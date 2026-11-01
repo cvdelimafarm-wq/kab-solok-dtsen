@@ -811,6 +811,195 @@
    "Kolom (7): uang saku <code>1.000.000</code>."
   ],
   "pembahasan": "Uang saku dan uang harian yang diterima dicatat di V.A kolom 7. Pengeluaran transportasi, akomodasi, dan makanan dicatat kembali di V.A kolom 6 sebagai upah/gaji dalam bentuk barang/jasa.",
-  "rujukan": "Buku 4 hlm. 298"
+  "rujukan": "Buku 4 hlm. 298",
+  "ditangguhkan": "Penempatan uang saku/uang harian (V.A K.5 atau K.7) belum terbukti dari teks Buku 4 hlm. 297-298 (teks hanya membahas biaya transportasi/akomodasi/swab yang ditanggung kantor = K.6). Tangguhkan sampai dikonfirmasi ke penyusun Buku 4."
+ },
+ {
+  "kode": "D19",
+  "level": "D",
+  "judul": "Fasilitas kendaraan dinas",
+  "cerita": "Pak Anwar (PNS, pejabat di sebuah dinas) mendapat fasilitas kendaraan dinas dari kantornya. Setiap bulan kantor menanggung bensin Rp600.000, dan perkiraan sewa kendaraan serupa Rp1.500.000. Setahun terakhir kantor juga membayar perbaikan kendaraan dinas itu Rp2.400.000. Abaikan gaji dan pendapatan lainnya.",
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "PNS pejabat di dinas",
+     "kat": "20",
+     "jenis": "4"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_barang": 27600000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_uang",
+    "v": 27600000,
+    "m": "Fasilitas kendaraan dinas bukan uang tunai: gunakan kolom (6)."
+   },
+   {
+    "k": "a1_barang",
+    "v": 25200000,
+    "m": "Biaya perbaikan kendaraan dinas yang didapat dari kantor juga dicatat. Tambahkan Rp2.400.000."
+   },
+   {
+    "k": "a1_barang",
+    "v": 2100000,
+    "m": "Nilai bensin dan perkiraan sewa Anda masih sebulan. Kalikan 12, lalu tambahkan biaya perbaikan."
+   }
+  ],
+  "petunjuk": [
+   "Fasilitas kendaraan dinas adalah imbalan kerja dalam bentuk barang/jasa. Tiga komponen apa yang dihitung?",
+   "Bensin dan perkiraan sewa dikali 12; biaya perbaikan sudah nilai setahun."
+  ],
+  "langkah": [
+   "Bensin + perkiraan sewa: <code>(600.000 + 1.500.000) × 12 = 25.200.000</code>.",
+   "Tambah biaya perbaikan setahun: <code>25.200.000 + 2.400.000 = 27.600.000</code> → V.A Kolom (6)."
+  ],
+  "pembahasan": "Jika anggota rumah tangga mendapat fasilitas kendaraan dinas, yang dicatat di V.A Kolom 6 adalah nilai bensin, perkiraan sewa kendaraan, dan biaya perbaikan kendaraan dinas yang didapat dari kantor.",
+  "rujukan": "Buku 4 hlm. 289 dan 313"
+ },
+ {
+  "kode": "D20",
+  "level": "D",
+  "judul": "Premi BPJS dibayar pemberi kerja",
+  "cerita": "Seorang karyawan swasta tidak membayar sendiri iuran jaminan sosialnya. Perusahaan menanggung seluruh premi BPJS Kesehatan Rp160.000 dan BPJS Ketenagakerjaan Rp90.000 per bulan atas namanya. Abaikan gaji dan pendapatan lainnya.",
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Karyawan swasta",
+     "kat": "08",
+     "jenis": "7"
+    }
+   ]
+  },
+  "blok": [
+   "A",
+   "E"
+  ],
+  "kunci": {
+   "a1_barang": 3000000
+  },
+  "jebakan": [
+   {
+    "k": "e_bantuan_barangD",
+    "m": "Premi ini dibayar pemberi kerja, bukan pemerintah (PBI). Bantuan pemerintah di V.E R.1.b tidak diisi."
+   }
+  ],
+  "alternatif": [
+   {
+    "k": "a1_uang",
+    "v": 3000000,
+    "m": "Premi yang dibayar perusahaan bukan uang yang Anda terima: gunakan kolom (6)."
+   },
+   {
+    "k": "a1_barang",
+    "v": 250000,
+    "m": "Nilai Anda masih sebulan. Kalikan 12."
+   }
+  ],
+  "petunjuk": [
+   "Siapa yang membayar premi? Kontribusi pemberi kerja termasuk upah dalam bentuk apa?",
+   "Jumlahkan kedua premi sebulan, lalu kali 12."
+  ],
+  "langkah": [
+   "Premi sebulan: <code>160.000 + 90.000 = 250.000</code>.",
+   "Setahun: <code>250.000 × 12 = 3.000.000</code> → V.A Kolom (6).",
+   "V.E dikosongkan."
+  ],
+  "pembahasan": "Upah dan gaji dalam bentuk barang juga termasuk kontribusi sosial, yaitu iuran asuransi kesehatan maupun dana pensiun yang dibayarkan pemberi kerja atas nama pegawainya, seperti premi asuransi kesehatan atau ketenagakerjaan. Dicatat di V.A Kolom 6.",
+  "rujukan": "Buku 4 hlm. 313"
+ },
+ {
+  "kode": "D21",
+  "level": "D",
+  "judul": "Usaha angkot dengan perbaikan besar",
+  "cerita": "Pak Dedi mengusahakan satu angkot miliknya. Penerimaan dari karcis penumpang Rp5.000.000 per bulan. Setiap bulan ia mengeluarkan bensin Rp1.500.000, pelumas Rp100.000, dan perbaikan kecil Rp200.000. Tahun ini ia juga mengganti mesin angkot seharga Rp8.000.000. Abaikan Blok V.G dan fokus pada Blok V.B.",
+  "meta": {
+   "B": [
+    {
+     "no": "01",
+     "uraian": "Sopir angkot milik sendiri",
+     "kat": "13",
+     "jenis": "8"
+    }
+   ]
+  },
+  "blok": [
+   "B"
+  ],
+  "kunci": {
+   "b1_produksi": 60000000,
+   "b1_biaya": 21600000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "b1_biaya",
+    "v": 29600000,
+    "m": "Penggantian mesin adalah perbaikan besar: bukan biaya produksi, melainkan penambahan barang modal."
+   },
+   {
+    "k": "b1_produksi",
+    "v": 5000000,
+    "m": "Nilai produksi Anda masih sebulan. Kalikan 12."
+   },
+   {
+    "k": "b1_produksi",
+    "v": 38400000,
+    "m": "Anda memasukkan surplus. Nilai produksi adalah penerimaan karcis sebelum dikurangi biaya."
+   }
+  ],
+  "petunjuk": [
+   "Biaya produksi angkutan mencakup bahan bakar, pelumas, dan perbaikan kecil. Bagaimana dengan perbaikan besar?",
+   "Semua nilai bulanan dikali 12."
+  ],
+  "langkah": [
+   "Kolom (5): <code>5.000.000 × 12 = 60.000.000</code>.",
+   "Kolom (6): <code>(1.500.000 + 100.000 + 200.000) × 12 = 21.600.000</code>.",
+   "Penggantian mesin Rp8.000.000 tidak masuk biaya produksi (penambahan barang modal)."
+  ],
+  "pembahasan": "Biaya produksi usaha pengangkutan adalah upah dan gaji, bahan bakar, pelumas, dan perbaikan kecil. Biaya perbaikan besar, seperti pembelian mesin, bukan ongkos produksi melainkan penambahan barang modal.",
+  "rujukan": "Buku 4 hlm. 325"
+ },
+ {
+  "kode": "D22",
+  "level": "D",
+  "judul": "Barang bekas dijual",
+  "cerita": "Keluarga Bu Ratna mengontrak rumah. Setahun terakhir mereka menjual ke pengepul tumpukan koran dan majalah lama senilai Rp180.000 (dibeli tahun-tahun sebelumnya dan dulu dicatat sebagai konsumsi) serta botol bekas Rp70.000. Tidak ada biaya khusus untuk penjualan ini. Abaikan pendapatan lainnya.",
+  "blok": [
+   "C",
+   "E"
+  ],
+  "kunci": {
+   "c_hasilLain_produksi": 250000
+  },
+  "jebakan": [
+   {
+    "k": "c_sewaRumah_produksi",
+    "m": "Rumah ini dikontrak, bukan milik sendiri, jadi tidak ada perkiraan sewa rumah milik sendiri."
+   },
+   {
+    "k": "e_badanUsaha_uangD",
+    "m": "Penjualan barang bekas ke pengepul adalah pendapatan, bukan transfer dari badan usaha."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Barang yang dulu dicatat sebagai konsumsi lalu dijual kembali masuk blok pendapatan yang mana?",
+   "Jumlahkan koran/majalah dan botol bekas."
+  ],
+  "langkah": [
+   "<code>180.000 + 70.000 = 250.000</code> → V.C Rincian 2 Kolom (2) (nilai produksi).",
+   "Kolom (3) kosong karena tidak ada biaya."
+  ],
+  "pembahasan": "Penjualan barang bekas dicatat sebagai nilai produksi pada V.C Rincian 2. Contoh Buku 4: koran yang dibeli tahun-tahun sebelumnya dan dicatat sebagai konsumsi, lalu dijual setahun terakhir.",
+  "rujukan": "Buku 4 hlm. 331"
  }
 ]

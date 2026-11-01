@@ -4,7 +4,7 @@
 // ringkasan, kesalahan tersering dan fatal, peta panas kasus x jenis, per petugas, perkembangan, per hari, serta berkas CSV.
 // Satu "pasangan" = satu petugas pada satu kasus. Peserta = akun dengan penugasan aktif di kegiatan itu (sebagai penyebut).
 
-import { cariKasusPublik } from "./kasus/daftar";
+import { cariKasusPublik, KODE_DITANGGUHKAN } from "./kasus/daftar";
 import { hasilFinal, PENGATURAN_BAWAAN, type Pengaturan, type StatusFinal } from "./pengaturan";
 import { labelSel } from "./sel";
 import type { JenisKesalahan, Tingkat } from "./tipe";
@@ -98,7 +98,10 @@ export function bukuPerAkun(peng: Pengaturan, perc: BarisPercobaanDb[]): Map<num
   return buku;
 }
 
-export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: BarisKesalahanDb[], namaLain: Record<number, string> = {}, opsi: OpsiDasbor = {}): Dasbor {
+export function susunDasbor(peserta: Peserta[], percSemua: BarisPercobaanDb[], kesSemua: BarisKesalahanDb[], namaLain: Record<number, string> = {}, opsi: OpsiDasbor = {}): Dasbor {
+  // Kasus yang DITANGGUHKAN tidak dihitung (rekaman lama atasnya diabaikan).
+  const perc = percSemua.filter((p) => !KODE_DITANGGUHKAN.has(p.kasus));
+  const kes = kesSemua.filter((e) => !KODE_DITANGGUHKAN.has(e.kasus));
   const peng = opsi.pengaturan ?? PENGATURAN_BAWAAN;
   const kalk = opsi.kalkulator ?? {};
   const namaAkun = new Map(peserta.map((p) => [p.akun_id, p]));

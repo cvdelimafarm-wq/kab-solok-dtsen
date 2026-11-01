@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KASUS, KASUS_BERNILAI, MAKS_BINTANG, URUTAN_LEVEL, cariKasus } from "../vanguard/kasus";
+import { KASUS, KASUS_BERNILAI, KASUS_DITANGGUHKAN, MAKS_BINTANG, SEMUA_KASUS, URUTAN_LEVEL, cariKasus } from "../vanguard/kasus";
 import { F, R, TOLERANSI, compute, engineChecks, evaluate, fmt, hitungBintang, isiOtomatisR1, kasusBenar, rp, tingkatKesalahan } from "../vanguard/engine";
 import { SEL_PER_BLOK, idSelKasus, labelSel, selDikenal } from "../vanguard/sel";
 import type { Kasus } from "../vanguard/tipe";
@@ -19,16 +19,16 @@ describe("data kasus", () => {
     expect(MAKS_BINTANG).toBe(KASUS_BERNILAI.length * 3);
     const awal = [["A", 11], ["B", 8], ["C", 7], ["D", 18], ["E", 18], ["G", 8]].flatMap(([l, n]) => Array.from({ length: n as number }, (_, i) => `${l}${String(i + 1).padStart(2, "0")}`)).concat("H01");
     expect(awal).toHaveLength(71);
-    for (const kode of awal) expect(KASUS.some((k) => k.kode === kode), kode).toBe(true);
+    for (const kode of awal) expect(SEMUA_KASUS.some((k) => k.kode === kode), kode).toBe(true); // kode dibekukan: kasus ditangguhkan tetap ada di berkas
     expect(KASUS.filter((k) => k.bebas).map((k) => k.kode)).toEqual(["H01"]);
     expect(KASUS.filter((k) => k.lengkap)).toHaveLength(8);
   });
   it("kode stabil: huruf level + dua digit, unik, berurutan per level, urutan level sesuai layar", () => {
-    const kode = KASUS.map((k) => k.kode);
+    const kode = SEMUA_KASUS.map((k) => k.kode); // termasuk yang ditangguhkan: kodenya tidak boleh bergeser atau dipakai ulang
     expect(new Set(kode).size).toBe(kode.length);
     kode.forEach((c) => expect(c).toMatch(/^[A-EGH]\d{2}$/));
     const cacah: Record<string, number> = {};
-    for (const k of KASUS) {
+    for (const k of SEMUA_KASUS) {
       cacah[k.level] = (cacah[k.level] ?? 0) + 1;
       expect(k.kode).toBe(k.level + String(cacah[k.level]).padStart(2, "0"));
     }
@@ -73,6 +73,20 @@ describe("data kasus", () => {
     expect(labelSel("tidak_ada")).toBe("tidak_ada");
     expect(idSelKasus(kasus("G01"))).not.toContain("vii_p1");
     expect(idSelKasus({ blok: ["VII"], lengkap: false })).toContain("vii_p1");
+  });
+});
+
+describe("kasus ditangguhkan (belum dikonfirmasi)", () => {
+  it("kasus ber-bidang ditangguhkan: ada alasan, tidak ikut KASUS/bernilai/bintang, tetap ada di SEMUA_KASUS", () => {
+    expect(KASUS_DITANGGUHKAN.map((k) => k.kode)).toContain("D18");
+    for (const k of KASUS_DITANGGUHKAN) {
+      expect(k.ditangguhkan, k.kode).toBeTruthy();
+      expect(KASUS.some((x) => x.kode === k.kode), k.kode).toBe(false);
+      expect(cariKasus(k.kode), k.kode).toBeUndefined();
+      expect(SEMUA_KASUS.some((x) => x.kode === k.kode), k.kode).toBe(true);
+    }
+    expect(KASUS.length + KASUS_DITANGGUHKAN.length).toBe(SEMUA_KASUS.length);
+    expect(MAKS_BINTANG).toBe(KASUS.filter((k) => !k.bebas).length * 3);
   });
 });
 

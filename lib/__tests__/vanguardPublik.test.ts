@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { KASUS, rahasiaKasus } from "../vanguard/kasus";
-import { KASUS_PUBLIK, MAKS_BINTANG } from "../vanguard/kasus/daftar";
+import { KASUS, KASUS_DITANGGUHKAN, rahasiaKasus } from "../vanguard/kasus";
+import { KASUS_PUBLIK, KODE_DITANGGUHKAN, MAKS_BINTANG } from "../vanguard/kasus/daftar";
 
 const RAHASIA = ["kunci", "jebakan", "alternatif", "nol", "petunjuk", "langkah", "pembahasan", "rujukan"];
 const AKAR = path.resolve(__dirname, "..", "..");
@@ -16,6 +16,13 @@ describe("data kasus publik (V5b)", () => {
     for (const k of KASUS_PUBLIK) for (const f of RAHASIA) expect(Object.keys(k), `${k.kode}.${f}`).not.toContain(f);
     expect(KASUS_PUBLIK.map((k) => k.kode)).toEqual(KASUS.map((k) => k.kode));
     expect(MAKS_BINTANG).toBe(KASUS.filter((k) => !k.bebas).length * 3);
+  });
+  it("kasus ditangguhkan tidak ada di publik.json; kodenya tercatat di ditangguhkan.json (alasan dan kunci tidak ikut)", () => {
+    expect([...KODE_DITANGGUHKAN].sort()).toEqual(KASUS_DITANGGUHKAN.map((k) => k.kode).sort());
+    for (const kode of KODE_DITANGGUHKAN) expect(KASUS_PUBLIK.some((k) => k.kode === kode), kode).toBe(false);
+    const mentah = fs.readFileSync(path.join(AKAR, "lib/vanguard/kasus/ditangguhkan.json"), "utf8");
+    expect(mentah).not.toContain("Buku 4");
+    expect(mentah).not.toContain("kunci");
   });
   it("rahasiaKasus memuat semua bidang rahasia dan tidak ada bahan soal", () => {
     const r = rahasiaKasus(KASUS[0]);

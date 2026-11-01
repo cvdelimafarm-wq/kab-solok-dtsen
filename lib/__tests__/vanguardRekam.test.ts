@@ -7,6 +7,12 @@ import type { Kasus } from "../vanguard/tipe";
 const kasus: Kasus = KASUS_BERNILAI.find((k) => Object.keys(k.kunci).length >= 1 && !k.nol && !k.lengkap)!;
 const sebagaiMuatan = (isian: Record<string, number>, lebih: Record<string, unknown> = {}) => ({ kegiatan: 5, kasus: kasus.kode, isian, petunjuk: 0, lihatJawaban: false, durasiDtk: 30, ...lebih });
 
+describe("kasus ditangguhkan", () => {
+  it("percobaan atas kasus ditangguhkan (D18) ditolak: kasus tidak dikenal", () => {
+    expect(bacaMuatan(sebagaiMuatan({}, { kasus: "D18" }))).toMatchObject({ ok: false, pesan: "Kasus tidak dikenal." });
+  });
+});
+
 describe("mode masuk", () => {
   it("ditentukan cara masuk: ada kegiatan = tercatat, selain itu bebas", () => {
     expect(modeMasuk(5)).toBe("tercatat");

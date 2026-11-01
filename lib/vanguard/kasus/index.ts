@@ -3,6 +3,7 @@
 // (1 Nov 2026) VANGUARD V1: pintu masuk data kasus. Kasus dipisah dari mesin dan dari tampilan: satu berkas JSON per level di folder ini.
 // Urutan = urutan di layar (A, B, C, D, E, G, H). Kode kasus (mis. E07) stabil dan dipakai rekaman percobaan; jangan diubah atau dipakai ulang.
 // (V5b) HANYA SERVER dan tes yang boleh mengimpor berkas ini: ia memuat kunci. Perangkat petugas memakai ./daftar (publik.json). Setelah mengubah level-*.json jalankan `node scripts/vanguard-bangun-publik.mjs`.
+// Kasus ditangguhkan: beri bidang "ditangguhkan":"alasan" pada kasus itu (kode tetap dibekukan); ia keluar dari KASUS, publik.json, bintang, nilai, dan dasbor.
 // Tambah kasus: tambahkan di BELAKANG berkas levelnya dengan kode berikutnya, lengkapi kunci, jebakan, pembahasan, dan rujukan, lalu jalankan tes.
 
 import levelA from "./level-A.json";
@@ -16,7 +17,14 @@ import type { Kasus, KasusRahasia, Level } from "../tipe";
 
 export { URUTAN_LEVEL, NAMA_LEVEL, MAKS_BINTANG } from "./daftar";
 
-export const KASUS: Kasus[] = [levelA, levelB, levelC, levelD, levelE, levelG, levelH].flat() as unknown as Kasus[];
+/** Semua kasus di berkas, termasuk yang DITANGGUHKAN (bidang "ditangguhkan" berisi alasan). Hanya untuk tes dan penomoran kode; jangan dipakai untuk menampilkan/menilai. */
+export const SEMUA_KASUS: Kasus[] = [levelA, levelB, levelC, levelD, levelE, levelG, levelH].flat() as unknown as Kasus[];
+
+/** Kasus yang ditangguhkan (belum dikonfirmasi): tidak tampil dan tidak dihitung. Aktifkan lagi dengan menghapus bidang "ditangguhkan" lalu `node scripts/vanguard-bangun-publik.mjs`. */
+export const KASUS_DITANGGUHKAN: Kasus[] = SEMUA_KASUS.filter((k) => !!k.ditangguhkan);
+
+/** Kasus AKTIF: yang tampil, dinilai, dan dihitung. */
+export const KASUS: Kasus[] = SEMUA_KASUS.filter((k) => !k.ditangguhkan);
 
 /** Kasus bernilai (berkunci, ikut bintang). Kalkulator bebas tidak termasuk. */
 export const KASUS_BERNILAI: Kasus[] = KASUS.filter((k) => !k.bebas);

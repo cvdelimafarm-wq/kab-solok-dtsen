@@ -46,7 +46,11 @@ export type KasusRahasia = {
   rujukan: string;
 };
 
-export type Kasus = KasusPublik & KasusRahasia;
+/**
+ * ditangguhkan: alasan (teks) bila kasus DITANGGUHKAN. Kasus ditangguhkan tetap tersimpan di berkas levelnya (kode tidak hilang) tetapi TIDAK ditampilkan, tidak masuk publik.json,
+ * tidak ikut bintang/nilai/hasil final, dan tidak ikut hitungan dasbor, sampai alasannya dikonfirmasi lalu bidang ini dihapus.
+ */
+export type Kasus = KasusPublik & KasusRahasia & { ditangguhkan?: string };
 
 export type JenisKesalahan =
   | "konversi_seminggu"

@@ -4,6 +4,7 @@
 // Kunci dan kawan-kawannya ada di kasus/index.ts (KASUS penuh) yang HANYA boleh diimpor server dan tes; tes vanguardPublik menjaga agar kode klien tidak mengimpornya.
 
 import publik from "./publik.json";
+import tangguh from "./ditangguhkan.json";
 import type { KasusPublik, Level } from "../tipe";
 
 export const URUTAN_LEVEL: Level[] = ["A", "B", "C", "D", "E", "G", "H"];
@@ -22,3 +23,6 @@ export const KASUS_PUBLIK: KasusPublik[] = publik as unknown as KasusPublik[];
 export const KASUS_PUBLIK_BERNILAI: KasusPublik[] = KASUS_PUBLIK.filter((k) => !k.bebas);
 export const MAKS_BINTANG = KASUS_PUBLIK_BERNILAI.length * 3;
 export const cariKasusPublik = (kode: string): KasusPublik | undefined => KASUS_PUBLIK.find((k) => k.kode === kode);
+
+/** Kode kasus yang DITANGGUHKAN (tidak tampil, tidak dihitung). Rekaman lama atas kode ini diabaikan oleh dasbor. */
+export const KODE_DITANGGUHKAN: ReadonlySet<string> = new Set(tangguh as string[]);

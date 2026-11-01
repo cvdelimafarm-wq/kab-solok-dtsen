@@ -503,5 +503,114 @@
   ],
   "pembahasan": "Penjualan barang modal dicatat sebagai pengurangan aset di V.G kolom 3.",
   "rujukan": "Buku 4 hlm. 339 dan 340"
+ },
+ {
+  "kode": "E19",
+  "level": "E",
+  "judul": "Dividen saham dan SHU koperasi",
+  "cerita": "Setahun terakhir rumah tangga menerima dividen saham sebuah PT sebesar Rp1.250.000 dan sisa hasil usaha (SHU) koperasi Rp450.000. Keduanya sudah diterima tunai. Abaikan pendapatan lainnya.",
+  "blok": [
+   "D"
+  ],
+  "kunci": {
+   "d_keuntunganSaham_diterima": 1700000
+  },
+  "jebakan": [
+   {
+    "k": "d_bunga_diterima",
+    "m": "Dividen dan SHU bukan bunga. Bunga (baris 4) hanya untuk simpanan, pinjaman, obligasi, dan sejenisnya."
+   },
+   {
+    "k": "d_keuntunganModal_diterima",
+    "m": "Baris 2 untuk keuntungan modal usaha rumah tangga (bagi hasil), bukan saham atau koperasi."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Saham PT dan koperasi punya baris sendiri di V.D. Baris berapa, dan adakah kolom dibayar?",
+   "Jumlahkan dividen dan SHU."
+  ],
+  "langkah": [
+   "<code>1.250.000 + 450.000 = 1.700.000</code> → V.D baris 3, Kolom (2) (diterima).",
+   "Baris ini tidak punya kolom dibayar."
+  ],
+  "pembahasan": "Keuntungan atas kepemilikan saham pada PT, PT Persero, yayasan, dan koperasi (dividen, termasuk sisa hasil usaha koperasi) dicatat di V.D Rincian 3 saat sudah diterima rumah tangga.",
+  "rujukan": "Buku 4 hlm. 334"
+ },
+ {
+  "kode": "E20",
+  "level": "E",
+  "judul": "Membeli dan menjual emas batangan",
+  "cerita": "Setahun terakhir rumah tangga membeli emas batangan Rp15.000.000 untuk disimpan sebagai penyimpan nilai, dan menjual emas batangan lama Rp4.000.000. Emas itu tidak dipakai untuk usaha maupun dikonsumsi.",
+  "blok": [
+   "G"
+  ],
+  "kunci": {
+   "g_berharga_tambah": 15000000,
+   "g_berharga_kurang": 4000000
+  },
+  "jebakan": [
+   {
+    "k": "g_mesin_tambah",
+    "m": "Emas batangan bukan mesin atau peralatan usaha. Ia barang berharga (baris 5)."
+   }
+  ],
+  "alternatif": [
+   {
+    "k": "g_berharga_tambah",
+    "v": 11000000,
+    "m": "Penambahan dan pengurangan dicatat di kolom terpisah, bukan selisihnya."
+   }
+  ],
+  "petunjuk": [
+   "Barang yang ditahan sebagai penyimpan nilai, bukan untuk produksi atau konsumsi, masuk baris aset yang mana?",
+   "Pembelian = penambahan, penjualan = pengurangan."
+  ],
+  "langkah": [
+   "Pembelian <code>15.000.000</code> → V.G baris 5 (barang berharga) Kolom (2).",
+   "Penjualan <code>4.000.000</code> → V.G baris 5 Kolom (3)."
+  ],
+  "pembahasan": "Barang berharga (emas batangan, batu dan logam mulia, barang antik, lukisan) adalah barang bernilai tinggi yang ditahan sebagai penyimpan nilai. Penambahan mencakup pembelian, pengurangan mencakup penjualan.",
+  "rujukan": "Buku 4 hlm. 339 dan 342"
+ },
+ {
+  "kode": "E21",
+  "level": "E",
+  "judul": "Membeli pasir untuk pembangunan masjid",
+  "cerita": "Pak Hendri membeli pasir seharga Rp1.500.000 untuk pembangunan masjid kampung dan menyerahkannya kepada panitia pembangunan. Uangnya diambil dari tabungan. Abaikan pendapatan dan pengeluaran lainnya.",
+  "blok": [
+   "E",
+   "F",
+   "VII"
+  ],
+  "kunci": {
+   "f_nirlaba_bangunanB": 1500000,
+   "vii_p1": 1500000
+  },
+  "jebakan": [
+   {
+    "k": "e_nirlaba_barangB",
+    "m": "Pemberian untuk membentuk barang modal pihak lain adalah transfer modal (V.F), bukan transfer berjalan V.E."
+   },
+   {
+    "k": "f_nirlaba_lahanB",
+    "m": "Pasir bukan lahan atau barang berharga. Gunakan kolom (4) untuk bahan bangunan."
+   },
+   {
+    "k": "vii_g1",
+    "m": "Ini bukan menabung. Dana berasal dari pengambilan tabungan, yang masuk sisi Penerimaan Rincian 1."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Penerimanya lembaga nirlaba dan tujuannya membentuk barang modal. Blok V mana, dan baris berapa?",
+   "Pemberi bukan pemilik aset: senilai itu juga dicatat sebagai pengambilan tabungan di VII."
+  ],
+  "langkah": [
+   "V.F baris 4 (lembaga nirlaba) Kolom (4) = <code>1.500.000</code>.",
+   "VII Penerimaan Rincian 1 Kolom (2) (pengambilan tabungan) = <code>1.500.000</code>."
+  ],
+  "pembahasan": "Jika pemberi bukan pemilik aset atau sengaja membeli untuk membentuk barang modal di pihak penerima, transfer dicatat di V.F dan senilai yang sama dicatat sebagai pengambilan tabungan di VII Rincian 1 Kolom 2. Contoh Buku 4: membeli pasir untuk pembangunan masjid, transfer dibayar ke lembaga nirlaba di V.F Kolom 4.",
+  "rujukan": "Buku 4 hlm. 340"
  }
 ]

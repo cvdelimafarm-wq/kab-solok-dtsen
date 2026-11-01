@@ -23,6 +23,16 @@ const KES: BarisKesalahanDb[] = [
   kes(2, "A01", "belum_diisi", "berat"),
 ];
 
+describe("kasus ditangguhkan tidak dihitung", () => {
+  it("rekaman lama atas D18 (ditangguhkan) diabaikan: percobaan, kesalahan, dan kasus dikerjakan sama dengan tanpa rekaman itu", () => {
+    const tambahan = [perc({ akun_id: 1, kasus: "D18", nomor: 1, benar: false }), perc({ akun_id: 3, kasus: "D18", nomor: 1, benar: true, bintang: 3 })];
+    const a = susunDasbor(P, PERC, KES);
+    const b = susunDasbor(P, [...PERC, ...tambahan], [...KES, kes(3, "D18", "salah_letak", "fatal")]);
+    expect(b.ringkasan).toEqual(a.ringkasan);
+    expect(b.petugas).toEqual(a.petugas);
+  });
+});
+
 describe("susunDasbor", () => {
   const d = susunDasbor(P, PERC, KES);
   it("ringkasan", () => {
