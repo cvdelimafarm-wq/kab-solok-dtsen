@@ -59,6 +59,12 @@ describe("aturan jeda", () => {
     expect(s1.bukaLagi).toBe("2026-11-05T17:00:00.000Z"); // 6 Nov 00.00 WIB
     expect(statusUjian(riw, new Date("2026-11-05T17:00:01Z")).sertifikasiBoleh).toBe(true);
   });
+  it("ujian dibatalkan (tingkat null) tidak dihitung selesai, tetapi tetap menghabiskan jatah hari itu", () => {
+    const riw: RiwayatUjian[] = [{ id: 1, jenis: "sertifikasi", mulai_at: "2026-11-01T01:00:00Z", selesai_at: "2026-11-01T01:30:00Z", tingkat: null }];
+    const s = statusUjian(riw, new Date("2026-11-01T08:00:00Z"));
+    expect(s.sudahBersertifikat).toBe(false); expect(s.sertifikasiBoleh).toBe(false); expect(s.berjalan).toBeNull();
+    expect(statusUjian(riw, new Date("2026-11-01T17:30:00Z")).sertifikasiBoleh).toBe(true); // besok boleh lagi
+  });
   it("satu ujian berjalan pada satu waktu; kedaluwarsa setelah 12 jam", () => {
     const riw = [r("latihan", "2026-11-01T01:00:00Z", null, 7)];
     expect(statusUjian(riw, new Date("2026-11-01T05:00:00Z")).berjalan?.id).toBe(7);
@@ -203,5 +209,16 @@ describe("rute sertifikasi", () => {
     const r = await ambil(); expect(r.status).toBe(503); expect((await r.json()).error).toMatch(/20261101z/);
     const m = await post({ aksi: "mulai", jenis: "latihan" }); expect(m.status).toBe(503);
     gagalTabel = false;
+  });
+  it("batal: melepas ujian berjalan tanpa skor; tidak menjadi sertifikat; tidak bisa dibatalkan dua kali; orang lain 404", async () => {
+    const m = await (await post({ aksi: "mulai", jenis: "sertifikasi" })).json();
+    expect((await post({ aksi: "batal", ujian: m.ujian }, kepala("99"))).status).toBe(404);
+    expect(await (await post({ aksi: "batal", ujian: m.ujian })).json()).toEqual({ dibatalkan: true });
+    expect(tabel.sigap_vanguard_ujian[0]).toMatchObject({ skor: null, tingkat: null });
+    expect((await post({ aksi: "batal", ujian: m.ujian })).status).toBe(409);
+    const ring = await (await ambil()).json();
+    expect(ring.berjalan).toBeNull(); expect(ring.status.sudahBersertifikat).toBe(false); expect(ring.sertifikat.tertinggi).toBeNull();
+    expect(ring.status.sertifikasiBoleh).toBe(false); // jatah hari ini terpakai
+    expect((await post({ aksi: "mulai", jenis: "latihan" })).status).toBe(200); // latihan tetap boleh
   });
 });

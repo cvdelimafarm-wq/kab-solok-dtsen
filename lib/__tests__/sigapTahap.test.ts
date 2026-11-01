@@ -1,6 +1,6 @@
 // (9 Okt 2026) Uji tahap kegiatan induk: status modul/tahap, aturan buka, ringkasan Layer 1, pemeriksaan masukan admin.
 import { describe, expect, it } from "vitest";
-import { chipPeranTim, periksaTahapAdmin, ringkasInduk, susunTahap, tahapSekarang, tanggalWib, type Induk, type KonteksTahap, type TahapDef } from "../sigapTahap";
+import { chipPeranTim, denganKegiatan, idPelatihanTahap, periksaTahapAdmin, ringkasInduk, ruteTahap, susunTahap, tahapSekarang, tanggalWib, type Induk, type KonteksTahap, type TahapDef } from "../sigapTahap";
 import type { RingkasKegiatan } from "../sigapKegiatan";
 
 const T = (kode: string, urutan: number, isi: string[], buka_mode: TahapDef["buka_mode"] = "langsung", buka_tanggal: string | null = null): TahapDef => ({
@@ -309,5 +309,38 @@ describe("chipPeranTim (Beranda PML/PPL)", () => {
     expect(chipPeranTim({ ...w, peran: "ppl", pml_nama: null }, depan)).toBe("PPL");
     expect(chipPeranTim(w, depan)).toBeNull();
     expect(chipPeranTim(null, depan)).toBeNull();
+  });
+});
+
+describe("pelatihan ganda (1 Nov 2026)", () => {
+  it("idPelatihanTahap: translok pada tahap yang memuat modul pelatihan; selain itu null", () => {
+    expect(idPelatihanTahap(["pelatihan", "translok:7"])).toBe(7);
+    expect(idPelatihanTahap(["translok:7", "pelatihan"])).toBe(7);
+    expect(idPelatihanTahap(["pelatihan"])).toBeNull();
+    expect(idPelatihanTahap(["translok:7"])).toBeNull();
+    expect(idPelatihanTahap([])).toBeNull();
+  });
+  it("denganKegiatan: hanya tautan pelatihan tanpa kegiatan=; query lama dipertahankan", () => {
+    expect(denganKegiatan("/sigap/pelatihan", 7)).toBe("/sigap/pelatihan?kegiatan=7");
+    expect(denganKegiatan("/sigap/pelatihan/tes/pretest", 7)).toBe("/sigap/pelatihan/tes/pretest?kegiatan=7");
+    expect(denganKegiatan("/sigap/pelatihan?x=1", 7)).toBe("/sigap/pelatihan?x=1&kegiatan=7");
+    expect(denganKegiatan("/sigap/pelatihan?kegiatan=3", 7)).toBe("/sigap/pelatihan?kegiatan=3");
+    expect(denganKegiatan("/sigap/kegiatan/x", 7)).toBe("/sigap/kegiatan/x");
+    expect(denganKegiatan("/sigap/pelatihan", null)).toBe("/sigap/pelatihan");
+  });
+  it("ruteTahap membawa kegiatan pelatihan dari translok sepasang", () => {
+    expect(ruteTahap({ kode: "seruti_tw4" }, T("pelatihan", 1, ["pelatihan", "translok:7"]))).toBe("/sigap/pelatihan?kegiatan=7");
+    expect(ruteTahap({ kode: "x" }, T("pelatihan", 1, ["pelatihan"]))).toBe("/sigap/pelatihan");
+    expect(ruteTahap({ kode: "x" }, T("pendataan", 2, ["translok:6"]))).toBe("/sigap/kegiatan/x/pendataan");
+  });
+  it("hub milik pelatihan lain: modul netral dengan tautan kegiatan sendiri (tidak memakai data pelatihan yang salah)", () => {
+    const hub = { kegiatan_id: 7, peserta: { peran: "ppl" }, undangan: { tanggal_iso: "2026-11-09" }, tes: [], langkah: null, presensi: null, kuis: null, token_translok: null } as never;
+    const psp = INDUK([T("pelatihan", 1, ["pelatihan", "translok:3"])]);
+    const h = susunTahap(K(psp, { hub }));
+    expect(h[0].modul[0]).toMatchObject({ ket: "Buka untuk melihat langkah", status: "menunggu", href: "/sigap/pelatihan?kegiatan=3" });
+    const seruti = INDUK([T("pelatihan", 1, ["pelatihan", "translok:7"])]);
+    const s2 = susunTahap(K(seruti, { hub }));
+    expect(s2[0].modul[0].ket).not.toBe("Buka untuk melihat langkah"); // hub cocok -> ringkasan sungguhan
+    expect(s2[0].modul[0].href).toBe("/sigap/pelatihan?kegiatan=7");
   });
 });

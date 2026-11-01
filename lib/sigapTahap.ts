@@ -168,6 +168,25 @@ export function ketTranslok(x: Pick<RingkasKegiatan, "sub" | "kekurangan">): str
   return x.sub.replace(/^(\d+)\/(\d+) · /, "Langkah $1 dari $2 · ");
 }
 
+/**
+ * (1 Nov 2026) Kegiatan pelatihan yang dimaksud sebuah tahap berisi modul "pelatihan": id pada modul `translok:<id>` di tahap yang sama (konvensi data:
+ * "Langkah pelatihan dan Transport Lokal pelatihan", mis. ["pelatihan","translok:3"]). Tanpa pasangan itu -> null (memakai pelatihan bawaan akun).
+ */
+export function idPelatihanTahap(isi: readonly string[]): number | null {
+  if (!isi.includes("pelatihan")) return null;
+  for (const m of isi) {
+    const h = /^translok:(\d+)$/.exec(m);
+    if (h) return Number(h[1]);
+  }
+  return null;
+}
+
+/** Tambahkan ?kegiatan=<id> ke tautan halaman pelatihan (tautan lain / id kosong / sudah memuat kegiatan= dibiarkan). */
+export function denganKegiatan(href: string, id: number | null): string {
+  if (id === null || !href.startsWith("/sigap/pelatihan") || /[?&]kegiatan=/.test(href)) return href;
+  return `${href}${href.includes("?") ? "&" : "?"}kegiatan=${id}`;
+}
+
 /** Modul -> keadaan petugas ini; null = modul tidak berlaku bagi petugas (mis. bukan peserta pelatihan). */
 export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): ModulTahap[] {
   const { induk, hub, hubMuat, keg, nowMs } = k;
@@ -188,13 +207,19 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
     ];
   }
   if (kode === "pelatihan") {
+    const idPel = idPelatihanTahap(tahap.isi);
+    const hrefPel = denganKegiatan("/sigap/pelatihan", idPel);
     if (hubMuat === "siap" && (!hub || !hub.peserta)) return [];
     if (hubMuat !== "siap" || !hub) {
-      return [{ kode, judul: "Langkah pelatihan", ket: hubMuat === "memuat" ? "Memuat…" : "Buka untuk melihat langkah", status: "menunggu", href: "/sigap/pelatihan", aksi: "Buka", pecahan: 0 }];
+      return [{ kode, judul: "Langkah pelatihan", ket: hubMuat === "memuat" ? "Memuat…" : "Buka untuk melihat langkah", status: "menunggu", href: hrefPel, aksi: "Buka", pecahan: 0 }];
+    }
+    // (1 Nov 2026) hub Beranda hanya memuat SATU pelatihan; bila tahap ini milik pelatihan lain (peserta dua pelatihan), jangan memakai data pelatihan yang salah
+    if (idPel !== null && typeof hub.kegiatan_id === "number" && hub.kegiatan_id !== idPel) {
+      return [{ kode, judul: "Langkah pelatihan", ket: "Buka untuk melihat langkah", status: "menunggu", href: hrefPel, aksi: "Buka", pecahan: 0 }];
     }
     const r = ringkasPelatihan(hub, nowMs);
     if (!r) return [];
-    return [{ kode, judul: "Langkah pelatihan", ket: r.sub, status: NADA_KE_STATUS[r.nada], href: r.href, aksi: "Buka langkah", pecahan: r.pecahan ?? 0 }];
+    return [{ kode, judul: "Langkah pelatihan", ket: r.sub, status: NADA_KE_STATUS[r.nada], href: denganKegiatan(r.href ?? "/sigap/pelatihan", idPel), aksi: "Buka langkah", pecahan: r.pecahan ?? 0 }];
   }
   if (kode === "wilayah_tim") {
     const w = induk.wilayah;
@@ -328,7 +353,7 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
 
 /** Halaman tujuan ketukan tahap: Pelatihan membuka halaman Langkah yang sudah ada; lainnya halaman tahap generik. */
 export function ruteTahap(induk: Pick<Induk, "kode">, tahap: Pick<TahapDef, "kode" | "isi">): string {
-  if (tahap.isi.includes("pelatihan")) return "/sigap/pelatihan";
+  if (tahap.isi.includes("pelatihan")) return denganKegiatan("/sigap/pelatihan", idPelatihanTahap(tahap.isi));
   return `/sigap/kegiatan/${induk.kode}/${tahap.kode}`;
 }
 

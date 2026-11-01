@@ -10,12 +10,13 @@
 //  - kegiatan yang sudah selesai dipisah (Beranda meringkasnya) supaya yang aktif tampil lebih dulu.
 
 import { URUT_NADA, type NadaKegiatan, type RingkasKegiatan } from "@/lib/sigapKegiatan";
-import { susunTahap, tahapSekarang, type KonteksTahap, type TahapHasil } from "@/lib/sigapTahap";
+import { idPelatihanTahap, susunTahap, tahapSekarang, type KonteksTahap, type TahapHasil } from "@/lib/sigapTahap";
 import { pakaiTemplateMenu } from "@/lib/sigapMenuKegiatan";
 
 export type JenisAktivitas = "pelatihan" | "pendataan";
 export type InfoAktivitas = { teks: string; href: string };
-export type Aktivitas = RingkasKegiatan & { jenis: JenisAktivitas; indukKode: string; info: InfoAktivitas | null };
+/** `pelatihanId` = kegiatan pelatihan kartu Pelatihan ini (null bila tahap tidak menyebutnya atau bukan kartu Pelatihan). */
+export type Aktivitas = RingkasKegiatan & { jenis: JenisAktivitas; indukKode: string; info: InfoAktivitas | null; pelatihanId: number | null };
 
 /** "Pendataan Pascabencana" -> "Pascabencana"; "SPDT NTP" -> "SPDT NTP". */
 export const namaDasar = (pendek: string): string => pendek.replace(/^(Pendataan|Pelatihan)\s+/i, "").trim() || pendek;
@@ -60,6 +61,7 @@ function bangun(jenis: JenisAktivitas, k: KonteksTahap, grup: TahapHasil[]): Akt
     jenis,
     indukKode: k.induk.kode,
     info: sekarang ? { teks: sekarang.modul.ket, href: sekarang.modul.href ?? sekarang.tahap.rute } : null,
+    pelatihanId: jenis === "pelatihan" ? (grup.map((x) => idPelatihanTahap(x.isi)).find((x): x is number => x !== null) ?? null) : null,
   };
 }
 

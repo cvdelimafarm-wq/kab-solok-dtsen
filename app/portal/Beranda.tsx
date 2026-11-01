@@ -266,7 +266,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       if (w) peringatan.push(w);
     }
     // (31 Okt 2026) satu kartu per survei; Pelatihan dan Pendataan terpisah, usang di bawah dan redup
-    const daftarKartu = susunDaftarKartu({ kegiatan: semua, induk, keg, tugasPelatihan: tp, nowMs: sekarang });
+    const daftarKartu = susunDaftarKartu({ kegiatan: semua, induk, keg, tugasPelatihan: tp, tugasPelatihanKegiatanId: hub?.kegiatan_id ?? null, nowMs: sekarang });
     return { kartu: sisa, daftarKartu, peringatan };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps

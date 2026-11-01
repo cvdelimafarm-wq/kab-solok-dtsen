@@ -28,12 +28,15 @@ export type BahanDaftar = {
   keg: RingkasKegiatan[] | null;
   /** tugas utama pelatihan (peserta); dipasang pada kartu Pelatihan pertama */
   tugasPelatihan: TugasUtama | null;
+  /** (1 Nov 2026) kegiatan pelatihan milik `tugasPelatihan` (hub Beranda); kartu Pelatihan dengan `pelatihanId` sama yang menerimanya. Kosong/tak cocok -> kartu Pelatihan pertama (perilaku lama). */
+  tugasPelatihanKegiatanId?: number | null;
   nowMs: number;
 };
 
 export function susunDaftarKartu(b: BahanDaftar): KartuBeranda[] {
   const kegTL = b.keg ?? [];
   let pelatihanTerpakai = false;
+  const sasaranTugas = b.tugasPelatihanKegiatanId == null ? null : b.kegiatan.find((x): x is Aktivitas => adalahAktivitas(x) && x.jenis === "pelatihan" && x.pelatihanId === b.tugasPelatihanKegiatanId)?.id ?? null;
   const kartu: KartuBeranda[] = b.kegiatan.map((x) => {
     const href = x.href ?? "/";
     if (adalahAktivitas(x)) {
@@ -42,7 +45,7 @@ export function susunDaftarKartu(b: BahanDaftar): KartuBeranda[] {
       if (x.jenis === "pendataan" && ind && pakaiTemplateMenu(ind.tahap)) {
         return kartuTemplate({ id: x.id, judul: x.judul, href, nada: x.nada }, { induk: ind, keg: kegTL, idTranslok: idTranslokMenu(ind.tahap), nowMs: b.nowMs }, info);
       }
-      if (x.jenis === "pelatihan" && !pelatihanTerpakai && b.tugasPelatihan) {
+      if (x.jenis === "pelatihan" && !pelatihanTerpakai && b.tugasPelatihan && (sasaranTugas === null || x.id === sasaranTugas)) {
         pelatihanTerpakai = true;
         return kartuBiasa({ id: x.id, judul: x.judul, href, nada: x.nada, jenis: "pelatihan" }, poinDariTugas(b.tugasPelatihan));
       }

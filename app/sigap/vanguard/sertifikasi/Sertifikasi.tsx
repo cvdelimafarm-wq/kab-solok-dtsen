@@ -95,6 +95,13 @@ export default function Sertifikasi() {
     if (r) { const d = await muatDetail(r.ujian); if (d) { setHasil(null); setLayar("ujian"); } }
     setKerja(false);
   };
+  const batalkan = async (id: number) => {
+    if (!window.confirm("Batalkan ujian yang sedang berjalan? Jawaban yang sudah dikirim tidak dinilai. Jatah sertifikasi hari ini tetap terpakai.")) return;
+    setKerja(true);
+    const r = await api<{ dibatalkan: boolean }>("/api/sigap/vanguard/sertifikasi", { method: "POST", body: JSON.stringify({ aksi: "batal", ujian: id }) });
+    if (r) await muatBeranda();
+    setKerja(false);
+  };
   const lanjutkan = async (id: number) => { setKerja(true); const d = await muatDetail(id); if (d) { setHasil(null); setLayar("ujian"); } setKerja(false); };
 
   const bukaButir = async (b: ButirRingkas) => {
@@ -197,7 +204,7 @@ export default function Sertifikasi() {
                   </>
                 )}
               </div>
-              {beranda.berjalan && <div className="catat ya" role="status"><b>Ada ujian yang belum selesai.</b> <button type="button" className="tog" disabled={kerja} onClick={() => void lanjutkan(beranda.berjalan as number)}>Lanjutkan</button></div>}
+              {beranda.berjalan && <div className="catat ya" role="status"><b>Ada ujian yang belum selesai.</b> <button type="button" className="tog" disabled={kerja} onClick={() => void lanjutkan(beranda.berjalan as number)}>Lanjutkan</button> <button type="button" className="tog" disabled={kerja} onClick={() => void batalkan(beranda.berjalan as number)}>Batalkan</button></div>}
               {!beranda.berjalan && (
                 <div className="sheet">
                   <span className="tag">Ujian Sertifikasi</span>
@@ -219,8 +226,8 @@ export default function Sertifikasi() {
                   <span className="tag">Riwayat ujian</span>
                   {beranda.riwayat.map((r) => (
                     <div key={r.ujian} className="item" style={{ cursor: "default" }}>
-                      <span className="num">{r.selesai_at ? r.tingkat : "…"}</span>
-                      <span className="t">{LABEL_JENIS_UJIAN[r.jenis]}{r.selesai_at ? ` · ${NAMA_TINGKAT[r.tingkat ?? 1]}` : " · belum selesai"}<small>{wibTeks(r.mulai_at)}{r.skor !== null ? ` · skor ${r.skor}` : ""}</small></span>
+                      <span className="num">{r.selesai_at ? (r.tingkat ?? "–") : "…"}</span>
+                      <span className="t">{LABEL_JENIS_UJIAN[r.jenis]}{r.selesai_at ? (r.tingkat === null ? " · dibatalkan" : ` · ${NAMA_TINGKAT[r.tingkat ?? 1]}`) : " · belum selesai"}<small>{wibTeks(r.mulai_at)}{r.skor !== null ? ` · skor ${r.skor}` : ""}</small></span>
                     </div>
                   ))}
                 </div>
@@ -298,7 +305,7 @@ export default function Sertifikasi() {
               {hasil.review.map((r) => (
                 <details key={r.urut} className={`sr-rev ${r.benar ? "ok" : "no"}`}>
                   <summary><span>{r.benar ? "✓" : r.terjawab ? "!" : "–"}</span><span>{r.urut}. {r.judul}</span><span className="poin">{r.poin}</span></summary>
-                  {r.rincian.length > 0 ? <ul>{r.rincian.map((x, i) => <li key={i}><b>{x.tingkat === "fatal" ? "Fatal" : x.tingkat === "berat" ? "Berat" : "Ringan"}:</b> {x.pesan}</li>)}</ul> : <ul><li>{r.terjawab ? "Tidak ada kesalahan." : "Tidak dijawab."}</li></ul>}
+                  {r.rincian.length > 0 ? <ul>{r.rincian.map((x, i) => <li key={i}><b>{x.tingkat === "fatal" ? "Fatal" : x.tingkat === "berat" ? "Berat" : "Ringan"}:</b> {x.sel && !/^R\d/.test(x.sel) ? `${labelSel(x.sel)}. ` : ""}{x.pesan}</li>)}</ul> : <ul><li>{r.terjawab ? "Tidak ada kesalahan." : "Tidak dijawab."}</li></ul>}
                 </details>
               ))}
             </div>

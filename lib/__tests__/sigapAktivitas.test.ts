@@ -40,7 +40,7 @@ describe("aktivitasDariInduk", () => {
 
   it("ketukan ikon = halaman kerja tahap utama (modul terbanyak), melewati layer Tahapan", () => {
     const a = aktivitasDariInduk(K(induk, [TL(3, "biru"), TL(1, "biru")]));
-    expect(a[0].href).toBe("/sigap/pelatihan");
+    expect(a[0].href).toBe("/sigap/pelatihan?kegiatan=3"); // (1 Nov 2026) tiap kartu Pelatihan membawa kegiatannya (dari translok:3 pada tahap yang sama)
     expect(a[1].href).toBe("/sigap/kegiatan/pascabencana/pendataan");
   });
 
@@ -50,7 +50,7 @@ describe("aktivitasDariInduk", () => {
       identifikasi: { total: 5, terisi: 5, tidak_terdampak: 0, hasil: 9 },
     });
     const a = aktivitasDariInduk(K(bermenu, [TL(3, "biru"), TL(1, "biru")]));
-    expect(a.find((x) => x.jenis === "pelatihan")!.href).toBe("/sigap/pelatihan");
+    expect(a.find((x) => x.jenis === "pelatihan")!.href).toBe("/sigap/pelatihan?kegiatan=3");
     expect(a.find((x) => x.jenis === "pendataan")!.href).toBe("/sigap/kegiatan/pascabencana");
   });
 
@@ -90,5 +90,19 @@ describe("tahapUtama & pisahAktif", () => {
     const r = pisahAktif([{ nada: "hijau", n: 1 }, { nada: "biru", n: 2 }, { nada: "merah", n: 3 }, { nada: "abu", n: 4 }]);
     expect(r.aktif.map((x) => x.n)).toEqual([3, 2, 4]);
     expect(r.selesai.map((x) => x.n)).toEqual([1]);
+  });
+});
+
+describe("pelatihan ganda (1 Nov 2026): kartu membawa kegiatannya", () => {
+  const seruti = INDUK([T("pelatihan", 1, ["pelatihan", "translok:7"]), T("pendataan", 2, ["translok:6"])], { kode: "seruti_tw4", nama: "Seruti Triwulan IV 2026", pendek: "Seruti TW IV", perencanaan: null, wilayah: null });
+  it("pelatihanId dan tautan mengikuti translok pada tahap pelatihan (hub belum siap: modul netral); kartu Pendataan tidak punya pelatihanId", () => {
+    const b = aktivitasDariInduk(K(seruti, [TL(7, "biru"), TL(6, "biru")])); // hubMuat "gagal": modul netral dengan tautan kegiatan
+    expect(b.find((x) => x.jenis === "pelatihan")).toMatchObject({ pelatihanId: 7, href: "/sigap/pelatihan?kegiatan=7" });
+    expect(b.find((x) => x.jenis === "pendataan")!.pelatihanId).toBeNull();
+  });
+  it("tahap pelatihan tanpa pasangan translok -> tanpa kegiatan (perilaku lama)", () => {
+    const polos = INDUK([T("pelatihan", 1, ["pelatihan"])]);
+    const a = aktivitasDariInduk(K(polos));
+    expect(a[0]).toMatchObject({ pelatihanId: null, href: "/sigap/pelatihan" });
   });
 });

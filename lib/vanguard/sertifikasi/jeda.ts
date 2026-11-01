@@ -3,12 +3,13 @@
 // (1 Nov 2026) VANGUARD V7d: aturan kapan petugas boleh memulai Ujian Sertifikasi atau Latihan (keputusan Iqbal 1 Nov):
 //   - Selama BELUM pernah menyelesaikan sertifikasi: sertifikasi boleh dicoba 1 kali per hari (hari menurut WIB, dihitung dari saat DIMULAI).
 //   - Setelah pernah menyelesaikan satu sertifikasi: sertifikasi baru terbuka lagi 5 hari setelah hari selesai terakhir; sebelum itu hanya LATIHAN (format sama, tidak mengubah sertifikat).
+//   - Ujian yang DIBATALKAN (tingkat kosong) tidak dihitung selesai, tetapi tetap menghabiskan jatah sertifikasi hari itu.
 //   - Latihan selalu boleh. Hanya satu ujian berjalan pada satu waktu; ujian yang tidak selesai dalam 12 jam dianggap kedaluwarsa.
 // (Tafsiran atas pesan Iqbal; mudah diubah di konstanta di bawah.)
 
 export const JEDA_ULANG_HARI = 5;
 export const KEDALUWARSA_JAM = 12;
-export type RiwayatUjian = { id: number; jenis: "sertifikasi" | "latihan"; mulai_at: string; selesai_at: string | null };
+export type RiwayatUjian = { id: number; jenis: "sertifikasi" | "latihan"; mulai_at: string; selesai_at: string | null; /** null pada ujian yang dibatalkan (selesai_at terisi, tanpa skor) */ tingkat?: number | null };
 
 const MS_HARI = 86_400_000;
 const WIB = 7 * 3_600_000;
@@ -29,7 +30,7 @@ export function statusUjian(riwayat: RiwayatUjian[], sekarang: Date): StatusUjia
   const ms = sekarang.getTime();
   const urut = [...riwayat].sort((a, b) => new Date(b.mulai_at).getTime() - new Date(a.mulai_at).getTime());
   const berjalan = urut.find((u) => !u.selesai_at && ms - new Date(u.mulai_at).getTime() < KEDALUWARSA_JAM * 3_600_000) ?? null;
-  const selesai = urut.filter((u) => u.jenis === "sertifikasi" && !!u.selesai_at);
+  const selesai = urut.filter((u) => u.jenis === "sertifikasi" && !!u.selesai_at && u.tingkat !== null);
   const sudahBersertifikat = selesai.length > 0;
   if (!sudahBersertifikat) {
     const hariIni = hariWibNomor(sekarang);

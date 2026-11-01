@@ -8,6 +8,7 @@
 //   POST { aksi:"mulai", jenis:"sertifikasi"|"latihan" }                   -> { ujian, jumlah } (atau dilanjutkan bila masih ada ujian berjalan)
 //   POST { aksi:"jawab", ujian, urut, isian, durasiDtk? }                  -> { benar, poin, [rincian pada latihan], semuaTerjawab }
 //   POST { aksi:"selesai", ujian, menyerah? }                              -> { hasil:{skor, tingkat, nama, butirFatal}, review[] }
+//   POST { aksi:"batal", ujian }                                           -> { dibatalkan:true } (ujian dilepas tanpa skor; jatah sertifikasi hari itu tetap terpakai)
 // Aturan jeda: lib/vanguard/sertifikasi/jeda.ts. Mode lihat (masuk sebagai) tidak boleh menulis.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -139,7 +140,12 @@ export async function POST(req: NextRequest) {
     const u = await ujianMilik(db, akun, ujianId);
     if (!u) return galat("Ujian tidak ditemukan.", 404);
     if (u.selesai_at) return galat("Ujian ini sudah selesai.", 409);
-    if (kedaluwarsa(u)) return galat(`Ujian kedaluwarsa (lebih dari ${KEDALUWARSA_JAM} jam). Mulai ujian baru.`, 410);
+    if (b.aksi === "batal") {
+      const { error } = await db.from("sigap_vanguard_ujian").update({ selesai_at: new Date().toISOString(), skor: null, tingkat: null, butir_fatal: null }).eq("id", u.id);
+      if (error) return galat("Gagal membatalkan ujian.", 500);
+      return NextResponse.json({ dibatalkan: true });
+    }
+    if (kedaluwarsa(u) && b.aksi !== "batal") return galat(`Ujian kedaluwarsa (lebih dari ${KEDALUWARSA_JAM} jam). Mulai ujian baru.`, 410);
     const butir = await butirUjian(db, ujianId);
 
     if (b.aksi === "jawab") {

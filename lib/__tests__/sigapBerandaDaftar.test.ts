@@ -93,3 +93,27 @@ describe("kartu lain tanpa informasi", () => {
     expect(d[0].sso).toBe("penyisiran");
   });
 });
+
+describe("tugas pelatihan pada peserta dua pelatihan (1 Nov 2026)", () => {
+  const pasca = INDUK("pascabencana", [T("pelatihan", 1, ["pelatihan", "translok:3"]), T("pendataan", 2, ["translok:1"])]);
+  const seruti = INDUK("seruti_tw4", [T("pelatihan", 1, ["pelatihan", "translok:7"]), T("pendataan", 2, ["translok:6"])]);
+  const keg = [TL(3, "hijau"), TL(1, "biru"), TL(7, "biru"), TL(6, "biru")];
+  const tp: TugasUtama = { skor: 60, ikon: "surat", label: "MULAI DARI SINI", judul: "Baca undangan pelatihan", uraian: "x", href: "/sigap/pelatihan/undangan?kegiatan=7", aksi: "Buka undangan" };
+  const akt = [...aktivitasDariInduk(K(pasca, keg)), ...aktivitasDariInduk(K(seruti, keg))];
+
+  it("tugas dipasang di kartu Pelatihan milik kegiatan hub (Seruti), bukan kartu Pelatihan pertama (PSP)", () => {
+    const d = susunDaftarKartu({ kegiatan: akt, induk: [pasca, seruti], keg, tugasPelatihan: tp, tugasPelatihanKegiatanId: 7, nowMs: NOW });
+    const pelPsp = d.find((k) => k.id === "akt-pascabencana-pelatihan")!;
+    const pelSeruti = d.find((k) => k.id === "akt-seruti_tw4-pelatihan")!;
+    expect(pelSeruti.poin).toMatchObject({ judul: "Baca undangan pelatihan", href: "/sigap/pelatihan/undangan?kegiatan=7" });
+    expect(pelPsp.poin?.judul).not.toBe("Baca undangan pelatihan");
+  });
+
+  it("id kegiatan kosong atau tidak cocok: perilaku lama (kartu Pelatihan pertama)", () => {
+    for (const id of [undefined, null, 999]) {
+      const d = susunDaftarKartu({ kegiatan: akt, induk: [pasca, seruti], keg, tugasPelatihan: tp, tugasPelatihanKegiatanId: id, nowMs: NOW });
+      const pertama = d.filter((k) => k.jenis === "pelatihan").map((k) => k.poin?.judul);
+      expect(pertama.filter((j) => j === "Baca undangan pelatihan")).toHaveLength(1);
+    }
+  });
+});

@@ -28,6 +28,8 @@ export type TugasUtama = {
 
 /** Bagian Hub (halaman Pelatihan) yang dipakai; Hub asli cocok secara struktur. */
 export type HubTugas = {
+  /** (1 Nov 2026) pelatihan yang dilayani hub ini (dari /api/sigap/pelatihan); dipakai Beranda untuk mencocokkan hub dengan kartu pelatihan yang tepat */
+  kegiatan_id?: number | null;
   peserta: unknown | null;
   undangan: { tanggal_iso: string };
   tes: { jenis: string; judul?: string; status: string; buka_at: string; tutup_at: string; durasi_menit: number; jumlah_soal: number; sesi: { batas_at: string; terjawab: number } | null }[];
