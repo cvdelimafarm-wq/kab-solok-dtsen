@@ -10,6 +10,7 @@ import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
 import { kkProporsionalTim } from "@/lib/portal/korwilMonitor";
 import { memoWaktu } from "@/lib/portal/memoSingkat";
+import { PESAN_HARI_TERKUNCI } from "@/lib/kunciPenandaan";
 import { MAKS_BARIS_UNGGAH, hanyaSubAktif, kunciBaris, periksaBarisKk, ringkasAktif, type Anggota, type BarisKk, type BarisRingkas, type IsiCatat, type KkLembar, type SubTim } from "@/lib/pendataan";
 
 type AkunMin = { id: number; petugas_bencana_id: number | null };
@@ -127,6 +128,8 @@ const PESAN_TOLAK: Record<string, string> = {
   hasil_tidak_dikenal: "Hasil pendataan tidak dikenal.",
   kk_tidak_ada: "KK tidak ditemukan (mungkin unggahan sudah dibatalkan admin).",
   bukan_wilayah_tim: "KK ini bukan di wilayah tim Anda.",
+  // (1 Nov 2026) SQL 20261101za: penandaan hari sebelumnya dikunci; hanya revisit yang boleh mengubahnya
+  hari_terkunci: PESAN_HARI_TERKUNCI,
 };
 
 export async function catatHasil(db: Db, akunId: number, c: IsiCatat): Promise<{ ok: true; terkini: boolean; duplikat: boolean } | { ok: false; pesan: string }> {

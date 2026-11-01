@@ -6,7 +6,7 @@
 // jadi kunci tidak pernah sampai ke perangkat petugas dan hasil bisa diulang untuk pembahasan.
 //
 // Rumus: + - * / ( ), angka, nama variabel, bulat(x) (setengah ke atas), bulat2(x) (2 desimal), min(a,b), max(a,b).
-// Penampung teks: {nama} angka (koma desimal, titik ribuan); {nama:rp} "Rp25.000"; {nama:d2} dua desimal tetap "2,00".
+// Penampung teks: {nama} angka (koma desimal, titik ribuan); {nama:rp} "Rp25.000"; {nama:d2} dua desimal tetap "2,00"; {nama:Kata} bilangan 0–20 sebagai kata berhuruf awal besar ("Tiga"), {nama:kata} huruf kecil.
 
 export type ParameterT = { baku: number; pilihan: number[] };
 export type KunciT = { r: number; art?: number; k1?: number | string; k2?: number | string; k3?: number | string; k4?: number | string; sumber?: number; nama?: string; satuan?: string };
@@ -86,12 +86,14 @@ export function hitungRumus(rumus: string, v: Record<string, number>): number {
 }
 
 const fmtAngka = (x: number) => x.toLocaleString("id-ID", { maximumFractionDigits: 2 });
+const KATA = ["nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan", "sepuluh", "sebelas", "dua belas", "tiga belas", "empat belas", "lima belas", "enam belas", "tujuh belas", "delapan belas", "sembilan belas", "dua puluh"];
+const kata = (x: number, besar: boolean): string => { if (!Number.isInteger(x) || x < 0 || x > 20) throw new Error(`Bilangan ${x} tidak bisa ditulis sebagai kata`); const k = KATA[x]; return besar ? k[0].toUpperCase() + k.slice(1) : k; };
 const fmtD2 = (x: number) => x.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Mengisi penampung {nama} dan {nama:rp}. Penampung tak dikenal = galat (templat salah ketik tertangkap tes). */
 export function isiTeks(teks: string, v: Record<string, number>): string {
-  return teks.replace(/\{([A-Za-z_][A-Za-z0-9_]*)(?::(rp|d2))?\}/g, (_m, nama: string, f?: string) => {
+  return teks.replace(/\{([A-Za-z_][A-Za-z0-9_]*)(?::(rp|d2|Kata|kata))?\}/g, (_m, nama: string, f?: string) => {
     if (!(nama in v)) throw new Error(`Penampung {${nama}} tidak punya nilai`);
-    return f === "rp" ? `Rp${fmtAngka(v[nama])}` : f === "d2" ? fmtD2(v[nama]) : fmtAngka(v[nama]);
+    return f === "rp" ? `Rp${fmtAngka(v[nama])}` : f === "d2" ? fmtD2(v[nama]) : f === "Kata" || f === "kata" ? kata(v[nama], f === "Kata") : fmtAngka(v[nama]);
   });
 }
 

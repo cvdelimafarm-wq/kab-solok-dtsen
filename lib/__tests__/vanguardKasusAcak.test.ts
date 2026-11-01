@@ -7,8 +7,8 @@ import { MIN_PILIHAN } from "../vanguard/kuesioner/templat";
 const bandingkan = (kode: string) => KASUS.find((k) => k.kode === kode)!;
 
 describe("templat kasus lama (V7c)", () => {
-  it("templat tersedia untuk level A (A01–A13) dan B (B01–B10), dan tiap kodenya ada di kasus asli", () => {
-    expect(TEMPLAT_V1.map((t) => t.kode)).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10"]);
+  it("templat tersedia untuk level A–C (A01–A13, B01–B10, C01–C11), dan tiap kodenya ada di kasus asli", () => {
+    expect(TEMPLAT_V1.map((t) => t.kode)).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11"]);
     for (const t of TEMPLAT_V1) { expect(punyaTemplatV1(t.kode)).toBe(true); expect(bandingkan(t.kode)).toBeDefined(); }
   });
   it(`tiap parameter >= ${MIN_PILIHAN} pilihan tanpa duplikat, dan nilai baku ada di pilihan`, () => {
@@ -23,7 +23,7 @@ describe("templat kasus lama (V7c)", () => {
   });
   it("benih sama = kasus sama; kasus tak bertemplat = undefined", () => {
     expect(kasusDariBenih("A05", 99)).toEqual(kasusDariBenih("A05", 99));
-    expect(kasusDariBenih("C01", 5)).toBeUndefined();
+    expect(kasusDariBenih("D01", 5)).toBeUndefined();
   });
   it("lintas 300 benih: tidak ada penampung tersisa, kunci menilai dirinya benar, nilai wajar, alternatif berbeda dari kunci", () => {
     for (const t of TEMPLAT_V1) for (let b = 1; b <= 300; b++) {

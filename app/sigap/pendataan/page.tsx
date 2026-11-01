@@ -33,6 +33,7 @@ import KontrolPetaDasar from "./KontrolPetaDasar";
 import { useDasarTim } from "./useDasar";
 import type { StatusDasar } from "./PetaDasar";
 import { namaTampil } from "@/lib/namaTampil";
+import { KETERANGAN_TERKUNCI, PESAN_HARI_TERKUNCI, penandaanTerkunci, tindakanDiizinkan } from "@/lib/kunciPenandaan";
 import { KETERANGAN_REVISIT, LABEL_REVISIT, LABEL_REVISIT_PENDEK, tampilkanRevisit } from "@/lib/revisit";
 import { inisial, namaDepan, tandaiKk, useKkSub, useTimPendataan, useUnduhKkLatar, uuid, waktuRingkas } from "./usePendataan";
 import { apiPortal } from "@/app/portal/sesi";
@@ -526,6 +527,9 @@ export default function LembarPendataan() {
     }
   }
 
+  // (1 Nov 2026) kunci per hari -- untuk menonaktifkan tombol di kartu KK (mode perbaikan laporan punya aturan sendiri: hanya KK tanpa hasil)
+  const terkunciKk = (k: KkLembar) => !perbaikan && penandaanTerkunci(k);
+  const diizinkanKk = (k: KkLembar, hasil: string, revisit: boolean) => !!perbaikan || tindakanDiizinkan(k, { hasil, revisit }, sayaAkun, kkQ.data?.revisit);
   function tandai(k: KkLembar, hasil: HasilKk, alasan?: string, revisit = false) {
     if (!subId) return;
     if (perbaikan) {
@@ -533,6 +537,8 @@ export default function LembarPendataan() {
       simpanTampung({ ...tampung, [k.id]: { hasil, alasan: alasan ?? null, kunci: tampung[k.id]?.kunci ?? uuid() } });
       return setToast({ pesan: `Ditandai: ${konfig.hasil[hasil].label} (belum dikirim)` });
     }
+    // (1 Nov 2026) kunci per hari: penandaan hari lalu hanya bisa diubah lewat revisit (server tetap yang memutuskan)
+    if (!tindakanDiizinkan(k, { hasil, revisit }, sayaAkun, kkQ.data?.revisit)) return setToast({ pesan: PESAN_HARI_TERKUNCI });
     const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan, revisit: k.revisit === true };
     const r = tandaiKk(subId, k, hasil, alasan, revisit);
     if (!r.ok) return setToast({ pesan: r.pesan });
@@ -551,6 +557,7 @@ export default function LembarPendataan() {
       simpanTampung(sisa);
       return setToast({ pesan: "Dikembalikan ke belum ada hasil" });
     }
+    if (penandaanTerkunci(k)) return setToast({ pesan: PESAN_HARI_TERKUNCI });
     const sebelum = { hasil: k.hasil, ppl: k.ppl_akun_id, alasan: k.alasan, revisit: k.revisit === true };
     const r = tandaiKk(subId, k, "belum");
     if (!r.ok) return setToast({ pesan: r.pesan });
@@ -1178,12 +1185,17 @@ export default function LembarPendataan() {
             </p>
           )}
           {terpilih.hasil && terpilih.ppl_akun_id === sayaAkun && <p className="mt-3 text-[12px] text-[#6B7A90]">Anda menandai {waktuRingkas(terpilih.status_at)}.</p>}
+          {terkunciKk(terpilih) && (
+            <p role="status" className="mt-3 rounded-[12px] bg-[#EEF1F6] px-3 py-2 text-[12.5px] font-bold text-[#3B4A63]">
+              {KETERANGAN_TERKUNCI}
+            </p>
+          )}
 
           <div className="mt-3 space-y-2" role="group" aria-label="Hasil pendataan">
             {hasilAktif(konfig).map((h) => {
               const aktif = terpilih.hasil === h && terpilih.ppl_akun_id === sayaAkun && !(h === "terdampak" && terpilih.revisit === true);
               return (
-                <button key={h} type="button" aria-pressed={aktif} onClick={() => tandai(terpilih, h)} className={`flex min-h-[56px] w-full items-center gap-3 rounded-[16px] border-2 px-3.5 py-2 text-left ${aktif ? "border-[#1F5FD1] bg-[#E3ECFB]" : "border-[#D9E3F2] bg-white active:bg-[#F1F6FE]"}`}>
+                <button key={h} type="button" aria-pressed={aktif} disabled={!diizinkanKk(terpilih, h, false)} onClick={() => tandai(terpilih, h)} className={`flex min-h-[56px] w-full items-center gap-3 rounded-[16px] border-2 px-3.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-45 ${aktif ? "border-[#1F5FD1] bg-[#E3ECFB]" : "border-[#D9E3F2] bg-white active:bg-[#F1F6FE]"}`}>
                   <IkonHasil hasil={h} warna={warnaPelaku(anggota.get(sayaAkun))} ukuran={26} peta={peta} />
                   <span className="text-[14px] font-extrabold text-[#0F2A52]">
                     {konfig.hasil[h].label}
@@ -1196,8 +1208,9 @@ export default function LembarPendataan() {
               <button
                 type="button"
                 aria-pressed={terpilih.hasil === "terdampak" && terpilih.revisit === true && terpilih.ppl_akun_id === sayaAkun}
+                disabled={!diizinkanKk(terpilih, "terdampak", true)}
                 onClick={() => tandai(terpilih, "terdampak", undefined, true)}
-                className={`flex min-h-[56px] w-full items-center gap-3 rounded-[16px] border-2 px-3.5 py-2 text-left ${terpilih.hasil === "terdampak" && terpilih.revisit === true && terpilih.ppl_akun_id === sayaAkun ? "border-[#6B1F96] bg-[#F1E4FA]" : "border-[#D9C2EA] bg-white active:bg-[#F8F0FD]"}`}
+                className={`flex min-h-[56px] disabled:cursor-not-allowed disabled:opacity-45 w-full items-center gap-3 rounded-[16px] border-2 px-3.5 py-2 text-left ${terpilih.hasil === "terdampak" && terpilih.revisit === true && terpilih.ppl_akun_id === sayaAkun ? "border-[#6B1F96] bg-[#F1E4FA]" : "border-[#D9C2EA] bg-white active:bg-[#F8F0FD]"}`}
               >
                 <IkonHasil hasil="terdampak" warna="#6B1F96" ukuran={26} peta={peta} />
                 <span className="text-[14px] font-extrabold text-[#0F2A52]">
@@ -1217,7 +1230,7 @@ export default function LembarPendataan() {
               <span className="text-[11.5px] font-bold text-[#52627A]">Alasan (boleh dikosongkan)</span>
               <div className="mt-1.5 flex flex-wrap gap-2">
                 {konfig.hasil[terpilih.hasil].alasan.map((a) => (
-                  <button key={a} type="button" aria-pressed={terpilih.alasan === a} onClick={() => tandai(terpilih, terpilih.hasil as HasilKk, a, terpilih.revisit === true)} className={`${chipBase} ${terpilih.alasan === a ? chipOn : chipOff}`}>
+                  <button key={a} type="button" aria-pressed={terpilih.alasan === a} disabled={terkunciKk(terpilih)} onClick={() => tandai(terpilih, terpilih.hasil as HasilKk, a, terpilih.revisit === true)} className={`${chipBase} ${terpilih.alasan === a ? chipOn : chipOff}`}>
                     {a}
                   </button>
                 ))}
@@ -1256,7 +1269,7 @@ export default function LembarPendataan() {
                 </button>
               </>
             )}
-            {terpilih.hasil && (
+            {terpilih.hasil && !terkunciKk(terpilih) && (
               <button type="button" onClick={() => kembalikan(terpilih)} className={`${chipBase} ${chipOff}`}>
                 Kembalikan ke belum ada hasil
               </button>

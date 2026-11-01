@@ -87,3 +87,11 @@ describe("templat kasus K (V7a)", () => {
     expect(KASUS_K.map((k) => [k.kode, k.kunci.length])).toEqual([["K01", 14], ["K02", 10]]);
   });
 });
+
+describe("format kata (V7c)", () => {
+  it("{x:Kata} dan {x:kata} menulis bilangan 0–20 sebagai kata; di luar rentang atau pecahan = galat", () => {
+    expect(isiTeks("{a:Kata} ART dan {b:kata} orang", { a: 3, b: 12 })).toBe("Tiga ART dan dua belas orang");
+    expect(() => isiTeks("{a:kata}", { a: 21 })).toThrow();
+    expect(() => isiTeks("{a:kata}", { a: 1.5 })).toThrow();
+  });
+});
