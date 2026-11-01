@@ -127,6 +127,21 @@ const kepala = (akun = "77") => ({ "x-akun": akun, "content-type": "application/
 const post = (badan: Record<string, unknown>, h: Record<string, string> = kepala()) => POST(new NextRequest("http://uji.local/api/sigap/vanguard/sertifikasi", { method: "POST", headers: h, body: JSON.stringify(badan) }));
 const ambil = (qs = "", h: Record<string, string> = kepala()) => GET(new NextRequest(`http://uji.local/api/sigap/vanguard/sertifikasi${qs}`, { headers: h }));
 const kosong = (row: Record<string, unknown>) => (row.jenis === "k" ? [] : {});
+describe("rincian koreksi memuat jawaban Anda vs seharusnya (V8b)", () => {
+  it("kotak yang salah membawa nilai isian petugas dan nilai kunci; kotak kosong = 0", () => {
+    const kunci = kasusDariBenih("A01", 12)!.kunci as Record<string, number>;
+    const sel = Object.keys(kunci).find((k) => kunci[k] > 0)!;
+    const kosong = nilaiButir("A01", 12, {}) as { rincian: { sel: string | null; anda?: number | null; seharusnya?: number | null }[] };
+    const r0 = kosong.rincian.find((r) => r.sel === sel)!;
+    expect(r0.anda).toBe(0);
+    expect(r0.seharusnya).toBe(kunci[sel]);
+    const salah = nilaiButir("A01", 12, { [sel]: kunci[sel] * 3 }) as { rincian: { sel: string | null; anda?: number | null; seharusnya?: number | null }[] };
+    const r1 = salah.rincian.find((r) => r.sel === sel)!;
+    expect(r1.anda).toBe(kunci[sel] * 3);
+    expect(r1.seharusnya).toBe(kunci[sel]);
+  });
+});
+
 const kunciDari = (kasus: string, jenis: string, benih: number) => (jenis === "k" ? soalK(kasus, benih)!.kunci : kasusDariBenih(kasus, benih)!.kunci);
 
 beforeEach(() => { hook = () => null; process.env.SUPABASE_SERVICE_ROLE_KEY = "kunci-uji"; process.env.NEXT_PUBLIC_SUPABASE_URL = "http://uji.local"; tabel = {}; });
@@ -191,6 +206,22 @@ describe("rute sertifikasi", () => {
     const lat = await (await post({ aksi: "mulai", jenis: "latihan" })).json();
     const j = await (await post({ aksi: "jawab", ujian: lat.ujian, urut: tabel.sigap_vanguard_ujian_butir[0].urut, isian: kosong(tabel.sigap_vanguard_ujian_butir[0]) })).json();
     if (!j.benar) expect(Array.isArray(j.rincian)).toBe(true);
+  });
+  it("penjelasan (langkah, pembahasan, rujukan) ikut pada jawaban salah di latihan dan pada review butir salah; tidak ada pada jawaban sertifikasi sebelum selesai", async () => {
+    const lat = await (await post({ aksi: "mulai", jenis: "latihan" })).json();
+    const row = tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === lat.ujian).find((x) => { const k = kunciDari(x.kasus, x.jenis, x.benih) as unknown; return Array.isArray(k) ? k.length > 0 : Object.keys(k as object).length > 0; })!;
+    const j = await (await post({ aksi: "jawab", ujian: lat.ujian, urut: row.urut, isian: kosong(row) })).json();
+    expect(j.benar).toBe(false);
+    expect(typeof j.penjelasan.pembahasan).toBe("string");
+    expect(Array.isArray(j.penjelasan.langkah)).toBe(true);
+    expect(j.penjelasan.pembahasan.length).toBeGreaterThan(0);
+    expect([...j.penjelasan.langkah, j.penjelasan.pembahasan, j.penjelasan.rujukan].join(" ")).not.toMatch(/[{}]/); // penampung templat sudah terisi
+    const m = await (await post({ aksi: "mulai", jenis: "sertifikasi" })).json();
+    const rs = tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === m.ujian).find((x) => { const k = kunciDari(x.kasus, x.jenis, x.benih) as unknown; return Array.isArray(k) ? k.length > 0 : Object.keys(k as object).length > 0; })!;
+    const js = await (await post({ aksi: "jawab", ujian: m.ujian, urut: rs.urut, isian: kosong(rs) })).json();
+    expect(js.penjelasan).toBeUndefined();
+    const sel = await (await post({ aksi: "selesai", ujian: m.ujian, menyerah: true })).json();
+    expect(sel.review.find((x: { urut: number }) => x.urut === rs.urut).penjelasan.pembahasan.length).toBeGreaterThan(0);
   });
   it("review setelah selesai memuat pesan koreksi; sebelum selesai tidak", async () => {
     const m = await (await post({ aksi: "mulai", jenis: "sertifikasi" })).json();

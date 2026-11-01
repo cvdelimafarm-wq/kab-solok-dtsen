@@ -20,6 +20,7 @@ import { compute, fmt as fmtRp } from "@/lib/vanguard/engine";
 import { FUNGSI, TOMBOL, hitungEkspresi, tekanPad } from "@/lib/vanguard/keypad";
 import { kutipanIv, lembarBlok } from "@/lib/vanguard/lembar";
 import { tujuanAman } from "@/lib/vanguard/navigasi";
+import { cariRincianIv1 } from "@/lib/vanguard/kuesioner/rincian";
 import { labelSel } from "@/lib/vanguard/sel";
 import { NAMA_TINGKAT } from "@/lib/vanguard/sertifikasi/skor";
 import type { KasusPublik, Nilai } from "@/lib/vanguard/tipe";
@@ -38,12 +39,13 @@ type Beranda = {
   riwayat: { ujian: number; jenis: JenisUjian; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null }[];
   sertifikat: { terbaru: Ringkas; tertinggi: Ringkas };
 };
-type Rincian = { jenis: string; tingkat: string; pesan: string; sel: string | null };
+type Penjelasan = { langkah: string[]; pembahasan: string; rujukan: string };
+type Rincian = { jenis: string; tingkat: string; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null };
 type ButirRingkas = { urut: number; kode: string; jenis: "k" | "v1"; judul: string; terjawab: boolean; benar?: boolean | null; poin?: number | null; rincian?: Rincian[] };
 type UjianDetail = { ujian: { id: number; jenis: JenisUjian; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; kedaluwarsa: boolean }; butir: ButirRingkas[] };
 type Soal = { soal: { jenis: "k" | "v1"; kode: string; benih: number; judul: string; data: Record<string, unknown> }; terjawab: boolean };
-type HasilUjian = { hasil: { skor: number; butirFatal: number; tingkat: number; nama: string }; jenis: JenisUjian; review: { urut: number; kode: string; judul: string; terjawab: boolean; benar: boolean | null; poin: number; rincian: Rincian[] }[] };
-type Jawab = { benar: boolean; poin: number; semuaTerjawab: boolean; rincian?: Rincian[] };
+type HasilUjian = { hasil: { skor: number; butirFatal: number; tingkat: number; nama: string }; jenis: JenisUjian; review: { urut: number; kode: string; judul: string; terjawab: boolean; benar: boolean | null; poin: number; rincian: Rincian[]; penjelasan?: Penjelasan | null }[] };
+type Jawab = { benar: boolean; poin: number; semuaTerjawab: boolean; rincian?: Rincian[]; penjelasan?: Penjelasan | null };
 
 const wibTeks = (iso: string | null) => (iso ? new Date(iso).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " WIB" : "");
 const html = (h: string) => ({ __html: h });
@@ -58,6 +60,54 @@ type Usulanku = { id: number; judul: string; status: string; catatan_admin: stri
 const LABEL_STATUS_USULAN: Record<string, string> = { baru: "Menunggu tinjauan", diterima: "Diterima", ditolak: "Belum dapat dipakai", dikerjakan: "Sedang dijadikan soal" };
 const kunciDrafUjian = (ujian: number, urut: number) => `vanguard.ujian.${ujian}.${urut}`;
 
+const NAMA_TINGKAT_SALAH: Record<string, string> = { fatal: "Fatal", berat: "Berat", ringan: "Ringan" };
+const teksRp = (v: number | null | undefined) => (v ? `Rp${fmtRp(v)}` : "kosong");
+/** Nama kotak yang mudah dibaca: lembar V–VII lewat labelSel; kasus kuesioner "R12 · nama rincian · ART 2". */
+const labelKotak = (sel: string | null): string | null => {
+  if (!sel) return null;
+  const m = /^R(\d+)(?:A(\d+))?$/.exec(sel);
+  if (m) { const nm = cariRincianIv1(Number(m[1]))?.nama; return `Blok IV.1 · Rincian ${m[1]}${nm ? ` (${nm})` : ""}${m[2] ? ` · ART ${m[2]}` : ""}`; }
+  return labelSel(sel);
+};
+/** Arti singkat tiap jenis kesalahan, supaya tidak hanya "salah" tetapi juga apa sebabnya. */
+const ARTI_JENIS: Record<string, string> = {
+  harus_kosong: "Kotak ini tidak berlaku untuk cerita ini, jadi harus dibiarkan kosong. Angka yang diisi di sini membuat total ikut keliru.",
+  belum_diisi: "Cerita memuat angka untuk kotak ini, tetapi kotaknya masih kosong.",
+  salah_letak: "Angkanya benar, tetapi tercatat di kotak lain. Pindahkan ke kotak yang ditunjuk.",
+  konversi_seminggu: "Nilai yang dicatat masih nilai seminggu. Blok V meminta nilai setahun terakhir.",
+  konversi_sebulan: "Nilai yang dicatat masih nilai sebulan. Blok V meminta nilai setahun terakhir.",
+  angka_meleset: "Angka yang diisi berbeda dari nilai seharusnya.",
+  jebakan: "Ini kesalahan yang sering terjadi pada kasus seperti ini.",
+  alternatif: "Ini kesalahan yang sering terjadi pada kasus seperti ini.",
+  diskrepansi: "Selisih Blok VI dan Blok VII harus nol. Ada isian di salah satu blok yang belum sesuai.",
+  kontrol_vii: "Rincian 1 Blok VII harus sesuai tabel kontrol.",
+};
+type Lihat = { x: Rincian; penjelasan: Penjelasan | null; bisaSorot: boolean };
+/** Koreksi satu kesalahan: kotak mana, jawaban Anda vs seharusnya (bila ada angkanya), lalu petunjuk singkat; ketuk untuk pop-up penjelasan. */
+function KoreksiButir({ daftar, penjelasan, bisaSorot, onLihat }: { daftar: Rincian[]; penjelasan: Penjelasan | null | undefined; bisaSorot: boolean; onLihat: (l: Lihat) => void }) {
+  return (
+    <div className="sr-kor">
+      {daftar.map((x, i) => {
+        const punyaNilai = x.anda !== undefined && x.seharusnya !== undefined;
+        const kotak = labelKotak(x.sel);
+        return (
+          <div key={i} className={`kor ${x.tingkat}`}>
+            <div className="kh"><span className="lv">{NAMA_TINGKAT_SALAH[x.tingkat] ?? x.tingkat}</span>{kotak && <span className="kt">{kotak}</span>}</div>
+            {punyaNilai && (
+              <div className="vs">
+                <div className="anda"><small>Jawaban Anda</small><b>{teksRp(x.anda)}</b></div>
+                <div className="seharusnya"><small>Seharusnya</small><b>{teksRp(x.seharusnya)}</b></div>
+              </div>
+            )}
+            <p className="ps">{x.pesan}</p>
+            <button type="button" className="lihat" onClick={() => onLihat({ x, penjelasan: penjelasan ?? null, bisaSorot: bisaSorot && !!x.sel && !/^R\d/.test(x.sel) })}>Lihat penjelasan ›</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Sertifikasi() {
   const q = useSearchParams();
   const tujuan = useMemo(() => { const d = q.get("dari"); return d ? tujuanAman(d) : "/sigap/vanguard"; }, [q]);
@@ -68,6 +118,8 @@ export default function Sertifikasi() {
   const [urut, setUrut] = useState(0);
   const [hasil, setHasil] = useState<HasilUjian | null>(null);
   const [jawab, setJawab] = useState<Jawab | null>(null);
+  const [jelas, setJelas] = useState<Lihat | null>(null); // pop-up penjelasan kotak
+  const [sorot, setSorot] = useState<string | null>(null); // kotak yang disorot pada lembar
   const [kerja, setKerja] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [isianK, setIsianK] = useState<Isian[]>([]);
@@ -93,8 +145,18 @@ export default function Sertifikasi() {
     void muatBeranda();
   }, [muatBeranda]);
 
-  const keAtas = () => { setPad(null); setLayar((l) => (l === "butir" ? "ujian" : l === "ujian" || l === "hasil" || l === "usul" ? "beranda" : l)); if (layar === "ujian" || layar === "hasil" || layar === "usul") void muatBeranda(); skrol.current?.scrollTo({ top: 0 }); };
+  const keAtas = () => { setPad(null); setJelas(null); setSorot(null); setLayar((l) => (l === "butir" ? "ujian" : l === "ujian" || l === "hasil" || l === "usul" ? "beranda" : l)); if (layar === "ujian" || layar === "hasil" || layar === "usul") void muatBeranda(); skrol.current?.scrollTo({ top: 0 }); };
   useTutupDenganBack(layar !== "beranda", keAtas);
+  useTutupDenganBack(jelas !== null, () => setJelas(null)); // Back HP menutup pop-up dulu
+  // sorot kotak pada lembar (merah berdenyut) dan gulir ke sana; hilang saat pindah butir
+  useEffect(() => {
+    if (!sorot || layar !== "butir") return;
+    const el = skrol.current?.querySelector<HTMLElement>(`td[data-id="${sorot}"]`);
+    if (!el) return;
+    el.classList.add("sr-sorot");
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    return () => el.classList.remove("sr-sorot");
+  }, [sorot, layar, soal]);
 
   const mulai = async (jenis: JenisUjian) => {
     setKerja(true);
@@ -113,7 +175,7 @@ export default function Sertifikasi() {
 
   const bukaButir = async (b: ButirRingkas) => {
     if (!detail) return;
-    setKerja(true); setJawab(null); setPad(null);
+    setKerja(true); setJawab(null); setPad(null); setJelas(null); setSorot(null);
     const r = await api<Soal>(`/api/sigap/vanguard/sertifikasi?ujian=${detail.ujian.id}&butir=${b.urut}`);
     if (r) {
       setSoal(r); setUrut(b.urut); setVals({}); setIsianK([]);
@@ -181,6 +243,8 @@ export default function Sertifikasi() {
 
   const terjawab = detail ? detail.butir.filter((b) => b.terjawab).length : 0;
   const total = detail ? detail.butir.length : 0;
+  // butir berikutnya yang belum dijawab (setelah butir ini, lalu berputar ke awal); tidak ada = semua sudah dijawab -> tombol "Selesai"
+  const butirBerikut = detail ? (detail.butir.find((b) => b.urut > urut && !b.terjawab) ?? detail.butir.find((b) => b.urut !== urut && !b.terjawab)) : undefined;
   const latihan = !!detail && detail.ujian.jenis !== "sertifikasi"; // latihan, harian, tantangan: rincian langsung, tidak mengubah sertifikat
   const judulLayar = layar === "hasil" ? "Hasil ujian" : layar === "usul" ? "Usul kasus" : layar === "butir" ? `Butir ${urut} dari ${total}` : layar === "ujian" ? (detail ? (detail.ujian.jenis === "sertifikasi" ? "Ujian Sertifikasi" : LABEL_JENIS_UJIAN[detail.ujian.jenis]) : "Ujian") : "Sertifikasi kemampuan";
   const persen = layar === "beranda" ? 0 : total ? (terjawab / total) * 100 : 0;
@@ -344,7 +408,7 @@ export default function Sertifikasi() {
             {soal.terjawab && jawab && (
               <div className={`catat ${jawab.benar ? "ya" : "tidak"}`} role="status">
                 {jawab.benar ? <><b>Jawaban benar.</b> Poin {jawab.poin}.</> : <><b>Jawaban terkirim.</b> Poin {jawab.poin}.{latihan ? "" : " Rincian koreksi tampil di tinjauan setelah ujian selesai."}</>}
-                {latihan && jawab.rincian && jawab.rincian.length > 0 && <ul style={{ margin: "6px 0 0 18px" }}>{jawab.rincian.map((r, i) => <li key={i}>{r.pesan}</li>)}</ul>}
+                {latihan && jawab.rincian && jawab.rincian.length > 0 && <KoreksiButir daftar={jawab.rincian} penjelasan={jawab.penjelasan} bisaSorot onLihat={setJelas} />}
               </div>
             )}
             {soal.soal.jenis === "k"
@@ -367,7 +431,7 @@ export default function Sertifikasi() {
               {hasil.review.map((r) => (
                 <details key={r.urut} className={`sr-rev ${r.benar ? "ok" : "no"}`}>
                   <summary><span>{r.benar ? "✓" : r.terjawab ? "!" : "–"}</span><span>{r.urut}. {r.judul}</span><span className="poin">{r.poin}</span></summary>
-                  {r.rincian.length > 0 ? <ul>{r.rincian.map((x, i) => <li key={i}><b>{x.tingkat === "fatal" ? "Fatal" : x.tingkat === "berat" ? "Berat" : "Ringan"}:</b> {x.sel && !/^R\d/.test(x.sel) ? `${labelSel(x.sel)}. ` : ""}{x.pesan}</li>)}</ul> : <ul><li>{r.terjawab ? "Tidak ada kesalahan." : "Tidak dijawab."}</li></ul>}
+                  {r.rincian.length > 0 ? <KoreksiButir daftar={r.rincian} penjelasan={r.penjelasan} bisaSorot={false} onLihat={setJelas} /> : <ul><li>{r.terjawab ? "Tidak ada kesalahan." : "Tidak dijawab."}</li></ul>}
                 </details>
               ))}
             </div>
@@ -379,11 +443,39 @@ export default function Sertifikasi() {
       {layar === "butir" && soal && (
         <div className="dock">
           <button type="button" className="btn" onClick={keAtas}>Daftar butir</button>
-          <button type="button" className="btn pri" disabled={kerja || soal.terjawab} onClick={() => void kirimJawaban()}>{soal.terjawab ? "Sudah dijawab" : kerja ? "Mengirim…" : "Kirim jawaban"}</button>
+          {soal.terjawab
+            ? <button type="button" className="btn pri" disabled={kerja} onClick={() => (butirBerikut ? void bukaButir(butirBerikut) : void selesai(false))}>{butirBerikut ? "Berikutnya ›" : kerja ? "Memuat…" : "Selesai ✓"}</button>
+            : <button type="button" className="btn pri" disabled={kerja} onClick={() => void kirimJawaban()}>{kerja ? "Mengirim…" : "Kirim jawaban"}</button>}
         </div>
       )}
       <div className="vgfoot"><b>{detail && layar !== "beranda" ? (latihan ? "Latihan" : "Ujian Sertifikasi") : "Sertifikasi kemampuan"}</b> · belum berdampak ke penilaian</div>
 
+      {jelas && (
+        <div className="ov" onClick={() => setJelas(null)}><div className="pad sr-pop" role="dialog" aria-label="Penjelasan kotak" onClick={(ev) => ev.stopPropagation()}>
+          <div className="ttl">Penjelasan · kesalahan {(NAMA_TINGKAT_SALAH[jelas.x.tingkat] ?? jelas.x.tingkat).toLowerCase()}</div>
+          {labelKotak(jelas.x.sel) && <div className="lab">{labelKotak(jelas.x.sel)}</div>}
+          {jelas.x.anda !== undefined && jelas.x.seharusnya !== undefined && (
+            <div className="sr-kor"><div className="vs">
+              <div className="anda"><small>Jawaban Anda</small><b>{teksRp(jelas.x.anda)}</b></div>
+              <div className="seharusnya"><small>Seharusnya</small><b>{teksRp(jelas.x.seharusnya)}</b></div>
+            </div></div>
+          )}
+          {ARTI_JENIS[jelas.x.jenis] && <><h4>Artinya</h4><p>{ARTI_JENIS[jelas.x.jenis]}</p></>}
+          <h4>Catatan penilai</h4><p>{jelas.x.pesan}</p>
+          {jelas.penjelasan && (jelas.penjelasan.langkah.length > 0 || jelas.penjelasan.pembahasan) && (
+            <>
+              <h4>Cara yang benar untuk butir ini</h4>
+              {jelas.penjelasan.langkah.length > 0 && <ol>{jelas.penjelasan.langkah.map((l, i) => <li key={i} dangerouslySetInnerHTML={html(l)} />)}</ol>}
+              {jelas.penjelasan.pembahasan && <p dangerouslySetInnerHTML={html(jelas.penjelasan.pembahasan)} />}
+              {jelas.penjelasan.rujukan && <small className="ruj">Rujukan: {jelas.penjelasan.rujukan}</small>}
+            </>
+          )}
+          <div className="row2">
+            <button type="button" className="btn" onClick={() => setJelas(null)}>Tutup</button>
+            {jelas.bisaSorot && jelas.x.sel && <button type="button" className="btn pri" onClick={() => { setSorot(jelas.x.sel); setJelas(null); }}>Tunjukkan di lembar</button>}
+          </div>
+        </div></div>
+      )}
       {pad && (
         <div className="ov"><div className="pad" role="dialog" aria-label="Isi angka">
           <div className="ttl">Isi angka (Rp)</div>

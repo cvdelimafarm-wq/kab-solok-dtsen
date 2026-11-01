@@ -36,7 +36,7 @@ export function sajikanButir(kode: string, benih: number): SoalSaji | null {
   return { jenis: "v1", kode, benih, judul: String(k.judul ?? kode), data: Object.fromEntries(PUBLIK_V1.filter((f) => k[f] !== undefined).map((f) => [f, k[f]])) };
 }
 
-export type RincianNilai = { jenis: string; tingkat: "fatal" | "berat" | "ringan"; pesan: string; sel: string | null };
+export type RincianNilai = { jenis: string; tingkat: "fatal" | "berat" | "ringan"; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null };
 export type HasilButir = { benar: boolean; poin: number; fatal: number; berat: number; ringan: number; rincian: RincianNilai[]; isianBersih: unknown };
 
 function bersihkanNilaiV1(mentah: unknown): { nilai: Nilai; galat: string | null } {
@@ -74,9 +74,24 @@ export function nilaiButir(kode: string, benih: number, isian: unknown): HasilBu
     if (galat) return { galat };
     const h = kasusBenar(kasus, nilai);
     benar = h.benar; isianBersih = nilai;
-    rincian = h.evaluasi.fb.map((f) => ({ jenis: f.jenis, tingkat: f.tingkat, pesan: f.m, sel: f.k }));
+    // "anda" dan "seharusnya" (rupiah; 0 = kosong) agar tinjauan dapat menampilkan jawaban petugas berdampingan dengan jawaban seharusnya
+    const baris = new Map(h.evaluasi.rows.map((r) => [r.k, r]));
+    rincian = h.evaluasi.fb.map((f) => { const r = f.k ? baris.get(f.k) : undefined; return { jenis: f.jenis, tingkat: f.tingkat, pesan: f.m, sel: f.k, ...(r ? { anda: r.u, seharusnya: r.e } : {}) }; });
     for (const p of h.pemeriksaan) if (!p.ok && !p.info && p.jenis) rincian.push({ jenis: p.jenis, tingkat: p.tingkat ?? "fatal", pesan: p.t, sel: null });
   }
   const c = cacahKesalahan(rincian);
   return { benar, poin: benar ? 100 : poinButir(c), ...c, rincian, isianBersih };
+}
+
+export type Penjelasan = { langkah: string[]; pembahasan: string; rujukan: string };
+/** Cara benar mengisi butir (langkah, pembahasan, rujukan) untuk pop-up penjelasan. Hanya dikirim SETELAH butir dijawab (latihan) atau ujian selesai. */
+export function penjelasanButir(kode: string, benih: number): Penjelasan | null {
+  const b = cariKolam(kode);
+  if (!b) return null;
+  if (b.jenis === "k") {
+    const k = soalK(kode, benih) as unknown as { petunjuk?: string[]; pembahasan?: string; rujukan?: string } | undefined;
+    return k ? { langkah: [], pembahasan: String(k.pembahasan ?? ""), rujukan: String(k.rujukan ?? "") } : null;
+  }
+  const k = kasusDariBenih(kode, benih) as unknown as { langkah?: string[]; pembahasan?: string; rujukan?: string } | undefined;
+  return k ? { langkah: Array.isArray(k.langkah) ? k.langkah.map(String) : [], pembahasan: String(k.pembahasan ?? ""), rujukan: String(k.rujukan ?? "") } : null;
 }

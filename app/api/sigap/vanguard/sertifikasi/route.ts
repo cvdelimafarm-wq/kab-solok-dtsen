@@ -18,7 +18,7 @@ import { createClient } from "@/lib/supabaseServer";
 import { aktorDariHeader, sesiDariHeader } from "@/lib/sigapAkses";
 import { benihBaru } from "@/lib/vanguard/kuesioner/templat";
 import { KEDALUWARSA_JAM, statusUjian, type RiwayatUjian } from "@/lib/vanguard/sertifikasi/jeda";
-import { KOLAM, nilaiButir, sajikanButir } from "@/lib/vanguard/sertifikasi/nilai";
+import { KOLAM, nilaiButir, penjelasanButir, sajikanButir } from "@/lib/vanguard/sertifikasi/nilai";
 import { hitungUjian, JUMLAH_BUTIR_UJIAN, VERSI_UJIAN } from "@/lib/vanguard/sertifikasi/skor";
 import { susunUjian } from "@/lib/vanguard/sertifikasi/ujian";
 import { hitungStreak } from "@/lib/vanguard/pembinaan/streak";
@@ -39,7 +39,7 @@ function supabaseAdmin() {
 
 type JenisUjian = "sertifikasi" | "latihan" | "harian" | "tantangan";
 type UjianRow = { id: number; akun_id: number; jenis: JenisUjian; benih: number; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; butir_fatal: number | null };
-type ButirRow = { id: number; ujian_id: number; urut: number; kasus: string; jenis: "k" | "v1"; benih: number; jawab_at: string | null; benar: boolean | null; poin: number | null; jml_fatal: number | null; jml_berat: number | null; jml_ringan: number | null; rincian: { jenis: string; tingkat: string; pesan: string; sel: string | null }[] | null };
+type ButirRow = { id: number; ujian_id: number; urut: number; kasus: string; jenis: "k" | "v1"; benih: number; jawab_at: string | null; benar: boolean | null; poin: number | null; jml_fatal: number | null; jml_berat: number | null; jml_ringan: number | null; rincian: { jenis: string; tingkat: string; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null }[] | null };
 
 /** Kode Postgres 42P01 = tabel belum ada (SQL 20261101z belum dijalankan). */
 const tabelBelumAda = (e: unknown): boolean => { const x = e as { code?: string; message?: string } | null; return !!x && (x.code === "42P01" || /does not exist|schema cache/i.test(x.message ?? "")); };
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
       const { error } = await db.from("sigap_vanguard_ujian_butir").update({ jawab_at: new Date().toISOString(), benar: h.benar, poin: h.poin, jml_fatal: h.fatal, jml_berat: h.berat, jml_ringan: h.ringan, rincian: h.rincian, isian: h.isianBersih, durasi_dtk: durasi }).eq("id", row.id);
       if (error) return galat("Gagal menyimpan jawaban.", 500);
       const semuaTerjawab = butir.filter((x) => x.id !== row.id).every((x) => !!x.jawab_at);
-      return NextResponse.json({ benar: h.benar, poin: h.poin, semuaTerjawab, ...(u.jenis !== "sertifikasi" ? { rincian: h.rincian } : {}) });
+      return NextResponse.json({ benar: h.benar, poin: h.poin, semuaTerjawab, ...(u.jenis !== "sertifikasi" ? { rincian: h.rincian, penjelasan: h.rincian.length > 0 ? penjelasanButir(row.kasus, row.benih) : null } : {}) });
     }
 
     if (b.aksi === "selesai") {
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
       if (error) return galat("Gagal menyelesaikan ujian.", 500);
       return NextResponse.json({
         hasil, jenis: u.jenis,
-        review: butir.map((x) => ({ urut: x.urut, kode: x.kasus, judul: judulButir(x), terjawab: !!x.jawab_at, benar: x.benar ?? null, poin: x.poin ?? 0, rincian: x.rincian ?? [] })),
+        review: butir.map((x) => ({ urut: x.urut, kode: x.kasus, judul: judulButir(x), terjawab: !!x.jawab_at, benar: x.benar ?? null, poin: x.poin ?? 0, rincian: x.rincian ?? [], penjelasan: x.jawab_at && !x.benar ? penjelasanButir(x.kasus, x.benih) : null })),
       });
     }
     return galat("Aksi tidak dikenal.");
