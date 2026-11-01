@@ -123,7 +123,10 @@ export async function GET(req: NextRequest) {
       if (!b) return galat("Butir tidak ditemukan.", 404);
       const soal = sajikanButir(b.kasus, b.benih);
       if (!soal) return galat("Butir tidak ditemukan.", 404);
-      return NextResponse.json({ soal, terjawab: !!b.jawab_at });
+      // (V8e) Butir yang sudah dijawab dibuka ulang dengan isian petugas sendiri dan koreksinya (latihan; sertifikasi setelah selesai), bukan lembar kosong.
+      const bukaJawab = !!b.jawab_at && (!!u.selesai_at || u.jenis !== "sertifikasi");
+      const jawaban = bukaJawab ? { benar: b.benar ?? false, poin: b.poin ?? 0, rincian: b.rincian ?? [], penjelasan: (b.rincian ?? []).length > 0 ? penjelasanButir(b.kasus, b.benih) : null, isian: b.isian ?? null } : null;
+      return NextResponse.json({ soal, terjawab: !!b.jawab_at, ...(jawaban ? { jawaban } : {}) });
     }
     const buka = !!u.selesai_at || u.jenis !== "sertifikasi"; // rincian terbuka setelah selesai, dan pada latihan
     return NextResponse.json({

@@ -333,7 +333,7 @@
   "kode": "C08",
   "level": "C",
   "judul": "Perusahaan membayar langsung ke rumah sakit",
-  "cerita": "Bu Sari (karyawan koperasi) berobat jalan di rumah sakit swasta. Biaya Rp1.800.000 dibayar langsung oleh perusahaannya ke rumah sakit. Ia tidak membayar apa pun. Abaikan gaji dan pendapatan lainnya.",
+  "cerita": "Bu Sari (karyawan koperasi) berobat jalan di rumah sakit swasta. Biaya Rp1.800.000 dibayar langsung oleh perusahaannya ke rumah sakit. Ia tidak membayar apa pun. Abaikan gaji pokok dan pendapatan lainnya.",
   "iv": {
    "t": 2,
    "rows": [
@@ -429,7 +429,7 @@
   "kode": "C10",
   "level": "C",
   "judul": "Biaya berobat diganti pemberi kerja (reimburse)",
-  "cerita": "Pak Anwar (karyawan swasta) berobat ke dokter spesialis. Ia membayar sendiri dulu Rp3.000.000 dengan uang dari tabungannya, lalu perusahaan mengganti Rp2.400.000 dan uang pengganti itu ia simpan kembali di tabungan. Abaikan gaji dan pendapatan lainnya.",
+  "cerita": "Pak Anwar (karyawan swasta) berobat ke dokter spesialis. Ia membayar sendiri dulu Rp3.000.000 dengan uang dari tabungannya, lalu perusahaan mengganti Rp2.400.000 dan uang pengganti itu ia simpan kembali di tabungan. Abaikan gaji pokok dan pendapatan lainnya.",
   "iv": {
    "t": 2,
    "rows": [

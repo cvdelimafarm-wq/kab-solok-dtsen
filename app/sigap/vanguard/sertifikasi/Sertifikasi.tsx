@@ -43,9 +43,9 @@ type Penjelasan = { langkah: string[]; pembahasan: string; rujukan: string };
 type Rincian = { jenis: string; tingkat: string; pesan: string; sel: string | null; anda?: number | null; seharusnya?: number | null; dari?: string };
 type ButirRingkas = { urut: number; kode: string; jenis: "k" | "v1"; judul: string; terjawab: boolean; benar?: boolean | null; poin?: number | null; rincian?: Rincian[] };
 type UjianDetail = { ujian: { id: number; jenis: JenisUjian; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; kedaluwarsa: boolean }; butir: ButirRingkas[] };
-type Soal = { soal: { jenis: "k" | "v1"; kode: string; benih: number; judul: string; data: Record<string, unknown> }; terjawab: boolean };
+type Soal = { soal: { jenis: "k" | "v1"; kode: string; benih: number; judul: string; data: Record<string, unknown> }; terjawab: boolean; jawaban?: Jawab & { isian: unknown } };
 type HasilUjian = { hasil: { skor: number; butirFatal: number; tingkat: number; nama: string }; jenis: JenisUjian; review: { urut: number; kode: string; judul: string; terjawab: boolean; benar: boolean | null; poin: number; rincian: Rincian[]; penjelasan?: Penjelasan | null }[] };
-type Jawab = { benar: boolean; poin: number; semuaTerjawab: boolean; rincian?: Rincian[]; penjelasan?: Penjelasan | null };
+type Jawab = { benar: boolean; poin: number; semuaTerjawab?: boolean; rincian?: Rincian[]; penjelasan?: Penjelasan | null };
 
 const wibTeks = (iso: string | null) => (iso ? new Date(iso).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " WIB" : "");
 const html = (h: string) => ({ __html: h });
@@ -73,7 +73,7 @@ const labelKotak = (sel: string | null): string | null => {
 const ARTI_JENIS: Record<string, string> = {
   harus_kosong: "Kotak ini tidak berlaku untuk cerita ini, jadi harus dibiarkan kosong. Angka yang diisi di sini membuat total ikut keliru.",
   belum_diisi: "Cerita memuat angka untuk kotak ini, tetapi kotaknya masih kosong.",
-  salah_letak: "Angkanya sudah benar, hanya kotaknya yang keliru. Kesalahan ini dihitung satu kali (fatal), bukan dua.",
+  salah_letak: "Angkanya sudah benar, hanya kotaknya yang keliru. Ini dihitung satu kesalahan (fatal).",
   konversi_seminggu: "Nilai yang dicatat masih nilai seminggu. Blok V meminta nilai setahun terakhir.",
   konversi_sebulan: "Nilai yang dicatat masih nilai sebulan. Blok V meminta nilai setahun terakhir.",
   angka_meleset: "Angka yang diisi berbeda dari nilai seharusnya.",
@@ -187,6 +187,12 @@ export default function Sertifikasi() {
     const r = await api<Soal>(`/api/sigap/vanguard/sertifikasi?ujian=${detail.ujian.id}&butir=${b.urut}`);
     if (r) {
       setSoal(r); setUrut(b.urut); setVals({}); setIsianK([]);
+      if (r.terjawab && r.jawaban) { // butir yang sudah dijawab: tampilkan isian sendiri dan koreksinya
+        setJawab({ benar: r.jawaban.benar, poin: r.jawaban.poin, rincian: r.jawaban.rincian, penjelasan: r.jawaban.penjelasan });
+        const isi = r.jawaban.isian;
+        if (b.jenis === "k" && Array.isArray(isi)) setIsianK(isi as Isian[]);
+        if (b.jenis === "v1" && isi && typeof isi === "object" && !Array.isArray(isi)) setVals(isi as Nilai);
+      }
       try { const t = window.localStorage.getItem(kunciDrafUjian(detail.ujian.id, b.urut)); if (t && !b.terjawab) { const d = JSON.parse(t); if (b.jenis === "k" && Array.isArray(d)) setIsianK(d); if (b.jenis === "v1" && d && typeof d === "object" && !Array.isArray(d)) setVals(d); } } catch { /* abaikan */ }
       mulaiButir.current = Date.now();
       setLayar("butir"); skrol.current?.scrollTo({ top: 0 });

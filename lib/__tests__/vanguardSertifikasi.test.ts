@@ -251,6 +251,28 @@ describe("rute sertifikasi", () => {
     expect(sel.review.find((x: { urut: number }) => x.urut === pilih!.urut).poin).toBe(60);
     expect(pilih!.jml_fatal).toBe(1);
   });
+  it("butir terjawab dibuka ulang membawa isian sendiri + koreksi (latihan; sertifikasi hanya setelah selesai) (V8e)", async () => {
+    const pilihSalah = (uid: number) => tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === uid).find((x) => { const k = kunciDari(x.kasus, x.jenis, x.benih) as unknown; return Array.isArray(k) ? k.length > 0 : Object.keys(k as object).length > 0; })!;
+    const lat = await (await post({ aksi: "mulai", jenis: "latihan" })).json();
+    const rl = pilihSalah(lat.ujian);
+    await post({ aksi: "jawab", ujian: lat.ujian, urut: rl.urut, isian: kosong(rl) });
+    const g1 = await (await ambil(`?ujian=${lat.ujian}&butir=${rl.urut}`)).json();
+    expect(g1.terjawab).toBe(true);
+    expect(g1.jawaban.benar).toBe(false);
+    expect(g1.jawaban.rincian.length).toBeGreaterThan(0);
+    expect(g1.jawaban.penjelasan.pembahasan.length).toBeGreaterThan(0);
+    expect("isian" in g1.jawaban).toBe(true);
+    await post({ aksi: "batal", ujian: lat.ujian });
+    const m = await (await post({ aksi: "mulai", jenis: "sertifikasi" })).json();
+    const rs = pilihSalah(m.ujian);
+    await post({ aksi: "jawab", ujian: m.ujian, urut: rs.urut, isian: kosong(rs) });
+    const g2 = await (await ambil(`?ujian=${m.ujian}&butir=${rs.urut}`)).json();
+    expect(g2.terjawab).toBe(true);
+    expect(g2.jawaban).toBeUndefined(); // sertifikasi berjalan: koreksi tidak dibuka
+    await post({ aksi: "selesai", ujian: m.ujian, menyerah: true });
+    const g3 = await (await ambil(`?ujian=${m.ujian}&butir=${rs.urut}`)).json();
+    expect(g3.jawaban.rincian.length).toBeGreaterThan(0);
+  });
   it("tabel belum dibuat (SQL belum dijalankan) = 503 dengan pesan jelas, bukan 500", async () => {
     const { buatDbPalsu: _b } = await import("./vanguardFakeDb");
     void _b;

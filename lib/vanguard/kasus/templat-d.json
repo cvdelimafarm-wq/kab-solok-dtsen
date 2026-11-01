@@ -108,7 +108,7 @@
    "kode": "D02",
    "level": "D",
    "judul": "Menempati rumah dinas",
-   "cerita": "Pak Budi (PNS di bagian tata usaha) menempati rumah dinas dari kantornya. Perkiraan sewa rumah serupa {sewa:rp} per bulan. Abaikan gaji dan pendapatan lainnya.",
+   "cerita": "Pak Budi (PNS di bagian tata usaha) menempati rumah dinas dari kantornya. Perkiraan sewa rumah serupa {sewa:rp} per bulan. Abaikan gaji pokok dan pendapatan lainnya.",
    "iv": {
     "t": 2,
     "rows": [
@@ -1304,7 +1304,7 @@
    "kode": "D19",
    "level": "D",
    "judul": "Fasilitas kendaraan dinas",
-   "cerita": "Pak Anwar (PNS, pejabat di sebuah dinas) mendapat fasilitas kendaraan dinas dari kantornya. Setiap bulan kantor menanggung bensin {bensin:rp}, dan perkiraan sewa kendaraan serupa {sewa:rp}. Setahun terakhir kantor juga membayar perbaikan kendaraan dinas itu {perbaikan:rp}. Abaikan gaji dan pendapatan lainnya.",
+   "cerita": "Pak Anwar (PNS, pejabat di sebuah dinas) mendapat fasilitas kendaraan dinas dari kantornya. Setiap bulan kantor menanggung bensin {bensin:rp}, dan perkiraan sewa kendaraan serupa {sewa:rp}. Setahun terakhir kantor juga membayar perbaikan kendaraan dinas itu {perbaikan:rp}. Abaikan gaji pokok dan pendapatan lainnya.",
    "meta": {
     "A": [
      {
@@ -1383,7 +1383,7 @@
    "kode": "D20",
    "level": "D",
    "judul": "Premi BPJS dibayar pemberi kerja",
-   "cerita": "Seorang karyawan swasta tidak membayar sendiri iuran jaminan sosialnya. Perusahaan menanggung seluruh premi BPJS Kesehatan {k1:rp} dan BPJS Ketenagakerjaan {k2:rp} per bulan atas namanya. Abaikan gaji dan pendapatan lainnya.",
+   "cerita": "Seorang karyawan swasta tidak membayar sendiri iuran jaminan sosialnya. Perusahaan menanggung seluruh premi BPJS Kesehatan {k1:rp} dan BPJS Ketenagakerjaan {k2:rp} per bulan atas namanya. Abaikan gaji pokok dan pendapatan lainnya.",
    "meta": {
     "A": [
      {
