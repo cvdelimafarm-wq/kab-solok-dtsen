@@ -215,7 +215,7 @@ export default function KelolaPelatihan() {
         </div>
       )}
       {ringkas && tab === "pengumuman" && <PengumumanKelola key={kegId ?? 0} />}
-      {ringkas && tab === "rapat" && <RapatKelola key={kegId ?? 0} />}
+      {ringkas && tab === "rapat" && <RapatKelola key={kegId ?? 0} kegiatanId={kegId} />}
       {ringkas && tab === "notifikasi" && <NotifikasiKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuis" && <KuisLive key={kegId ?? 0} bisaKelolaAwal={ringkas.boleh_kelola} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian key={kegId ?? 0} />}

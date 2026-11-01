@@ -24,6 +24,7 @@ import { susunDaftarKartu } from "@/lib/sigapBerandaDaftar"; // (31 Okt 2026) sa
 import KartuSurvei from "./KartuSurvei";
 import KartuSeleksi from "./KartuSeleksi"; // (31 Okt 2026) ajakan seleksi petugas yang sedang dibuka (Mitra)
 import KartuAnomali from "./KartuAnomali"; // (31 Okt 2026) temuan anomali yang menunggu konfirmasi petugas
+import KartuVanguard from "./KartuVanguard"; // (1 Nov 2026) kartu promosi Vanguard untuk semua pengguna (simulasi bebas, tidak dicatat)
 import { KUNCI_PINTASAN, bacaPintasan, kodeTampil, susunPintasan } from "@/lib/sigapPintasan"; // (30 Okt 2026) pintasan pilihan petugas
 import AturPintasan from "./AturPintasan";
 import { peringatanDariInduk, type PeringatanBeranda } from "@/lib/sigapPrioritas";
@@ -455,6 +456,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
             </section>
           )
         )}
+        {/* (1 Nov 2026) Kartu promosi Vanguard (ungu) untuk semua pengguna; di bawah kartu kegiatan agar tidak menggeser tugas. Masuk lewat sini tidak dicatat */}
+        {adaSesi && !memuatAwal && !dtsen && <KartuVanguard />}
         {/* (20 Okt 2026) Pintasan Lembar Pendataan SPDT NTP: lembar bantu (bukan tugas bernomor) tidak pernah jadi kartu utama, jadi diberi kartu sendiri */}
         {!memuatAwal && lembarSpdt && (
           <Link href={`/sigap/spdt?dari=${encodeURIComponent("/")}`} className="flex items-center gap-3 rounded-[20px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)] active:bg-[#EAF1FC]" aria-label="Lembar Pendataan SPDT NTP">

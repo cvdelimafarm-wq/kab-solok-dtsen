@@ -28,6 +28,7 @@ import KartuTranslokPelatihan from "./translok";
 import KartuKuisPra from "./kartuKuisPra"; // (31 Okt 2026) kuis pra pelatihan (tampil bila diaktifkan panitia)
 import KartuKelas, { useKelasSaya } from "./kartuKelas"; // (1 Nov 2026) kelas dari perencanaan: mode daring/luring/hybrid + jadwal (tampil bila tertaut)
 import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
+import PresensiZoom from "./presensiZoom"; // (1 Nov 2026) presensi daring lewat rapat Zoom + token
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -571,7 +572,7 @@ const TERIMA: Record<string, string> = {
   foto_awal: "Foto sebelum posttest sudah terunggah",
   foto_akhir: "Semua foto Transport Lokal sudah terunggah",
 };
-function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: number): Pemandu | null {
+function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: number, hanyaZoom = false): Pemandu | null {
   if (!langkah.length) return null;
   const tes = (k: string) => data.tes.find((t) => t.jenis === k);
   const L = data.langkah;
@@ -626,6 +627,7 @@ function susunPemandu(langkah: Langkah[], data: Hub, nowMs: number, mulaiMs: num
       return { nada: "ingat", ikon: "🔔", judul: `Langkah ${n}: ${nama} sedang dibuka`, teks: `Sesi ditutup dalam ${formatSisa((new Date(t.tutup_at).getTime() - nowMs) / 1000)}. ${t.jumlah_soal} soal · ${t.durasi_menit} menit sejak Mulai.`, aksi: { label: `Mulai ${nama} →`, href: `/sigap/pelatihan/tes/${t.jenis}` }, terima, catatan };
     }
     case "hadir": {
+      if (hanyaZoom) return { nada: "info", ikon: "💻", judul: `Langkah ${n}: presensi lewat rapat Zoom`, teks: "Ikuti rapat Zoom sesuai jadwal, lalu ketik token yang diumumkan panitia pada langkah ini.", terima, catatan };
       if (!data.presensi) return { nada: "info", ikon: "ℹ️", judul: `Langkah ${n}: presensi menyusul`, teks: "Panitia belum mengatur presensi.", terima, catatan };
       // (8 Okt 2026) per sesi: pandu ke sesi yang sedang dibuka, atau tunjukkan jam sesi berikutnya
       const kh = keadaanHari(data.presensi.hari, nowMs, data.presensi.pengaturan.susulan_sampai);
@@ -729,6 +731,10 @@ export default function HalamanPelatihan() {
   // (1 Nov 2026) Kelas Daring tidak memerlukan foto bukti Transport Lokal: langkah foto dan kartu Transport Lokal disembunyikan. Selain itu (luring, hybrid, belum tertaut) tetap seperti biasa.
   const kelasSaya = useKelasSaya();
   const fotoTranslok = perluFotoTranslok(kelasSaya?.aturan);
+  // Presensi: Daring = rapat Zoom + token (tanpa GPS); Hybrid = keduanya; selain itu GPS seperti biasa.
+  const metodeKelas = kelasSaya?.kelas?.metode ?? "";
+  const zoomPresensi = metodeKelas === "Daring" || metodeKelas === "Hybrid";
+  const hanyaZoom = metodeKelas === "Daring";
   // (8 Okt 2026) Modal pengumuman dari panitia (Kelola Pelatihan > Pengumuman): antrian berurutan, ditentukan SEKALI saat data pertama
   // tiba (supaya muat-ulang otomatis tiap 30 dtk tidak mengacak). Modal "sekali" yang sudah ditutup dicatat di browser.
   const [antrianPeng, setAntrianPeng] = useState<PengumumanPeserta[] | null>(null);
@@ -859,11 +865,13 @@ export default function HalamanPelatihan() {
         badan: (
           <>
             <LabelHari tglIso={u.tanggal_iso} nowMs={now} jam={`pelatihan ${u.pukul}`} />
-            {data.presensi ? (
-              <IsiPresensi pres={data.presensi} nowMs={now} tempat={data.presensi.pengaturan.tempat ?? u.tempat} segarkan={muat} />
-            ) : (
-              <p className="text-[13px] text-[#5B6B84]">{u.tempat}. Presensi belum diatur panitia.</p>
-            )}
+            {zoomPresensi && <PresensiZoom segarkan={muat} />}
+            {!hanyaZoom &&
+              (data.presensi ? (
+                <IsiPresensi pres={data.presensi} nowMs={now} tempat={data.presensi.pengaturan.tempat ?? u.tempat} segarkan={muat} />
+              ) : (
+                <p className="text-[13px] text-[#5B6B84]">{u.tempat}. Presensi belum diatur panitia.</p>
+              ))}
           </>
         ),
       },
@@ -897,7 +905,7 @@ export default function HalamanPelatihan() {
   });
   const wajib = langkah.filter((l) => !l.tambahan);
   const nSelesai = wajib.filter((l) => l.selesai).length;
-  const pemandu = data && peserta && u ? susunPemandu(langkah, data, now, jendelaPelatihan(u).mulai) : null;
+  const pemandu = data && peserta && u ? susunPemandu(langkah, data, now, jendelaPelatihan(u).mulai, hanyaZoom) : null;
   const terlewatDaftar = data && peserta ? daftarTerlewat(langkah, data.presensi ? keadaanHari(data.presensi.hari, now).sesi : null) : [];
 
   // (7 Okt 2026) Modal "Yeay": langkah yang baru selesai (belum pernah dirayakan di browser ini) dirayakan sekali.

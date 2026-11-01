@@ -1,6 +1,7 @@
 // app/api/sigap/rapat/admin/route.ts
 //
 // (9 Okt 2026) SIGAP > Kelola Pelatihan > tab "Rapat Zoom": atur rapat & lihat rekap hadir. Izin menu `pelatihan.kelola` (lihat/kelola).
+// (1 Nov 2026) Mesin yang sama untuk SEMUA kegiatan (pendataan/pelatihan/lainnya): ?kegiatan=ID atau body.kegiatan_id; daftar dan penyimpanan terikat ke kegiatan itu (sasaran_kegiatan_id).
 // Aksi tulis dicatat di sigap_audit. Tanpa hapus permanen: rapat dimatikan lewat `aktif`.
 //
 // GET ?rapat_id=            -> { boleh_kelola, sekarang, daftar: Rapat[], rekap: {rapat_id, baris[]}|null }
@@ -13,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { KOLOM_RAPAT, tautanAman, type PeranSasaran, type Rapat } from "@/lib/sigapRapat";
 import { muatRapat, rekapRapat } from "@/lib/sigapRapatDb";
+import { jembatanPresensiPelatihan } from "@/lib/portal/rapatPeserta";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -32,23 +34,39 @@ const menit = (v: unknown, bawaan: number) => {
   return Number.isFinite(n) ? Math.min(720, Math.max(0, Math.round(n))) : bawaan;
 };
 
-async function siapkan(req: NextRequest) {
+/**
+ * (1 Nov 2026) Mesin rapat Zoom SAMA untuk semua kegiatan: kegiatan dipilih lewat ?kegiatan=ID (GET) atau `kegiatan_id` (POST); tanpa itu = pelatihan bawaan (perilaku lama).
+ * Izin: pelatihan -> menu pelatihan.kelola; kegiatan lain (pendataan, dll.) -> bencana.admin atau translok.penugasan pada kegiatan itu, atau akses.kelola.
+ */
+async function siapkan(req: NextRequest, kegiatanBody?: unknown) {
   const db = dbAdmin();
   if (!db) return { err: galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500) } as const;
   const akun = await akunDariRequest(req, db);
   if (!akun) return { err: galat("Sesi berakhir. Silakan masuk kembali.", 401) } as const;
-  const kegiatanId = await idKegiatanPelatihan(db);
+  const diminta = Number(kegiatanBody ?? req.nextUrl.searchParams.get("kegiatan"));
+  let kegiatanId: number | null;
+  let pelatihan = true;
+  if (Number.isInteger(diminta) && diminta > 0) {
+    const { data: k } = await db.from("sigap_kegiatan").select("id, jenis").eq("id", diminta).maybeSingle();
+    if (!k) return { err: galat("Kegiatan tidak ditemukan.", 404) } as const;
+    kegiatanId = Number(k.id);
+    pelatihan = k.jenis === "pelatihan";
+  } else {
+    kegiatanId = await idKegiatanPelatihan(db);
+  }
   if (!kegiatanId) return { err: galat("Kegiatan pelatihan belum dibuat.", 404) } as const;
   const { izin } = await izinAkun(db, akun.id);
-  if (!boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return { err: galat("Tidak punya izin membuka menu ini.", 403) } as const;
-  return { db, akun, kegiatanId, bisaKelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId) } as const;
+  const bolehDi = (level: "lihat" | "kelola") =>
+    pelatihan ? boleh(izin, "pelatihan.kelola", level, kegiatanId as number) : boleh(izin, "bencana.admin", level, kegiatanId as number) || boleh(izin, "translok.penugasan", level, kegiatanId as number) || boleh(izin, "akses.kelola", level);
+  if (!bolehDi("lihat")) return { err: galat("Tidak punya izin membuka menu ini.", 403) } as const;
+  return { db, akun, kegiatanId, bisaKelola: bolehDi("kelola") } as const;
 }
 
 export async function GET(req: NextRequest) {
   try {
     const p = await siapkan(req);
     if ("err" in p) return p.err;
-    const { data, error } = await p.db.from("sigap_rapat").select(KOLOM_RAPAT).order("mulai_at", { ascending: false }).limit(50);
+    const { data, error } = await p.db.from("sigap_rapat").select(KOLOM_RAPAT).eq("sasaran_kegiatan_id", p.kegiatanId).order("mulai_at", { ascending: false }).limit(50);
     if (error) return galat(error.message, 500);
     const daftar = (data ?? []) as Rapat[];
     const diminta = Number(req.nextUrl.searchParams.get("rapat_id"));
@@ -61,11 +79,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const p = await siapkan(req);
+    const body = await req.json().catch(() => null);
+    const p = await siapkan(req, body?.kegiatan_id);
     if ("err" in p) return p.err;
     if (!p.bisaKelola) return galat("Tidak punya izin mengelola rapat.", 403);
     const { db, akun } = p;
-    const body = await req.json().catch(() => null);
     const aksi = String(body?.aksi ?? "");
 
     if (aksi === "simpan") {
@@ -87,13 +105,13 @@ export async function POST(req: NextRequest) {
       };
       const id = body?.id != null ? Number(body.id) : null;
       if (id !== null) {
-        if (!Number.isInteger(id) || !(await muatRapat(db, id))) return galat("Rapat tidak ditemukan.", 404);
+        if (!Number.isInteger(id) || (await muatRapat(db, id))?.sasaran_kegiatan_id !== p.kegiatanId) return galat("Rapat tidak ditemukan.", 404);
         const { error } = await db.from("sigap_rapat").update(nilai).eq("id", id);
         if (error) return galat(error.message, 500);
         await catatAudit(db, akun.id, "rapat_ubah", { id, judul, aktif: nilai.aktif });
         return NextResponse.json({ ok: true, id });
       }
-      const { data, error } = await db.from("sigap_rapat").insert(nilai).select("id").single();
+      const { data, error } = await db.from("sigap_rapat").insert({ ...nilai, sasaran_kegiatan_id: p.kegiatanId }).select("id").single();
       if (error) return galat(error.message, 500);
       await catatAudit(db, akun.id, "rapat_buat", { id: data.id, judul, aktif: nilai.aktif });
       return NextResponse.json({ ok: true, id: data.id as number });
@@ -101,7 +119,7 @@ export async function POST(req: NextRequest) {
 
     if (aksi === "aktif") {
       const id = Number(body?.id);
-      if (!Number.isInteger(id) || !(await muatRapat(db, id))) return galat("Rapat tidak ditemukan.", 404);
+      if (!Number.isInteger(id) || (await muatRapat(db, id))?.sasaran_kegiatan_id !== p.kegiatanId) return galat("Rapat tidak ditemukan.", 404);
       const { error } = await db.from("sigap_rapat").update({ aktif: !!body?.aktif, diubah_at: new Date().toISOString() }).eq("id", id);
       if (error) return galat(error.message, 500);
       await catatAudit(db, akun.id, "rapat_aktif", { id, aktif: !!body?.aktif });
@@ -115,13 +133,15 @@ export async function POST(req: NextRequest) {
       if (!Number.isInteger(rapatId) || !Number.isInteger(akunId)) return galat("Data tidak valid.");
       if (alasan.length < 3) return galat("Alasan catat manual wajib diisi.", 422);
       const r = await muatRapat(db, rapatId);
-      if (!r) return galat("Rapat tidak ditemukan.", 404);
+      if (!r || r.sasaran_kegiatan_id !== p.kegiatanId) return galat("Rapat tidak ditemukan.", 404);
       const rekap = await rekapRapat(db, r);
       if (!rekap.some((b) => b.akun_id === akunId)) return galat("Akun bukan sasaran rapat ini.", 422);
       const { error } = await db.from("sigap_rapat_hadir").insert({ rapat_id: rapatId, akun_id: akunId, sumber: "manual", alasan });
       if (error && error.code !== "23505") return galat(error.message, 500);
       await catatAudit(db, akun.id, "rapat_hadir_manual", { rapat_id: rapatId, akun_id: akunId, alasan });
-      return NextResponse.json({ ok: true });
+      // rapat kegiatan pelatihan: catat juga presensi sesi yang beririsan (terbaik-usaha)
+      const jembatan = await jembatanPresensiPelatihan(db, r, akunId, "manual");
+      return NextResponse.json({ ok: true, presensi_sesi: jembatan.dicatat ? jembatan.sesi : null });
     }
 
     return galat("Aksi tidak dikenal.");

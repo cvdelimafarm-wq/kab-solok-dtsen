@@ -51,7 +51,11 @@ function statusRapat(r: Rapat, sk: number): { w: "ok" | "wait" | "mut"; teks: st
   return { w: "ok", teks: "Presensi dibuka" };
 }
 
-export default function RapatKelola() {
+/**
+ * (1 Nov 2026) Panel SAMA untuk semua kegiatan: Kelola Pelatihan (tab Rapat Zoom), Kelola Pendataan (Notifikasi > Manual), dan tahap lain. `kegiatanId` menentukan rapat milik
+ * kegiatan mana yang diatur; tanpa itu = pelatihan bawaan (perilaku lama).
+ */
+export default function RapatKelola({ kegiatanId = null }: { kegiatanId?: number | null } = {}) {
   const [data, setData] = useState<Data | null>(null);
   const [form, setForm] = useState<Form>(FORM_BARU);
   const [pilihId, setPilihId] = useState<number | null>(null);
@@ -63,7 +67,8 @@ export default function RapatKelola() {
 
   const muat = useCallback(async (rapatId?: number | null, isiForm = false) => {
     try {
-      const d = await fetchJson<Data>(`${URL_API}${rapatId ? `?rapat_id=${rapatId}` : ""}`);
+      const q = [rapatId ? `rapat_id=${rapatId}` : "", kegiatanId ? `kegiatan=${kegiatanId}` : ""].filter(Boolean).join("&");
+      const d = await fetchJson<Data>(`${URL_API}${q ? `?${q}` : ""}`);
       setData(d);
       setGalat(null);
       if (d.rekap) setPilihId(d.rekap.rapat_id);
@@ -74,7 +79,7 @@ export default function RapatKelola() {
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
     }
-  }, []);
+  }, [kegiatanId]);
   useEffect(() => {
     muat(undefined, true);
     const t = setInterval(() => document.visibilityState === "visible" && muat(pilihId), 15_000);
@@ -82,7 +87,7 @@ export default function RapatKelola() {
   }, [muat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ubah = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const kirim = (body: unknown) => fetchJson<Record<string, unknown>>(URL_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const kirim = (body: unknown) => fetchJson<Record<string, unknown>>(URL_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(kegiatanId ? { kegiatan_id: kegiatanId, ...(body as object) } : body) });
 
   async function simpan() {
     setSibuk(true);
@@ -144,7 +149,7 @@ export default function RapatKelola() {
   return (
     <div className="space-y-3">
       <div className="grid gap-3 lg:grid-cols-2">
-        <Kartu judul="Daftar rapat" ket="Rapat aktif tampil sebagai modal di aplikasi petugas (PPL & PML)">
+        <Kartu judul="Daftar rapat" ket="Rapat aktif tampil sebagai modal di aplikasi petugas (PPL & PML). Pada pelatihan, hadir lewat token otomatis menjadi presensi sesi yang jamnya beririsan.">
           {galat && <Pesan jenis="galat">{galat}</Pesan>}
           <div className="space-y-1.5">
             {data.daftar.length === 0 && <p className="text-[12.5px] text-[#7B8794]">Belum ada rapat.</p>}

@@ -14,6 +14,7 @@ import { SUB_NOTIFIKASI, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
 import type { EntriRiwayat, KunciFasih, SetelanTranslok } from "@/lib/pushPengaturan";
 import Siaran from "./Siaran";
 import KirimSatu from "./KirimSatu";
+import RapatKelola from "../../pelatihan/kelola/rapat"; // (1 Nov 2026) mesin rapat Zoom yang sama dengan Kelola Pelatihan
 import { SubPilih, useSubTab } from "./useSubTab";
 
 type Denyut = { terakhir: string | null; status: "hidup" | "terlambat" | "mati" | "belum"; ringkasan: unknown };
@@ -76,6 +77,13 @@ export default function Notifikasi({ kegiatanId, namaKegiatan, adaQc, onBukaTab 
         <>
           <Siaran key={kegiatanId} kegiatanId={kegiatanId} namaKegiatan={namaKegiatan} />
           <KirimSatu key={`k${kegiatanId}`} kegiatanId={kegiatanId} />
+          <section className="mt-4" aria-label="Rapat Zoom">
+            <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Rapat Zoom (briefing, evaluasi, presensi daring)</h2>
+            <p className="mt-1 text-[12.5px] text-[#55657D]">Mesin yang sama dengan Kelola Pelatihan: jadwal, tautan, passcode, token hadir, sasaran PPL/PML, dan rekap kehadiran untuk kegiatan ini.</p>
+            <div className="mt-2">
+              <RapatKelola key={`r${kegiatanId}`} kegiatanId={kegiatanId} />
+            </div>
+          </section>
         </>
       )}
       {sub === "riwayat" && d && <Riwayat riwayat={d.riwayat} />}

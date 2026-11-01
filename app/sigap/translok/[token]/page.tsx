@@ -27,6 +27,7 @@ import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalA
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import BarisPengawasan from "@/app/sigap/BarisPengawasan";
 import BarisLangkah from "@/app/sigap/BarisLangkah";
+import KartuVanguardHariIni from "@/app/sigap/KartuVanguardHariIni"; // (1 Nov 2026) hanya bila Vanguard menyala di kegiatan ini (dicatat)
 import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
 import { tabBarDariTranslok, type ItemBar } from "@/lib/sigapMenuKegiatan";
@@ -618,6 +619,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
               return w ? <BarisPengawasan kode={bar.kode} peran={bar.peran} label={w.label} href={w.href} /> : null;
             })()}
             <Ringkasan pen={pen} hariIni={data.hari_ini} />
+            <KartuVanguardHariIni kegiatanId={pen.kegiatan.id} />
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
