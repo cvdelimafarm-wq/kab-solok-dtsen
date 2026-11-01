@@ -4,24 +4,75 @@
 //
 // (1 Nov 2026) Penunjuk tahap (di atas isi) dan tombol Sebelumnya/Berikutnya (di bawah isi) untuk halaman Kelola yang beralur.
 // Logika urutan ada di lib/alurKelola.ts (murni, teruji). Dua bentuk: alur bertab (onPilih) dan alur berhalaman (tiap tahap punya href).
+// (1 Nov 2026) Lajur ikon tahap di atas halaman (permintaan user): satu ikon per tahap, tahap sekarang biru, sebelumnya lembut, sesudahnya abu-abu; tiap ikon bisa diklik.
 // Berikutnya BEBAS diklik. Bila halaman memberi `peringatan`, catatan kuning tampil di atas tombol (tidak memblokir).
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { teksPosisi, tahapTerakhir, type PosisiAlur, type TahapAlur } from "@/lib/alurKelola";
+import { nomorDariLabel, namaTanpaNomor, teksPosisi, tahapTerakhir, type PosisiAlur, type TahapAlur } from "@/lib/alurKelola";
+import { IkonTahap } from "./IkonTahap";
 
 type Umum = { posisi: PosisiAlur | null };
 
-/** Titik-titik tahap: sebelum tahap sekarang = terisi lembut (sudah dilewati urutannya, BUKAN klaim selesai), sekarang = biru, sesudahnya = kosong. */
-function Titik({ posisi }: { posisi: PosisiAlur }) {
+/**
+ * Lajur ikon tahap. Sebelum tahap sekarang = lembut (sudah dilewati urutannya, BUKAN klaim selesai), sekarang = biru berlingkar, sesudahnya = abu-abu.
+ * Tiap ikon bisa diklik (tautan bila tahap punya href, tombol bila alur bertab). Di layar sempit lajur digeser mendatar dan tahap sekarang
+ * otomatis dibawa ke tengah. Lebih dari 12 tahap -> tidak digambar (terlalu padat).
+ */
+function LajurIkon({ posisi, onPilih }: { posisi: PosisiAlur; onPilih?: (kode: string) => void }) {
+  const wadah = useRef<HTMLOListElement | null>(null);
+  useEffect(() => {
+    const w = wadah.current;
+    const ini = w?.querySelector<HTMLElement>('[aria-current="step"]');
+    if (!w || !ini) return;
+    w.scrollLeft = Math.max(0, ini.offsetLeft - (w.clientWidth - ini.offsetWidth) / 2);
+  }, [posisi.indeks]);
   if (posisi.urutan.length > 12) return null;
+  const n = posisi.urutan.length;
   return (
-    <ol className="m-0 flex list-none items-center gap-1.5 p-0" aria-hidden>
-      {posisi.urutan.map((t, i) => (
-        <li
-          key={t.kode}
-          className={`h-2 rounded-full transition-all ${i === posisi.indeks ? "w-6 bg-[#1F5FD1]" : i < posisi.indeks ? "w-2 bg-[#9DB8E6]" : "w-2 bg-[#D5DDE9]"}`}
-        />
-      ))}
+    <ol ref={wadah} className="m-0 mt-2.5 flex list-none gap-0 overflow-x-auto p-0 pb-1" aria-label="Ikon tahap alur">
+      {posisi.urutan.map((t, i) => {
+        const sekarang = i === posisi.indeks;
+        const lewat = i < posisi.indeks;
+        const no = nomorDariLabel(t.label);
+        const nama = namaTanpaNomor(t.label);
+        const warnaBulat = sekarang
+          ? "bg-[#1F5FD1] text-white ring-4 ring-[#CFE0FB]"
+          : lewat
+            ? "bg-[#E3EEFF] text-[#1F5FD1]"
+            : "bg-[#F1F4F9] text-[#8896AB]";
+        const isi = (
+          <>
+            <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full transition ${warnaBulat}`}>
+              <IkonTahap kode={t.kode} />
+            </span>
+            <span className={`mt-1 line-clamp-2 w-full px-0.5 text-center text-[10.5px] leading-tight ${sekarang ? "font-extrabold text-[#1F5FD1]" : "font-semibold text-[#55657D]"}`}>
+              {no !== null ? <b className="mr-0.5">{no}</b> : null}
+              {nama}
+            </span>
+          </>
+        );
+        const kelas = "relative flex w-full flex-col items-center rounded-lg px-0.5 pb-1 pt-0.5 text-center";
+        return (
+          <li key={t.kode} className="relative min-w-[74px] flex-1">
+            {i > 0 && <span aria-hidden className={`absolute left-0 right-1/2 top-[19px] h-0.5 ${i <= posisi.indeks ? "bg-[#9DB8E6]" : "bg-[#D5DDE9]"}`} />}
+            {i < n - 1 && <span aria-hidden className={`absolute left-1/2 right-0 top-[19px] h-0.5 ${i < posisi.indeks ? "bg-[#9DB8E6]" : "bg-[#D5DDE9]"}`} />}
+            {sekarang ? (
+              <div className={kelas} aria-current="step" title={`Tahap sekarang: ${t.label}`}>
+                {isi}
+              </div>
+            ) : t.href ? (
+              <Link href={t.href} className={`${kelas} hover:bg-[#F4F8FE]`} title={t.label} aria-label={`Buka tahap ${t.label}`}>
+                {isi}
+              </Link>
+            ) : (
+              <button type="button" className={`${kelas} hover:bg-[#F4F8FE]`} title={t.label} aria-label={`Buka tahap ${t.label}`} onClick={() => onPilih?.(t.kode)}>
+                {isi}
+              </button>
+            )}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -38,8 +89,8 @@ export function PenunjukAlur({ posisi, nama, onPilih }: Umum & { nama: string; o
             {teksPosisi(posisi)}
           </p>
         </div>
-        <Titik posisi={posisi} />
       </div>
+      <LajurIkon posisi={posisi} onPilih={onPilih} />
       {posisi.tahap.ket && <p className="mb-0 mt-1 text-[12.5px] leading-snug text-[#55657D]">{posisi.tahap.ket}</p>}
       <p className="mb-0 mt-1.5 text-[12.5px] text-[#1F5FD1]">
         {berikut ? (

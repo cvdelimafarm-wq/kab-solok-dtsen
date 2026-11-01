@@ -62,4 +62,25 @@ describe("komponen alur", () => {
     expect(h).toContain('href="/sigap/kelola/perencanaan/identifikasi/9/pendataan"');
     expect(h).not.toContain('href="/sigap/kelola/perencanaan/identifikasi/9/pelatihan"'); // tahap sekarang bukan tautan
   });
+
+  it("lajur ikon: satu ikon per tahap, tahap sekarang ditandai, tahap lain bisa dibuka (tautan)", () => {
+    const h = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur identifikasi survei", posisi: posisiAlur(alurIdentifikasi(9), "pelatihan") }));
+    expect(h).toContain('aria-label="Ikon tahap alur"');
+    expect(h.match(/<svg/g)?.length).toBe(6);
+    expect(h.match(/aria-current="step"/g)?.length).toBeGreaterThanOrEqual(2); // judul + ikon sekarang
+    expect(h).toContain('aria-label="Buka tahap 5 · Persiapan pendataan"');
+    expect(h).not.toContain('aria-label="Buka tahap 4 · Persiapan pelatihan"'); // tahap sekarang bukan tautan
+  });
+  it("lajur ikon alur bertab: tombol per tahap lain, Ringkasan tanpa nomor", () => {
+    const h = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur pendataan", posisi: posisiAlur(tab, "persiapan"), onPilih: () => undefined }));
+    expect(h.match(/<svg/g)?.length).toBe(3);
+    expect(h).toContain('aria-label="Buka tahap Ringkasan"');
+    expect(h).toContain('aria-label="Buka tahap 2 · Tim &amp; Surat Tugas"');
+  });
+  it("lajur ikon: lebih dari 12 tahap tidak digambar; kode tak dikenal memakai titik", () => {
+    const banyak = urutanDariTab(Array.from({ length: 13 }, (_, i) => ({ kode: `x${i}`, label: `${i + 1} · T${i + 1}` })));
+    expect(renderToStaticMarkup(e(PenunjukAlur, { nama: "x", posisi: posisiAlur(banyak, "x0") }))).not.toContain("<svg");
+    const asing = urutanDariTab([{ kode: "asing", label: "Asing" }, { kode: "asing2", label: "Asing 2" }]);
+    expect(renderToStaticMarkup(e(PenunjukAlur, { nama: "x", posisi: posisiAlur(asing, "asing") }))).toContain("<circle");
+  });
 });
