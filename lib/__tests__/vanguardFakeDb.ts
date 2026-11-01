@@ -11,6 +11,7 @@ class Q implements PromiseLike<any> {
   private opsi: { count?: string; head?: boolean } = {};
   private urut: { k: string; naik: boolean } | null = null;
   private batas = Infinity;
+  private dari = 0;
   private kembalikan = false;
   constructor(private t: Tabel, private nama: string, private gagal: (nama: string) => Galat) {}
   select(_k?: string, opsi?: { count?: string; head?: boolean }) { if (this.op === "insert") this.kembalikan = true; this.opsi = opsi ?? {}; return this; }
@@ -19,6 +20,8 @@ class Q implements PromiseLike<any> {
   or(ekspresi: string) { if (ekspresi.includes("sumber.neq.administrasi")) this.saring.push((r) => r.sumber !== "administrasi"); return this; }
   order(k: string, o?: { ascending?: boolean }) { this.urut = { k, naik: o?.ascending !== false }; return this; }
   limit(n: number) { this.batas = n; return this; }
+  in(k: string, v: unknown[]) { this.saring.push((r) => v.includes(r[k])); return this; }
+  range(a: number, b: number) { this.dari = a; this.batas = b - a + 1; return this; }
   insert(baris: Baris | Baris[]) { this.op = "insert"; this.muat = Array.isArray(baris) ? baris : [baris]; return this; }
   maybeSingle() { return Promise.resolve(this.jalan(true)); }
   single() { return Promise.resolve(this.jalan(true)); }
@@ -40,7 +43,7 @@ class Q implements PromiseLike<any> {
     }
     let r = tabel.filter((x) => this.saring.every((f) => f(x)));
     if (this.urut) { const { k, naik } = this.urut; r = [...r].sort((a, b) => (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0) * (naik ? 1 : -1)); }
-    r = r.slice(0, this.batas);
+    r = r.slice(this.dari, this.dari + this.batas);
     if (this.opsi.head) return { data: null, error: null, count: this.saring.length === 0 ? tabel.length : tabel.filter((x) => this.saring.every((f) => f(x))).length };
     return { data: satu ? r[0] ?? null : r, error: null };
   }

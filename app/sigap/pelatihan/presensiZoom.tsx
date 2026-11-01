@@ -62,7 +62,7 @@ export default function PresensiZoom({ segarkan }: { segarkan: () => void }) {
     <div className="rounded-[14px] border border-[#CFE0F7] bg-[#F4F8FE] p-3" data-testid="presensi-zoom">
       <p className="text-[13.5px] font-extrabold text-[#0F2A52]">💻 {r.judul}</p>
       <p className="mt-0.5 text-[12.5px] text-[#55657D]">
-        {waktuWib(r.mulai_at)} – {waktuWib(r.selesai_at)} WIB · presensi dibuka {waktuWib(r.buka_at)}, ditutup {waktuWib(r.tutup_at)} WIB
+        {waktuWib(r.mulai_at)} – {waktuWib(r.selesai_at)} · presensi dibuka {waktuWib(r.buka_at)}, ditutup {waktuWib(r.tutup_at)}
       </p>
       {(r.tautan || r.meeting_id) && (
         <p className="mt-1.5 text-[12.5px] text-[#34455F]">
@@ -75,7 +75,7 @@ export default function PresensiZoom({ segarkan }: { segarkan: () => void }) {
           {r.passcode ? ` · passcode ${r.passcode}` : ""}
         </p>
       )}
-      {r.status === "sudah" && <p className="mt-2 text-[13px] font-bold text-[#13794B]">✓ Kehadiran Anda tercatat{r.hadir_at ? ` pukul ${waktuWib(r.hadir_at)} WIB` : ""}.</p>}
+      {r.status === "sudah" && <p className="mt-2 text-[13px] font-bold text-[#13794B]">✓ Kehadiran Anda tercatat{r.hadir_at ? ` pukul ${waktuWib(r.hadir_at)}` : ""}.</p>}
       {r.status === "belum" && <p className="mt-2 text-[13px] text-[#5B6B84]">Kolom token aktif mendekati jam rapat.</p>}
       {r.status === "tutup" && <p className="mt-2 text-[13px] text-[#8A6200]">Presensi rapat sudah ditutup. Hubungi panitia bila Anda hadir.</p>}
       {r.status === "buka" && (
