@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     const { data: pen } = await db.from("sigap_penugasan").select("akun_id, peran").eq("kegiatan_id", kegiatan).eq("aktif", true).or(BUKAN_ADMINISTRASI).limit(5000);
     const penugasan = (pen ?? []) as { akun_id: number; peran: string | null }[];
     const [perc, kes] = await Promise.all([
-      muatSemua<BarisPercobaanDb>(db as Db, "sigap_vanguard_percobaan", "id, akun_id, kasus, nomor, benar, bintang, jml_salah, jml_fatal, petunjuk, lihat_jawaban, durasi_dtk, dibuat_at", kegiatan),
+      muatSemua<BarisPercobaanDb>(db as Db, "sigap_vanguard_percobaan", "id, akun_id, kasus, nomor, benar, bintang, jml_salah, jml_fatal, petunjuk, lihat_jawaban, durasi_dtk, dibuat_at, mode", kegiatan),
       muatSemua<BarisKesalahanDb>(db as Db, "sigap_vanguard_kesalahan", "id, akun_id, kasus, sel, jenis, tingkat", kegiatan),
     ]);
     const idSemua = [...new Set([...penugasan.map((x) => x.akun_id), ...perc.baris.map((x) => x.akun_id)])];

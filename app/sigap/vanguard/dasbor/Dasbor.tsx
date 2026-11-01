@@ -158,6 +158,9 @@ function FormPengaturan({ kegiatanId, awal, bolehKelola, onTersimpan }: { kegiat
           </label>
         </div>
       </fieldset>
+      {bolehKelola && (
+        <button type="button" disabled={sibuk} onClick={() => { setMode("uji"); setLulus("70"); setMaks("3"); }} className="mt-3 mr-2 min-h-[44px] rounded-[12px] border border-[#5B34C9] bg-white px-4 text-[13px] font-extrabold text-[#5B34C9] disabled:opacity-60">Terapkan aturan standar (uji, lulus 70, maks 3 percobaan)</button>
+      )}
       {bolehKelola ? (
         <button type="button" disabled={sibuk || level.length === 0} onClick={simpan} className="mt-3 min-h-[44px] rounded-[12px] bg-[#5B34C9] px-4 text-[13px] font-extrabold text-white disabled:opacity-60">{sibuk ? "Menyimpan…" : "Simpan pengaturan"}</button>
       ) : <p className="mt-3 text-[12.5px] text-[#6B7A90]">Anda hanya dapat melihat pengaturan ini (izin kelola diperlukan untuk mengubah).</p>}
@@ -187,7 +190,7 @@ function TabelPetugas({ petugas }: { petugas: BarisPetugas[] }) {
         <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
           <caption className="sr-only">Ringkasan per petugas</caption>
           <thead><tr className="text-left text-[#44546F]">
-            {["Nama", "Percobaan", "Kasus benar / dikerjakan", "Benar di percobaan pertama", "Kelemahan utama", "Fatal", "Lulus", "Kalkulator"].map((h) => <th key={h} scope="col" className="px-2 py-1 font-bold">{h}</th>)}</tr></thead>
+            {["Nama", "Percobaan", "Kasus benar / dikerjakan", "Benar di percobaan pertama", "Kelemahan utama", "Fatal", "Hasil", "Kalkulator"].map((h) => <th key={h} scope="col" className="px-2 py-1 font-bold">{h}</th>)}</tr></thead>
           <tbody>
             {baris.map((p) => (
               <tr key={p.akun_id} className="border-t border-[#EEF2F7] align-top">
@@ -197,7 +200,12 @@ function TabelPetugas({ petugas }: { petugas: BarisPetugas[] }) {
                 <td className="px-2 py-1.5 tabular-nums">{p.kasusDikerjakan ? `${p.persenBenarPertama}%` : "–"}</td>
                 <td className="px-2 py-1.5">{p.kelemahan ? <>{LABEL_JENIS[p.kelemahan.jenis]} <span className="text-[#6B7A90]">({p.kelemahan.jumlah}×)</span></> : <span className="text-[#6B7A90]">{p.percobaan ? "tidak ada" : "belum mencoba"}</span>}</td>
                 <td className="px-2 py-1.5 font-bold tabular-nums">{p.fatal > 0 ? <span className="text-[#7A1D22]">⚠ {p.fatal}</span> : 0}</td>
-                <td className="px-2 py-1.5 tabular-nums">{p.lulus === null ? <span className="text-[#6B7A90]">–</span> : p.lulus ? <b className="text-[#0F5C38]">✓ Lulus</b> : <span>Belum <span className="text-[#6B7A90]">({p.persenBenar}%)</span></span>}</td>
+                <td className="px-2 py-1.5 tabular-nums">
+                  {p.hasil === "tanpa_batas" ? <span className="text-[#6B7A90]">–</span>
+                    : p.hasil === "lulus" ? <b className="text-[#0F5C38]">✓ Lulus <span className="font-normal text-[#6B7A90]">({p.persenBenar}%)</span></b>
+                    : p.hasil === "tidak_lulus" ? <span><b className="text-[#7A1D22]">✗ Tidak lulus</b> <span className="text-[#6B7A90]">({p.persenBenar}%)</span><span className="block text-[11.5px] font-bold text-[#8A5A00]">Pendampingan khusus</span></span>
+                    : <span>Belum final <span className="text-[#6B7A90]">({p.persenBenar}%)</span></span>}
+                </td>
                 <td className="px-2 py-1.5 tabular-nums">{p.kalkulator}×</td>
               </tr>
             ))}
@@ -312,6 +320,8 @@ export default function Dasbor() {
               <Ubin judul="WAKTU MEDIAN" nilai={durasi(x.ringkasan.medianDurasiDtk)} ket="per percobaan" />
               <Ubin judul="KESALAHAN FATAL" nilai={String(x.ringkasan.kesalahanFatal)} ket={`dari ${x.ringkasan.kesalahanTotal} kesalahan tercatat`} />
               {x.ringkasan.lulus !== null && <Ubin judul="LULUS" nilai={`${x.ringkasan.lulus} / ${x.ringkasan.peserta}`} ket={`${x.ringkasan.persenLulus}% peserta; batas ${d.pengaturan.nilai_lulus}% kasus benar`} />}
+              {x.ringkasan.tidakLulus !== null && <Ubin judul="TIDAK LULUS (FINAL)" nilai={String(x.ringkasan.tidakLulus)} ket="percobaan habis; tetap mendata dengan pendampingan khusus" />}
+              {x.ringkasan.belumFinal !== null && <Ubin judul="BELUM FINAL" nilai={String(x.ringkasan.belumFinal)} ket="belum lulus dan masih ada percobaan, atau belum mulai" />}
               <Ubin judul="PEMAKAIAN KALKULATOR" nilai={`${x.ringkasan.kalkulatorTotal}×`} ket={`${x.ringkasan.kalkulatorPetugas} petugas memakainya`} />
             </section>
 

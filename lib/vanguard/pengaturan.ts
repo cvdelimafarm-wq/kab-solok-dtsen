@@ -108,6 +108,47 @@ export function hitungLulus(p: Pengaturan, benarKasus: Iterable<string>, daftar:
   return { dibuka: bernilai.length, benar, persen, lulus: p.nilai_lulus === null ? null : persen >= p.nilai_lulus };
 }
 
+// ---- Hasil final (V5c): kerjakan sampai lulus, jumlah percobaan terbatas, hasil final sesudah percobaan terakhir ----
+export type StatusFinal = "tanpa_batas" | "berjalan" | "lulus" | "tidak_lulus";
+export type HasilFinal = {
+  status: StatusFinal;
+  /** Persen kasus bernilai (pada level dibuka) yang pernah benar. */
+  nilai: number;
+  dibuka: number;
+  benar: number;
+  /** Kasus yang sudah selesai: benar, atau percobaannya sudah habis. */
+  selesai: number;
+  /** Keterangan untuk kolom remark; null bila tidak perlu. */
+  remark: string | null;
+  /** Tidak lulus pada hasil final: tetap boleh mendata, dengan pendampingan khusus (bukan gerbang yang memblokir). */
+  pendampingan: boolean;
+};
+export const REMARK_TIDAK_LULUS = "Tidak lulus Vanguard; tetap dapat mendata dengan pendampingan khusus.";
+
+/**
+ * Aturan: petugas mengerjakan kasus sampai lulus (nilai >= nilai lulus) dalam batas percobaan per kasus. Lulus berlaku begitu nilai tercapai.
+ * Hasil TIDAK LULUS baru final setelah percobaan terakhir: semua kasus yang dibuka sudah benar atau percobaannya habis, dan nilai tetap di bawah nilai lulus.
+ * Sebelum itu statusnya "berjalan". Tanpa nilai lulus, kegiatan tidak memakai kelulusan ("tanpa_batas").
+ * `riwayat` = per kasus: jumlah percobaan dan sudah benar (buku uji bila kegiatan bermode uji; lihat route dan dasbor).
+ */
+export function hasilFinal(p: Pengaturan, riwayat: { kasus: string; percobaan: number; benar: boolean }[], daftar: KasusPublik[] = KASUS_PUBLIK): HasilFinal {
+  const bernilai = kasusDibuka(p, daftar).filter((k) => !k.bebas);
+  const peta = new Map(riwayat.map((r) => [r.kasus, r]));
+  const maks = maksPercobaan(p);
+  let benar = 0, selesai = 0;
+  for (const k of bernilai) {
+    const r = peta.get(k.kode);
+    if (r?.benar) { benar += 1; selesai += 1; }
+    else if (r && r.percobaan >= maks) selesai += 1;
+  }
+  const nilai = bernilai.length === 0 ? 0 : Math.round((benar / bernilai.length) * 1000) / 10;
+  const dasar = { nilai, dibuka: bernilai.length, benar, selesai };
+  if (p.nilai_lulus === null) return { ...dasar, status: "tanpa_batas", remark: null, pendampingan: false };
+  if (nilai >= p.nilai_lulus) return { ...dasar, status: "lulus", remark: null, pendampingan: false };
+  if (bernilai.length > 0 && selesai >= bernilai.length) return { ...dasar, status: "tidak_lulus", remark: `${REMARK_TIDAK_LULUS} (nilai ${nilai} < ${p.nilai_lulus})`, pendampingan: true };
+  return { ...dasar, status: "berjalan", remark: null, pendampingan: false };
+}
+
 // ---- Waktu untuk kolom isian datetime-local (WIB, UTC+7) ----
 /** ISO (UTC) -> "YYYY-MM-DDTHH:mm" waktu WIB; kosong atau rusak -> "". */
 export function isoKeInputWib(iso: string | null | undefined): string {

@@ -5,13 +5,15 @@
 // Satu "pasangan" = satu petugas pada satu kasus. Peserta = akun dengan penugasan aktif di kegiatan itu (sebagai penyebut).
 
 import { cariKasusPublik } from "./kasus/daftar";
-import { hitungLulus, PENGATURAN_BAWAAN, type Pengaturan } from "./pengaturan";
+import { hasilFinal, PENGATURAN_BAWAAN, type Pengaturan, type StatusFinal } from "./pengaturan";
 import { labelSel } from "./sel";
 import type { JenisKesalahan, Tingkat } from "./tipe";
 
 export type BarisPercobaanDb = {
   akun_id: number; kasus: string; nomor: number; benar: boolean; bintang: number; jml_salah: number; jml_fatal: number; petunjuk: number;
   lihat_jawaban: boolean; durasi_dtk: number; dibuat_at: string;
+  /** "latihan" | "uji"; tanpa nilai = latihan. */
+  mode?: string;
 };
 export type BarisKesalahanDb = { akun_id: number; kasus: string; sel: string | null; jenis: JenisKesalahan; tingkat: Tingkat };
 export type Peserta = { akun_id: number; nama: string; peran: string | null };
@@ -46,6 +48,10 @@ export type Ringkasan = {
   persenBenarTanpaPetunjuk: number; rataBintang: number; medianDurasiDtk: number; kasusDikerjakan: number; kesalahanTotal: number; kesalahanFatal: number;
   /** Peserta yang lulus menurut nilai lulus kegiatan; null bila kegiatan tidak memakai nilai lulus. */
   lulus: number | null; persenLulus: number | null;
+  /** Hasil final tidak lulus (semua percobaan terpakai, nilai di bawah nilai lulus): tetap mendata dengan pendampingan khusus. Null bila tanpa nilai lulus. */
+  tidakLulus: number | null;
+  /** Belum final: belum lulus dan masih ada percobaan. Null bila tanpa nilai lulus. */
+  belumFinal: number | null;
   kalkulatorPetugas: number; kalkulatorTotal: number;
 };
 export type BarisTersering = { kunci: string; label: string; jumlah: number; petugas: number; tingkat?: Tingkat };
@@ -55,6 +61,8 @@ export type BarisPetugas = {
   persenBenarPertama: number; kelemahan: { jenis: JenisKesalahan; jumlah: number } | null; fatal: number; terakhir: string | null;
   /** Persen kasus bernilai (pada level yang dibuka) yang pernah benar; lulus = null bila tanpa nilai lulus. */
   persenBenar: number; lulus: boolean | null; kalkulator: number;
+  /** Hasil final menurut aturan kegiatan (lihat hasilFinal di pengaturan.ts) dan keterangan remark untuk yang tidak lulus. */
+  hasil: StatusFinal; remark: string | null;
 };
 export type Dasbor = {
   ringkasan: Ringkasan;
@@ -89,6 +97,17 @@ export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: B
     if (p.benar && x.benarNomor === null) { x.benarNomor = p.nomor; x.benarPetunjuk = p.petunjuk; }
     if (p.benar) x.bintangTerbaik = Math.max(x.bintangTerbaik, p.bintang);
     pas.set(k, x);
+  }
+  // Kelulusan: kegiatan bermode uji memakai BUKU UJI (hanya percobaan bermode "uji"); latihan sebelumnya tidak menghitung. Selain itu semua percobaan.
+  // Per petugas per kasus: jumlah percobaan di buku itu dan sudah benar atau belum (dasar hasil final).
+  const buku = new Map<number, Map<string, { kasus: string; percobaan: number; benar: boolean }>>();
+  for (const p of perc) {
+    if (peng.mode === "uji" && p.mode !== "uji") continue;
+    const m = buku.get(p.akun_id) ?? buku.set(p.akun_id, new Map()).get(p.akun_id)!;
+    const r = m.get(p.kasus) ?? { kasus: p.kasus, percobaan: 0, benar: false };
+    r.percobaan += 1;
+    if (p.benar) r.benar = true;
+    m.set(p.kasus, r);
   }
   const semuaPasangan = [...pas.values()];
   const pasBenar = semuaPasangan.filter((x) => x.benarNomor !== null);
@@ -135,7 +154,7 @@ export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: B
       kasusBenar: pasMilik.filter((x) => x.benarNomor !== null).length, bintang: pasMilik.reduce((a, x) => a + x.bintangTerbaik, 0),
       persenBenarPertama: persen(pasMilik.filter((x) => x.pertamaBenar).length, pasMilik.length),
       kelemahan: lemah ? { jenis: lemah[0], jumlah: lemah[1] } : null, fatal, terakhir,
-      ...(() => { const h = hitungLulus(peng, pasMilik.filter((x) => x.benarNomor !== null).map((x) => x.kasus)); return { persenBenar: h.persen, lulus: h.lulus }; })(),
+      ...(() => { const h = hasilFinal(peng, [...(buku.get(id)?.values() ?? [])]); return { persenBenar: h.nilai, lulus: h.status === "tanpa_batas" ? null : h.status === "lulus", hasil: h.status, remark: h.remark }; })(),
       kalkulator: kalk[id] ?? 0,
     };
   }).sort((a, b) => a.nama.localeCompare(b.nama, "id"));
@@ -154,6 +173,8 @@ export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: B
     kesalahanTotal: kes.length, kesalahanFatal: kes.filter((e) => e.tingkat === "fatal").length,
     lulus: peng.nilai_lulus === null ? null : petugas.filter((p) => p.lulus === true && namaAkun.has(p.akun_id)).length,
     persenLulus: peng.nilai_lulus === null ? null : persen(petugas.filter((p) => p.lulus === true && namaAkun.has(p.akun_id)).length, peserta.length),
+    tidakLulus: peng.nilai_lulus === null ? null : petugas.filter((p) => p.hasil === "tidak_lulus" && namaAkun.has(p.akun_id)).length,
+    belumFinal: peng.nilai_lulus === null ? null : peserta.length - petugas.filter((p) => (p.hasil === "lulus" || p.hasil === "tidak_lulus") && namaAkun.has(p.akun_id)).length,
     kalkulatorPetugas: petugas.filter((p) => p.kalkulator > 0).length,
     kalkulatorTotal: petugas.reduce((a, p) => a + p.kalkulator, 0),
   };
@@ -179,10 +200,11 @@ export function selCsv(v: unknown): string {
 export const barisCsv = (a: unknown[]): string => a.map(selCsv).join(",");
 const csv = (kepala: string[], baris: unknown[][]): string => "﻿" + [barisCsv(kepala), ...baris.map(barisCsv)].join("\r\n") + "\r\n";
 
+const HASIL_TEKS: Record<StatusFinal, string> = { tanpa_batas: "", berjalan: "Belum final", lulus: "Lulus", tidak_lulus: "Tidak lulus" };
 export function csvSkor(d: Dasbor): string {
   return csv(
-    ["Nama", "Peran", "Percobaan", "Kasus dikerjakan", "Kasus benar", "Bintang", "Benar di percobaan pertama (%)", "Kasus benar dari yang dibuka (%)", "Lulus", "Pemakaian kalkulator", "Kelemahan utama", "Jumlah kelemahan utama", "Kesalahan fatal", "Percobaan terakhir (UTC)"],
-    d.petugas.map((p) => [p.nama, p.peran ?? "", p.percobaan, p.kasusDikerjakan, p.kasusBenar, p.bintang, p.persenBenarPertama, p.persenBenar, p.lulus === null ? "" : p.lulus ? "Ya" : "Belum", p.kalkulator, p.kelemahan ? LABEL_JENIS[p.kelemahan.jenis] : "", p.kelemahan?.jumlah ?? "", p.fatal, p.terakhir ?? ""]),
+    ["Nama", "Peran", "Percobaan", "Kasus dikerjakan", "Kasus benar", "Bintang", "Benar di percobaan pertama (%)", "Kasus benar dari yang dibuka (%)", "Hasil final", "Remark", "Pemakaian kalkulator", "Kelemahan utama", "Jumlah kelemahan utama", "Kesalahan fatal", "Percobaan terakhir (UTC)"],
+    d.petugas.map((p) => [p.nama, p.peran ?? "", p.percobaan, p.kasusDikerjakan, p.kasusBenar, p.bintang, p.persenBenarPertama, p.persenBenar, HASIL_TEKS[p.hasil], p.remark ?? "", p.kalkulator, p.kelemahan ? LABEL_JENIS[p.kelemahan.jenis] : "", p.kelemahan?.jumlah ?? "", p.fatal, p.terakhir ?? ""]),
   );
 }
 export function csvKesalahan(peserta: Peserta[], kes: BarisKesalahanDb[]): string {

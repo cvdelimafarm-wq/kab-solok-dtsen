@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { barisCsv, csvKesalahan, csvSkor, hariWib, menuDasbor, selCsv, susunDasbor, type BarisKesalahanDb, type BarisPercobaanDb, type Peserta } from "../vanguard/dasbor";
+import { PENGATURAN_BAWAAN } from "../vanguard/pengaturan";
+import { KASUS } from "../vanguard/kasus";
 
 const P: Peserta[] = [{ akun_id: 1, nama: "Rina", peran: "ppl" }, { akun_id: 2, nama: "Budi", peran: "pml" }, { akun_id: 3, nama: "Sari", peran: "ppl" }];
 let id = 0;
@@ -102,11 +104,11 @@ describe("nilai lulus dan kalkulator pada dasbor", () => {
     expect(rina.kalkulator).toBe(4);
   });
   it("CSV skor memuat kolom lulus dan kalkulator", () => {
-    const peng = { level_dibuka: [], nilai_lulus: 90, buka_at: null, tutup_at: null, maks_percobaan: null };
+    const peng = { level_dibuka: [], nilai_lulus: 90, buka_at: null, tutup_at: null, maks_percobaan: null, mode: "latihan" as const };
     const l = csvSkor(susunDasbor(P, PERC, KES, {}, { pengaturan: peng, kalkulator: { 1: 2 } })).trim().split("\r\n");
-    expect(l[0]).toContain("Lulus,Pemakaian kalkulator");
+    expect(l[0]).toContain("Hasil final,Remark,Pemakaian kalkulator");
     const rina = l.find((x) => x.startsWith("Rina,"))!.split(",");
-    expect(rina[8]).toBe("Belum"); expect(rina[9]).toBe("2");
+    expect(rina[8]).toBe("Belum final"); expect(rina[9]).toBe(""); expect(rina[10]).toBe("2");
   });
 });
 
@@ -132,5 +134,61 @@ describe("CSV", () => {
     expect(k).toHaveLength(1 + 4);
     expect(k[1]).toContain("Rina,A01,");
     expect(k.join("\n")).toContain("Fatal");
+  });
+});
+
+describe("kelulusan pada buku uji (V5b)", () => {
+  const perc = (akun: number, kasus: string, nomor: number, benar: boolean, mode: string) => ({ akun_id: akun, kasus, nomor, benar, bintang: benar ? 3 : 0, jml_salah: 0, jml_fatal: 0, petunjuk: 0, lihat_jawaban: false, durasi_dtk: 10, dibuat_at: "2026-11-01T01:00:00Z", mode });
+  const peserta = [{ akun_id: 1, nama: "Rina", peran: "ppl" }, { akun_id: 2, nama: "Budi", peran: "ppl" }];
+  const data = [perc(1, "A01", 1, true, "latihan"), perc(2, "A01", 1, true, "uji")];
+  it("bermode uji: hanya percobaan uji yang membuat lulus", () => {
+    const d = susunDasbor(peserta, data as never, [], {}, { pengaturan: { ...PENGATURAN_BAWAAN, level_dibuka: ["A"], nilai_lulus: 1, mode: "uji" } });
+    expect(d.petugas.find((p) => p.nama === "Rina")?.lulus).toBe(false);
+    expect(d.petugas.find((p) => p.nama === "Budi")?.lulus).toBe(true);
+    expect(d.ringkasan.lulus).toBe(1);
+  });
+  it("bermode latihan: semua percobaan dihitung", () => {
+    const d = susunDasbor(peserta, data as never, [], {}, { pengaturan: { ...PENGATURAN_BAWAAN, level_dibuka: ["A"], nilai_lulus: 1, mode: "latihan" } });
+    expect(d.ringkasan.lulus).toBe(2);
+  });
+});
+
+describe("hasil final per petugas (V5c)", () => {
+  const A = KASUS.filter((k) => k.level === "A" && !k.bebas);
+  const P2 = [{ akun_id: 1, nama: "Rina", peran: "ppl" }, { akun_id: 2, nama: "Budi", peran: "ppl" }, { akun_id: 3, nama: "Sari", peran: "ppl" }];
+  const r = (akun: number, kasus: string, nomor: number, benar: boolean, mode = "uji") => ({ akun_id: akun, kasus, nomor, benar, bintang: benar ? 3 : 0, jml_salah: benar ? 0 : 1, jml_fatal: 0, petunjuk: 0, lihat_jawaban: false, durasi_dtk: 10, dibuat_at: "2026-11-01T01:00:00Z", mode });
+  const peng = { ...PENGATURAN_BAWAAN, level_dibuka: ["A" as const], nilai_lulus: 70, maks_percobaan: 3, mode: "uji" as const };
+  const data = [
+    // Rina: 8 dari 11 benar = 72,7% -> lulus walau 3 kasus belum dikerjakan
+    ...A.slice(0, 8).map((k) => r(1, k.kode, 1, true)),
+    // Budi: 5 benar, 6 kasus habis 3 percobaan salah -> tidak lulus FINAL (45,5%)
+    ...A.slice(0, 5).map((k) => r(2, k.kode, 1, true)),
+    ...A.slice(5, 11).flatMap((k) => [r(2, k.kode, 1, false), r(2, k.kode, 2, false), r(2, k.kode, 3, false)]),
+    // Sari: 4 benar, sisanya masih punya percobaan -> berjalan
+    ...A.slice(0, 4).map((k) => r(3, k.kode, 1, true)), r(3, A[4].kode, 1, false),
+  ];
+  const d = susunDasbor(P2, data as never, [], {}, { pengaturan: peng });
+  const baris = (n: string) => d.petugas.find((p) => p.nama === n)!;
+  it("lulus, tidak lulus final, dan berjalan dibedakan; remark hanya untuk tidak lulus", () => {
+    expect(baris("Rina")).toMatchObject({ hasil: "lulus", lulus: true, remark: null });
+    expect(baris("Budi")).toMatchObject({ hasil: "tidak_lulus", lulus: false });
+    expect(baris("Budi").remark).toMatch(/pendampingan khusus/);
+    expect(baris("Sari")).toMatchObject({ hasil: "berjalan", lulus: false, remark: null });
+  });
+  it("ringkasan: lulus, tidak lulus final, dan belum final", () => {
+    expect(d.ringkasan).toMatchObject({ lulus: 1, tidakLulus: 1, belumFinal: 1 });
+  });
+  it("latihan lama tidak menggagalkan atau meluluskan pada buku uji", () => {
+    const lama = A.slice(0, 11).map((k) => r(3, k.kode, 1, true, "latihan")); // Sari pernah benar semua di latihan
+    const d2 = susunDasbor(P2, [...data, ...lama] as never, [], {}, { pengaturan: peng });
+    expect(d2.petugas.find((p) => p.nama === "Sari")).toMatchObject({ hasil: "berjalan" });
+  });
+  it("CSV memuat hasil final dan remark; tanpa nilai lulus kolom kosong", () => {
+    const l = csvSkor(d).trim().split("\r\n");
+    expect(l.find((x) => x.startsWith("Budi,"))).toContain("Tidak lulus");
+    expect(l.find((x) => x.startsWith("Budi,"))).toContain("pendampingan khusus");
+    const t = susunDasbor(P2, data as never, [], {}, { pengaturan: { ...peng, nilai_lulus: null } });
+    expect(t.ringkasan).toMatchObject({ lulus: null, tidakLulus: null, belumFinal: null });
+    expect(t.petugas.every((p) => p.hasil === "tanpa_batas" && p.remark === null)).toBe(true);
   });
 });

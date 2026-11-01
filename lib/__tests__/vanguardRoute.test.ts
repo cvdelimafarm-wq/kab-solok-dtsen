@@ -220,3 +220,60 @@ describe("mode uji (V5b)", () => {
     expect(tabel.sigap_vanguard_percobaan[0].mode).toBe("latihan");
   });
 });
+
+describe("buku uji (V5b): latihan sebelumnya tidak ikut dihitung saat kegiatan bermode uji", () => {
+  const set = (lebih: Record<string, unknown> = {}) => { tabel.sigap_vanguard_pengaturan = [{ kegiatan_id: 5, level_dibuka: [], nilai_lulus: 1, buka_at: null, tutup_at: null, maks_percobaan: 2, mode: "uji", ...lebih }]; };
+  const lama = (nomor: number, benar: boolean, mode: string) => ({ id: nomor, kegiatan_id: 5, akun_id: 77, kasus: kasus.kode, nomor, benar, bintang: benar ? 3 : 0, mode });
+
+  it("GET: riwayat dan lulus hanya dari percobaan uji; latihan lama diabaikan", async () => {
+    tabel.sigap_vanguard_percobaan.push(lama(1, true, "latihan"), lama(2, true, "latihan"));
+    set();
+    const j = await (await ambil("?kegiatan=5")).json();
+    expect(j.riwayat).toEqual([]);
+    expect(j.lulus).toMatchObject({ benar: 0, lulus: false });
+    tabel.sigap_vanguard_percobaan.push(lama(3, true, "uji"));
+    const k = await (await ambil("?kegiatan=5")).json();
+    expect(k.riwayat).toEqual([{ kasus: kasus.kode, percobaan: 1, benar: true, bintang: 3 }]);
+    expect(k.lulus).toMatchObject({ benar: 1, lulus: true });
+  });
+  it("GET: kegiatan bermode latihan tetap menghitung semua percobaan", async () => {
+    tabel.sigap_vanguard_percobaan.push(lama(1, true, "latihan"), lama(2, false, "uji"));
+    set({ mode: "latihan" });
+    expect((await (await ambil("?kegiatan=5")).json()).riwayat).toEqual([{ kasus: kasus.kode, percobaan: 2, benar: true, bintang: 3 }]);
+  });
+  it("POST: batas percobaan dan nomor balasan dihitung dari percobaan uji saja (nomor di basis data tetap unik)", async () => {
+    tabel.sigap_vanguard_percobaan.push(lama(1, false, "latihan"), lama(2, false, "latihan"), lama(3, false, "latihan")); // 3 latihan lama: tidak memakan jatah uji
+    set(); // batas 2
+    const a = await kirim(muatan({})); expect(a.status).toBe(200);
+    expect(await a.json()).toMatchObject({ uji: true, nomor: 1 });
+    const b = await kirim(muatan({})); expect(b.status).toBe(200);
+    expect(await b.json()).toMatchObject({ nomor: 2 });
+    const c = await kirim(muatan({})); expect(c.status).toBe(429);
+    const uji = tabel.sigap_vanguard_percobaan.filter((x) => x.mode === "uji");
+    expect(uji.map((x) => x.nomor)).toEqual([4, 5]); // nomor basis data lanjut dari semua percobaan
+  });
+  it("POST: bintang uji dari percobaan uji (pertama benar = 3 bintang walau ada latihan lama)", async () => {
+    tabel.sigap_vanguard_percobaan.push(lama(1, false, "latihan"), lama(2, false, "latihan"));
+    set({ maks_percobaan: null });
+    const j = await (await kirim(muatan({ ...kasus.kunci }))).json();
+    expect(j).toMatchObject({ benar: true, bintang: 3, nomor: 1 });
+  });
+});
+
+describe("hasil final pada GET (V5c)", () => {
+  const set = (lebih: Record<string, unknown> = {}) => { tabel.sigap_vanguard_pengaturan = [{ kegiatan_id: 5, level_dibuka: ["A"], nilai_lulus: 70, buka_at: null, tutup_at: null, maks_percobaan: 3, mode: "uji", ...lebih }]; };
+  const A = KASUS_BERNILAI.filter((k) => k.level === "A");
+  const p = (id: number, kode: string, nomor: number, benar: boolean) => ({ id, kegiatan_id: 5, akun_id: 77, kasus: kode, nomor, benar, bintang: benar ? 3 : 0, mode: "uji" });
+  it("berjalan -> lulus -> tidak lulus final mengikuti riwayat uji", async () => {
+    set();
+    expect((await (await ambil("?kegiatan=5")).json()).final).toMatchObject({ status: "berjalan", nilai: 0, remark: null });
+    A.slice(0, 8).forEach((k, i) => tabel.sigap_vanguard_percobaan.push(p(i + 1, k.kode, 1, true)));
+    expect((await (await ambil("?kegiatan=5")).json()).final).toMatchObject({ status: "lulus", benar: 8, pendampingan: false });
+    tabel.sigap_vanguard_percobaan = [];
+    A.slice(0, 5).forEach((k, i) => tabel.sigap_vanguard_percobaan.push(p(i + 1, k.kode, 1, true)));
+    A.slice(5).forEach((k, i) => [1, 2, 3].forEach((n) => tabel.sigap_vanguard_percobaan.push(p(100 + i * 3 + n, k.kode, n, false))));
+    const j = await (await ambil("?kegiatan=5")).json();
+    expect(j.final).toMatchObject({ status: "tidak_lulus", nilai: 45.5, pendampingan: true });
+    expect(j.final.remark).toMatch(/pendampingan khusus/);
+  });
+});

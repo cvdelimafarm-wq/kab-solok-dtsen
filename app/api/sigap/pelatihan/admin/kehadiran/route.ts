@@ -276,7 +276,8 @@ export async function POST(req: NextRequest) {
         presensi_buka_at: jadwal[0].buka_at,
         presensi_tutup_at: jadwal[0].tutup_at,
         akurasi_maks_m: akurasi,
-        tempat: typeof body?.tempat === "string" && body.tempat.trim() ? body.tempat.trim().slice(0, 120) : sebelum?.tempat ?? null,
+        // (1 Nov 2026) tanpa isian tempat eksplisit dan belum pernah ada: pakai nama titik pertama (dipakai undangan peserta untuk pelatihan selain PSP)
+        tempat: typeof body?.tempat === "string" && body.tempat.trim() ? body.tempat.trim().slice(0, 120) : sebelum?.tempat ?? titik[0].nama.slice(0, 120),
         diubah_at: new Date().toISOString(),
       };
       // kolom lama presensi_lat/lng/radius_m wajib terisi saat baris pertama dibuat -> isi dari titik pertama (titik sebenarnya ada di sigap_pelatihan_titik)
