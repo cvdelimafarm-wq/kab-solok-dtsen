@@ -29,3 +29,13 @@ export function alamatVanguard(o: { kegiatan: number | null; dari: string }): st
   const s = q.toString();
   return s ? `/sigap/vanguard?${s}` : "/sigap/vanguard";
 }
+
+/** Alamat dasbor Vanguard satu kegiatan; `dari` = halaman asal untuk tombol kembali. */
+export function alamatDasbor(o: { kegiatan: number; dari: string }): string {
+  const q = new URLSearchParams();
+  if (Number.isInteger(o.kegiatan) && o.kegiatan > 0) q.set("kegiatan", String(o.kegiatan));
+  const dari = tujuanAman(o.dari);
+  if (dari !== TUJUAN_BAWAAN) q.set("dari", dari);
+  const t = q.toString();
+  return t ? `/sigap/vanguard/dasbor?${t}` : "/sigap/vanguard/dasbor";
+}

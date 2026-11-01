@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FITUR, STRATEGI, fiturEfektif, fiturTersedia, type PetaFitur, type StrategiKegiatan } from "@/lib/sigapFitur";
 import { BTN, BTN_O, Kartu, Pesan } from "../../admin/ui";
+import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard
 
 type Props = {
   kegiatanId: number;
@@ -84,6 +85,7 @@ export default function FiturKegiatan({ kegiatanId, nama, strategi, fitur, siap,
       {galatMuat && <Pesan jenis="info">Profil fitur belum bisa dimuat ({galatMuat}); dipakai pengaturan bawaan kegiatan ini.</Pesan>}
       {dimuat && !siap && <Pesan jenis="info">Penyimpanan profil fitur belum aktif di basis data (migrasi 20261030e belum dijalankan). Pengaturan bawaan dipakai dan belum bisa diubah.</Pesan>}
       {pesan && <Pesan jenis={pesan.jenis === "ok" ? "ok" : "galat"}>{pesan.teks}</Pesan>}
+      <TautanDasborVanguard key={String(fitur.vanguard)} kegiatanId={kegiatanId} />
 
       <label className="mt-3 block text-[12px] font-bold uppercase tracking-wide text-[#55657D]">
         Strategi kegiatan

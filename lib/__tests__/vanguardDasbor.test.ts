@@ -84,6 +84,32 @@ describe("susunDasbor", () => {
   });
 });
 
+describe("nilai lulus dan kalkulator pada dasbor", () => {
+  it("tanpa pengaturan: lulus = null; kalkulator 0", () => {
+    const d = susunDasbor(P, PERC, KES);
+    expect(d.ringkasan).toMatchObject({ lulus: null, persenLulus: null, kalkulatorPetugas: 0, kalkulatorTotal: 0 });
+    expect(d.petugas.every((p) => p.lulus === null && p.kalkulator === 0)).toBe(true);
+  });
+  it("dengan nilai lulus: dihitung dari kasus bernilai pada level yang dibuka; hanya peserta dihitung pada ringkasan", () => {
+    const peng = { level_dibuka: ["A" as const], nilai_lulus: 1, buka_at: null, tutup_at: null, maks_percobaan: null };
+    const d = susunDasbor(P, PERC, KES, { 9: "Mantan" }, { pengaturan: peng, kalkulator: { 1: 4, 2: 1, 9: 7 } });
+    const rina = d.petugas.find((x) => x.nama === "Rina")!, sari = d.petugas.find((x) => x.nama === "Sari")!;
+    expect(rina.lulus).toBe(true); expect(rina.persenBenar).toBeGreaterThan(0);
+    expect(sari).toMatchObject({ lulus: false, persenBenar: 0 });
+    expect(d.ringkasan.lulus).toBe(2); // Rina dan Budi (masing-masing benar sedikitnya 1 kasus level A)
+    expect(d.ringkasan.persenLulus).toBe(66.7);
+    expect(d.ringkasan).toMatchObject({ kalkulatorPetugas: 2, kalkulatorTotal: 5 });
+    expect(rina.kalkulator).toBe(4);
+  });
+  it("CSV skor memuat kolom lulus dan kalkulator", () => {
+    const peng = { level_dibuka: [], nilai_lulus: 90, buka_at: null, tutup_at: null, maks_percobaan: null };
+    const l = csvSkor(susunDasbor(P, PERC, KES, {}, { pengaturan: peng, kalkulator: { 1: 2 } })).trim().split("\r\n");
+    expect(l[0]).toContain("Lulus,Pemakaian kalkulator");
+    const rina = l.find((x) => x.startsWith("Rina,"))!.split(",");
+    expect(rina[8]).toBe("Belum"); expect(rina[9]).toBe("2");
+  });
+});
+
 describe("CSV", () => {
   it("melindungi dari injeksi rumus dan mengutip sel khusus", () => {
     expect(selCsv("=HYPERLINK(\"x\")")).toBe("\"'=HYPERLINK(\"\"x\"\")\"");
@@ -101,7 +127,7 @@ describe("CSV", () => {
     const s = csvSkor(d).trim().split("\r\n");
     expect(s[0]).toContain("Nama,Peran,Percobaan");
     expect(s).toHaveLength(1 + 3);
-    expect(s.some((l) => l.startsWith("Rina,ppl,3,2,2,5,50"))).toBe(true);
+    expect(s.some((l) => l.startsWith("Rina,ppl,3,2,2,5,50,"))).toBe(true);
     const k = csvKesalahan(P, KES).trim().split("\r\n");
     expect(k).toHaveLength(1 + 4);
     expect(k[1]).toContain("Rina,A01,");

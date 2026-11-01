@@ -110,7 +110,7 @@ function UsulanPeriode({ kegiatanId, mulai, selesai, onTerapkan }: { kegiatanId:
   const banding = bandingPeriode(rencana, { mulai, selesai });
   return (
     <div className="rounded-lg border border-[#D6E2F5] bg-[#F3F7FD] p-2 text-[12px] leading-snug text-[#34455F] sm:col-start-2" data-testid="usulan-periode">
-      <strong>Usulan dari perencanaan:</strong> {rentangTanggal(rencana.mulai, rencana.selesai)} ({rencana.hari} hari, dari kelas pelatihan pada identifikasi).{" "}
+      <strong>Usulan dari perencanaan:</strong> {rentangTanggal(rencana.mulai, rencana.selesai)} ({rencana.hari} hari, dari jadwal kelas pada identifikasi).{" "}
       {banding === "sama" ? (
         <span className="font-semibold text-[#1B7F4B]">Periode di atas sudah sama.</span>
       ) : (

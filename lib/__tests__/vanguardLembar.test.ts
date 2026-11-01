@@ -4,7 +4,7 @@ import { KASUS } from "../vanguard/kasus";
 import { boxes, idDiLembar, kutipanIv, lembarBlok, mny } from "../vanguard/lembar";
 import { idSelKasus } from "../vanguard/sel";
 import { hitungEkspresi, tekanPad, tekanTombol } from "../vanguard/keypad";
-import { alamatVanguard, tujuanAman } from "../vanguard/navigasi";
+import { alamatDasbor, alamatVanguard, tujuanAman } from "../vanguard/navigasi";
 
 /** Angka yang tampil pada sebuah sel (gabungan digit kotak) menurut atribut data-id atau data-co. */
 const angkaSel = (html: string, atribut: string, id: string): string => {
@@ -110,5 +110,11 @@ describe("jalan pulang", () => {
     expect(alamatVanguard({ kegiatan: 5, dari: "/sigap/translok/tok?k=5" })).toBe("/sigap/vanguard?k=5&dari=%2Fsigap%2Ftranslok%2Ftok%3Fk%3D5");
     expect(alamatVanguard({ kegiatan: null, dari: "/" })).toBe("/sigap/vanguard");
     expect(alamatVanguard({ kegiatan: 0, dari: "//x" })).toBe("/sigap/vanguard");
+  });
+  it("alamatDasbor: membawa kegiatan dan halaman asal (pintasan dari Kelola)", () => {
+    expect(alamatDasbor({ kegiatan: 5, dari: "/sigap/pelatihan/kelola?survei=SPDT&tab=soal" })).toBe("/sigap/vanguard/dasbor?kegiatan=5&dari=%2Fsigap%2Fpelatihan%2Fkelola%3Fsurvei%3DSPDT%26tab%3Dsoal");
+    expect(alamatDasbor({ kegiatan: 5, dari: "/" })).toBe("/sigap/vanguard/dasbor?kegiatan=5");
+    expect(alamatDasbor({ kegiatan: 5, dari: "https://jahat.example" })).toBe("/sigap/vanguard/dasbor?kegiatan=5");
+    expect(alamatDasbor({ kegiatan: 0, dari: "/" })).toBe("/sigap/vanguard/dasbor");
   });
 });

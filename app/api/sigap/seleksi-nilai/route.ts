@@ -22,6 +22,8 @@ import { periksaJadwalTes, periksaVariabel, pesanPengumuman, type Hasil } from "
 import { teksWaktuWib } from "@/lib/seleksiDaftar";
 import { bacaPapan, bacaVariabel, muatSeleksiLengkap } from "@/lib/portal/seleksiPapan";
 import { tugaskanPeserta } from "@/lib/portal/seleksiPenugasan";
+import { muatKelasTertaut } from "@/lib/portal/kelasIdent";
+import { teksInfoPelatihan } from "@/lib/sigapKelasIdent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,8 +69,17 @@ export async function GET(req: NextRequest) {
     }
 
     const papan = await bacaPapan(db, r);
+    // (1 Nov 2026) usulan teks info pelatihan dari jadwal kelas pada identifikasi yang tertaut ke kegiatan seleksi; gagal/tak tertaut -> null (layar seperti semula)
+    let infoUsulan: string | null = null;
+    try {
+      const kt = await muatKelasTertaut(db, r.kegiatan_id, true);
+      infoUsulan = kt.tersambung ? teksInfoPelatihan(kt.kelas) || null : null;
+    } catch {
+      infoUsulan = null;
+    }
     return NextResponse.json({
       tabel_siap: true,
+      info_usulan: infoUsulan,
       boleh_kelola: bolehKelola(s.izin, r.kegiatan_id),
       seleksi: {
         id: r.id, nama: r.nama, status: r.status, peringkat_level: r.peringkat_level, tampil_nilai: r.tampil_nilai, jadwal_tutup: r.jadwal_tutup,

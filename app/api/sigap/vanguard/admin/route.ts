@@ -3,14 +3,17 @@
 // (1 Nov 2026) VANGUARD V3a: dasbor BPS Kabupaten Solok. Hanya baca. Izin: kegiatan pelatihan = menu `pelatihan.kelola`; kegiatan lain = `translok.monitoring`
 // (tingkat lihat, sesuai lingkup kegiatan; lib/vanguard/dasbor.ts `menuDasbor`). Akun yang sedang "masuk sebagai" boleh melihat (hanya baca).
 //   GET                                        -> { daftar:[{id, nama, jenis, menyala, percobaan}] } kegiatan yang boleh dilihat dan memakai Vanguard
-//   GET ?kegiatan=ID                           -> { kegiatan, dasbor, terpotong }
+//   GET ?kegiatan=ID                           -> { kegiatan, dasbor, terpotong, pengaturan, boleh_kelola }
+//   POST { kegiatan, pengaturan }              -> simpan pengaturan per kegiatan (izin tingkat kelola pada menu yang sama; dicatat di sigap_audit)
 //   GET ?kegiatan=ID&format=csv&bagian=skor|kesalahan -> berkas CSV (vanguard_skor_YYYYMMDD.csv / vanguard_kesalahan_YYYYMMDD.csv)
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
-import { boleh, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
+import { aktorDariHeader, boleh, catatAudit, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { keadaanVanguard } from "@/lib/vanguardAkses";
+import { muatKalkulator, muatPengaturan, simpanPengaturan } from "@/lib/vanguardPengaturanDb";
+import { periksaSimpan, statusJadwal } from "@/lib/vanguard/pengaturan";
 import { csvKesalahan, csvSkor, hariWib, menuDasbor, susunDasbor, type BarisKesalahanDb, type BarisPercobaanDb, type Peserta } from "@/lib/vanguard/dasbor";
 
 export const runtime = "nodejs";
@@ -92,7 +95,9 @@ export async function GET(req: NextRequest) {
     const nama = await namaAkun(db as Db, idSemua);
     const peserta: Peserta[] = penugasan.map((x) => ({ akun_id: x.akun_id, nama: nama.get(x.akun_id) ?? `Akun ${x.akun_id}`, peran: x.peran }));
     const namaLain = Object.fromEntries(idSemua.map((id) => [id, nama.get(id) ?? `Akun ${id}`]));
-    const d = susunDasbor(peserta, perc.baris, kes.baris, namaLain);
+    const peng = await muatPengaturan(db as Db, kegiatan);
+    const kalkulator = await muatKalkulator(db as Db, kegiatan);
+    const d = susunDasbor(peserta, perc.baris, kes.baris, namaLain, { pengaturan: peng, kalkulator });
 
     if (p.get("format") === "csv") {
       const bagian = p.get("bagian") === "kesalahan" ? "kesalahan" : "skor";
@@ -100,8 +105,38 @@ export async function GET(req: NextRequest) {
       const isi = bagian === "kesalahan" ? csvKesalahan(peserta.concat(idSemua.filter((i) => !penugasan.some((x) => x.akun_id === i)).map((i) => ({ akun_id: i, nama: namaLain[i], peran: null }))), kes.baris) : csvSkor(d);
       return new NextResponse(isi, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="vanguard_${bagian}_${tgl}.csv"`, "cache-control": "no-store" } });
     }
-    return NextResponse.json({ kegiatan: kg, dasbor: d, terpotong: perc.terpotong || kes.terpotong });
+    return NextResponse.json({ kegiatan: kg, dasbor: d, terpotong: perc.terpotong || kes.terpotong, pengaturan: { ...peng, status: statusJadwal(peng, Date.now()) }, boleh_kelola: boleh(izin, menuDasbor(kg.jenis), "kelola", kg.id) });
   } catch {
     return galat("Gagal memuat dasbor Vanguard.", 500);
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const db = supabaseAdmin();
+  if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
+  try {
+    const akunId = sesiDariHeader(req.headers);
+    if (!akunId) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
+    if (aktorDariHeader(req.headers)) return galat("Mode lihat (masuk sebagai) tidak dapat mengubah pengaturan.", 403);
+    let badan: unknown;
+    try { badan = await req.json(); } catch { return galat("Isi permintaan tidak sah."); }
+    const b = (typeof badan === "object" && badan !== null ? badan : {}) as Record<string, unknown>;
+    const id = typeof b.kegiatan === "number" && Number.isInteger(b.kegiatan) && b.kegiatan > 0 ? b.kegiatan : null;
+    if (!id) return galat("Kegiatan tidak sah.");
+    const { data: k } = await db.from("sigap_kegiatan").select("id, nama, jenis").eq("id", id).maybeSingle();
+    if (!k) return galat("Kegiatan tidak ditemukan.", 404);
+    const kg = k as { id: number; nama: string; jenis: string };
+    const { izin } = await izinAkun(db as Db, akunId);
+    if (!boleh(izin, menuDasbor(kg.jenis), "kelola", kg.id)) return galat("Tidak punya izin mengatur Vanguard kegiatan ini.", 403);
+    const cek = periksaSimpan(b.pengaturan);
+    if (!cek.ok) return galat(cek.pesan);
+    const { data: akun } = await db.from("sigap_akun").select("nama").eq("id", akunId).maybeSingle();
+    const oleh = (akun as { nama?: string } | null)?.nama ?? `akun ${akunId}`;
+    const s = await simpanPengaturan(db as Db, kg.id, cek.pengaturan, oleh);
+    if (!s.ok) return galat(s.pesan, 500);
+    await catatAudit(db as Db, akunId, "vanguard_pengaturan", { kegiatan_id: kg.id, pengaturan: cek.pengaturan });
+    return NextResponse.json({ tersimpan: true, pengaturan: { ...cek.pengaturan, status: statusJadwal(cek.pengaturan, Date.now()) } });
+  } catch {
+    return galat("Gagal menyimpan pengaturan Vanguard.", 500);
   }
 }

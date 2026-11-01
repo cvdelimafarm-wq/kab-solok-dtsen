@@ -18,6 +18,7 @@ import Administrasi from "./administrasi";
 import KuisPraKelola from "./kuisPra"; // (31 Okt 2026) tab Kuis Pra
 import KelasIdentKelola from "./kelasIdent"; // (1 Nov 2026) tab Kelas (perencanaan, hanya baca)
 import PengumumanKelola from "./pengumuman";
+import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard (tampil bila kegiatan memakai Vanguard)
 import RapatKelola from "./rapat"; // (9 Okt 2026) tab Rapat Zoom
 import NotifikasiKelola from "./notifikasi";
 import KuisLive from "./kuis";
@@ -199,6 +200,7 @@ export default function KelolaPelatihan() {
     >
       <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={kegId} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} onDibuat={setelahDibuat} />
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      <TautanDasborVanguard kegiatanId={kegId} />
       {!ringkas && !galat && <Memuat />}
       {ringkas && tab === "soal" && (
         <div key={kegId ?? 0} className="grid gap-3 lg:grid-cols-2">

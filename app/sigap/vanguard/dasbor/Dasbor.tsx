@@ -11,10 +11,13 @@ import { useSearchParams } from "next/navigation";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { DAFTAR_JENIS, LABEL_JENIS, LABEL_TINGKAT, type BarisHeat, type BarisPetugas, type BarisTersering, type Dasbor as DataDasbor } from "@/lib/vanguard/dasbor";
 import { tujuanAman } from "@/lib/vanguard/navigasi";
+import { NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus";
+import { inputWibKeIso, isoKeInputWib, levelDibuka, type Pengaturan, type StatusJadwal } from "@/lib/vanguard/pengaturan";
 import type { JenisKesalahan, Tingkat } from "@/lib/vanguard/tipe";
 
 type Daftar = { id: number; nama: string; jenis: string; menyala: boolean; percobaan: number }[];
-type Muat = { kegiatan: { id: number; nama: string; jenis: string }; dasbor: DataDasbor; terpotong: boolean };
+type PengaturanJadwal = Pengaturan & { status: StatusJadwal };
+type Muat = { kegiatan: { id: number; nama: string; jenis: string }; dasbor: DataDasbor; terpotong: boolean; pengaturan: PengaturanJadwal; boleh_kelola: boolean };
 
 const UNGU = "#5B34C9";
 const kartu = "rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]";
@@ -89,6 +92,69 @@ function PetaPanas({ heat }: { heat: BarisHeat[] }) {
   );
 }
 
+const NAMA_STATUS: Record<StatusJadwal, string> = { belum_buka: "belum dibuka", buka: "dibuka", tutup: "sudah ditutup" };
+const inputKelas = "min-h-[44px] w-full rounded-[10px] border border-[#CBD6E6] bg-white px-3 text-[14px] text-[#0F2A52] disabled:bg-[#F1F4F9]";
+
+function FormPengaturan({ kegiatanId, awal, bolehKelola, onTersimpan }: { kegiatanId: number; awal: PengaturanJadwal; bolehKelola: boolean; onTersimpan: (p: PengaturanJadwal) => void }) {
+  const [level, setLevel] = useState<string[]>(levelDibuka(awal));
+  const [lulus, setLulus] = useState(awal.nilai_lulus === null ? "" : String(awal.nilai_lulus));
+  const [maks, setMaks] = useState(awal.maks_percobaan === null ? "" : String(awal.maks_percobaan));
+  const [buka, setBuka] = useState(isoKeInputWib(awal.buka_at));
+  const [tutup, setTutup] = useState(isoKeInputWib(awal.tutup_at));
+  const [sibuk, setSibuk] = useState(false);
+  const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
+
+  async function simpan() {
+    setSibuk(true); setPesan(null);
+    try {
+      const r = await apiPortal<{ pengaturan: PengaturanJadwal }>("/api/sigap/vanguard/admin", {
+        method: "POST",
+        body: JSON.stringify({ kegiatan: kegiatanId, pengaturan: { level_dibuka: level, nilai_lulus: lulus.trim() === "" ? null : Number(lulus), maks_percobaan: maks.trim() === "" ? null : Number(maks), buka_at: inputWibKeIso(buka), tutup_at: inputWibKeIso(tutup) } }),
+      });
+      onTersimpan(r.pengaturan);
+      setPesan({ jenis: "ok", teks: "Pengaturan tersimpan. Berlaku untuk percobaan berikutnya." });
+    } catch (e) {
+      setPesan({ jenis: "galat", teks: e instanceof Error ? e.message : "Gagal menyimpan." });
+    } finally { setSibuk(false); }
+  }
+  const semua = level.length === URUTAN_LEVEL.length;
+  return (
+    <div className="mt-2">
+      <p className="text-[12.5px] text-[#55657D]">Status jadwal sekarang: <b>{NAMA_STATUS[awal.status]}</b>. Pengaturan hanya berlaku untuk latihan yang dicatat pada kegiatan ini; simulasi bebas dari Beranda tidak terpengaruh.</p>
+      <fieldset className="mt-3" disabled={!bolehKelola || sibuk}>
+        <legend className="text-[12.5px] font-bold text-[#44546F]">Level kasus yang dibuka</legend>
+        <div className="mt-1 flex flex-wrap gap-2">
+          {URUTAN_LEVEL.map((l) => (
+            <label key={l} className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] border border-[#DCE3EE] px-3 text-[13px] text-[#0F2A52]">
+              <input type="checkbox" checked={level.includes(l)} onChange={(e) => setLevel((x) => (e.target.checked ? [...x, l] : x.filter((y) => y !== l)))} />
+              <span><b>{l}</b> · {NAMA_LEVEL[l]}</span>
+            </label>
+          ))}
+        </div>
+        <p className="mt-1 text-[11.5px] text-[#6B7A90]">{semua ? "Semua level terbuka." : level.length === 0 ? "Pilih minimal satu level." : `${level.length} dari ${URUTAN_LEVEL.length} level terbuka.`}</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="text-[12.5px] font-bold text-[#44546F]">Nilai lulus (% kasus yang harus benar)
+            <input className={`${inputKelas} mt-1`} inputMode="numeric" placeholder="kosong = tanpa batas lulus" value={lulus} onChange={(e) => setLulus(e.target.value.replace(/[^0-9]/g, ""))} />
+          </label>
+          <label className="text-[12.5px] font-bold text-[#44546F]">Batas percobaan per kasus (1 sampai 200)
+            <input className={`${inputKelas} mt-1`} inputMode="numeric" placeholder="kosong = 200" value={maks} onChange={(e) => setMaks(e.target.value.replace(/[^0-9]/g, ""))} />
+          </label>
+          <label className="text-[12.5px] font-bold text-[#44546F]">Dibuka mulai (WIB)
+            <input type="datetime-local" className={`${inputKelas} mt-1`} value={buka} onChange={(e) => setBuka(e.target.value)} />
+          </label>
+          <label className="text-[12.5px] font-bold text-[#44546F]">Ditutup pada (WIB)
+            <input type="datetime-local" className={`${inputKelas} mt-1`} value={tutup} onChange={(e) => setTutup(e.target.value)} />
+          </label>
+        </div>
+      </fieldset>
+      {bolehKelola ? (
+        <button type="button" disabled={sibuk || level.length === 0} onClick={simpan} className="mt-3 min-h-[44px] rounded-[12px] bg-[#5B34C9] px-4 text-[13px] font-extrabold text-white disabled:opacity-60">{sibuk ? "Menyimpan…" : "Simpan pengaturan"}</button>
+      ) : <p className="mt-3 text-[12.5px] text-[#6B7A90]">Anda hanya dapat melihat pengaturan ini (izin kelola diperlukan untuk mengubah).</p>}
+      {pesan && <p role={pesan.jenis === "galat" ? "alert" : "status"} className={`mt-2 text-[12.5px] ${pesan.jenis === "galat" ? "text-[#7A1D22]" : "text-[#0F5C38]"}`}>{pesan.teks}</p>}
+    </div>
+  );
+}
+
 type Urut = "nama" | "fatal" | "percobaan" | "benar";
 function TabelPetugas({ petugas }: { petugas: BarisPetugas[] }) {
   const [urut, setUrut] = useState<Urut>("nama");
@@ -107,10 +173,10 @@ function TabelPetugas({ petugas }: { petugas: BarisPetugas[] }) {
         </select>
       </label>
       <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-[12.5px]">
+        <table className="w-full min-w-[760px] border-collapse text-[12.5px]">
           <caption className="sr-only">Ringkasan per petugas</caption>
           <thead><tr className="text-left text-[#44546F]">
-            {["Nama", "Percobaan", "Kasus benar / dikerjakan", "Benar di percobaan pertama", "Kelemahan utama", "Fatal"].map((h) => <th key={h} scope="col" className="px-2 py-1 font-bold">{h}</th>)}</tr></thead>
+            {["Nama", "Percobaan", "Kasus benar / dikerjakan", "Benar di percobaan pertama", "Kelemahan utama", "Fatal", "Lulus", "Kalkulator"].map((h) => <th key={h} scope="col" className="px-2 py-1 font-bold">{h}</th>)}</tr></thead>
           <tbody>
             {baris.map((p) => (
               <tr key={p.akun_id} className="border-t border-[#EEF2F7] align-top">
@@ -120,6 +186,8 @@ function TabelPetugas({ petugas }: { petugas: BarisPetugas[] }) {
                 <td className="px-2 py-1.5 tabular-nums">{p.kasusDikerjakan ? `${p.persenBenarPertama}%` : "–"}</td>
                 <td className="px-2 py-1.5">{p.kelemahan ? <>{LABEL_JENIS[p.kelemahan.jenis]} <span className="text-[#6B7A90]">({p.kelemahan.jumlah}×)</span></> : <span className="text-[#6B7A90]">{p.percobaan ? "tidak ada" : "belum mencoba"}</span>}</td>
                 <td className="px-2 py-1.5 font-bold tabular-nums">{p.fatal > 0 ? <span className="text-[#7A1D22]">⚠ {p.fatal}</span> : 0}</td>
+                <td className="px-2 py-1.5 tabular-nums">{p.lulus === null ? <span className="text-[#6B7A90]">–</span> : p.lulus ? <b className="text-[#0F5C38]">✓ Lulus</b> : <span>Belum <span className="text-[#6B7A90]">({p.persenBenar}%)</span></span>}</td>
+                <td className="px-2 py-1.5 tabular-nums">{p.kalkulator}×</td>
               </tr>
             ))}
           </tbody>
@@ -213,6 +281,11 @@ export default function Dasbor() {
               {unduhGalat && <p role="alert" className="mt-2 text-[12.5px] text-[#7A1D22]">{unduhGalat}</p>}
             </section>
 
+            <section className={kartu} aria-label="Pengaturan Vanguard">
+              <div className={judulBagian}>PENGATURAN VANGUARD KEGIATAN INI</div>
+              <FormPengaturan key={d.kegiatan.id} kegiatanId={d.kegiatan.id} awal={d.pengaturan} bolehKelola={d.boleh_kelola} onTersimpan={(p) => setD((m) => (m ? { ...m, pengaturan: p } : m))} />
+            </section>
+
             <section aria-label="Ringkasan" className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <Ubin judul="PETUGAS MENCOBA" nilai={`${x.ringkasan.mencoba} / ${x.ringkasan.peserta}`} ket={`${x.ringkasan.persenMencoba}% dari peserta`} />
               <Ubin judul="PERCOBAAN" nilai={String(x.ringkasan.percobaan)} ket={`${x.ringkasan.rataPercobaanPerKasus} per kasus per petugas`} />
@@ -220,6 +293,8 @@ export default function Dasbor() {
               <Ubin judul="RATA-RATA BINTANG" nilai={`${x.ringkasan.rataBintang} / 3`} ket="kasus yang benar" />
               <Ubin judul="WAKTU MEDIAN" nilai={durasi(x.ringkasan.medianDurasiDtk)} ket="per percobaan" />
               <Ubin judul="KESALAHAN FATAL" nilai={String(x.ringkasan.kesalahanFatal)} ket={`dari ${x.ringkasan.kesalahanTotal} kesalahan tercatat`} />
+              {x.ringkasan.lulus !== null && <Ubin judul="LULUS" nilai={`${x.ringkasan.lulus} / ${x.ringkasan.peserta}`} ket={`${x.ringkasan.persenLulus}% peserta; batas ${d.pengaturan.nilai_lulus}% kasus benar`} />}
+              <Ubin judul="PEMAKAIAN KALKULATOR" nilai={`${x.ringkasan.kalkulatorTotal}×`} ket={`${x.ringkasan.kalkulatorPetugas} petugas memakainya`} />
             </section>
 
             <section className={kartu} aria-label="Kesalahan paling sering">

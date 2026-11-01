@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KASUS_BERNILAI } from "../vanguard/kasus";
-import { MAKS_PETUNJUK, MAKS_SEL, barisKesalahan, barisPercobaan, bacaMuatan, modeMasuk, ringkasPercobaan, ringkasRiwayat } from "../vanguard/rekam";
+import { MAKS_PETUNJUK, MAKS_SEL, barisKesalahan, barisPercobaan, bacaMuatan, modeMasuk, ringkasLemah, ringkasPercobaan, ringkasRiwayat } from "../vanguard/rekam";
 import type { Kasus } from "../vanguard/tipe";
 
 /** Kasus bernilai dengan kunci tidak kosong dan sedikitnya satu kotak yang harus kosong di blok yang sama. */
@@ -100,6 +100,13 @@ describe("ringkasPercobaan: penilaian ulang di server", () => {
     const ks = barisKesalahan(901, 77, b.muatan, r);
     expect(ks).toHaveLength(r.kesalahan.length);
     for (const k of ks) expect(k).toMatchObject({ percobaan_id: 901, kegiatan_id: 5, akun_id: 77, kasus: kasus.kode });
+  });
+});
+
+describe("ringkasLemah", () => {
+  it("menghitung per jenis, terbanyak dulu, seri menurut nama", () => {
+    expect(ringkasLemah([{ jenis: "alternatif" }, { jenis: "jebakan" }, { jenis: "jebakan" }, { jenis: "belum_diisi" }, { jenis: "alternatif" }])).toEqual([{ jenis: "alternatif", jumlah: 2 }, { jenis: "jebakan", jumlah: 2 }, { jenis: "belum_diisi", jumlah: 1 }]);
+    expect(ringkasLemah([])).toEqual([]);
   });
 });
 

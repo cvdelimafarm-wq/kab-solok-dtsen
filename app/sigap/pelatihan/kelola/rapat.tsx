@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Rapat } from "@/lib/sigapRapat";
+import { tglIndo, usulanRapat, type KelasInfo, type UsulanRapat } from "@/lib/sigapKelasIdent";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 
@@ -51,6 +52,8 @@ function statusRapat(r: Rapat, sk: number): { w: "ok" | "wait" | "mut"; teks: st
   return { w: "ok", teks: "Presensi dibuka" };
 }
 
+const tokenAcak = () => `Z${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+
 /**
  * (1 Nov 2026) Panel SAMA untuk semua kegiatan: Kelola Pelatihan (tab Rapat Zoom), Kelola Pendataan (Notifikasi > Manual), dan tahap lain. `kegiatanId` menentukan rapat milik
  * kegiatan mana yang diatur; tanpa itu = pelatihan bawaan (perilaku lama).
@@ -64,6 +67,15 @@ export default function RapatKelola({ kegiatanId = null }: { kegiatanId?: number
   const [sibuk, setSibuk] = useState(false);
   const [saring, setSaring] = useState<"semua" | "hadir" | "belum">("semua");
   const [manual, setManual] = useState<{ akun_id: number; alasan: string } | null>(null);
+  // (1 Nov 2026) jadwal kelas Daring/Hybrid dari perencanaan -> pintasan "siapkan rapat"; diam bila tidak tertaut / bukan pelatihan / tanpa izin.
+  const [kelas, setKelas] = useState<KelasInfo[]>([]);
+  useEffect(() => {
+    let batal = false;
+    fetchJson<{ tersambung: boolean; kelas: KelasInfo[] }>(`/api/sigap/pelatihan/kelas?mode=admin${kegiatanId ? `&kegiatan=${kegiatanId}` : ""}`)
+      .then((r) => { if (!batal) setKelas(r.tersambung ? r.kelas : []); })
+      .catch(() => { if (!batal) setKelas([]); });
+    return () => { batal = true; };
+  }, [kegiatanId]);
 
   const muat = useCallback(async (rapatId?: number | null, isiForm = false) => {
     try {
@@ -123,6 +135,14 @@ export default function RapatKelola({ kegiatanId = null }: { kegiatanId?: number
     }
   }
 
+  const usulan = useMemo(() => usulanRapat(kelas, (data?.daftar ?? []).map((r) => keInputWib(r.mulai_at).slice(0, 10))), [kelas, data]);
+  function siapkanDari(u: UsulanRapat) {
+    const untuk = kelas.find((k) => k.nomor === u.kelas_nomor)?.untuk ?? [];
+    const sasaran: Form["sasaran_peran"] = untuk.length === 1 && untuk[0] === "ppl" ? "ppl" : untuk.length === 1 && untuk[0] === "pml" ? "pml" : "semua";
+    setForm({ ...FORM_BARU, judul: u.judul, mulai_at: `${u.tanggal}T08:00`, selesai_at: `${u.tanggal}T16:00`, token: tokenAcak(), sasaran_peran: sasaran, aktif: false });
+    setPesan({ jenis: "ok", teks: "Formulir diisi dari jadwal kelas (jam 08.00–16.00 WIB, token acak, nonaktif). Lengkapi tautan Zoom lalu Simpan." });
+  }
+
   const baris = data?.rekap?.baris ?? [];
   const nHadir = baris.filter((b) => b.hadir_at).length;
   const tampil = useMemo(() => baris.filter((b) => (saring === "semua" ? true : saring === "hadir" ? !!b.hadir_at : !b.hadir_at)), [baris, saring]);
@@ -175,6 +195,18 @@ export default function RapatKelola({ kegiatanId = null }: { kegiatanId?: number
             <button type="button" className={`${BTN_O} mt-2`} onClick={() => { setForm(FORM_BARU); setPesan(null); }}>
               + Rapat baru
             </button>
+          )}
+          {bisa && usulan.length > 0 && (
+            <div className="mt-3 rounded-lg border border-[#D6E2F5] bg-[#F3F7FD] p-2" data-testid="usulan-rapat">
+              <p className="text-[12px] font-semibold text-[#34455F]">Dari jadwal kelas pada perencanaan (belum punya rapat):</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {usulan.slice(0, 12).map((u) => (
+                  <button key={`${u.kelas_nomor}-${u.tanggal}`} type="button" className={`${BTN_O} !px-2 !py-0.5 !text-[12px]`} onClick={() => siapkanDari(u)}>
+                    {u.nama} · {tglIndo(u.tanggal)} ({u.metode})
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </Kartu>
 

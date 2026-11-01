@@ -4,19 +4,22 @@ import { buatDbPalsu, type Tabel } from "./vanguardFakeDb";
 
 let tabel: Tabel = {};
 let izinAda: string[] = [];
+const audit: { aksi: string; detail: Record<string, unknown> }[] = [];
 vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu(tabel) }));
 vi.mock("@/lib/sigapAkses", () => ({
   sesiDariHeader: (h: Headers) => (h.get("x-akun") ? Number(h.get("x-akun")) : null),
-  aktorDariHeader: () => null,
+  aktorDariHeader: (h: Headers) => (h.get("x-aktor") ? Number(h.get("x-aktor")) : null),
   izinAkun: async () => ({ peran: [], izin: {} }),
-  boleh: (_izin: unknown, menu: string) => izinAda.includes(menu),
+  boleh: (_izin: unknown, menu: string, level: string) => izinAda.includes(level === "kelola" ? `${menu}:kelola` : menu),
+  catatAudit: async (_db: unknown, _akun: number, aksi: string, detail: Record<string, unknown>) => { audit.push({ aksi, detail }); },
 }));
-const { GET } = await import("../../app/api/sigap/vanguard/admin/route");
+const { GET, POST } = await import("../../app/api/sigap/vanguard/admin/route");
 
 const baris = (n: number, f: (i: number) => Record<string, unknown>) => Array.from({ length: n }, (_, i) => ({ id: i + 1, ...f(i) }));
 function mulai() {
   process.env.SUPABASE_SERVICE_ROLE_KEY = "kunci-uji"; process.env.NEXT_PUBLIC_SUPABASE_URL = "http://uji.local";
   izinAda = ["pelatihan.kelola"];
+  audit.length = 0;
   tabel = {
     sigap_kegiatan: [{ id: 5, nama: "UJI Pelatihan", jenis: "pelatihan", aktif: true }, { id: 4, nama: "UJI Pendataan", jenis: "pendataan", aktif: true }],
     sigap_kegiatan_fitur: [{ kegiatan_id: 5, fitur: "vanguard", aktif: true }],
@@ -82,5 +85,57 @@ describe("GET /api/sigap/vanguard/admin", () => {
     const j = await (await ambil("?kegiatan=5")).json();
     expect(j.terpotong).toBe(true);
     expect(j.dasbor.ringkasan.percobaan).toBe(50_000);
+  });
+});
+
+const kirim = (badan: unknown, kepala: Record<string, string> = { "x-akun": "7" }) =>
+  POST(new NextRequest("http://uji.local/api/sigap/vanguard/admin", { method: "POST", headers: kepala, body: typeof badan === "string" ? badan : JSON.stringify(badan) }));
+
+describe("pengaturan pada rute admin", () => {
+  it("GET: pengaturan bawaan dan boleh_kelola menurut izin", async () => {
+    let j = await (await ambil("?kegiatan=5")).json();
+    expect(j.pengaturan).toMatchObject({ level_dibuka: [], nilai_lulus: null, status: "buka" });
+    expect(j.boleh_kelola).toBe(false);
+    izinAda = ["pelatihan.kelola", "pelatihan.kelola:kelola"];
+    j = await (await ambil("?kegiatan=5")).json();
+    expect(j.boleh_kelola).toBe(true);
+  });
+  it("GET: lulus dan kalkulator ikut dihitung dari pengaturan dan cacahan", async () => {
+    tabel.sigap_vanguard_pengaturan = [{ kegiatan_id: 5, level_dibuka: ["A"], nilai_lulus: 1, buka_at: null, tutup_at: null, maks_percobaan: null }];
+    tabel.sigap_vanguard_kalkulator = [{ kegiatan_id: 5, akun_id: 1, jumlah: 6 }];
+    const j = await (await ambil("?kegiatan=5")).json();
+    expect(j.dasbor.ringkasan).toMatchObject({ lulus: 1, kalkulatorPetugas: 1, kalkulatorTotal: 6 });
+    expect(j.dasbor.petugas.find((p: { nama: string }) => p.nama === "Rina")).toMatchObject({ lulus: true, kalkulator: 6 });
+  });
+  it("POST: tanpa sesi 401; masuk sebagai 403; tanpa izin kelola 403; kegiatan tak sah 400; tak ada 404", async () => {
+    izinAda = ["pelatihan.kelola:kelola"];
+    const b = { kegiatan: 5, pengaturan: { nilai_lulus: 80 } };
+    expect((await kirim(b, {})).status).toBe(401);
+    expect((await kirim(b, { "x-akun": "7", "x-aktor": "1" })).status).toBe(403);
+    expect((await kirim({ ...b, kegiatan: "5" })).status).toBe(400);
+    expect((await kirim({ ...b, kegiatan: 99 })).status).toBe(404);
+    expect((await kirim("{rusak")).status).toBe(400);
+    izinAda = ["pelatihan.kelola"]; // lihat saja
+    expect((await kirim(b)).status).toBe(403);
+    expect(tabel.sigap_vanguard_pengaturan ?? []).toHaveLength(0);
+  });
+  it("POST: pengaturan tidak sah ditolak dengan pesan; yang sah disimpan, diaudit, dan terbaca di GET", async () => {
+    izinAda = ["pelatihan.kelola", "pelatihan.kelola:kelola"];
+    const tolak = await kirim({ kegiatan: 5, pengaturan: { nilai_lulus: 101 } });
+    expect(tolak.status).toBe(400);
+    expect((await tolak.json()).error).toContain("Nilai lulus");
+    expect(tabel.sigap_vanguard_pengaturan ?? []).toHaveLength(0);
+    const r = await kirim({ kegiatan: 5, pengaturan: { level_dibuka: ["B", "A"], nilai_lulus: 80, maks_percobaan: 5, buka_at: "2026-11-01T01:00:00Z", tutup_at: "2099-01-01T00:00:00Z" } });
+    expect(r.status).toBe(200);
+    expect((await r.json()).pengaturan).toMatchObject({ level_dibuka: ["A", "B"], nilai_lulus: 80, maks_percobaan: 5, status: "buka" });
+    expect(tabel.sigap_vanguard_pengaturan).toHaveLength(1);
+    expect(tabel.sigap_vanguard_pengaturan[0]).toMatchObject({ kegiatan_id: 5, level_dibuka: ["A", "B"], nilai_lulus: 80, maks_percobaan: 5, diubah_oleh: "Akun 7".replace("Akun 7", "akun 7") });
+    expect(audit).toEqual([{ aksi: "vanguard_pengaturan", detail: expect.objectContaining({ kegiatan_id: 5 }) }]);
+    const j = await (await ambil("?kegiatan=5")).json();
+    expect(j.pengaturan).toMatchObject({ level_dibuka: ["A", "B"], nilai_lulus: 80, maks_percobaan: 5 });
+    // simpan ulang = ubah baris yang sama (bukan menambah)
+    await kirim({ kegiatan: 5, pengaturan: { nilai_lulus: 60 } });
+    expect(tabel.sigap_vanguard_pengaturan).toHaveLength(1);
+    expect(tabel.sigap_vanguard_pengaturan[0]).toMatchObject({ nilai_lulus: 60, level_dibuka: [] });
   });
 });

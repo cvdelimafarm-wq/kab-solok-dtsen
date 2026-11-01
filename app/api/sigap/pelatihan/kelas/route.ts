@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, FILTER_BUKAN_ADMINISTRASI, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { muatKelasTertaut } from "@/lib/portal/kelasIdent";
-import { aturanMode, bandingPeriode, kelasUntukPeserta, periodeKelas, peringatanKelas, sebaranPeserta } from "@/lib/sigapKelasIdent";
+import { aturanMode, bandingPeriode, kelasUntukPeserta, periodeKelas, peringatanKelas, sebaranDenganPeran } from "@/lib/sigapKelasIdent";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,9 +30,9 @@ export async function GET(req: NextRequest) {
     const { izin } = await izinAkun(db, akun.id);
     if (!boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return galat("Tidak punya izin melihat kelas pelatihan.", 403);
     const tertaut = await muatKelasTertaut(db, kegiatanId, true);
-    const { data: pen } = await db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(5000);
-    const nomor = ((pen ?? []) as { kelas: number | null }[]).map((r) => (r.kelas === null || r.kelas === undefined ? null : Number(r.kelas)));
-    const sebar = sebaranPeserta(tertaut.kelas, nomor);
+    const { data: pen } = await db.from("sigap_penugasan").select("peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(5000);
+    const peserta = ((pen ?? []) as { peran: string; kelas: number | null }[]).map((r) => ({ peran: String(r.peran), kelas: r.kelas === null || r.kelas === undefined ? null : Number(r.kelas) }));
+    const sebar = sebaranDenganPeran(tertaut.kelas, peserta);
     const { data: keg } = await db.from("sigap_kegiatan").select("tanggal_mulai, tanggal_selesai").eq("id", kegiatanId).maybeSingle();
     const tgl = { tanggal_mulai: (keg?.tanggal_mulai as string | null | undefined) ?? null, tanggal_selesai: (keg?.tanggal_selesai as string | null | undefined) ?? null };
     const rencana = periodeKelas(tertaut.kelas);
@@ -41,8 +41,9 @@ export async function GET(req: NextRequest) {
       tersambung: tertaut.tersambung,
       ident: tertaut.ident_id === null ? null : { id: tertaut.ident_id, nama: tertaut.ident_nama, status_lanjutan: tertaut.status_lanjutan, versi: tertaut.versi },
       kelas: tertaut.kelas.map((k) => ({ ...k, aturan: aturanMode(k.metode), peserta: sebar.per_kelas.get(k.nomor) ?? 0 })),
-      jumlah_peserta: nomor.length,
+      jumlah_peserta: peserta.length,
       tanpa_kelas: sebar.tanpa_kelas,
+      otomatis: sebar.otomatis,
       di_luar: sebar.di_luar,
       peringatan: peringatanKelas(tertaut.kelas),
       kegiatan: tgl,

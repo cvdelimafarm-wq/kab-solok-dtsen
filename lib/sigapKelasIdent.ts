@@ -191,3 +191,79 @@ export function bandingPeriode(rencana: Pick<PeriodeRencana, "mulai" | "selesai"
   if (!kegiatan.mulai || !kegiatan.selesai) return "kosong";
   return kegiatan.mulai === rencana.mulai && kegiatan.selesai === rencana.selesai ? "sama" : "beda";
 }
+
+/** Semua tanggal (YYYY-MM-DD) dari mulai sampai selesai inklusif; kosong bila tanggal tidak sah/terbalik. Dibatasi `maks` hari agar isian ngawur tidak meledak. */
+export function tanggalKelas(k: Pick<KelasInfo, "mulai" | "selesai">, maks = 31): string[] {
+  const a = hariUtc(k.mulai);
+  const b = hariUtc(k.selesai);
+  if (a === null || b === null || b < a) return [];
+  const hasil: string[] = [];
+  for (let h = a; h <= b && hasil.length < maks; h++) hasil.push(new Date(h * 86_400_000).toISOString().slice(0, 10));
+  return hasil;
+}
+
+export type UsulanRapat = { kelas_nomor: number; nama: string; metode: "Daring" | "Hybrid"; tanggal: string; judul: string };
+
+/**
+ * Usulan rapat Zoom dari jadwal kelas: satu usulan per hari kelas berbentuk Daring/Hybrid yang BELUM punya rapat pada tanggal itu.
+ * `tanggalRapatAda` = tanggal (WIB, YYYY-MM-DD) rapat yang sudah dibuat untuk kegiatan itu.
+ */
+export function usulanRapat(daftar: readonly KelasInfo[], tanggalRapatAda: readonly string[]): UsulanRapat[] {
+  const ada = new Set(tanggalRapatAda);
+  const hasil: UsulanRapat[] = [];
+  for (const k of daftar) {
+    if (k.metode !== "Daring" && k.metode !== "Hybrid") continue;
+    const hari = tanggalKelas(k);
+    hari.forEach((t, i) => {
+      if (ada.has(t)) return;
+      hasil.push({ kelas_nomor: k.nomor, nama: k.nama, metode: k.metode as "Daring" | "Hybrid", tanggal: t, judul: hari.length > 1 ? `${k.nama} (Zoom) – hari ke-${i + 1}` : `${k.nama} (Zoom)` });
+    });
+  }
+  return hasil;
+}
+
+export type SebaranPeran = SebaranPeserta & { otomatis: number };
+
+/**
+ * Seperti `sebaranPeserta`, tetapi peserta tanpa nomor kelas tetap dihitung ke kelas bila peran-nya hanya cocok dengan satu kelas (sama dengan yang dilihat peserta).
+ * `tanpa_kelas` = tidak bisa ditentukan (tidak ada kelas untuk perannya, atau lebih dari satu kandidat). `otomatis` = jumlah peserta yang kelasnya ditentukan dari peran.
+ */
+export function sebaranDenganPeran(daftar: readonly KelasInfo[], peserta: readonly { peran: string; kelas: number | null }[]): SebaranPeran {
+  const per = new Map<number, number>(daftar.map((k) => [k.nomor, 0]));
+  let tanpa = 0;
+  let luar = 0;
+  let otomatis = 0;
+  for (const p of peserta) {
+    const n = p.kelas === null || p.kelas === undefined ? null : Number(p.kelas);
+    if (n !== null && Number.isInteger(n) && n >= 1 && n > daftar.length) {
+      luar++;
+      continue;
+    }
+    const h = kelasUntukPeserta(daftar, p.peran, n);
+    if (h.kelas) {
+      per.set(h.kelas.nomor, (per.get(h.kelas.nomor) ?? 0) + 1);
+      if (h.cara === "otomatis") otomatis++;
+    } else tanpa++;
+  }
+  return { per_kelas: per, tanpa_kelas: tanpa, di_luar: luar, otomatis };
+}
+
+/**
+ * Teks ringkas jadwal pelatihan untuk pengumuman seleksi (batas 500 karakter pada kolom info): "Nama: 2–3 Nov 2026, Luring di Hotel X; Nama2: ..., Daring (Zoom)".
+ * Kelas tanpa tanggal tetap disebut tanpa tanggal. Daftar kosong -> "". Dipotong pada batas kelas bila melebihi `maks`.
+ */
+export function teksInfoPelatihan(daftar: readonly KelasInfo[], maks = 480): string {
+  const butir = daftar.map((k) => {
+    const tgl = k.mulai !== "" && k.selesai !== "" ? rentangTanggal(k.mulai, k.selesai) : k.mulai !== "" ? tglIndo(k.mulai) : "";
+    const bentuk = k.metode === "Daring" ? "Daring (Zoom)" : k.metode === "" ? "" : k.lokasi ? `${k.metode} di ${k.lokasi}` : k.metode;
+    return [k.nama, [tgl, bentuk].filter(Boolean).join(", ")].filter(Boolean).join(": ");
+  });
+  let hasil = "";
+  for (const b of butir) {
+    const calon = hasil ? `${hasil}; ${b}` : b;
+    if (calon.length > maks) break;
+    hasil = calon;
+  }
+  if (hasil === "" && butir.length > 0) hasil = `${butir[0].slice(0, maks - 1)}…`;
+  return hasil;
+}

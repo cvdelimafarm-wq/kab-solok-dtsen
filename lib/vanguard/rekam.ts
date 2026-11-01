@@ -20,6 +20,7 @@ export const MAKS_PERCOBAAN_PER_KASUS = 200;
 export const MAKS_NILAI = 9_000_000_000_000; // 9 triliun rupiah per kotak: jauh di atas kewajaran, di bawah batas bilangan aman JS
 export const MAKS_SEL = 400;
 export const MAKS_DURASI_DTK = 86_400;
+export const MAKS_KALKULATOR = 500;
 
 /** Mode ditentukan CARA MASUK (ada kegiatan atau tidak), bukan pilihan petugas. */
 export const modeMasuk = (kegiatanId: number | null | undefined): ModeMasuk => (Number.isInteger(kegiatanId) && (kegiatanId as number) > 0 ? "tercatat" : "bebas");
@@ -31,6 +32,8 @@ export type Muatan = {
   petunjuk: number;
   lihatJawaban: boolean;
   durasiDtk: number;
+  /** Berapa kali kalkulator (ekspresi) dipakai sejak kiriman sebelumnya; hanya cacahan. */
+  kalkulator: number;
 };
 
 export type HasilBaca = { ok: true; muatan: Muatan; kasus: Kasus } | { ok: false; pesan: string };
@@ -62,7 +65,9 @@ export function bacaMuatan(x: unknown): HasilBaca {
   const durasi = bulat(x.durasiDtk ?? 0);
   if (durasi === null || durasi < 0 || durasi > MAKS_DURASI_DTK) return { ok: false, pesan: "Durasi tidak sah." };
   if (x.lihatJawaban !== undefined && typeof x.lihatJawaban !== "boolean") return { ok: false, pesan: "Isian tidak sah." };
-  return { ok: true, kasus, muatan: { kegiatan, kasus: kasus.kode, isian, petunjuk, lihatJawaban: x.lihatJawaban === true, durasiDtk: durasi } };
+  const kalk = bulat(x.kalkulator ?? 0);
+  if (kalk === null || kalk < 0 || kalk > MAKS_KALKULATOR) return { ok: false, pesan: "Cacahan kalkulator tidak sah." };
+  return { ok: true, kasus, muatan: { kegiatan, kasus: kasus.kode, isian, petunjuk, lihatJawaban: x.lihatJawaban === true, durasiDtk: durasi, kalkulator: kalk } };
 }
 
 export type BarisKesalahan = { sel: string | null; jenis: JenisKesalahan; tingkat: Tingkat; nilai_petugas: number | null; nilai_benar: number | null };
@@ -131,6 +136,13 @@ export function barisPercobaan(akunId: number, m: Muatan, r: RingkasanPercobaan,
 
 export const barisKesalahan = (percobaanId: number, akunId: number, m: Muatan, r: RingkasanPercobaan) =>
   r.kesalahan.map((k) => ({ percobaan_id: percobaanId, kegiatan_id: m.kegiatan, akun_id: akunId, kasus: m.kasus, ...k }));
+
+/** Jumlah kesalahan per jenis (urut terbanyak; seri menurut nama jenis) dari baris kesalahan seorang petugas. Dipakai saran Latihan kesalahan saya. */
+export function ringkasLemah(baris: { jenis: string }[]): { jenis: JenisKesalahan; jumlah: number }[] {
+  const n = new Map<string, number>();
+  for (const b of baris) n.set(b.jenis, (n.get(b.jenis) ?? 0) + 1);
+  return [...n].map(([jenis, jumlah]) => ({ jenis: jenis as JenisKesalahan, jumlah })).sort((a, b) => b.jumlah - a.jumlah || a.jenis.localeCompare(b.jenis));
+}
 
 /** Ringkasan riwayat per kasus dari baris percobaan (urutan bebas): jumlah percobaan, sudah benar, bintang terbaik. */
 export type RiwayatKasus = { kasus: string; percobaan: number; benar: boolean; bintang: number };

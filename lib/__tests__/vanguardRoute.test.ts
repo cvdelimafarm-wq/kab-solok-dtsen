@@ -50,7 +50,10 @@ describe("GET /api/sigap/vanguard", () => {
   });
   it("riwayat hanya milik sendiri", async () => {
     tabel.sigap_vanguard_percobaan.push({ id: 1, kegiatan_id: 5, akun_id: 77, kasus: kasus.kode, nomor: 1, benar: true, bintang: 3 }, { id: 2, kegiatan_id: 5, akun_id: 99, kasus: "B01", nomor: 1, benar: false, bintang: 0 });
-    expect(await (await ambil("?kegiatan=5")).json()).toMatchObject({ boleh: true, riwayat: [{ kasus: kasus.kode, percobaan: 1, benar: true, bintang: 3 }] });
+    tabel.sigap_vanguard_kesalahan.push({ id: 1, percobaan_id: 1, kegiatan_id: 5, akun_id: 77, kasus: kasus.kode, jenis: "konversi_seminggu", tingkat: "fatal" }, { id: 2, percobaan_id: 1, kegiatan_id: 5, akun_id: 77, kasus: kasus.kode, jenis: "konversi_seminggu", tingkat: "fatal" }, { id: 3, percobaan_id: 1, kegiatan_id: 5, akun_id: 77, kasus: kasus.kode, jenis: "alternatif", tingkat: "berat" }, { id: 4, percobaan_id: 2, kegiatan_id: 5, akun_id: 99, kasus: "B01", jenis: "belum_diisi", tingkat: "berat" });
+    const j = await (await ambil("?kegiatan=5")).json();
+    expect(j).toMatchObject({ boleh: true, riwayat: [{ kasus: kasus.kode, percobaan: 1, benar: true, bintang: 3 }] });
+    expect(j.lemah).toEqual([{ jenis: "konversi_seminggu", jumlah: 2 }, { jenis: "alternatif", jumlah: 1 }]); // hanya milik sendiri, urut terbanyak
   });
 });
 
@@ -110,5 +113,61 @@ describe("POST /api/sigap/vanguard", () => {
     const r = await kirim(muatan({}));
     expect(r.status).toBe(200);
     expect((await r.json()).nomor).toBe(2);
+  });
+});
+
+describe("pengaturan per kegiatan dan cacahan kalkulator", () => {
+  const atur = (o: Record<string, unknown>) => { tabel.sigap_vanguard_pengaturan = [{ kegiatan_id: 5, level_dibuka: [], nilai_lulus: null, buka_at: null, tutup_at: null, maks_percobaan: null, ...o }]; };
+  const levelLain = KASUS_BERNILAI.find((k) => k.level !== kasus.level)!;
+
+  it("GET menyertakan pengaturan (bawaan bila belum ada) dan status lulus", async () => {
+    tabel.sigap_vanguard_percobaan.push({ id: 1, kegiatan_id: 5, akun_id: 77, kasus: kasus.kode, nomor: 1, benar: true, bintang: 3 });
+    const j0 = await (await ambil("?kegiatan=5")).json();
+    expect(j0.pengaturan).toMatchObject({ level_dibuka: [], nilai_lulus: null, buka_at: null, tutup_at: null, maks_percobaan: null, status: "buka" });
+    expect(j0.lulus).toMatchObject({ benar: 1, lulus: null });
+    atur({ level_dibuka: [kasus.level], nilai_lulus: 50, maks_percobaan: 4 });
+    const j = await (await ambil("?kegiatan=5")).json();
+    expect(j.pengaturan).toMatchObject({ level_dibuka: [kasus.level], nilai_lulus: 50, maks_percobaan: 4, status: "buka" });
+    expect(j.lulus.dibuka).toBeGreaterThan(0);
+    expect(j.lulus.benar).toBe(1);
+  });
+  it("jadwal: belum buka dan sudah tutup ditolak 403 tanpa rekaman; di dalam jadwal diterima", async () => {
+    atur({ buka_at: new Date(Date.now() + 3_600_000).toISOString() });
+    let r = await kirim(muatan({ ...kasus.kunci })); expect(r.status).toBe(403);
+    expect((await r.json()).error).toBe("Latihan Vanguard untuk kegiatan ini belum dibuka.");
+    atur({ tutup_at: new Date(Date.now() - 3_600_000).toISOString() });
+    r = await kirim(muatan({ ...kasus.kunci })); expect(r.status).toBe(403);
+    expect((await r.json()).error).toBe("Latihan Vanguard untuk kegiatan ini sudah ditutup.");
+    expect(tabel.sigap_vanguard_percobaan).toHaveLength(0);
+    atur({ buka_at: new Date(Date.now() - 3_600_000).toISOString(), tutup_at: new Date(Date.now() + 3_600_000).toISOString() });
+    expect((await kirim(muatan({ ...kasus.kunci }))).status).toBe(200);
+    expect((await (await ambil("?kegiatan=5")).json()).pengaturan.status).toBe("buka");
+  });
+  it("level belum dibuka ditolak 403 (walau klien dimanipulasi)", async () => {
+    atur({ level_dibuka: [kasus.level] });
+    const r = await kirim(muatan({}, { kasus: levelLain.kode }));
+    expect(r.status).toBe(403);
+    expect((await r.json()).error).toBe("Kasus ini belum dibuka untuk kegiatan Anda.");
+    expect(tabel.sigap_vanguard_percobaan).toHaveLength(0);
+    expect((await kirim(muatan({ ...kasus.kunci }))).status).toBe(200);
+  });
+  it("batas percobaan per kegiatan: percobaan ke-3 ditolak 429 bila batas 2", async () => {
+    atur({ maks_percobaan: 2 });
+    expect((await kirim(muatan({}))).status).toBe(200);
+    expect((await kirim(muatan({}))).status).toBe(200);
+    const r = await kirim(muatan({})); expect(r.status).toBe(429);
+    expect((await r.json()).error).toBe("Batas percobaan untuk kasus ini sudah tercapai.");
+    expect(tabel.sigap_vanguard_percobaan).toHaveLength(2);
+  });
+  it("kalkulator: cacahan bertambah sesuai kiriman; nilai tak sah ditolak; tanpa cacahan tidak menulis", async () => {
+    tabel.sigap_vanguard_kalkulator = [];
+    expect((await kirim(muatan({}))).status).toBe(200);
+    expect(tabel.sigap_vanguard_kalkulator).toHaveLength(0);
+    expect((await kirim(muatan({}, { kalkulator: 3 }))).status).toBe(200);
+    expect(tabel.sigap_vanguard_kalkulator).toHaveLength(1);
+    expect(tabel.sigap_vanguard_kalkulator[0]).toMatchObject({ kegiatan_id: 5, akun_id: 77, jumlah: 3 });
+    expect((await kirim(muatan({}, { kalkulator: 2 }))).status).toBe(200);
+    expect(tabel.sigap_vanguard_kalkulator[0].jumlah).toBe(5);
+    for (const v of [-1, 1.5, 501, "2"]) expect((await kirim(muatan({}, { kalkulator: v }))).status).toBe(400);
   });
 });

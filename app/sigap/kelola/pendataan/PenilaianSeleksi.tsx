@@ -13,6 +13,7 @@ import type { Papan } from "@/lib/portal/seleksiPapan";
 
 type Data = {
   tabel_siap: boolean;
+  info_usulan?: string | null;
   boleh_kelola?: boolean;
   seleksi?: {
     id: number; nama: string; status: string; peringkat_level: string; tampil_nilai: boolean; jadwal_tutup: string | null;
@@ -313,6 +314,11 @@ export default function PenilaianSeleksi({ seleksiId }: { seleksiId: number }) {
                   <label className="block text-[12px] font-semibold text-[#44546F]">Info jadwal pelatihan / pesan untuk yang lulus (opsional)
                     <textarea className={`${kolom} mt-1`} rows={2} maxLength={500} value={umum.info} onChange={(e) => setUmum({ ...umum, info: e.target.value })} placeholder="Contoh: Pelatihan 10 November 2026, 08.00 WIB di Aula BPS Kab. Solok." />
                   </label>
+                  {d?.info_usulan && d.info_usulan !== umum.info && (
+                    <button type="button" className={tombolPutih} data-testid="isi-info-kelas" onClick={() => setUmum({ ...umum, info: d.info_usulan ?? "" })}>
+                      Isi dari jadwal kelas pada perencanaan
+                    </button>
+                  )}
                   <label className="block text-[12px] font-semibold text-[#44546F]">Batas konfirmasi kesediaan (WIB, opsional)
                     <input type="datetime-local" className={kolom} value={umum.batas} onChange={(e) => setUmum({ ...umum, batas: e.target.value })} />
                   </label>

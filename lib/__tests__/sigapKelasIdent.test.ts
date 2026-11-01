@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aturanMode, bandingPeriode, kelasUntukPeserta, periodeKelas, perluFotoTranslok, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
+import { aturanMode, bandingPeriode, teksInfoPelatihan, sebaranDenganPeran, tanggalKelas, usulanRapat, kelasUntukPeserta, periodeKelas, perluFotoTranslok, peringatanKelas, rentangTanggal, ringkasKelas, sebaranPeserta, tglIndo } from "../sigapKelasIdent";
 
 const mentah = (o: Partial<Parameters<typeof ringkasKelas>[0][number]> = {}) => ({
   id: "k1", nama: "Pelatihan Triwulan IV", sesi: "pelatihan" as const, metode: "Luring" as const, tempat: "Hotel dalam kota" as const, lokasi: "Hotel Contoh, Arosuka",
@@ -146,5 +146,70 @@ describe("periodeKelas / bandingPeriode", () => {
     expect(bandingPeriode(r, { mulai: "2026-11-02", selesai: "2026-11-04" })).toBe("beda");
     expect(bandingPeriode(r, { mulai: null, selesai: "2026-11-03" })).toBe("kosong");
     expect(bandingPeriode(r, { mulai: "", selesai: "" })).toBe("kosong");
+  });
+});
+
+describe("tanggalKelas / usulanRapat", () => {
+  it("daftar tanggal inklusif, lintas bulan; tanggal rusak -> kosong; dibatasi maks", () => {
+    expect(tanggalKelas({ mulai: "2026-11-30", selesai: "2026-12-02" })).toEqual(["2026-11-30", "2026-12-01", "2026-12-02"]);
+    expect(tanggalKelas({ mulai: "2026-11-03", selesai: "2026-11-02" })).toEqual([]);
+    expect(tanggalKelas({ mulai: "", selesai: "2026-11-02" })).toEqual([]);
+    expect(tanggalKelas({ mulai: "2026-01-01", selesai: "2026-12-31" }, 5)).toHaveLength(5);
+  });
+  it("hanya Daring/Hybrid; hari yang sudah punya rapat dilewati; judul bernomor hari bila lebih dari satu hari", () => {
+    const d = ringkasKelas([
+      mentah({ id: "a", nama: "Kelas A", metode: "Daring", mulai: "2026-11-02", selesai: "2026-11-03" }),
+      mentah({ id: "b", nama: "Kelas B", metode: "Luring", mulai: "2026-11-02", selesai: "2026-11-02" }),
+      mentah({ id: "c", nama: "Kelas C", metode: "Hybrid", mulai: "2026-11-05", selesai: "2026-11-05" }),
+    ], false);
+    const u = usulanRapat(d, ["2026-11-02"]);
+    expect(u.map((x) => [x.kelas_nomor, x.tanggal, x.judul])).toEqual([
+      [1, "2026-11-03", "Kelas A (Zoom) – hari ke-2"],
+      [3, "2026-11-05", "Kelas C (Zoom)"],
+    ]);
+    expect(usulanRapat(d, ["2026-11-02", "2026-11-03", "2026-11-05"])).toEqual([]);
+  });
+});
+
+describe("sebaranDenganPeran", () => {
+  const d = ringkasKelas([mentah({ id: "a", untuk: ["ppl"] }), mentah({ id: "b", untuk: ["pml"] }), mentah({ id: "c", untuk: ["pml"] })], false);
+  it("nomor eksplisit menang; peran satu kelas -> otomatis; peran dua kelas -> belum pasti; peran tanpa kelas -> belum", () => {
+    const r = sebaranDenganPeran(d, [
+      { peran: "ppl", kelas: null }, // otomatis -> kelas 1
+      { peran: "ppl", kelas: 1 }, // eksplisit kelas 1
+      { peran: "pml", kelas: 3 }, // eksplisit kelas 3
+      { peran: "pml", kelas: null }, // dua kandidat -> tidak pasti
+      { peran: "entri", kelas: null }, // tak ada kelas
+      { peran: "ppl", kelas: 9 }, // di luar
+    ]);
+    expect([...r.per_kelas.entries()]).toEqual([[1, 2], [2, 0], [3, 1]]);
+    expect(r.otomatis).toBe(1);
+    expect(r.tanpa_kelas).toBe(2);
+    expect(r.di_luar).toBe(1);
+  });
+  it("tanpa kelas sama sekali -> semua tanpa_kelas", () => {
+    const r = sebaranDenganPeran([], [{ peran: "ppl", kelas: null }, { peran: "pml", kelas: 1 }]);
+    expect(r.tanpa_kelas).toBe(1);
+    expect(r.di_luar).toBe(1);
+  });
+});
+
+describe("teksInfoPelatihan", () => {
+  it("menyusun jadwal per kelas; Daring tanpa tempat, Luring/Hybrid dengan tempat", () => {
+    const d = ringkasKelas([
+      mentah({ id: "a", nama: "Kelas A", metode: "Daring", mulai: "2026-11-02", selesai: "2026-11-03" }),
+      mentah({ id: "b", nama: "Kelas B", metode: "Luring", lokasi: "Aula BPS", mulai: "2026-11-05", selesai: "2026-11-05" }),
+      mentah({ id: "c", nama: "Kelas C", metode: "", lokasi: "", mulai: "", selesai: "" }),
+    ], false);
+    expect(teksInfoPelatihan(d)).toBe("Kelas A: 2–3 Nov 2026, Daring (Zoom); Kelas B: 5 Nov 2026, Luring di Aula BPS; Kelas C");
+  });
+  it("kosong -> kosong; terlalu panjang dipotong pada batas kelas; satu kelas kepanjangan dipotong dengan elipsis", () => {
+    expect(teksInfoPelatihan([])).toBe("");
+    const d = ringkasKelas([mentah({ id: "a", nama: "A".repeat(30) }), mentah({ id: "b", nama: "B".repeat(30) })], false);
+    expect(teksInfoPelatihan(d, 80)).not.toContain("BBBB");
+    const panjang = ringkasKelas([mentah({ id: "a", nama: "X".repeat(100) })], false);
+    const t = teksInfoPelatihan(panjang, 40);
+    expect(t.length).toBe(40);
+    expect(t.endsWith("…")).toBe(true);
   });
 });

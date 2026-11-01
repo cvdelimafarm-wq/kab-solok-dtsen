@@ -17,6 +17,7 @@ type Data = {
   kelas: KelasAdmin[];
   jumlah_peserta: number;
   tanpa_kelas: number;
+  otomatis?: number;
   di_luar: number;
   peringatan: PeringatanKelas[];
   kegiatan: { tanggal_mulai: string | null; tanggal_selesai: string | null };
@@ -95,7 +96,7 @@ export default function KelasIdentKelola() {
           </TabelKartu>
         )}
         <p className="mt-2 text-[12.5px] text-[#5B6B84]">
-          {data.jumlah_peserta} peserta pada penugasan · {data.tanpa_kelas} belum dibagi ke kelas
+          {data.jumlah_peserta} peserta pada penugasan · {data.tanpa_kelas} belum jelas kelasnya{data.otomatis ? ` · ${data.otomatis} ditentukan otomatis dari perannya` : ""}
           {data.di_luar > 0 ? ` · ${data.di_luar} bernomor kelas yang tidak ada pada perencanaan` : ""}. Urutan kelas di atas = nomor kelas pada penugasan.
         </p>
       </Kartu>

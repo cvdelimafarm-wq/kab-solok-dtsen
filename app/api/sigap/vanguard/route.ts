@@ -1,9 +1,11 @@
 // app/api/sigap/vanguard/route.ts
 //
 // (1 Nov 2026) VANGUARD V2a: rekaman percobaan simulasi kuesioner KP. Aturan: lib/vanguard/rekam.ts (penilaian ulang di server), lib/vanguardAkses.ts.
-//   GET  ?kegiatan=ID  -> { mode:"tercatat", boleh, alasan, riwayat:[{kasus, percobaan, benar, bintang}] } (hanya milik akun sendiri)
+//   GET  ?kegiatan=ID  -> { mode:"tercatat", boleh, alasan, riwayat:[{kasus, percobaan, benar, bintang}], lemah:[{jenis, jumlah}], pengaturan:{level_dibuka, nilai_lulus, buka_at, tutup_at, maks_percobaan, status}, lulus:{dibuka, benar, persen, lulus} }
+//                         (hanya milik akun sendiri; lemah = kesalahan per jenis, dasar saran Latihan kesalahan saya; pengaturan = sigap_vanguard_pengaturan, bawaan bila belum ada)
 //                         tanpa ?kegiatan -> { mode:"bebas", boleh:false, riwayat:[] } (simulasi bebas: tidak ada rekaman)
-//   POST { kegiatan, kasus, isian, petunjuk, lihatJawaban, durasiDtk } -> menilai ulang di server, mencatat, dan membalas { dicatat, nomor, benar, bintang, koreksi, pemeriksaan }
+//   POST { kegiatan, kasus, isian, petunjuk, lihatJawaban, durasiDtk, kalkulator } -> menilai ulang di server, mencatat, dan membalas { dicatat, nomor, benar, bintang, koreksi, pemeriksaan }
+//        Ditolak bila di luar jadwal (403), level kasus belum dibuka (403), atau batas percobaan tercapai (429): lib/vanguard/pengaturan.ts.
 // Tidak boleh mencatat saat "masuk sebagai" akun lain (hanya lihat). Tidak ada data responden nyata: kasus fiktif; yang disimpan isian petugas.
 
 import { NextRequest, NextResponse } from "next/server";
@@ -11,7 +13,9 @@ import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { aktorDariHeader, sesiDariHeader } from "@/lib/sigapAkses";
 import { bolehMencatat } from "@/lib/vanguardAkses";
-import { barisKesalahan, barisPercobaan, bacaMuatan, MAKS_PERCOBAAN_PER_KASUS, modeMasuk, ringkasPercobaan, ringkasRiwayat } from "@/lib/vanguard/rekam";
+import { barisKesalahan, barisPercobaan, bacaMuatan, modeMasuk, ringkasLemah, ringkasPercobaan, ringkasRiwayat } from "@/lib/vanguard/rekam";
+import { bolehMencoba, hitungLulus, statusJadwal } from "@/lib/vanguard/pengaturan";
+import { muatPengaturan, tambahKalkulator } from "@/lib/vanguardPengaturanDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +42,15 @@ export async function GET(req: NextRequest) {
     if (!izin.boleh) return NextResponse.json({ mode: "tercatat", boleh: false, alasan: izin.alasan, riwayat: [] });
     const { data, error } = await db.from("sigap_vanguard_percobaan").select("kasus, benar, bintang").eq("kegiatan_id", kegiatan).eq("akun_id", akunId).limit(5000);
     if (error) return galat("Gagal memuat riwayat.", 500);
-    return NextResponse.json({ mode: "tercatat", boleh: true, alasan: null, riwayat: ringkasRiwayat((data ?? []) as { kasus: string; benar: boolean; bintang: number }[]) });
+    const { data: ks, error: eKs } = await db.from("sigap_vanguard_kesalahan").select("jenis").eq("kegiatan_id", kegiatan).eq("akun_id", akunId).limit(5000);
+    if (eKs) return galat("Gagal memuat riwayat.", 500);
+    const riwayat = ringkasRiwayat((data ?? []) as { kasus: string; benar: boolean; bintang: number }[]);
+    const peng = await muatPengaturan(db as Db, kegiatan as number);
+    return NextResponse.json({
+      mode: "tercatat", boleh: true, alasan: null, riwayat, lemah: ringkasLemah((ks ?? []) as { jenis: string }[]),
+      pengaturan: { ...peng, status: statusJadwal(peng, Date.now()) },
+      lulus: hitungLulus(peng, riwayat.filter((r) => r.benar).map((r) => r.kasus)),
+    });
   } catch {
     return galat("Gagal memuat Vanguard.", 500);
   }
@@ -58,13 +70,16 @@ export async function POST(req: NextRequest) {
     const { muatan, kasus } = baca;
     const izin = await bolehMencatat(db as Db, akunId, muatan.kegiatan);
     if (!izin.boleh) return galat(izin.alasan ?? "Tidak diizinkan.", 403);
+    const peng = await muatPengaturan(db as Db, muatan.kegiatan);
 
     // Nomor percobaan = urutan petugas pada kasus ini. Dua kiriman bersamaan bertabrakan di unique (kegiatan, akun, kasus, nomor): coba ulang sekali.
     for (let ulang = 0; ulang < 2; ulang++) {
       const { count, error: eHitung } = await db.from("sigap_vanguard_percobaan").select("id", { count: "exact", head: true }).eq("kegiatan_id", muatan.kegiatan).eq("akun_id", akunId).eq("kasus", muatan.kasus);
       if (eHitung) return galat("Gagal mencatat percobaan.", 500);
-      const nomor = (count ?? 0) + 1;
-      if (nomor > MAKS_PERCOBAAN_PER_KASUS) return galat("Batas percobaan untuk kasus ini sudah tercapai.", 429);
+      const sudah = count ?? 0;
+      const nomor = sudah + 1;
+      const cek = bolehMencoba(peng, kasus, sudah, Date.now());
+      if (!cek.boleh) return galat(cek.alasan, cek.alasan.startsWith("Batas percobaan") ? 429 : 403);
       const hasil = ringkasPercobaan(kasus, muatan, nomor);
       const { data: baru, error } = await db.from("sigap_vanguard_percobaan").insert(barisPercobaan(akunId, muatan, hasil, nomor)).select("id").single();
       if (error) {
@@ -76,6 +91,7 @@ export async function POST(req: NextRequest) {
         const { error: eKes } = await db.from("sigap_vanguard_kesalahan").insert(kes);
         if (eKes) return galat("Percobaan tercatat, tetapi rincian kesalahan gagal disimpan.", 500);
       }
+      await tambahKalkulator(db as Db, muatan.kegiatan, akunId, muatan.kalkulator);
       return NextResponse.json({ dicatat: true, nomor, benar: hasil.benar, bintang: hasil.bintang, koreksi: hasil.koreksi, pemeriksaan: hasil.pemeriksaan });
     }
     return galat("Gagal mencatat percobaan.", 500);

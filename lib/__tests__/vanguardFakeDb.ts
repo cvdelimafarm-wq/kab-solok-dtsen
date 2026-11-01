@@ -6,7 +6,8 @@ export type Galat = { code?: string; message: string } | null;
 
 class Q implements PromiseLike<any> {
   private saring: ((r: Baris) => boolean)[] = [];
-  private op: "select" | "insert" = "select";
+  private op: "select" | "insert" | "upsert" = "select";
+  private konflik: string[] = ["id"];
   private muat: Baris[] = [];
   private opsi: { count?: string; head?: boolean } = {};
   private urut: { k: string; naik: boolean } | null = null;
@@ -23,6 +24,7 @@ class Q implements PromiseLike<any> {
   in(k: string, v: unknown[]) { this.saring.push((r) => v.includes(r[k])); return this; }
   range(a: number, b: number) { this.dari = a; this.batas = b - a + 1; return this; }
   insert(baris: Baris | Baris[]) { this.op = "insert"; this.muat = Array.isArray(baris) ? baris : [baris]; return this; }
+  upsert(baris: Baris, o?: { onConflict?: string }) { this.op = "upsert"; this.muat = [baris]; this.konflik = (o?.onConflict ?? "id").split(",").map((x) => x.trim()); return this; }
   maybeSingle() { return Promise.resolve(this.jalan(true)); }
   single() { return Promise.resolve(this.jalan(true)); }
   then<A, B>(ok?: ((v: any) => A | PromiseLike<A>) | null, tolak?: ((e: unknown) => B | PromiseLike<B>) | null) { return Promise.resolve(this.jalan(false)).then(ok, tolak); }
@@ -30,6 +32,13 @@ class Q implements PromiseLike<any> {
     const g = this.gagal(this.nama + ":" + this.op);
     if (g) return { data: null, error: g };
     const tabel = (this.t[this.nama] ??= []);
+    if (this.op === "upsert") {
+      for (const b of this.muat) {
+        const ada = tabel.find((r) => this.konflik.every((k) => r[k] === b[k]));
+        if (ada) Object.assign(ada, b); else tabel.push({ id: tabel.length + 1, ...b });
+      }
+      return { data: null, error: null };
+    }
     if (this.op === "insert") {
       const jadi: Baris[] = [];
       for (const b of this.muat) {

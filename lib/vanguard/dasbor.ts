@@ -5,6 +5,7 @@
 // Satu "pasangan" = satu petugas pada satu kasus. Peserta = akun dengan penugasan aktif di kegiatan itu (sebagai penyebut).
 
 import { cariKasus } from "./kasus";
+import { hitungLulus, PENGATURAN_BAWAAN, type Pengaturan } from "./pengaturan";
 import { labelSel } from "./sel";
 import type { JenisKesalahan, Tingkat } from "./tipe";
 
@@ -43,12 +44,17 @@ const median = (a: number[]): number => { if (!a.length) return 0; const s = [..
 export type Ringkasan = {
   peserta: number; mencoba: number; persenMencoba: number; percobaan: number; rataPercobaanPerKasus: number;
   persenBenarTanpaPetunjuk: number; rataBintang: number; medianDurasiDtk: number; kasusDikerjakan: number; kesalahanTotal: number; kesalahanFatal: number;
+  /** Peserta yang lulus menurut nilai lulus kegiatan; null bila kegiatan tidak memakai nilai lulus. */
+  lulus: number | null; persenLulus: number | null;
+  kalkulatorPetugas: number; kalkulatorTotal: number;
 };
 export type BarisTersering = { kunci: string; label: string; jumlah: number; petugas: number; tingkat?: Tingkat };
 export type BarisHeat = { kasus: string; judul: string; total: number; per: Partial<Record<JenisKesalahan, number>> };
 export type BarisPetugas = {
   akun_id: number; nama: string; peran: string | null; percobaan: number; kasusDikerjakan: number; kasusBenar: number; bintang: number;
   persenBenarPertama: number; kelemahan: { jenis: JenisKesalahan; jumlah: number } | null; fatal: number; terakhir: string | null;
+  /** Persen kasus bernilai (pada level yang dibuka) yang pernah benar; lulus = null bila tanpa nilai lulus. */
+  persenBenar: number; lulus: boolean | null; kalkulator: number;
 };
 export type Dasbor = {
   ringkasan: Ringkasan;
@@ -66,7 +72,10 @@ const TOP = 10;
 const urutDesc = (a: { jumlah: number; label: string }, b: { jumlah: number; label: string }) => b.jumlah - a.jumlah || a.label.localeCompare(b.label, "id");
 
 /** `namaLain`: nama akun yang pernah mencoba tetapi bukan peserta aktif lagi (penyebut persen tetap peserta aktif). */
-export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: BarisKesalahanDb[], namaLain: Record<number, string> = {}): Dasbor {
+export type OpsiDasbor = { pengaturan?: Pengaturan; kalkulator?: Record<number, number> };
+export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: BarisKesalahanDb[], namaLain: Record<number, string> = {}, opsi: OpsiDasbor = {}): Dasbor {
+  const peng = opsi.pengaturan ?? PENGATURAN_BAWAAN;
+  const kalk = opsi.kalkulator ?? {};
   const namaAkun = new Map(peserta.map((p) => [p.akun_id, p]));
   // ---- pasangan petugas x kasus ----
   type Pasangan = { akun: number; kasus: string; ada: number; pertamaBenar: boolean; benarNomor: number | null; benarPetunjuk: number; bintangTerbaik: number };
@@ -126,6 +135,8 @@ export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: B
       kasusBenar: pasMilik.filter((x) => x.benarNomor !== null).length, bintang: pasMilik.reduce((a, x) => a + x.bintangTerbaik, 0),
       persenBenarPertama: persen(pasMilik.filter((x) => x.pertamaBenar).length, pasMilik.length),
       kelemahan: lemah ? { jenis: lemah[0], jumlah: lemah[1] } : null, fatal, terakhir,
+      ...(() => { const h = hitungLulus(peng, pasMilik.filter((x) => x.benarNomor !== null).map((x) => x.kasus)); return { persenBenar: h.persen, lulus: h.lulus }; })(),
+      kalkulator: kalk[id] ?? 0,
     };
   }).sort((a, b) => a.nama.localeCompare(b.nama, "id"));
 
@@ -141,6 +152,10 @@ export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: B
     rataBintang: bulat1(bagi(pasBenar.reduce((a, x) => a + x.bintangTerbaik, 0), pasBenar.length)),
     medianDurasiDtk: Math.round(median(perc.map((p) => p.durasi_dtk))), kasusDikerjakan: new Set(perc.map((p) => p.kasus)).size,
     kesalahanTotal: kes.length, kesalahanFatal: kes.filter((e) => e.tingkat === "fatal").length,
+    lulus: peng.nilai_lulus === null ? null : petugas.filter((p) => p.lulus === true && namaAkun.has(p.akun_id)).length,
+    persenLulus: peng.nilai_lulus === null ? null : persen(petugas.filter((p) => p.lulus === true && namaAkun.has(p.akun_id)).length, peserta.length),
+    kalkulatorPetugas: petugas.filter((p) => p.kalkulator > 0).length,
+    kalkulatorTotal: petugas.reduce((a, p) => a + p.kalkulator, 0),
   };
   return {
     ringkasan, jenis, jenisFatal, sel, kasus, heat, petugas,
@@ -166,8 +181,8 @@ const csv = (kepala: string[], baris: unknown[][]): string => "﻿" + [barisCsv(
 
 export function csvSkor(d: Dasbor): string {
   return csv(
-    ["Nama", "Peran", "Percobaan", "Kasus dikerjakan", "Kasus benar", "Bintang", "Benar di percobaan pertama (%)", "Kelemahan utama", "Jumlah kelemahan utama", "Kesalahan fatal", "Percobaan terakhir (UTC)"],
-    d.petugas.map((p) => [p.nama, p.peran ?? "", p.percobaan, p.kasusDikerjakan, p.kasusBenar, p.bintang, p.persenBenarPertama, p.kelemahan ? LABEL_JENIS[p.kelemahan.jenis] : "", p.kelemahan?.jumlah ?? "", p.fatal, p.terakhir ?? ""]),
+    ["Nama", "Peran", "Percobaan", "Kasus dikerjakan", "Kasus benar", "Bintang", "Benar di percobaan pertama (%)", "Kasus benar dari yang dibuka (%)", "Lulus", "Pemakaian kalkulator", "Kelemahan utama", "Jumlah kelemahan utama", "Kesalahan fatal", "Percobaan terakhir (UTC)"],
+    d.petugas.map((p) => [p.nama, p.peran ?? "", p.percobaan, p.kasusDikerjakan, p.kasusBenar, p.bintang, p.persenBenarPertama, p.persenBenar, p.lulus === null ? "" : p.lulus ? "Ya" : "Belum", p.kalkulator, p.kelemahan ? LABEL_JENIS[p.kelemahan.jenis] : "", p.kelemahan?.jumlah ?? "", p.fatal, p.terakhir ?? ""]),
   );
 }
 export function csvKesalahan(peserta: Peserta[], kes: BarisKesalahanDb[]): string {
