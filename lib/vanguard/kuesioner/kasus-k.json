@@ -1,0 +1,130 @@
+[
+ {
+  "kode": "K01",
+  "judul": "Dapur Bu Maryati: minyak, bumbu, minuman, dan bahan lainnya",
+  "level": "K",
+  "cerita": "Catatan belanja dan pemakaian dapur rumah tangga Pak Sucipto selama SEMINGGU terakhir (kelompok minyak dan kelapa sampai bahan makanan lainnya). Warung Bu Maryati adalah usaha rumah tangga sendiri: barang yang diambil dari warung dicatat sebagai pembelian pada harga JUAL warung (bukan harga kulakan).",
+  "catatan": [
+   "Minyak goreng: 2 liter diambil dari warung. Harga kulakan kemasan 2 liter Rp23.000; harga jual di warung Rp25.000.",
+   "Kelapa: 2 butir dibeli di pasar, Rp8.000 per butir.",
+   "Santan instan: 1,5 kemasan @70 ml dibeli di minimarket, Rp3.000 per kemasan.",
+   "Gula pasir: 1 kg dari warung. Harga kulakan Rp12.000/kg; harga jual Rp14.000/kg.",
+   "Gula merah: sekitar 20 gram dari pembelian di pasar, harga Rp15.000 per kg.",
+   "Kopi instan: tiap hari 1 sachet (kemasan 20 gram) dari warung, 7 hari. Harga kulakan Rp1.000; harga jual Rp1.500 per sachet.",
+   "Garam: tiap hari 3 sendok teh dari warung, 7 hari. Sebungkus garam 150 gram dijual Rp2.000 (kulakan Rp1.500).",
+   "Merica: 3 sachet kemasan 7 gram dari warung. Harga jual Rp500 per sachet (kulakan Rp400).",
+   "Kecap manis: setengah botol kemasan 135 ml dari warung. Harga jual Rp7.500 per botol (kulakan Rp7.200). Satuan kuesioner kecap: 100 ml.",
+   "Penyedap masakan: 4 bungkus kemasan 11 gram dari warung. Harga jual Rp500 per bungkus (kulakan Rp400).",
+   "Tepung bumbu: 1 bungkus 200 gram dari warung, dipakai untuk tempe goreng. Harga jual Rp4.500 (kulakan Rp4.200).",
+   "Bumbu dapur: 1 bungkus sekitar 2 ons dibeli di pasar, Rp3.000 per bungkus.",
+   "Bihun: 3 bungkus kemasan 250 gram dibeli di pasar, Rp4.000 per bungkus.",
+   "Bubur bayi: setengah kotak kemasan 100 gram dimakan Naldo (bayi). Harga Rp14.000 per kotak. Satuan kuesioner: kotak kecil = 150 gram."
+  ],
+  "info": [
+   "1 sendok teh garam = 4,8 gram.",
+   "1 ons = 100 gram; 1 kg = 10 ons.",
+   "Pembulatan matematika: banyaknya 2 desimal, nilai rupiah utuh.",
+   "Rincian yang tidak punya baris sendiri dicatat pada baris \"lainnya (sebutkan)\" dengan nama komoditas huruf kapital dan satuan standar."
+  ],
+  "kunci": [
+   {
+    "r": 156,
+    "k1": 2.0,
+    "k2": 25000
+   },
+   {
+    "r": 157,
+    "k1": 2.0,
+    "k2": 16000
+   },
+   {
+    "r": 158,
+    "k1": 105.0,
+    "k2": 4500,
+    "nama": "SANTAN INSTAN",
+    "satuan": "ML"
+   },
+   {
+    "r": 160,
+    "k1": 10.0,
+    "k2": 14000
+   },
+   {
+    "r": 161,
+    "k1": 0.2,
+    "k2": 300
+   },
+   {
+    "r": 165,
+    "k1": 7.0,
+    "k2": 10500
+   },
+   {
+    "r": 168,
+    "k1": 101.0,
+    "k2": 1347
+   },
+   {
+    "r": 171,
+    "k1": 21.0,
+    "k2": 1500
+   },
+   {
+    "r": 176,
+    "k1": 0.68,
+    "k2": 3750
+   },
+   {
+    "r": 177,
+    "k1": 44.0,
+    "k2": 2000
+   },
+   {
+    "r": 180,
+    "k1": 200.0,
+    "k2": 4500
+   },
+   {
+    "r": 181,
+    "k1": 200.0,
+    "k2": 3000
+   },
+   {
+    "r": 185,
+    "k1": 0.33,
+    "k2": 7000
+   },
+   {
+    "r": 186,
+    "k1": 750.0,
+    "k2": 12000,
+    "nama": "BIHUN",
+    "satuan": "GRAM"
+   }
+  ],
+  "jebakan": [
+   {
+    "r": 158,
+    "k": "nama",
+    "m": "Santan instan tidak punya baris sendiri: catat di R158 (minyak dan kelapa lainnya), tulis SANTAN INSTAN dan satuan ML."
+   },
+   {
+    "r": 186,
+    "k": "nama",
+    "m": "Bihun dicatat di R186 (bahan makanan lainnya) dengan nama BIHUN dan satuan GRAM."
+   },
+   {
+    "r": 168,
+    "k": "harga",
+    "m": "Barang dari warung sendiri dicatat pada harga JUAL warung, bukan harga kulakan. Margin warung masuk Blok V.B, bukan di sini."
+   }
+  ],
+  "petunjuk": [
+   "Mulai dari kelompok mana setiap barang berada? Tiap barang punya nomor rincian sendiri.",
+   "Semua barang pada catatan ini berasal dari pembelian (kolom 5 dan 6), termasuk yang diambil dari warung sendiri.",
+   "Ubah semua pemakaian ke satuan baku kuesioner (ons, gram, ml, liter, butir) sebelum mengisi banyaknya."
+  ],
+  "pembahasan": "Konsumsi dari warung sendiri dicatat di kolom pembelian pada harga jual; margin perdagangannya menjadi nilai produksi Blok V.B. Komoditas tanpa baris sendiri dicatat pada baris \"lainnya\" dengan nama dan satuan. Banyaknya dikonversi ke satuan standar rincian (mis. garam: 3 sendok teh × 4,8 gram × 7 hari = 100,8 → 101 gram).",
+  "rujukan": "Buku 4 hlm. 269–276"
+ }
+]
