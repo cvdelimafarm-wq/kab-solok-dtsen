@@ -6,23 +6,40 @@
 import type { Db } from "@/lib/sigap";
 import { bacaPengaturan, PENGATURAN_BAWAAN, type Pengaturan } from "@/lib/vanguard/pengaturan";
 
+const KOLOM_DASAR = "level_dibuka, nilai_lulus, buka_at, tutup_at, maks_percobaan";
+
 export async function muatPengaturan(db: Db, kegiatan: number): Promise<Pengaturan> {
   try {
-    const { data, error } = await db.from("sigap_vanguard_pengaturan").select("level_dibuka, nilai_lulus, buka_at, tutup_at, maks_percobaan").eq("kegiatan_id", kegiatan).maybeSingle();
-    if (error || !data) return { ...PENGATURAN_BAWAAN };
-    return bacaPengaturan(data);
+    // Kolom `mode` (SQL 20261101x) boleh belum ada: bila gagal, baca ulang tanpa kolom itu (mode = latihan).
+    let r = await db.from("sigap_vanguard_pengaturan").select(`${KOLOM_DASAR}, mode`).eq("kegiatan_id", kegiatan).maybeSingle();
+    if (r.error) r = await db.from("sigap_vanguard_pengaturan").select(KOLOM_DASAR).eq("kegiatan_id", kegiatan).maybeSingle();
+    if (r.error || !r.data) return { ...PENGATURAN_BAWAAN };
+    return bacaPengaturan(r.data);
   } catch {
     return { ...PENGATURAN_BAWAAN };
   }
 }
 
+/** Kegiatan yang sedang bermode uji beserta pengaturannya (jumlahnya kecil). Kosong bila tabel atau kolom mode belum ada. */
+export async function muatKegiatanUji(db: Db): Promise<{ kegiatan: number; pengaturan: Pengaturan }[]> {
+  try {
+    const { data, error } = await db.from("sigap_vanguard_pengaturan").select(`kegiatan_id, ${KOLOM_DASAR}, mode`).eq("mode", "uji").limit(200);
+    if (error) return [];
+    return ((data ?? []) as Record<string, unknown>[]).filter((r) => typeof r.kegiatan_id === "number").map((r) => ({ kegiatan: r.kegiatan_id as number, pengaturan: bacaPengaturan(r) }));
+  } catch {
+    return [];
+  }
+}
+
 export async function simpanPengaturan(db: Db, kegiatan: number, p: Pengaturan, oleh: string): Promise<{ ok: true } | { ok: false; pesan: string }> {
   try {
-    const { error } = await db.from("sigap_vanguard_pengaturan").upsert(
-      { kegiatan_id: kegiatan, level_dibuka: p.level_dibuka, nilai_lulus: p.nilai_lulus, buka_at: p.buka_at, tutup_at: p.tutup_at, maks_percobaan: p.maks_percobaan, diubah_oleh: oleh.slice(0, 120), diubah_at: new Date().toISOString() },
-      { onConflict: "kegiatan_id" },
-    );
-    if (error) return { ok: false, pesan: "Pengaturan belum dapat disimpan. Pastikan SQL 20261101w_vanguard_pengaturan sudah dijalankan." };
+    const dasar = { kegiatan_id: kegiatan, level_dibuka: p.level_dibuka, nilai_lulus: p.nilai_lulus, buka_at: p.buka_at, tutup_at: p.tutup_at, maks_percobaan: p.maks_percobaan, diubah_oleh: oleh.slice(0, 120), diubah_at: new Date().toISOString() };
+    const { error } = await db.from("sigap_vanguard_pengaturan").upsert({ ...dasar, mode: p.mode }, { onConflict: "kegiatan_id" });
+    if (!error) return { ok: true };
+    // Kolom mode belum ada (SQL 20261101x belum dijalankan): latihan tetap dapat disimpan tanpanya; uji tidak.
+    if (p.mode === "uji") return { ok: false, pesan: "Mode uji belum dapat disimpan. Pastikan SQL 20261101x_vanguard_mode sudah dijalankan." };
+    const { error: e2 } = await db.from("sigap_vanguard_pengaturan").upsert(dasar, { onConflict: "kegiatan_id" });
+    if (e2) return { ok: false, pesan: "Pengaturan belum dapat disimpan. Pastikan SQL 20261101w_vanguard_pengaturan sudah dijalankan." };
     return { ok: true };
   } catch {
     return { ok: false, pesan: "Pengaturan belum dapat disimpan." };

@@ -6,10 +6,10 @@
 // Urutan saran selalu sama untuk data yang sama (tanpa acak).
 
 import { evaluate, F } from "./engine";
-import { KASUS } from "./kasus";
+import { KASUS_PUBLIK } from "./kasus/daftar";
 import { idSelKasus } from "./sel";
 import { LABEL_JENIS } from "./dasbor";
-import type { JenisKesalahan, Kasus } from "./tipe";
+import type { JenisKesalahan, Kasus, KasusPublik } from "./tipe";
 
 export type Kelemahan = { jenis: JenisKesalahan; jumlah: number };
 export type RiwayatKasus = { kasus: string; percobaan: number; benar: boolean; bintang: number };
@@ -53,7 +53,13 @@ const BOBOT = { belumBenar: 30, belumDicoba: 20, bintangRendah: 10 };
  * Saran kasus. Skor = status (belum benar sesudah mencoba 30; belum pernah dicoba 20; benar tetapi bintang <= 1 10) + 10 x (jumlah kelemahan yang dilatih kasus ini / jumlah kelemahan teratas),
  * memakai sampai tiga kelemahan teratas. Kasus yang sudah benar dengan bintang >= 2 dan tidak melatih kelemahan apa pun tidak disarankan. Tanpa riwayat dan tanpa kelemahan = daftar kosong.
  */
-export function saranKasus(lemah: Kelemahan[], riwayat: RiwayatKasus[], maks = MAKS_SARAN, daftar: Kasus[] = KASUS): Saran[] {
+export type PetaKemampuan = Record<string, JenisKesalahan[]>;
+/** (V5b) Kemampuan semua kasus, dihitung di SERVER (butuh kunci) lalu dikirim ke layar petugas dalam bentuk daftar jenis saja, tanpa kunci. */
+export function petaKemampuan(daftar: Kasus[]): PetaKemampuan {
+  return Object.fromEntries(daftar.filter((k) => !k.bebas).map((k) => [k.kode, [...kemampuanKasus(k)].sort()]));
+}
+
+export function saranKasus(lemah: Kelemahan[], riwayat: RiwayatKasus[], kemampuan: PetaKemampuan, maks = MAKS_SARAN, daftar: KasusPublik[] = KASUS_PUBLIK): Saran[] {
   if (lemah.length === 0 && riwayat.length === 0) return [];
   const teratas = [...lemah].filter((x) => x.jumlah > 0).sort((a, b) => b.jumlah - a.jumlah || a.jenis.localeCompare(b.jenis)).slice(0, 3);
   const peta = new Map(riwayat.map((r) => [r.kasus, r]));
@@ -66,7 +72,7 @@ export function saranKasus(lemah: Kelemahan[], riwayat: RiwayatKasus[], maks = M
     if (r && !r.benar) { skor += BOBOT.belumBenar; alasan.push("Belum benar"); }
     else if (!r) { skor += BOBOT.belumDicoba; alasan.push("Belum dicoba"); }
     else if (r.bintang <= 1) { skor += BOBOT.bintangRendah; alasan.push("Benar dengan bintang rendah"); }
-    const mampu = kemampuanKasus(k);
+    const mampu = new Set<JenisKesalahan>(kemampuan[k.kode] ?? []);
     const cocok = teratas.filter((t) => mampu.has(t.jenis));
     if (cocok.length > 0) {
       skor += (10 * cocok.length) / teratas.length;

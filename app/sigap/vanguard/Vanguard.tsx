@@ -17,23 +17,27 @@ import { apiPortal } from "@/app/portal/sesi";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { bacaSesi } from "@/app/sigap/admin/api";
 import { compute, engineChecks, fmt, hitungBintang, isiOtomatisR1, kasusBenar, rp } from "@/lib/vanguard/engine";
-import { KASUS, KASUS_BERNILAI, NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus";
+import { KASUS_PUBLIK, KASUS_PUBLIK_BERNILAI, NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus/daftar";
 import { kutipanIv, lembarBlok, type Status } from "@/lib/vanguard/lembar";
 import { FUNGSI, TOMBOL, hitungEkspresi, tekanPad } from "@/lib/vanguard/keypad";
 import { tujuanAman } from "@/lib/vanguard/navigasi";
-import { saranKasus, type Kelemahan, type Saran } from "@/lib/vanguard/remedial";
+import { saranKasus, type Kelemahan, type PetaKemampuan, type Saran } from "@/lib/vanguard/remedial";
 import { LABEL_JENIS } from "@/lib/vanguard/dasbor";
 import { labelSel } from "@/lib/vanguard/sel";
 import { bacaPengaturan, hitungLulus, isoKeInputWib, levelDibuka, maksPercobaan, type Pengaturan, type StatusJadwal } from "@/lib/vanguard/pengaturan";
-import type { Kasus, Koreksi, Kontrol, Level, Nilai, PeriksaEngine } from "@/lib/vanguard/tipe";
+import type { Kasus, KasusPublik, KasusRahasia, Koreksi, Kontrol, Level, Nilai, PeriksaEngine } from "@/lib/vanguard/tipe";
 import { Lambang, LogoPenuh } from "./Logo";
 
 type PengKirim = Pengaturan & { status: StatusJadwal };
 type Layar = "pembuka" | "beranda" | "kasus" | "akhir";
-type Info = { memuat: boolean; mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null };
+type Info = { memuat: boolean; mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null; uji: boolean };
+type StatusRahasia = "idle" | "memuat" | "siap" | "ditolak" | "gagal";
 type Catat = { status: "tidak" | "mengirim" | "ok" | "gagal"; nomor?: number; pesan?: string };
 type Hasil = {
   jenis: "benar" | "salah" | "kunci" | "bebas";
+  /** Mode uji: hanya vonis dari server; tanpa rincian kotak, koreksi, atau pembahasan. */
+  uji?: boolean;
+  jmlSalah?: number;
   bintang: number | null;
   baris: { k: string; e: number; u: number; ok: boolean }[];
   koreksi: Koreksi[];
@@ -67,24 +71,29 @@ export default function Vanguard() {
   const [pad, setPad] = useState<{ id: string; expr: string; ganti: boolean } | null>(null);
   const [pas, setPas] = useState(false);
   const [lemah, setLemah] = useState<Kelemahan[]>([]);
+  const [kemampuan, setKemampuan] = useState<PetaKemampuan>({});
+  const [rahasia, setRahasia] = useState<Record<string, KasusRahasia>>({});
+  const [statusRahasia, setStatusRahasia] = useState<Record<string, StatusRahasia>>({});
   const [peng, setPeng] = useState<PengKirim | null>(null);
   const [benarKode, setBenarKode] = useState<string[]>([]);
   const kalkRef = useRef(0);
-  const [info, setInfo] = useState<Info>({ memuat: kegiatan !== null, mode: kegiatan ? "tercatat" : "bebas", boleh: false, alasan: null });
+  const [info, setInfo] = useState<Info>({ memuat: kegiatan !== null, mode: kegiatan ? "tercatat" : "bebas", boleh: false, alasan: null, uji: false });
   const mulaiRef = useRef(Date.now());
   const hasilRef = useRef<HTMLDivElement | null>(null);
   const lembarRef = useRef<HTMLDivElement | null>(null);
   const skrol = useRef<HTMLDivElement | null>(null);
 
-  const k: Kasus | null = layar === "kasus" ? KASUS[idx] ?? null : null;
+  const k: KasusPublik | null = layar === "kasus" ? KASUS_PUBLIK[idx] ?? null : null;
+  const kp: Kasus | null = k && rahasia[k.kode] ? { ...k, ...rahasia[k.kode] } : null; // kasus PENUH (latihan, rahasia sudah dimuat)
   const jadwal: StatusJadwal = peng?.status ?? "buka";
   const dicatat = info.mode === "tercatat" && info.boleh && jadwal === "buka";
+  const uji = dicatat && info.uji; // mode uji berlaku: server menilai, tanpa kunci/petunjuk/pembahasan di perangkat
   const alasanTampil = info.alasan ?? (info.mode === "tercatat" && info.boleh && jadwal !== "buka" && peng
     ? (jadwal === "belum_buka" ? `Latihan tercatat untuk kegiatan ini baru dibuka ${wib(peng.buka_at)}.` : `Latihan tercatat untuk kegiatan ini sudah ditutup${peng.tutup_at ? ` (${wib(peng.tutup_at)})` : ""}.`)
     : null);
   const infoTampil: Info = { ...info, alasan: alasanTampil };
   const levelAktif = useMemo(() => new Set<Level>(dicatat && peng ? levelDibuka(peng) : URUTAN_LEVEL), [dicatat, peng]);
-  const bernilaiAktif = useMemo(() => KASUS_BERNILAI.filter((x) => levelAktif.has(x.level)), [levelAktif]);
+  const bernilaiAktif = useMemo(() => KASUS_PUBLIK_BERNILAI.filter((x) => levelAktif.has(x.level)), [levelAktif]);
   const maksBintang = bernilaiAktif.length * 3;
 
   // ---------- masuk, mode, dan riwayat ----------
@@ -101,9 +110,10 @@ export default function Vanguard() {
     let batal = false;
     (async () => {
       try {
-        const r = await apiPortal<{ mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null; riwayat: { kasus: string; percobaan: number; benar: boolean; bintang: number }[]; lemah?: Kelemahan[]; pengaturan?: Record<string, unknown> & { status?: string } }>(`/api/sigap/vanguard?kegiatan=${kegiatan}`);
+        const r = await apiPortal<{ mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null; riwayat: { kasus: string; percobaan: number; benar: boolean; bintang: number }[]; lemah?: Kelemahan[]; uji?: boolean; kemampuan?: PetaKemampuan; pengaturan?: Record<string, unknown> & { status?: string } }>(`/api/sigap/vanguard?kegiatan=${kegiatan}`);
         if (batal) return;
-        setInfo({ memuat: false, mode: r.mode, boleh: r.boleh, alasan: r.alasan });
+        setInfo({ memuat: false, mode: r.mode, boleh: r.boleh, alasan: r.alasan, uji: r.uji === true });
+        setKemampuan(r.kemampuan ?? {});
         setLemah(Array.isArray(r.lemah) ? r.lemah : []);
         if (r.pengaturan) setPeng({ ...bacaPengaturan(r.pengaturan), status: r.pengaturan.status === "belum_buka" || r.pengaturan.status === "tutup" ? r.pengaturan.status : "buka" });
         setBenarKode(r.riwayat.filter((x) => x.benar).map((x) => x.kasus));
@@ -111,7 +121,7 @@ export default function Vanguard() {
         setBintang(Object.fromEntries(r.riwayat.filter((x) => x.benar).map((x) => [x.kasus, x.bintang])));
       } catch (e) {
         if (batal || (e instanceof Error && e.message === "SESI_BERAKHIR")) return;
-        setInfo({ memuat: false, mode: "tercatat", boleh: false, alasan: "Tidak dapat memuat status pencatatan; latihan tetap bisa dilakukan tetapi tidak dicatat." });
+        setInfo({ memuat: false, mode: "tercatat", boleh: false, alasan: "Tidak dapat memuat status pencatatan; latihan tetap bisa dilakukan tetapi tidak dicatat.", uji: false });
       }
     })();
     return () => { batal = true; };
@@ -145,8 +155,25 @@ export default function Vanguard() {
   }, [htmlLembar, pas, layar]);
 
   // ---------- layar kasus ----------
+  // Bagian rahasia kasus (kunci, petunjuk, pembahasan) diminta per kasus dan hanya pada latihan; server menolaknya bila kasus itu sedang diujikan kepada akun ini.
+  const ambilRahasia = async (kode: string): Promise<KasusRahasia | null> => {
+    if (rahasia[kode]) return rahasia[kode];
+    setStatusRahasia((s) => ({ ...s, [kode]: "memuat" }));
+    try {
+      const r = await apiPortal<{ rahasia: KasusRahasia }>(`/api/sigap/vanguard/kasus?kode=${kode}`);
+      setRahasia((x) => ({ ...x, [kode]: r.rahasia }));
+      setStatusRahasia((s) => ({ ...s, [kode]: "siap" }));
+      return r.rahasia;
+    } catch (e) {
+      if (e instanceof Error && e.message === "SESI_BERAKHIR") return null;
+      setStatusRahasia((s) => ({ ...s, [kode]: e instanceof Error && /diujikan/.test(e.message) ? "ditolak" : "gagal" }));
+      return null;
+    }
+  };
+
   const bukaKasus = (i: number) => {
-    const kode = KASUS[i].kode;
+    const kode = KASUS_PUBLIK[i].kode;
+    if (!uji && !KASUS_PUBLIK[i].bebas) void ambilRahasia(kode);
     setVals({}); setStatus({}); setHasil(null); setCatat({ status: "tidak" }); setHint(hints[kode] ?? 0); setPad(null);
     mulaiRef.current = Date.now();
     setIdx(i);
@@ -155,12 +182,12 @@ export default function Vanguard() {
   };
   const keBeranda = () => { setPad(null); setLayar("beranda"); skrol.current?.scrollTo({ top: 0 }); };
 
-  const kirim = async (kas: Kasus, isian: Nilai, lihatJawaban: boolean, petunjuk: number) => {
-    if (!dicatat || kegiatan === null) return;
+  const kirim = async (kas: KasusPublik, isian: Nilai, lihatJawaban: boolean, petunjuk: number): Promise<{ nomor: number; benar: boolean; bintang: number; jmlSalah?: number } | null> => {
+    if (!dicatat || kegiatan === null) return null;
     setCatat({ status: "mengirim" });
     const kalkKirim = Math.min(500, kalkRef.current);
     try {
-      const r = await apiPortal<{ nomor: number; benar: boolean; bintang: number }>("/api/sigap/vanguard", {
+      const r = await apiPortal<{ nomor: number; benar: boolean; bintang: number; jmlSalah?: number }>("/api/sigap/vanguard", {
         method: "POST",
         body: JSON.stringify({ kegiatan, kasus: kas.kode, isian, petunjuk, lihatJawaban, kalkulator: kalkKirim, durasiDtk: Math.min(86400, Math.max(0, Math.round((Date.now() - mulaiRef.current) / 1000))) }),
       });
@@ -168,16 +195,28 @@ export default function Vanguard() {
       setCatat({ status: "ok", nomor: r.nomor });
       setTries((t) => ({ ...t, [kas.kode]: r.nomor }));
       if (r.benar) { setBenarKode((b) => (b.includes(kas.kode) ? b : [...b, kas.kode])); setBintang((b) => ({ ...b, [kas.kode]: Math.max(b[kas.kode] ?? 0, r.bintang) })); setHasil((h) => (h && h.jenis === "benar" ? { ...h, bintang: r.bintang } : h)); }
+      return r;
     } catch (err) {
-      if (err instanceof Error && err.message === "SESI_BERAKHIR") return;
+      if (err instanceof Error && err.message === "SESI_BERAKHIR") return null;
       setCatat({ status: "gagal", pesan: err instanceof Error ? err.message : "Gagal mencatat." });
+      return null;
     }
   };
 
   const gulirKeHasil = () => window.setTimeout(() => hasilRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
 
+  // Mode uji: SERVER yang menilai; perangkat hanya menerima vonis (benar atau tidak, dan jumlah kotak yang salah), tanpa kunci, koreksi, atau pembahasan.
+  const periksaUji = async () => {
+    if (!k) return;
+    const r = await kirim(k, vals, false, 0);
+    if (!r) return;
+    setHasil({ jenis: r.benar ? "benar" : "salah", bintang: r.benar ? r.bintang : null, baris: [], koreksi: [], pemeriksaan: [], ctl: null, uji: true, jmlSalah: r.jmlSalah });
+    gulirKeHasil();
+  };
+
   const periksa = () => {
     if (!k) return;
+    if (uji && !k.bebas) { void periksaUji(); return; }
     const nomor = (tries[k.kode] ?? 0) + 1;
     setTries((t) => ({ ...t, [k.kode]: nomor }));
     if (k.bebas) {
@@ -185,7 +224,8 @@ export default function Vanguard() {
       gulirKeHasil();
       return;
     }
-    const r = kasusBenar(k, vals);
+    if (!kp) return; // rahasia belum dimuat (tombol Periksa nonaktif sampai siap)
+    const r = kasusBenar(kp, vals);
     const st: Status = {};
     for (const b of r.evaluasi.rows) if (b.e !== 0 || b.u !== 0) st[b.k] = b.ok ? "ok" : "no";
     setStatus(st);
@@ -197,13 +237,13 @@ export default function Vanguard() {
   };
 
   const lihatJawaban = () => {
-    if (!k) return;
-    const kunci: Nilai = { ...k.kunci };
+    if (!k || !kp || uji) return;
+    const kunci: Nilai = { ...kp.kunci };
     const isi = k.lengkap ? isiOtomatisR1(kunci) : kunci;
     setRev((r) => ({ ...r, [k.kode]: true }));
     setBintang((b) => (b[k.kode] == null ? { ...b, [k.kode]: 0 } : b));
     setVals(isi);
-    const r = kasusBenar(k, isi);
+    const r = kasusBenar(kp, isi);
     const st: Status = {};
     for (const b of r.evaluasi.rows) if (b.e !== 0 || b.u !== 0) st[b.k] = "ok";
     setStatus(st);
@@ -254,10 +294,12 @@ export default function Vanguard() {
   };
 
   const isiOtomatis = () => { setVals((v) => isiOtomatisR1(v)); setStatus({}); };
-  const muatContoh = () => {
-    const ali = KASUS.find((x) => x.nama === "ali");
-    if (!ali) return;
-    setVals(isiOtomatisR1({ ...ali.kunci, vii_p1: 0 }));
+  const muatContoh = async () => {
+    const ali = KASUS_PUBLIK.find((x) => x.nama === "ali");
+    if (!ali || uji) return;
+    const r = await ambilRahasia(ali.kode);
+    if (!r) return;
+    setVals(isiOtomatisR1({ ...r.kunci, vii_p1: 0 }));
     setStatus({});
   };
 
@@ -265,20 +307,20 @@ export default function Vanguard() {
   const totalBintang = Object.entries(bintang).filter(([kode]) => bernilaiAktif.some((x) => x.kode === kode)).reduce((a, [, b]) => a + b, 0);
   const selesai = bernilaiAktif.filter((x) => bintang[x.kode] != null).length;
   const lulus = useMemo(() => (dicatat && peng ? hitungLulus(peng, benarKode) : null), [dicatat, peng, benarKode]);
-  const idxLanjut = k ? KASUS.findIndex((c, i) => i > idx && levelAktif.has(c.level)) : -1;
+  const idxLanjut = k ? KASUS_PUBLIK.findIndex((c, i) => i > idx && levelAktif.has(c.level)) : -1;
   const habis = !!(dicatat && k && !k.bebas && peng && (tries[k.kode] ?? 0) >= maksPercobaan(peng) && peng.maks_percobaan !== null);
   // Latihan kesalahan saya: hanya mode tercatat (butuh riwayat kesalahan di server)
   const saran: Saran[] = useMemo(() => {
-    if (!dicatat) return [];
+    if (!dicatat || uji) return [];
     const kode = new Set([...Object.keys(tries), ...Object.keys(bintang)]);
-    return saranKasus(lemah, [...kode].map((k) => ({ kasus: k, percobaan: tries[k] ?? 0, benar: bintang[k] != null, bintang: bintang[k] ?? 0 })))
-      .filter((x) => { const c = KASUS.find((y) => y.kode === x.kasus); return !!c && levelAktif.has(c.level); });
-  }, [dicatat, lemah, tries, bintang, levelAktif]);
-  const modeTeks = dicatat ? "Pelatihan · hasil Anda dicatat" : "Simulasi bebas · data tidak dicatat";
+    return saranKasus(lemah, [...kode].map((k) => ({ kasus: k, percobaan: tries[k] ?? 0, benar: bintang[k] != null, bintang: bintang[k] ?? 0 })), kemampuan)
+      .filter((x) => { const c = KASUS_PUBLIK.find((y) => y.kode === x.kasus); return !!c && levelAktif.has(c.level); });
+  }, [dicatat, uji, lemah, kemampuan, tries, bintang, levelAktif]);
+  const modeTeks = uji ? "UJI · hasil Anda dicatat dan menentukan kelulusan" : dicatat ? "Pelatihan · hasil Anda dicatat" : "Simulasi bebas · data tidak dicatat";
 
   // ---------- tampilan ----------
   const judul = layar === "kasus" && k ? `Kasus ${k.kode} · ${k.judul}` : layar === "akhir" ? "Hasil akhir" : "Simulasi isian Blok V–VII";
-  const persen = layar === "akhir" ? 100 : layar === "kasus" ? (idx / KASUS.length) * 100 : (bernilaiAktif.length ? selesai / bernilaiAktif.length : 0) * 100;
+  const persen = layar === "akhir" ? 100 : layar === "kasus" ? (idx / KASUS_PUBLIK.length) * 100 : (bernilaiAktif.length ? selesai / bernilaiAktif.length : 0) * 100;
 
   if (layar === "pembuka") {
     return (
@@ -289,7 +331,7 @@ export default function Vanguard() {
             <LogoPenuh />
             <div><div className="j1">Jaga data dari garis depan.</div><div className="j2">Simulasi pengisian kuesioner KP Susenas</div></div>
             <div className={`chip ${dicatat ? "ya" : "tidak"}`} role="status">
-              {info.memuat ? "Memeriksa status pencatatan…" : dicatat ? "PELATIHAN · hasil Anda dicatat" : "SIMULASI BEBAS · data tidak dicatat"}
+              {info.memuat ? "Memeriksa status pencatatan…" : uji ? "UJI · hasil Anda dicatat dan menentukan kelulusan" : dicatat ? "PELATIHAN · hasil Anda dicatat" : "SIMULASI BEBAS · data tidak dicatat"}
             </div>
             {!info.memuat && info.mode === "tercatat" && !dicatat && alasanTampil && <div className="j2" style={{ padding: "0 14px" }}>{alasanTampil} Anda tetap dapat berlatih; hasilnya tidak dicatat.</div>}
           </div>
@@ -318,7 +360,7 @@ export default function Vanguard() {
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
-        {layar === "beranda" && <Beranda bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
+        {layar === "beranda" && <Beranda bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
 
         {layar === "kasus" && k && (
           <>
@@ -327,12 +369,16 @@ export default function Vanguard() {
               <h2>{k.judul}</h2>
               <p dangerouslySetInnerHTML={html(k.cerita)} />
               {k.info && <ul>{k.info.map((x, i) => <li key={i} dangerouslySetInnerHTML={html(x)} />)}</ul>}
-              {k.bebas && <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" onClick={muatContoh}>Muat contoh Pak Ali</button></div>}
+              {k.bebas && !uji && <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" onClick={() => void muatContoh()}>Muat contoh Pak Ali</button></div>}
             </div>
             {k.iv && <div dangerouslySetInnerHTML={html(kutipanIv(k.iv))} />}
+            {uji && !k.bebas && <div className="catat ya" role="status"><b>Mode uji:</b> tanpa petunjuk, tanpa kunci, dan tanpa pembahasan. Setiap kali Anda menekan Periksa, jawaban dikirim ke server untuk dinilai dan dicatat. Hasil menentukan kelulusan.</div>}
+            {!uji && !k.bebas && statusRahasia[k.kode] === "ditolak" && <div className="catat gagal" role="alert">Kasus ini sedang diujikan kepada Anda di sebuah kegiatan, sehingga tidak tersedia untuk latihan selama uji berlangsung.</div>}
+            {!uji && !k.bebas && statusRahasia[k.kode] === "gagal" && <div className="catat gagal" role="alert">Kunci kasus belum dapat dimuat. Periksa sinyal, lalu buka ulang kasus ini dari daftar.</div>}
+            {uji && !hasil && catat.status === "gagal" && <CatatInfo catat={catat} dicatat={dicatat} />}
             {habis && <div className="catat gagal" role="alert">Batas percobaan untuk kasus ini sudah tercapai ({peng?.maks_percobaan}×). Pilih kasus lain dari daftar.</div>}
             <div className="legend"><span><i className="sw" style={{ background: "#fff" }} />isian Anda (ketuk)</span><span><i className="sw" style={{ background: "#f1f1f1" }} />otomatis</span><span><i className="sw" style={{ background: "#a6a6a6" }} />tidak berlaku</span></div>
-            {hint > 0 && <div className="hint stack" style={{ gap: 6 }}>{k.petunjuk.slice(0, hint).map((t, i) => <div key={i}><b>Petunjuk {i + 1}.</b> <span dangerouslySetInnerHTML={html(t)} /></div>)}</div>}
+            {!uji && kp && hint > 0 && <div className="hint stack" style={{ gap: 6 }}>{kp.petunjuk.slice(0, hint).map((t, i) => <div key={i}><b>Petunjuk {i + 1}.</b> <span dangerouslySetInnerHTML={html(t)} /></div>)}</div>}
             <div ref={lembarRef} className="stack" style={{ gap: 12 }} onClick={klikLembar} onKeyDown={tombolLembar} dangerouslySetInnerHTML={html(htmlLembar)} />
             {k.blok.includes("VII") && (
               <div className={`sheet dk ${Math.abs(disk) <= 1 ? "ok" : "no"}`}>
@@ -344,7 +390,7 @@ export default function Vanguard() {
             )}
             <div ref={hasilRef}>
               {hasil && (
-                <PanelHasil k={k} hasil={hasil} catat={catat} dicatat={dicatat} adaLanjut={idxLanjut >= 0}
+                <PanelHasil k={k} rah={uji ? null : kp} hasil={hasil} catat={catat} dicatat={dicatat} adaLanjut={idxLanjut >= 0}
                   onUlang={() => { setHasil(null); setStatus({}); setCatat({ status: "tidak" }); }} onKunci={lihatJawaban}
                   onLanjut={() => bukaKasus(idxLanjut)} onAkhir={() => setLayar("akhir")} />
               )}
@@ -352,15 +398,16 @@ export default function Vanguard() {
           </>
         )}
 
-        {layar === "akhir" && <Akhir bintang={bintang} total={totalBintang} maks={maksBintang} daftar={bernilaiAktif} lulus={lulus} nilaiLulus={peng?.nilai_lulus ?? null} dicatat={dicatat} onBuka={bukaKasus} onDaftar={keBeranda} />}
+        {layar === "akhir" && <Akhir bintang={bintang} total={totalBintang} maks={maksBintang} daftar={bernilaiAktif} lulus={lulus} nilaiLulus={peng?.nilai_lulus ?? null} uji={uji} dicatat={dicatat} onBuka={bukaKasus} onDaftar={keBeranda} />}
       </div></div>
 
       {layar === "kasus" && k && (
         <div className="dock">
           <button type="button" className="btn" aria-label="Daftar kasus" onClick={keBeranda}>☰</button>
           {k.bebas ? <button type="button" className="btn amb" onClick={isiOtomatis}>Isi R.1 otomatis</button>
-            : <button type="button" className="btn" disabled={hint >= k.petunjuk.length} onClick={() => { const n = Math.min(k.petunjuk.length, hint + 1); setHint(n); setHints((h) => ({ ...h, [k.kode]: n })); }}>Petunjuk{k.petunjuk.length ? ` ${hint}/${k.petunjuk.length}` : ""}</button>}
-          <button type="button" className="btn pri" disabled={catat.status === "mengirim" || habis} onClick={periksa}>Periksa</button>
+            : uji ? <button type="button" className="btn" disabled>Tanpa petunjuk</button>
+            : <button type="button" className="btn" disabled={!kp || hint >= kp.petunjuk.length} onClick={() => { if (!kp) return; const n = Math.min(kp.petunjuk.length, hint + 1); setHint(n); setHints((h) => ({ ...h, [k.kode]: n })); }}>Petunjuk{kp && kp.petunjuk.length ? ` ${hint}/${kp.petunjuk.length}` : ""}</button>}
+          <button type="button" className="btn pri" disabled={catat.status === "mengirim" || habis || (!uji && !k.bebas && !kp)} onClick={periksa}>{!uji && !k.bebas && !kp && statusRahasia[k.kode] !== "ditolak" && statusRahasia[k.kode] !== "gagal" ? "Memuat…" : "Periksa"}</button>
         </div>
       )}
       <div className="vgfoot"><b>{modeTeks}</b>{dicatat ? "" : " · tidak menentukan kelulusan"}</div>
@@ -388,11 +435,12 @@ export default function Vanguard() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-function Beranda({ bintang, selesai, total, levelAktif, dicatat, info, peng, lulus, saran, lemah, onBuka, onAkhir }: { bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
+function Beranda({ bintang, selesai, total, levelAktif, dicatat, uji, info, peng, lulus, saran, lemah, onBuka, onAkhir }: { bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; uji: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
   return (
     <>
       <div className={`catat ${dicatat ? "ya" : "tidak"}`} role="status">
-        {dicatat ? <><b>Pelatihan:</b> setiap kali Anda menekan Periksa, percobaan dicatat untuk BPS Kabupaten Solok (kesalahan dan jumlah percobaan).</>
+        {uji ? <><b>Mode uji:</b> tanpa petunjuk, kunci, atau pembahasan. Setiap kali Anda menekan Periksa, jawaban dinilai server dan dicatat; hasilnya menentukan kelulusan.</>
+          : dicatat ? <><b>Pelatihan:</b> setiap kali Anda menekan Periksa, percobaan dicatat untuk BPS Kabupaten Solok (kesalahan dan jumlah percobaan).</>
           : <><b>Simulasi bebas:</b> jawaban Anda tidak dicatat dan tidak menentukan apa pun. Berlatihlah sebebasnya.{info.mode === "tercatat" && info.alasan ? ` (${info.alasan})` : ""}</>}
       </div>
       <div className="sheet"><span className="tag">Cara main</span><p style={{ fontSize: 13 }}>Baca hasil wawancara dan kutipan Blok IV, lalu isi Blok V (dan VI–VII pada kasus lengkap) seperti di kuesioner. <b>Ketuk kotak isian</b> untuk memasukkan angka; kalkulator ada di lembar isian. Sel <span className="sw" style={{ background: "#a6a6a6", width: 11, height: 11 }} /> abu-abu tidak berlaku. Kotak bertinta biru adalah isian Anda; kotak abu muda dihitung otomatis.</p></div>
@@ -413,7 +461,7 @@ function Beranda({ bintang, selesai, total, levelAktif, dicatat, info, peng, lul
           {lemah[0] && <div style={{ fontSize: 12.5, marginTop: 3 }}>Kesalahan Anda yang paling sering: <b>{LABEL_JENIS[lemah[0].jenis]}</b> ({lemah[0].jumlah}×). Kasus berikut disarankan untuk mengulangnya.</div>}
           <div style={{ marginTop: 6 }}>
             {saran.map((x) => (
-              <button key={x.kasus} type="button" className="item" onClick={() => onBuka(KASUS.findIndex((c) => c.kode === x.kasus))}>
+              <button key={x.kasus} type="button" className="item" onClick={() => onBuka(KASUS_PUBLIK.findIndex((c) => c.kode === x.kasus))}>
                 <span className="num">{x.kasus}</span>
                 <span className="t">{x.judul}<small>{x.alasan.join(" · ")}</small></span>
               </button>
@@ -424,7 +472,7 @@ function Beranda({ bintang, selesai, total, levelAktif, dicatat, info, peng, lul
       {URUTAN_LEVEL.filter((lv) => levelAktif.has(lv)).map((lv) => (
         <div key={lv}>
           <div><span className="lv">{lv} · {NAMA_LEVEL[lv]}</span></div>
-          {KASUS.map((c, i) => c.level !== lv ? null : (
+          {KASUS_PUBLIK.map((c, i) => c.level !== lv ? null : (
             <button key={c.kode} type="button" className={`item${bintang[c.kode] != null && !c.bebas ? " done" : ""}`} onClick={() => onBuka(i)}>
               <span className="num">{c.kode}</span>
               <span className="t">{c.judul}<small>{c.lengkap ? "Blok V–VII lengkap" : c.bebas ? "Tanpa kunci" : `Blok ${c.blok.map((b) => `V.${b}`).join(" + ")}`}</small></span>
@@ -438,16 +486,16 @@ function Beranda({ bintang, selesai, total, levelAktif, dicatat, info, peng, lul
   );
 }
 
-function Akhir({ bintang, total, maks, daftar, lulus, nilaiLulus, dicatat, onBuka, onDaftar }: { bintang: Record<string, number>; total: number; maks: number; daftar: Kasus[]; lulus: ReturnType<typeof hitungLulus> | null; nilaiLulus: number | null; dicatat: boolean; onBuka: (i: number) => void; onDaftar: () => void }) {
+function Akhir({ bintang, total, maks, daftar, lulus, nilaiLulus, uji, dicatat, onBuka, onDaftar }: { bintang: Record<string, number>; total: number; maks: number; daftar: KasusPublik[]; lulus: ReturnType<typeof hitungLulus> | null; nilaiLulus: number | null; uji: boolean; dicatat: boolean; onBuka: (i: number) => void; onDaftar: () => void }) {
   return (
     <>
       <div className="sheet" style={{ textAlign: "center" }}>
         <span className="tag">Skor</span><div className="score">{total} / {maks}</div>
         <p style={{ marginTop: 6, fontSize: 13 }}>{total >= maks * 0.8 ? "Sangat baik. Pola pasangan Blok IV dan V sudah dikuasai." : total >= maks * 0.5 ? "Cukup baik. Ulangi kasus bertanda bintang rendah." : "Pelajari lagi pasangan Blok IV dan V, lalu ulangi kasus."}</p>
-        <p className="ref" style={{ marginTop: 6 }}>{dicatat ? `Hasil percobaan Anda tercatat untuk BPS Kabupaten Solok.${lulus && nilaiLulus !== null ? ` Kelulusan: ${lulus.benar} dari ${lulus.dibuka} kasus benar (${lulus.persen}%), syarat ${nilaiLulus}%: ${lulus.lulus ? "LULUS" : "belum lulus"}.` : ""}` : "Simulasi bebas: skor ini hanya tersimpan di perangkat Anda."}</p>
+        <p className="ref" style={{ marginTop: 6 }}>{dicatat ? `${uji ? "Hasil uji Anda tercatat dan menentukan kelulusan." : "Hasil percobaan Anda tercatat untuk BPS Kabupaten Solok."}${lulus && nilaiLulus !== null ? ` Kelulusan: ${lulus.benar} dari ${lulus.dibuka} kasus benar (${lulus.persen}%), syarat ${nilaiLulus}%: ${lulus.lulus ? "LULUS" : "belum lulus"}.` : ""}` : "Simulasi bebas: skor ini hanya tersimpan di perangkat Anda."}</p>
       </div>
       {daftar.map((c) => (
-        <button key={c.kode} type="button" className="item" onClick={() => onBuka(KASUS.indexOf(c))}>
+        <button key={c.kode} type="button" className="item" onClick={() => onBuka(KASUS_PUBLIK.indexOf(c))}>
           <span className="num">{c.kode}</span><span className="t">{c.judul}</span><span className="st">{bintang[c.kode] != null ? bintangTeks(bintang[c.kode]) : "–"}</span>
         </button>
       ))}
@@ -474,17 +522,17 @@ function KontrolTabel({ ctl }: { ctl: Kontrol }) {
   );
 }
 
-function PanelHasil({ k, hasil, catat, dicatat, adaLanjut, onUlang, onKunci, onLanjut, onAkhir }: {
-  k: Kasus; hasil: Hasil; catat: Catat; dicatat: boolean; adaLanjut: boolean;
+function PanelHasil({ k, rah, hasil, catat, dicatat, adaLanjut, onUlang, onKunci, onLanjut, onAkhir }: {
+  k: KasusPublik; rah: KasusRahasia | null; hasil: Hasil; catat: Catat; dicatat: boolean; adaLanjut: boolean;
   onUlang: () => void; onKunci: () => void; onLanjut: () => void; onAkhir: () => void;
 }) {
   const benar = hasil.jenis === "benar";
   const kunci = hasil.jenis === "kunci";
   const bebas = hasil.jenis === "bebas";
   const baris = hasil.baris.filter((x) => x.e !== 0 || x.u !== 0);
-  const jmlSalah = hasil.baris.filter((x) => !x.ok).length + hasil.pemeriksaan.filter((x) => !x.ok && !x.info).length;
+  const jmlSalah = hasil.uji ? hasil.jmlSalah ?? 0 : hasil.baris.filter((x) => !x.ok).length + hasil.pemeriksaan.filter((x) => !x.ok && !x.info).length;
   const bagus = benar || kunci || (bebas && hasil.pemeriksaan.every((x) => x.ok));
-  const koreksi: { k: string | null; m: string }[] = [...(!kunci && k.nol && hasil.koreksi.length ? [{ k: null, m: k.nol }] : []), ...(kunci ? [] : hasil.koreksi)];
+  const koreksi: { k: string | null; m: string }[] = [...(!kunci && rah?.nol && hasil.koreksi.length ? [{ k: null, m: rah.nol }] : []), ...(kunci ? [] : hasil.koreksi)];
   return (
     <div className={`res ${bagus ? "good" : "bad"}`}>
       <div className="vd">
@@ -495,7 +543,7 @@ function PanelHasil({ k, hasil, catat, dicatat, adaLanjut, onUlang, onKunci, onL
         </div>
       </div>
       <CatatInfo catat={catat} dicatat={dicatat} />
-      {!bebas && (baris.length === 0
+      {!bebas && !hasil.uji && (baris.length === 0
         ? <section><h3>Cek per kotak</h3><p style={{ fontSize: 13 }}>Semua kotak pada kasus ini seharusnya kosong.</p></section>
         : <section><h3>Cek per kotak</h3>
             <table className="tbl"><thead><tr><th>Kotak</th><th style={{ textAlign: "right" }}>Anda</th><th style={{ textAlign: "right" }}>Benar</th></tr></thead>
@@ -510,14 +558,15 @@ function PanelHasil({ k, hasil, catat, dicatat, adaLanjut, onUlang, onKunci, onL
       {koreksi.length > 0 && !bebas && (
         <section><h3>Koreksi</h3><ul className="fb">{koreksi.map((f, i) => <li key={i}>{f.k && <b>{labelSel(f.k)}. </b>}{f.m}</li>)}</ul></section>
       )}
-      {(benar || kunci) && (
+      {hasil.uji && benar && <div className="btns">{adaLanjut ? <button type="button" className="btn pri" onClick={onLanjut}>Kasus berikutnya</button> : <button type="button" className="btn pri" onClick={onAkhir}>Lihat hasil akhir</button>}</div>}
+      {!hasil.uji && (benar || kunci) && rah && (
         <>
-          <section><h3>Cara hitung</h3><ol className="steps">{k.langkah.map((s, i) => <li key={i} dangerouslySetInnerHTML={html(s)} />)}</ol></section>
-          <section><h3>Pembahasan</h3><p style={{ fontSize: 13 }} dangerouslySetInnerHTML={html(k.pembahasan)} /><p className="ref" style={{ marginTop: 6 }}>Rujukan: {k.rujukan}</p></section>
+          <section><h3>Cara hitung</h3><ol className="steps">{rah.langkah.map((s, i) => <li key={i} dangerouslySetInnerHTML={html(s)} />)}</ol></section>
+          <section><h3>Pembahasan</h3><p style={{ fontSize: 13 }} dangerouslySetInnerHTML={html(rah.pembahasan)} /><p className="ref" style={{ marginTop: 6 }}>Rujukan: {rah.rujukan}</p></section>
           <div className="btns">{adaLanjut ? <button type="button" className="btn pri" onClick={onLanjut}>Kasus berikutnya</button> : <button type="button" className="btn pri" onClick={onAkhir}>Lihat hasil akhir</button>}</div>
         </>
       )}
-      {hasil.jenis === "salah" && <div className="btns"><button type="button" className="btn pri" onClick={onUlang}>Coba lagi</button><button type="button" className="btn" onClick={onKunci}>Lihat jawaban</button></div>}
+      {hasil.jenis === "salah" && <div className="btns"><button type="button" className="btn pri" onClick={onUlang}>Coba lagi</button>{!hasil.uji && <button type="button" className="btn" onClick={onKunci}>Lihat jawaban</button>}</div>}
     </div>
   );
 }

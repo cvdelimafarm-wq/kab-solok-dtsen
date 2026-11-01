@@ -6,7 +6,7 @@
 // Label kotak diambil dari registri sel (sel.ts), jadi pesan koreksi dan label di layar selalu sama.
 
 import { AR, BR, D_ROWS, E_ROWS, F_ROWS, G_MAIN, G_SUB, labelSel } from "./sel";
-import type { Blok, BarisUsaha, Kasus, KutipanIv, Nilai } from "./tipe";
+import type { Blok, BarisUsaha, KasusPublik, KutipanIv, Nilai } from "./tipe";
 
 const R = Math.round;
 
@@ -157,7 +157,7 @@ function blkVII(x: Konteks): string {
   return paper(h);
 }
 
-const BLOK: Record<Blok, (x: Konteks, k: Kasus) => string> = {
+const BLOK: Record<Blok, (x: Konteks, k: KasusPublik) => string> = {
   A: (x, k) => blkA(x, k.meta?.A), B: (x, k) => blkB(x, k.meta?.B), C: blkC, D: blkD, E: blkE, F: blkF, G: blkG, VI: blkVI, VII: blkVII,
 };
 
@@ -165,7 +165,7 @@ const BLOK: Record<Blok, (x: Konteks, k: Kasus) => string> = {
 export const pitaBlokV = (): string => `<div class="paper" style="border-bottom:0"><table class="frm">${band("BLOK V. PENDAPATAN, PENERIMAAN, DAN PENGELUARAN BUKAN KONSUMSI", 1, true)}</table></div>`;
 
 /** Seluruh lembar isian sebuah kasus (tanpa kutipan Blok IV dan tanpa memo cerita). */
-export function lembarBlok(k: Kasus, x: Konteks): string {
+export function lembarBlok(k: KasusPublik, x: Konteks): string {
   const adaV = k.blok.some((b) => /^[A-G]$/.test(b));
   return (adaV ? pitaBlokV() : "") + k.blok.map((b) => BLOK[b](x, k)).join("");
 }

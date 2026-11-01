@@ -9,18 +9,14 @@
 
 import { kasusBenar, hitungBintang } from "./engine";
 import { cariKasus } from "./kasus";
+import { MAKS_DURASI_DTK, MAKS_KALKULATOR, MAKS_NILAI, MAKS_PERCOBAAN_PER_KASUS, MAKS_PETUNJUK, MAKS_SEL, VERSI_KASUS } from "./konstanta";
+
+export { MAKS_DURASI_DTK, MAKS_KALKULATOR, MAKS_NILAI, MAKS_PERCOBAAN_PER_KASUS, MAKS_PETUNJUK, MAKS_SEL, VERSI_KASUS };
 import { selDikenal } from "./sel";
 import type { JenisKesalahan, Kasus, Nilai, Tingkat } from "./tipe";
 
 export type ModeMasuk = "bebas" | "tercatat";
 /** Versi aturan penilaian kasus; naik bila kunci diperbaiki (dicatat di tiap percobaan agar hasil lama bisa ditelusuri). */
-export const VERSI_KASUS = 1;
-export const MAKS_PETUNJUK = 3;
-export const MAKS_PERCOBAAN_PER_KASUS = 200;
-export const MAKS_NILAI = 9_000_000_000_000; // 9 triliun rupiah per kotak: jauh di atas kewajaran, di bawah batas bilangan aman JS
-export const MAKS_SEL = 400;
-export const MAKS_DURASI_DTK = 86_400;
-export const MAKS_KALKULATOR = 500;
 
 /** Mode ditentukan CARA MASUK (ada kegiatan atau tidak), bukan pilihan petugas. */
 export const modeMasuk = (kegiatanId: number | null | undefined): ModeMasuk => (Number.isInteger(kegiatanId) && (kegiatanId as number) > 0 ? "tercatat" : "bebas");

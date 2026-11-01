@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KASUS, URUTAN_LEVEL } from "../vanguard/kasus";
-import { PENGATURAN_BAWAAN, bacaPengaturan, bolehMencoba, hitungLulus, inputWibKeIso, isoKeInputWib, kasusDibuka, levelDibuka, maksPercobaan, periksaSimpan, statusJadwal, type Pengaturan } from "../vanguard/pengaturan";
+import { PENGATURAN_BAWAAN, bacaPengaturan, bolehMencoba, hitungLulus, inputWibKeIso, isoKeInputWib, kasusDibuka, kasusSedangDiuji, levelDibuka, maksPercobaan, periksaSimpan, statusJadwal, ujiBerlaku, type Pengaturan } from "../vanguard/pengaturan";
 
 const P = (o: Partial<Pengaturan> = {}): Pengaturan => ({ ...PENGATURAN_BAWAAN, ...o });
 const T = (s: string) => Date.parse(s);
@@ -25,7 +25,7 @@ describe("periksaSimpan (masukan admin)", () => {
     const r = periksaSimpan({ level_dibuka: ["B", "A"], nilai_lulus: "80", maks_percobaan: "" });
     expect(r.ok).toBe(false); // string "80" tidak diterima: harus bilangan
     const s = periksaSimpan({ level_dibuka: ["B", "A"], nilai_lulus: 80, maks_percobaan: null, buka_at: "2026-11-01T01:00:00Z", tutup_at: "2026-11-08T01:00:00Z" });
-    expect(s).toEqual({ ok: true, pengaturan: { level_dibuka: ["A", "B"], nilai_lulus: 80, maks_percobaan: null, buka_at: "2026-11-01T01:00:00.000Z", tutup_at: "2026-11-08T01:00:00.000Z" } });
+    expect(s).toEqual({ ok: true, pengaturan: { level_dibuka: ["A", "B"], nilai_lulus: 80, maks_percobaan: null, buka_at: "2026-11-01T01:00:00.000Z", tutup_at: "2026-11-08T01:00:00.000Z", mode: "latihan" } });
   });
   it("kosong = bawaan; semua level terpilih disimpan sebagai kosong", () => {
     expect(periksaSimpan({})).toEqual({ ok: true, pengaturan: PENGATURAN_BAWAAN });
@@ -100,5 +100,34 @@ describe("waktu WIB untuk kolom isian", () => {
   it("kosong dan rusak", () => {
     for (const x of [null, undefined, "", "bukan"]) { expect(isoKeInputWib(x)).toBe(""); }
     for (const x of [null, undefined, "", "2026-11-01", "2026-11-01 08:30", "2026-13-40T99:99"]) expect(inputWibKeIso(x), String(x)).toBeNull();
+  });
+});
+
+describe("mode uji (V5b)", () => {
+  it("bacaPengaturan: hanya 'uji' yang dikenali; lainnya latihan", () => {
+    expect(bacaPengaturan({ mode: "uji" }).mode).toBe("uji");
+    for (const x of ["latihan", "UJI", "", null, 5, undefined]) expect(bacaPengaturan({ mode: x }).mode, String(x)).toBe("latihan");
+    expect(PENGATURAN_BAWAAN.mode).toBe("latihan");
+  });
+  it("periksaSimpan: menerima latihan dan uji, menolak nilai lain, tanpa mode = latihan", () => {
+    expect(periksaSimpan({ mode: "uji" })).toMatchObject({ ok: true, pengaturan: { mode: "uji" } });
+    expect(periksaSimpan({ mode: "latihan" })).toMatchObject({ ok: true, pengaturan: { mode: "latihan" } });
+    expect(periksaSimpan({})).toMatchObject({ ok: true, pengaturan: { mode: "latihan" } });
+    expect(periksaSimpan({ mode: "ujian" })).toEqual({ ok: false, pesan: "Mode harus latihan atau uji." });
+  });
+  it("ujiBerlaku: hanya bila mode uji DAN jadwal buka", () => {
+    const u = P({ mode: "uji", buka_at: "2026-11-02T00:00:00Z", tutup_at: "2026-11-03T00:00:00Z" });
+    expect(ujiBerlaku(u, T("2026-11-01T00:00:00Z"))).toBe(false); // belum buka
+    expect(ujiBerlaku(u, T("2026-11-02T12:00:00Z"))).toBe(true);
+    expect(ujiBerlaku(u, T("2026-11-03T00:00:00Z"))).toBe(false); // sudah tutup
+    expect(ujiBerlaku(P({ mode: "latihan" }), T("2026-11-02T12:00:00Z"))).toBe(false);
+  });
+  it("kasusSedangDiuji: kunci level yang diuji terkunci; level yang tidak dibuka tidak ikut", () => {
+    const u = P({ mode: "uji", level_dibuka: ["A", "B"] });
+    const t = T("2026-11-01T00:00:00Z");
+    expect(kasusSedangDiuji(u, "A", t)).toBe(true);
+    expect(kasusSedangDiuji(u, "D", t)).toBe(false);
+    expect(kasusSedangDiuji(P({ mode: "uji" }), "H", t)).toBe(true); // kosong = semua level
+    expect(kasusSedangDiuji(P({ mode: "latihan" }), "A", t)).toBe(false);
   });
 });

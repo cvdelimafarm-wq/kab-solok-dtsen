@@ -11,7 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { DAFTAR_JENIS, LABEL_JENIS, LABEL_TINGKAT, type BarisHeat, type BarisPetugas, type BarisTersering, type Dasbor as DataDasbor } from "@/lib/vanguard/dasbor";
 import { tujuanAman } from "@/lib/vanguard/navigasi";
-import { NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus";
+import { NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus/daftar";
 import { inputWibKeIso, isoKeInputWib, levelDibuka, type Pengaturan, type StatusJadwal } from "@/lib/vanguard/pengaturan";
 import type { JenisKesalahan, Tingkat } from "@/lib/vanguard/tipe";
 
@@ -96,6 +96,7 @@ const NAMA_STATUS: Record<StatusJadwal, string> = { belum_buka: "belum dibuka", 
 const inputKelas = "min-h-[44px] w-full rounded-[10px] border border-[#CBD6E6] bg-white px-3 text-[14px] text-[#0F2A52] disabled:bg-[#F1F4F9]";
 
 function FormPengaturan({ kegiatanId, awal, bolehKelola, onTersimpan }: { kegiatanId: number; awal: PengaturanJadwal; bolehKelola: boolean; onTersimpan: (p: PengaturanJadwal) => void }) {
+  const [mode, setMode] = useState<"latihan" | "uji">(awal.mode);
   const [level, setLevel] = useState<string[]>(levelDibuka(awal));
   const [lulus, setLulus] = useState(awal.nilai_lulus === null ? "" : String(awal.nilai_lulus));
   const [maks, setMaks] = useState(awal.maks_percobaan === null ? "" : String(awal.maks_percobaan));
@@ -109,7 +110,7 @@ function FormPengaturan({ kegiatanId, awal, bolehKelola, onTersimpan }: { kegiat
     try {
       const r = await apiPortal<{ pengaturan: PengaturanJadwal }>("/api/sigap/vanguard/admin", {
         method: "POST",
-        body: JSON.stringify({ kegiatan: kegiatanId, pengaturan: { level_dibuka: level, nilai_lulus: lulus.trim() === "" ? null : Number(lulus), maks_percobaan: maks.trim() === "" ? null : Number(maks), buka_at: inputWibKeIso(buka), tutup_at: inputWibKeIso(tutup) } }),
+        body: JSON.stringify({ kegiatan: kegiatanId, pengaturan: { mode, level_dibuka: level, nilai_lulus: lulus.trim() === "" ? null : Number(lulus), maks_percobaan: maks.trim() === "" ? null : Number(maks), buka_at: inputWibKeIso(buka), tutup_at: inputWibKeIso(tutup) } }),
       });
       onTersimpan(r.pengaturan);
       setPesan({ jenis: "ok", teks: "Pengaturan tersimpan. Berlaku untuk percobaan berikutnya." });
@@ -120,9 +121,19 @@ function FormPengaturan({ kegiatanId, awal, bolehKelola, onTersimpan }: { kegiat
   const semua = level.length === URUTAN_LEVEL.length;
   return (
     <div className="mt-2">
-      <p className="text-[12.5px] text-[#55657D]">Status jadwal sekarang: <b>{NAMA_STATUS[awal.status]}</b>. Pengaturan hanya berlaku untuk latihan yang dicatat pada kegiatan ini; simulasi bebas dari Beranda tidak terpengaruh.</p>
+      <p className="text-[12.5px] text-[#55657D]">Status jadwal sekarang: <b>{NAMA_STATUS[awal.status]}</b>{awal.mode === "uji" ? <> · mode <b>uji</b>{awal.status === "buka" ? " sedang berlangsung" : ""}</> : null}. Pengaturan hanya berlaku untuk latihan yang dicatat pada kegiatan ini; simulasi bebas dari Beranda tidak terpengaruh.</p>
       <fieldset className="mt-3" disabled={!bolehKelola || sibuk}>
-        <legend className="text-[12.5px] font-bold text-[#44546F]">Level kasus yang dibuka</legend>
+        <legend className="text-[12.5px] font-bold text-[#44546F]">Mode</legend>
+        <div className="mt-1 grid gap-2 sm:grid-cols-2">
+          {([["latihan", "Latihan", "Petugas boleh memakai petunjuk, melihat kunci dan pembahasan. Hasil dicatat."], ["uji", "Uji", "Server yang menilai. Tanpa petunjuk, kunci, atau pembahasan; hanya benar atau salah. Hasil dicatat dan menentukan kelulusan."]] as const).map(([k, nama, ket]) => (
+            <label key={k} className={`flex min-h-[44px] cursor-pointer items-start gap-2 rounded-[10px] border px-3 py-2 text-[13px] ${mode === k ? "border-[#5B34C9] bg-[#F5F0FF]" : "border-[#DCE3EE]"}`}>
+              <input type="radio" name="mode-vanguard" className="mt-1" checked={mode === k} onChange={() => setMode(k)} />
+              <span><b>{nama}</b><span className="block text-[12px] text-[#55657D]">{ket}</span></span>
+            </label>
+          ))}
+        </div>
+        {mode === "uji" && <p className="mt-1 text-[11.5px] text-[#6B4C00]">Uji hanya berlaku selama jadwal buka (atur waktu buka dan tutup di bawah). Selama uji, peserta kegiatan ini tidak dapat melihat kunci kasus pada level yang diuji, juga lewat simulasi bebas di Beranda.</p>}
+        <div className="mt-3 text-[12.5px] font-bold text-[#44546F]">Level kasus yang dibuka</div>
         <div className="mt-1 flex flex-wrap gap-2">
           {URUTAN_LEVEL.map((l) => (
             <label key={l} className="inline-flex min-h-[44px] items-center gap-2 rounded-[10px] border border-[#DCE3EE] px-3 text-[13px] text-[#0F2A52]">
@@ -244,7 +255,14 @@ export default function Dasbor() {
     <main className="min-h-screen bg-[#EEF2F8] pb-10">
       <header className="bg-gradient-to-br from-[#2A1763] to-[#5B34C9] px-4 pb-14 pt-4 text-white">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Link href={idPilih === null ? kembali : `/sigap/vanguard/dasbor${kembali !== "/" ? `?dari=${encodeURIComponent(kembali)}` : ""}`} className="inline-flex min-h-[44px] items-center rounded-full bg-white/15 px-4 text-[13px] font-bold">{idPilih === null ? "← Kembali" : "← Semua kegiatan"}</Link>
+          {(() => {
+            const keDaftar = `/sigap/vanguard/dasbor${kembali !== "/" ? `?dari=${encodeURIComponent(kembali)}` : ""}`;
+            const kelas = "inline-flex min-h-[44px] items-center rounded-full bg-white/15 px-4 text-[13px] font-bold";
+            // Datang dari layar Kelola (?dari=): tombol utama kembali ke sana; "Semua kegiatan" tetap tersedia sebagai tautan kedua.
+            if (idPilih === null) return <Link href={kembali} className={kelas}>← Kembali</Link>;
+            if (kembali !== "/") return <div className="flex flex-col gap-1"><Link href={kembali} className={kelas}>← Kembali</Link><Link href={keDaftar} className="px-2 text-[11.5px] font-bold text-[#D9CFF8] underline">Semua kegiatan</Link></div>;
+            return <Link href={keDaftar} className={kelas}>← Semua kegiatan</Link>;
+          })()}
           <div className="min-w-0 flex-1"><div className="text-[10.5px] font-extrabold tracking-[0.14em] text-[#D9CFF8]">VANGUARD · BPS KABUPATEN SOLOK</div><h1 className="text-[20px] font-extrabold leading-tight">Dasbor kesalahan pengisian</h1></div>
         </div>
       </header>

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { KASUS } from "../vanguard/kasus";
-import { MAKS_SARAN, kemampuanKasus, saranKasus } from "../vanguard/remedial";
+import { MAKS_SARAN, kemampuanKasus, petaKemampuan, saranKasus } from "../vanguard/remedial";
+
+const PETA = petaKemampuan(KASUS);
 
 const kasus = (kode: string) => KASUS.find((k) => k.kode === kode)!;
 
@@ -26,9 +28,9 @@ describe("kemampuanKasus (diturunkan dari engine dan data)", () => {
 });
 
 describe("saranKasus", () => {
-  it("tanpa riwayat dan tanpa kelemahan = tidak ada saran", () => { expect(saranKasus([], [])).toEqual([]); });
+  it("tanpa riwayat dan tanpa kelemahan = tidak ada saran", () => { expect(saranKasus([], [], PETA)).toEqual([]); });
   it("kasus yang belum benar sesudah mencoba berada di atas; alasan jelas", () => {
-    const s = saranKasus([{ jenis: "konversi_seminggu", jumlah: 4 }], [{ kasus: "A01", percobaan: 3, benar: false, bintang: 0 }]);
+    const s = saranKasus([{ jenis: "konversi_seminggu", jumlah: 4 }], [{ kasus: "A01", percobaan: 3, benar: false, bintang: 0 }], PETA);
     expect(s[0].kasus).toBe("A01");
     expect(s[0].alasan[0]).toBe("Belum benar");
     expect(s[0].alasan.some((a) => a.startsWith("Melatih: Masih nilai seminggu"))).toBe(true);
@@ -36,21 +38,21 @@ describe("saranKasus", () => {
   });
   it("kasus yang sudah benar tidak disarankan kecuali melatih kelemahan; tanpa kelemahan semuanya benar = kosong", () => {
     const semua = KASUS.filter((k) => !k.bebas).map((k) => ({ kasus: k.kode, percobaan: 1, benar: true, bintang: 3 }));
-    const s = saranKasus([{ jenis: "konversi_seminggu", jumlah: 2 }], semua, 71);
+    const s = saranKasus([{ jenis: "konversi_seminggu", jumlah: 2 }], semua, PETA, 71);
     expect(s.length).toBeGreaterThan(0);
     expect(s.every((x) => kemampuanKasus(kasus(x.kasus)).has("konversi_seminggu"))).toBe(true);
-    expect(saranKasus([], semua)).toEqual([]);
+    expect(saranKasus([], semua, PETA)).toEqual([]);
   });
   it("urutan deterministik, menurun menurut skor, dan mengutamakan kasus yang melatih kelemahan teratas", () => {
     const l = [{ jenis: "jebakan" as const, jumlah: 5 }, { jenis: "konversi_sebulan" as const, jumlah: 1 }];
-    const a = saranKasus(l, []); const b = saranKasus(l, []);
+    const a = saranKasus(l, [], PETA); const b = saranKasus(l, [], PETA);
     expect(a).toEqual(b);
     expect(a.length).toBe(MAKS_SARAN);
     expect(kemampuanKasus(kasus(a[0].kasus)).has("jebakan")).toBe(true);
     for (let i = 1; i < a.length; i++) expect(a[i - 1].skor).toBeGreaterThanOrEqual(a[i].skor);
   });
   it("kasus bebas tidak pernah disarankan; maks dihormati", () => {
-    const s = saranKasus([{ jenis: "belum_diisi", jumlah: 9 }], [], 3);
+    const s = saranKasus([{ jenis: "belum_diisi", jumlah: 9 }], [], PETA, 3);
     expect(s).toHaveLength(3);
     expect(s.some((x) => x.kasus === "H01")).toBe(false);
   });

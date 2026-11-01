@@ -4,8 +4,9 @@ import { buatDbPalsu, type Tabel } from "./vanguardFakeDb";
 
 let tabel: Tabel = {};
 let izinAda: string[] = [];
+let gagalUpsert = false;
 const audit: { aksi: string; detail: Record<string, unknown> }[] = [];
-vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu(tabel) }));
+vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu(tabel, (n) => (gagalUpsert && n === "sigap_vanguard_pengaturan:upsert" ? { message: "kolom mode tidak ada" } : null)) }));
 vi.mock("@/lib/sigapAkses", () => ({
   sesiDariHeader: (h: Headers) => (h.get("x-akun") ? Number(h.get("x-akun")) : null),
   aktorDariHeader: (h: Headers) => (h.get("x-aktor") ? Number(h.get("x-aktor")) : null),
@@ -137,5 +138,27 @@ describe("pengaturan pada rute admin", () => {
     await kirim({ kegiatan: 5, pengaturan: { nilai_lulus: 60 } });
     expect(tabel.sigap_vanguard_pengaturan).toHaveLength(1);
     expect(tabel.sigap_vanguard_pengaturan[0]).toMatchObject({ nilai_lulus: 60, level_dibuka: [] });
+  });
+  it("mode uji (V5b): disimpan, terbaca di GET, dan mode salah ditolak", async () => {
+    izinAda = ["pelatihan.kelola", "pelatihan.kelola:kelola"];
+    const r = await kirim({ kegiatan: 5, pengaturan: { mode: "uji", nilai_lulus: 70 } });
+    expect(r.status).toBe(200);
+    expect((await r.json()).pengaturan).toMatchObject({ mode: "uji", nilai_lulus: 70 });
+    expect(tabel.sigap_vanguard_pengaturan[0]).toMatchObject({ mode: "uji" });
+    expect((await (await ambil("?kegiatan=5")).json()).pengaturan.mode).toBe("uji");
+    const tolak = await kirim({ kegiatan: 5, pengaturan: { mode: "ujian" } });
+    expect(tolak.status).toBe(400);
+    expect((await tolak.json()).error).toBe("Mode harus latihan atau uji.");
+    expect(tabel.sigap_vanguard_pengaturan[0].mode).toBe("uji"); // tidak berubah
+  });
+  it("mode uji tidak dapat disimpan bila penyimpanan gagal (kolom mode belum ada): pesan menyebut SQL 20261101x dan tidak ada yang berubah", async () => {
+    izinAda = ["pelatihan.kelola", "pelatihan.kelola:kelola"];
+    gagalUpsert = true;
+    try {
+      const r = await kirim({ kegiatan: 5, pengaturan: { mode: "uji" } });
+      expect(r.status).toBeGreaterThanOrEqual(400);
+      expect((await r.json()).error).toMatch(/20261101x/);
+      expect(tabel.sigap_vanguard_pengaturan ?? []).toHaveLength(0);
+    } finally { gagalUpsert = false; }
   });
 });

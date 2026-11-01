@@ -4,7 +4,7 @@
 // ringkasan, kesalahan tersering dan fatal, peta panas kasus x jenis, per petugas, perkembangan, per hari, serta berkas CSV.
 // Satu "pasangan" = satu petugas pada satu kasus. Peserta = akun dengan penugasan aktif di kegiatan itu (sebagai penyebut).
 
-import { cariKasus } from "./kasus";
+import { cariKasusPublik } from "./kasus/daftar";
 import { hitungLulus, PENGATURAN_BAWAAN, type Pengaturan } from "./pengaturan";
 import { labelSel } from "./sel";
 import type { JenisKesalahan, Tingkat } from "./tipe";
@@ -110,7 +110,7 @@ export function susunDasbor(peserta: Peserta[], perc: BarisPercobaanDb[], kes: B
     k.n += 1; k.akun.add(e.akun_id); k.jenis.set(e.jenis, (k.jenis.get(e.jenis) ?? 0) + 1);
     perKasus.set(e.kasus, k);
   }
-  const judulKasus = (kode: string): string => cariKasus(kode)?.judul ?? kode;
+  const judulKasus = (kode: string): string => cariKasusPublik(kode)?.judul ?? kode;
   const jenis: BarisTersering[] = [...perJenis].map(([j, v]) => ({ kunci: j, label: LABEL_JENIS[j] ?? j, jumlah: v.n, petugas: v.akun.size, tingkat: v.tingkat })).sort(urutDesc);
   const jenisFatal: BarisTersering[] = [...perJenisFatal].map(([j, v]) => ({ kunci: j, label: LABEL_JENIS[j] ?? j, jumlah: v.n, petugas: v.akun.size, tingkat: "fatal" as Tingkat })).sort(urutDesc);
   const sel: BarisTersering[] = [...perSel].map(([s, v]) => ({ kunci: s, label: labelSel(s), jumlah: v.n, petugas: v.akun.size })).sort(urutDesc).slice(0, TOP);
@@ -192,4 +192,4 @@ export function csvKesalahan(peserta: Peserta[], kes: BarisKesalahanDb[]): strin
     kes.map((e) => [nama.get(e.akun_id) ?? `Akun ${e.akun_id}`, e.kasus, judulKasusCsv(e.kasus), e.sel ? labelSel(e.sel) : "", LABEL_JENIS[e.jenis] ?? e.jenis, LABEL_TINGKAT[e.tingkat] ?? e.tingkat]),
   );
 }
-const judulKasusCsv = (k: string): string => cariKasus(k)?.judul ?? "";
+const judulKasusCsv = (k: string): string => cariKasusPublik(k)?.judul ?? "";

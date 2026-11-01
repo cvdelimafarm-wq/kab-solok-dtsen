@@ -17,7 +17,8 @@ export type BarisUsaha = { no?: string | number; uraian?: string; kat?: string; 
 /** Kutipan Blok IV yang ditampilkan di atas isian (baca saja). Bentuknya mengikuti prototipe; UI V2 yang mengetikkannya lebih rinci. */
 export type KutipanIv = { t?: number; rows?: Record<string, unknown>[]; iv1?: Record<string, unknown>[]; iv2?: Record<string, unknown>[]; sum?: [string, string][] };
 
-export type Kasus = {
+/** Bagian kasus yang BOLEH dikirim ke perangkat petugas pada mode uji: bahan soal saja (cerita, kutipan Blok IV, tata letak). */
+export type KasusPublik = {
   kode: string;
   level: Level;
   judul: string;
@@ -26,20 +27,26 @@ export type Kasus = {
   iv?: KutipanIv;
   meta?: { A?: BarisUsaha[]; B?: BarisUsaha[] };
   blok: Blok[];
+  lengkap?: boolean;
+  bebas?: boolean;
+  nama?: string;
+};
+
+/** Bagian RAHASIA: kunci, jebakan, petunjuk, pembahasan. Hanya server yang memegangnya; ke perangkat petugas hanya pada latihan (lewat /api/sigap/vanguard/kasus). */
+export type KasusRahasia = {
   /** Kunci: id sel -> nilai benar. Sel yang tidak tercantum harus kosong. */
   kunci: Nilai;
   jebakan: Jebakan[];
   alternatif: Alternatif[];
   /** Pesan untuk kasus yang semua kotaknya harus kosong. */
   nol?: string;
-  lengkap?: boolean;
-  bebas?: boolean;
-  nama?: string;
   petunjuk: string[];
   langkah: string[];
   pembahasan: string;
   rujukan: string;
 };
+
+export type Kasus = KasusPublik & KasusRahasia;
 
 export type JenisKesalahan =
   | "konversi_seminggu"

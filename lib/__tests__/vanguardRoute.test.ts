@@ -171,3 +171,52 @@ describe("pengaturan per kegiatan dan cacahan kalkulator", () => {
     for (const v of [-1, 1.5, 501, "2"]) expect((await kirim(muatan({}, { kalkulator: v }))).status).toBe(400);
   });
 });
+
+describe("mode uji (V5b)", () => {
+  const uji = (lebih: Record<string, unknown> = {}) => { tabel.sigap_vanguard_pengaturan = [{ kegiatan_id: 5, level_dibuka: [], nilai_lulus: null, buka_at: null, tutup_at: null, maks_percobaan: null, mode: "uji", ...lebih }]; };
+
+  it("GET: uji berlaku -> uji true dan TANPA kemampuan (peta saran); latihan -> uji false dengan kemampuan", async () => {
+    uji();
+    const j = await (await ambil("?kegiatan=5")).json();
+    expect(j.uji).toBe(true);
+    expect(j.kemampuan).toBeUndefined();
+    expect(j.pengaturan.mode).toBe("uji");
+    tabel.sigap_vanguard_pengaturan = [];
+    const l = await (await ambil("?kegiatan=5")).json();
+    expect(l.uji).toBe(false);
+    expect(Object.keys(l.kemampuan).length).toBeGreaterThan(50);
+    expect(JSON.stringify(l.kemampuan)).not.toMatch(/\d{4,}/); // hanya jenis kesalahan, tanpa angka kunci
+  });
+  it("GET: mode uji di luar jadwal tidak berlaku (uji false)", async () => {
+    uji({ tutup_at: "2020-01-01T00:00:00Z" });
+    expect((await (await ambil("?kegiatan=5")).json()).uji).toBe(false);
+  });
+  it("POST: balasan hanya vonis; tidak membocorkan koreksi, pemeriksaan, atau kotak yang salah; percobaan bermode uji", async () => {
+    uji();
+    const r = await kirim(muatan({}));
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(Object.keys(j).sort()).toEqual(["benar", "bintang", "dicatat", "jmlSalah", "nomor", "uji"]);
+    expect(j).toMatchObject({ dicatat: true, uji: true, nomor: 1, benar: false });
+    expect(j.jmlSalah).toBeGreaterThan(0);
+    expect(tabel.sigap_vanguard_percobaan[0]).toMatchObject({ mode: "uji", benar: false });
+    expect(tabel.sigap_vanguard_kesalahan.length).toBeGreaterThan(0); // BPS tetap melihat rinciannya di dasbor
+  });
+  it("POST: jawaban benar pada uji = benar true, bintang dari percobaan saja (petunjuk dari klien diabaikan)", async () => {
+    uji();
+    const j = await (await kirim(muatan({ ...kasus.kunci }, { petunjuk: 3 }))).json();
+    expect(j).toMatchObject({ benar: true, bintang: 3 });
+    expect(tabel.sigap_vanguard_percobaan[0]).toMatchObject({ petunjuk: 0, mode: "uji", benar: true });
+  });
+  it("POST: 'Lihat jawaban' ditolak 400 pada uji dan tidak mencatat", async () => {
+    uji();
+    const r = await kirim(muatan({}, { lihatJawaban: true }));
+    expect(r.status).toBe(400);
+    expect(tabel.sigap_vanguard_percobaan).toHaveLength(0);
+  });
+  it("POST: latihan tetap membalas koreksi dan mencatat mode latihan", async () => {
+    const j = await (await kirim(muatan({}))).json();
+    expect(j.koreksi).toBeDefined(); expect(j.pemeriksaan).toBeDefined();
+    expect(tabel.sigap_vanguard_percobaan[0].mode).toBe("latihan");
+  });
+});
