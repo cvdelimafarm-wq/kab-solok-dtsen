@@ -15,6 +15,8 @@ import { aksiKeu, useKalibrasi, useKatalogSkor, useKirim } from "../data";
 import KertasKerjaPanel, { type HasilKertasPakai } from "../KertasKerja";
 import { KELAS } from "../merek";
 import type { Nada } from "../merek";
+import Link from "next/link";
+import { useKonteksDelego } from "../konteks";
 import { Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan, Memuat, Peringatan, fmt } from "../ui";
 
 const NADA: Record<StatusSkor, Nada> = { usulan: "biru", disetujui: "hijau", ditolak: "merah" };
@@ -74,6 +76,8 @@ export default function Skor() {
   const [uraian, setUraian] = useState("");
   const [alasan, setAlasan] = useState("");
   const [kertas, setKertas] = useState<KertasKerja | null>(null);
+  const [bukaKertas, setBukaKertas] = useState(false);
+  const { pemberi } = useKonteksDelego();
   const [kirimBaru, setKirimBaru] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -126,6 +130,11 @@ export default function Skor() {
         </button>
       }
     >
+      {pemberi && (
+        <p className="m-0 text-[13px] text-[#3B4A57]">
+          Untuk mengatur langkah bawaan, kewajiban hasil kerja, dan tinjau per jenis pekerjaan, buka <Link href="/sigap/delego/jenis" className="font-semibold text-[#0F6B63] underline">Pengaturan jenis pekerjaan</Link>.
+        </p>
+      )}
       {kat.memuat && !d && <Memuat />}
       {kat.galat && !d && <Galat>{kat.galat}</Galat>}
       {kirim.galat && <Galat>{kirim.galat}</Galat>}
@@ -157,6 +166,11 @@ export default function Skor() {
                     Pekerjaan lain bersatuan sama: {banding.setara.map((s) => `${s.nama} (${fmt(s.poin, 1)} poin, sekitar ${fmt(s.menit, 0)} menit)`).join("; ")}
                   </div>
                 )}
+                {banding.setaraLain.length > 0 && (
+                  <div className="text-[12.5px] text-[#3B4A57]">
+                    Beban sebanding pada satuan lain: {banding.setaraLain.map((s) => `${s.nama} (${fmt(s.poin, 1)} poin per ${s.satuan})`).join("; ")}
+                  </div>
+                )}
                 {banding.perluAlasan && (
                   <Medan label="Alasan skor" bantu={galatAlasan ?? undefined}>
                     <textarea className={KELAS.isian} rows={2} value={alasan} onChange={(e) => setAlasan(e.target.value)} maxLength={300} />
@@ -164,9 +178,20 @@ export default function Skor() {
                 )}
               </div>
             )}
-            <KertasKerjaPanel onPakai={pakaiKertas} />
+            <div>
+              <button type="button" className={KELAS.tombolKecil} aria-expanded={bukaKertas} onClick={() => setBukaKertas((b) => !b)}>
+                {bukaKertas ? "Tutup kertas kerja" : "Bantu hitung skor dengan kertas kerja"}
+              </button>
+            </div>
+            {bukaKertas && <KertasKerjaPanel onPakai={(h) => { pakaiKertas(h); setBukaKertas(false); }} />}
             {kertas && <Info>Skor di atas dihitung dari kertas kerja dan akan disimpan bersama usulan agar Ketua Tim dapat memeriksa dasar hitungnya.</Info>}
             {galat && <Galat>{galat}</Galat>}
+            {!siap && (
+              <p className="m-0 text-[12.5px] text-[#8A4605]">
+                Belum lengkap:{" "}
+                {[nama.trim().length < 3 ? "nama pekerjaan (min. 3 huruf)" : null, satuan.trim() === "" ? "satuan" : null, !(pps > 0) ? "skor per satuan" : null, galatAlasan ? "alasan skor" : null].filter(Boolean).join(", ")}.
+              </p>
+            )}
             <button type="button" className={KELAS.tombolUtama} disabled={!siap || kirimBaru} onClick={() => void ajukan()}>
               {kirimBaru ? "Mengirim..." : "Kirim usulan ke Ketua Tim"}
             </button>

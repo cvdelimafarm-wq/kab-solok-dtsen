@@ -153,7 +153,7 @@ export default function Jadwal() {
                 <div className="space-y-2 text-[13.5px]">
                   <div className="flex justify-between"><span>Terisi</span><b>{fmt(hariIni.poin, 1)} dari {fmt(hariIni.kapasitas, 0)} poin</b></div>
                   <Batang persen={Math.min(100, hariIni.persen === 999 ? 100 : hariIni.persen)} nada={hariIni.persen > 100 ? "merah" : hariIni.persen >= 80 ? "hijau" : "amber"} />
-                  <div className="text-[12.5px] text-[#3B4A57]">{hariIni.persen === 999 ? "Ada pekerjaan di hari tanpa kapasitas." : `${hariIni.persen}% dari kapasitas harian.`}{hariIni.bayangan > 0 ? ` Usulan belum disetujui: ${fmt(hariIni.bayangan, 1)} poin.` : ""}</div>
+                  <div className="text-[12.5px] text-[#3B4A57]">{hariIni.persen === 999 ? "Ada pekerjaan di hari tanpa kapasitas (akhir pekan atau libur)." : `${hariIni.persen}% dari kapasitas harian.`}{hariIni.rincian.some((r) => r.sumber !== "delegasi") ? " Hari lapangan atau pelatihan dihitung satu hari penuh; delegasi di hari yang sama menambah beban." : ""}{hariIni.bayangan > 0 ? ` Usulan belum disetujui: ${fmt(hariIni.bayangan, 1)} poin.` : ""}</div>
                 </div>
               ) : (
                 <p className="m-0 text-[13.5px] text-[#3B4A57]">Tidak ada data hari ini.</p>
@@ -180,7 +180,7 @@ export default function Jadwal() {
                   <div className="text-[14.5px] font-semibold">{tglPendek(c.tanggal)}{c.libur ? <span className="font-normal text-[#3B4A57]"> · {c.libur}</span> : null}</div>
                   <div className="flex items-center gap-2">
                     {c.ketersediaan && <Lencana nada="abu">{c.ketersediaan.jenis}{c.ketersediaan.status === "diajukan" ? " (diajukan)" : ""}</Lencana>}
-                    {c.kapasitas > 0 && <span className="rounded-md px-2 py-0.5 text-[13px] font-bold" style={w ? { backgroundColor: w.latar, color: w.teks } : { backgroundColor: "#F3F5F7", color: "#7A8793" }}>{c.persen === 999 ? "-" : `${c.persen}%`}</span>}
+                    {c.kapasitas > 0 && <span className="rounded-md px-2 py-0.5 text-[13px] font-bold" style={w ? { backgroundColor: w.latar, color: w.teks } : { backgroundColor: "#F3F5F7", color: "#7A8793" }}>{c.persen === 999 ? "!" : `${c.persen}%`}</span>}
                   </div>
                 </div>
                 <div className="mt-2"><Rincian sel={c} /></div>

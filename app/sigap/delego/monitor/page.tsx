@@ -5,6 +5,7 @@
 // (1 Nov 2026) Monitoring Kepala: tiga angka capaian per pegawai (mandiri, terverifikasi Ketua Tim, disanggah/dikoreksi), antrean tinjau per Ketua Tim,
 // hambatan, usulan yang menunggu, dan sanggahan. Kepala meminta klarifikasi (pegawai berhak menjawab 2 hari kerja) lalu memutuskan benar, sebagian, atau salah.
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { angka, awalBulan, awalMinggu, tglPendek } from "@/lib/delego/hitung";
 import { MIN_HURUF, TEKS_KETERANGAN, angkaCapaian, galatPutusan, keteranganCapaian, rasioSanggahDitolak, ringkasMonitor, sisaHariJawab } from "@/lib/delego/tinjau";
@@ -124,6 +125,10 @@ export default function Monitor() {
             <Statistik label="Usulan menunggu" nilai={r.usulanMenunggu} ket={r.usulanLewat3 > 0 ? `${r.usulanLewat3} lewat 3 hari kerja` : undefined} nada={r.usulanLewat3 > 0 ? "amber" : "biasa"} />
             <Statistik label="Terhalang" nilai={r.terhalang} ket="butir yang menunggu pihak lain" nada={r.terhalang > 0 ? "amber" : "biasa"} />
           </div>
+
+          <Info>
+            Hutang poin, keterlambatan lapor, dan saran tindak lanjut per pegawai ada di <Link href="/sigap/delego" className="font-semibold underline">Beranda tim</Link>; beban semua pekerjaan per hari ada di <Link href="/sigap/delego/beban" className="font-semibold underline">Beban kerja</Link>.
+          </Info>
 
           <Kartu judul="Capaian per pegawai">
             {capaian.length === 0 ? (

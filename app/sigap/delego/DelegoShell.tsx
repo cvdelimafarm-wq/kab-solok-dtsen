@@ -11,7 +11,7 @@ import TombolKembali from "@/app/components/TombolKembali";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { aturLibur, jamWib, tglPendek } from "@/lib/delego/hitung";
-import { useHakDelegasi } from "./data";
+import { useHakDelegasi, useTinjauBahan } from "./data";
 import { KonteksDelegoRef, type KonteksDelego } from "./konteks";
 import Lonceng from "./Lonceng";
 import { Galat, Memuat } from "./ui";
@@ -68,7 +68,6 @@ const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego/beban", label: "Beban kerja", ikon: "beban" },
   { href: "/sigap/delego/monitor", label: "Monitoring Kepala", ikon: "monitor" },
   { href: "/sigap/delego/pembinaan", label: "Pembinaan dan skor", ikon: "pembinaan" },
-  { href: "/sigap/delego/jenis", label: "Katalog pekerjaan", ikon: "katalog" },
   { href: "/sigap/delego/rutin", label: "Pekerjaan berulang", ikon: "ulang" },
   { href: "/sigap/delego/libur", label: "Kalender libur", ikon: "libur" },
 ];
@@ -111,6 +110,21 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
   }, [sesiBerakhir, router]);
 
   const hak = h.data;
+  // (2 Nov 2026) Penanda angka di menu: yang menunggu tindakan Anda (tinjau, usulan, sanggahan, revisi)
+  const tinjauBahan = useTinjauBahan(!!hak);
+  const jumlah = useMemo<Record<string, number>>(() => {
+    const t = tinjauBahan.data;
+    if (!t || !hak) return {} as Record<string, number>;
+    return {
+      "/sigap/delego/tinjau": t.antrean.length + t.usulan.length,
+      "/sigap/delego/monitor": t.pemutus ? t.sanggah.filter((x) => x.status === "menunggu_putusan").length : 0,
+      "/sigap/delego/saya": t.saya.laporan.filter((l) => l.tinjau_status === "ditolak").length + t.sanggah.filter((x) => x.penerima_akun === hak.akun.id && x.status === "menunggu_jawab").length,
+    };
+  }, [tinjauBahan.data, hak]);
+  const lencana = (href: string) => {
+    const n = jumlah[href] ?? 0;
+    return n > 0 ? <span className="ml-auto rounded-full bg-[#E5B77E] px-1.5 text-[11.5px] font-bold text-[#3B2403]" aria-label={`${n} menunggu`}>{n}</span> : null;
+  };
   const konteks = useMemo<KonteksDelego | null>(() => {
     if (!hak) return null;
     aturLibur(hak.libur ?? []); // kalender libur dipakai semua hitungan hari kerja (lib/delego/hitung.ts)
@@ -132,6 +146,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
     >
       <Gambar n={b.ikon} />
       {b.label}
+      {lencana(b.href)}
     </Link>
   );
 
@@ -205,7 +220,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
                 aria-current={aktif(b) ? "page" : undefined}
                 className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-[13px] font-semibold ${aktif(b) ? "border-[#0F6B63] bg-[#0F6B63] text-white" : "border-[#BCC6CE] bg-white text-[#14212B]"}`}
               >
-                {b.label}
+                {b.label}{(jumlah[b.href] ?? 0) > 0 ? ` (${jumlah[b.href]})` : ""}
               </Link>
             ))}
           </nav>
@@ -233,7 +248,7 @@ export default function DelegoShell({ children }: { children: ReactNode }) {
               className={`flex min-h-[60px] flex-1 flex-col items-center justify-center gap-0.5 text-[12px] ${aktif(b) ? "font-bold text-[#0B524C]" : "font-medium text-[#33404B]"}`}
             >
               <Gambar n={b.ikon} ukuran={22} />
-              {b.pendek ?? b.label}
+              {b.pendek ?? b.label}{(jumlah[b.href] ?? 0) > 0 ? ` (${jumlah[b.href]})` : ""}
             </Link>
           ))}
         </nav>

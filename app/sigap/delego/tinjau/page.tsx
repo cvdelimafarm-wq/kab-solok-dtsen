@@ -6,15 +6,16 @@
 // sanggahan diteruskan ke Kepala yang meminta klarifikasi pegawai (hak jawab 2 hari kerja) dan memutuskan. Usulan pekerjaan pegawai juga disetujui atau ditolak di sini.
 
 import Link from "next/link";
-import { useState } from "react";
-import { angka, tglPendek } from "@/lib/delego/hitung";
+import { useEffect, useState } from "react";
+import { angka, awalMinggu, tambahHari, tglPendek } from "@/lib/delego/hitung";
+import { rentangMinggu, susunRekap } from "@/lib/delego/rekap";
 import { MIN_HURUF, galatKeputusan, lewatBatasTinjau, sisaHariJawab, type KeputusanTinjau } from "@/lib/delego/tinjau";
 import type { LaporanTinjau, Sanggah, UsulanMenunggu } from "@/lib/delego/tipe";
 import { DaftarBukti } from "../BuktiFoto";
 import TombolSinkron from "../TombolSinkron";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
-import { useKirim, useTinjauBahan } from "../data";
+import { useBahan, useKirim, useRekap, useTinjauBahan } from "../data";
 import { Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan, Memuat, Peringatan, fmt } from "../ui";
 
 type Tab = "antrean" | "usulan" | "revisi" | "sanggah";
@@ -97,7 +98,9 @@ function KartuLaporan({ l, kirim }: { l: LaporanTinjau; kirim: ReturnType<typeof
   );
 }
 
-function KartuUsulan({ u, kirim }: { u: UsulanMenunggu; kirim: ReturnType<typeof useKirim> }) {
+type Dampak = { sebelum: number; sesudah: number; kapasitas: number };
+
+function KartuUsulan({ u, kirim, dampak }: { u: UsulanMenunggu; kirim: ReturnType<typeof useKirim>; dampak: Dampak | null }) {
   const pps0 = angka(u.poin_per_satuan);
   const vol0 = pps0 > 0 ? angka(u.target_total) / pps0 : 0;
   const [vol, setVol] = useState(String(Math.round(vol0 * 100) / 100));
@@ -131,6 +134,12 @@ function KartuUsulan({ u, kirim }: { u: UsulanMenunggu; kirim: ReturnType<typeof
         </Medan>
       </div>
       <div className="text-[13px] text-[#3B4A57]">Total {fmt(total, 1)} poin.</div>
+      {dampak && (
+        <div className={`rounded-lg px-3 py-2 text-[13px] leading-snug ${dampak.sesudah > 100 ? "bg-[#FBE9E9] text-[#9B2C2C]" : "bg-[#F1F7F6] text-[#0B524C]"}`}>
+          Beban {u.penerima_nama} pada {tglPendek(u.mulai)} sampai {tglPendek(u.tenggat)}: <b>{dampak.sebelum}%</b> sekarang, <b>{Math.round(dampak.sebelum + (total / Math.max(dampak.kapasitas, 1)) * 100)}%</b> bila usulan ini disetujui.
+          {dampak.sesudah > 100 ? " Melebihi kapasitas; pertimbangkan mengubah volume atau tenggat." : ""}
+        </div>
+      )}
       <Medan label={berubah ? "Alasan perubahan (wajib)" : "Alasan (wajib bila menolak)"}>
         <input className={KELAS.isian} value={alasan} onChange={(e) => setAlasan(e.target.value)} maxLength={300} />
       </Medan>
@@ -183,7 +192,35 @@ export default function Tinjau() {
   const b = useTinjauBahan();
   const kirim = useKirim(b.muat);
   const [tab, setTab] = useState<Tab>("antrean");
+  const [dipilih, setDipilih] = useState(false);
   const d = b.data;
+  const { manajer } = useKonteksDelego();
+  const bahanTim = useBahan({ aktif: manajer });
+  const mg = rentangMinggu(awalMinggu(hari));
+  const rekap = useRekap(mg.dari, tambahHari(mg.dari, 55), manajer);
+  const dampakDari = (u: UsulanMenunggu): Dampak | null => {
+    if (!rekap.data || !bahanTim.data) return null;
+    const dari = u.mulai < mg.dari ? mg.dari : u.mulai;
+    const sampai = u.tenggat > tambahHari(mg.dari, 55) ? tambahHari(mg.dari, 55) : u.tenggat;
+    if (sampai < dari) return null;
+    const orang = rekap.data.orang.filter((o) => o.akun === u.penerima_akun);
+    if (orang.length === 0) return null;
+    const h = susunRekap({ orang, delegasi: bahanTim.data.delegasi, lapangan: rekap.data.lapangan, ketersediaan: rekap.data.ketersediaan, dari, sampai });
+    const br = h.baris[0];
+    if (!br || br.kapasitas <= 0) return null;
+    const sebelum = Math.round((br.total / br.kapasitas) * 100);
+    const tambah = (angka(u.target_total) / br.kapasitas) * 100;
+    return { sebelum, sesudah: Math.round(sebelum + tambah), kapasitas: br.kapasitas };
+  };
+  // tab pertama yang berisi dipilih otomatis (sekali) supaya Ketua Tim tidak membuka tab kosong padahal ada yang menunggu
+  useEffect(() => {
+    if (!d || dipilih) return;
+    setDipilih(true);
+    if (d.antrean.length > 0) setTab("antrean");
+    else if (d.usulan.length > 0) setTab("usulan");
+    else if (d.revisi.length > 0) setTab("revisi");
+    else if (d.sanggah.length > 0) setTab("sanggah");
+  }, [d, dipilih]);
   const tabs: { k: Tab; t: string; n: number }[] = [
     { k: "antrean", t: "Menunggu tinjau", n: d?.antrean.length ?? 0 },
     { k: "usulan", t: "Usulan pegawai", n: d?.usulan.length ?? 0 },
@@ -205,7 +242,7 @@ export default function Tinjau() {
                 type="button"
                 role="tab"
                 aria-selected={tab === x.k}
-                onClick={() => setTab(x.k)}
+                onClick={() => { setTab(x.k); setDipilih(true); }}
                 className={`whitespace-nowrap rounded-full border px-3.5 py-2 text-[13.5px] font-semibold ${tab === x.k ? "border-[#0F6B63] bg-[#0F6B63] text-white" : "border-[#BCC6CE] bg-white text-[#14212B]"}`}
               >
                 {x.t} ({x.n})
@@ -213,7 +250,7 @@ export default function Tinjau() {
             ))}
           </div>
           {tab === "antrean" && (d.antrean.length === 0 ? <Kosong>Tidak ada laporan yang menunggu tinjau.</Kosong> : <div className="space-y-3">{d.antrean.map((l) => <KartuLaporan key={l.id} l={l} kirim={kirim} />)}</div>)}
-          {tab === "usulan" && (d.usulan.length === 0 ? <Kosong>Tidak ada usulan pekerjaan yang menunggu.</Kosong> : <div className="space-y-3">{d.usulan.map((u) => <KartuUsulan key={u.id} u={u} kirim={kirim} />)}</div>)}
+          {tab === "usulan" && (d.usulan.length === 0 ? <Kosong>Tidak ada usulan pekerjaan yang menunggu.</Kosong> : <div className="space-y-3">{d.usulan.map((u) => <KartuUsulan key={u.id} u={u} kirim={kirim} dampak={dampakDari(u)} />)}</div>)}
           {tab === "revisi" &&
             (d.revisi.length === 0 ? (
               <Kosong>Tidak ada laporan yang sedang menunggu perbaikan pegawai.</Kosong>

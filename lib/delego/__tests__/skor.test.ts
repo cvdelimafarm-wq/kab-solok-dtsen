@@ -20,6 +20,14 @@ describe("konversi poin dan menit", () => {
 });
 
 describe("bandingSkor", () => {
+  it("setaraLain menunjukkan pekerjaan bersatuan lain yang skornya terdekat", () => {
+    const b = bandingSkor(katalog, "dokumen", 4.8);
+    expect(b.setaraLain.every((x) => x.satuan !== "dokumen")).toBe(true);
+    expect(b.setaraLain[0].nama).toBe("Periksa peta");
+    const c = bandingSkor(katalog, "satuan baru", 5);
+    expect(c.n).toBe(0);
+    expect(c.setaraLain).toHaveLength(3);
+  });
   it("skor wajar tidak diperingatkan dan menampilkan tiga pembanding terdekat", () => {
     const b = bandingSkor(katalog, "dokumen", 4.5);
     expect(b.n).toBe(3);

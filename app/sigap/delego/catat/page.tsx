@@ -12,7 +12,8 @@ import { angka, bulat, hariKerjaAntara, kapasitasPada, tambahHari, tglPendek } f
 import { bandingSkor, galatAlasanSkor } from "@/lib/delego/skor";
 import { menitDariPoin } from "@/lib/delego/teknis";
 import { NAMA_KELAS, type KelasPekerjaan } from "@/lib/delego/tipe";
-import { aksiKeu, useKatalogSkor, useTinjauBahan } from "../data";
+import { rentangMinggu, susunRekap } from "@/lib/delego/rekap";
+import { aksiKeu, useKatalogSkor, useRekap, useSaya, useTinjauBahan } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Batang, Galat, Halaman, Info, Kartu, Medan, Memuat, Peringatan, fmt } from "../ui";
@@ -31,6 +32,8 @@ export default function Catat() {
   const { hari } = useKonteksDelego();
   const kat = useKatalogSkor();
   const bahan = useTinjauBahan();
+  const saya = useSaya();
+  const rekapSaya = useRekap(hari, tambahHari(hari, 55));
   const [tautan, setTautan] = useState<string>("kantor"); // "kantor" atau id kegiatan
   const [kelompok, setKelompok] = useState("");
   const [judul, setJudul] = useState("");
@@ -70,6 +73,21 @@ export default function Catat() {
   const banding = useMemo(() => (d ? bandingSkor(d.jenis, satuan, pps) : null), [d, satuan, pps]);
   const galatAlasan = banding ? galatAlasanSkor(banding, alasan) : null;
 
+  // beban Anda pada rentang yang sama SEBELUM usulan ini (delegasi, lapangan, pelatihan, ketersediaan)
+  const sebelum = useMemo(() => {
+    if (!saya.data || !rekapSaya.data || !mulai || !tenggat || tenggat < mulai) return null;
+    const dari = mulai < hari ? hari : mulai;
+    const sampai = tenggat > tambahHari(hari, 55) ? tambahHari(hari, 55) : tenggat;
+    if (sampai < dari) return null;
+    const nama: Record<number, string> = {};
+    for (const l of rekapSaya.data.lapangan) nama[l.kegiatan_id] = l.kegiatan;
+    const h = susunRekap({ orang: [{ akun: saya.data.akun.id, nama: saya.data.akun.nama }], delegasi: saya.data.delegasi, lapangan: rekapSaya.data.lapangan.filter((l) => l.akun === saya.data!.akun.id), ketersediaan: rekapSaya.data.ketersediaan.filter((k) => k.akun === saya.data!.akun.id), dari, sampai, namaKegiatan: nama });
+    const b = h.baris[0];
+    return b && b.kapasitas > 0 ? { persen: Math.round((b.total / b.kapasitas) * 100), kapasitas: b.kapasitas } : null;
+  }, [saya.data, rekapSaya.data, mulai, tenggat, hari]);
+  const persenSesudah = sebelum && total > 0 ? Math.round(sebelum.persen + (total / sebelum.kapasitas) * 100) : null;
+  const kurang = [judul.trim().length < 3 ? "nama pekerjaan (min. 3 huruf)" : null, satuan.trim() === "" ? "satuan" : null, !(vol > 0) ? "volume" : null, !(pps > 0) ? "skor per satuan" : null, nhk <= 0 ? "jadwal (tenggat dan hari kerja)" : null, galatAlasan ? "alasan skor" : null].filter(Boolean);
+
   const lengkap = judul.trim().length >= 3 && satuan.trim() !== "" && vol > 0 && pps > 0 && nhk > 0 && !galatAlasan && (tautan !== "kantor" || kelompok !== "" || (d?.kelompok.length ?? 0) > 0);
 
   async function kirim() {
@@ -97,6 +115,7 @@ export default function Catat() {
       setGalat(r.pesan);
       return;
     }
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     setBerhasil(`Usulan terkirim: ${fmt(angka(r.data.poin_total), 1)} poin selama ${r.data.hari_kerja} hari kerja. Ketua Tim akan meninjau; Anda mendapat notifikasi.`);
     setJudul("");
     setUraian("");
@@ -117,6 +136,7 @@ export default function Catat() {
       {d && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-3">
+            {berhasil && <Info>{berhasil}</Info>}
             <Kartu judul="Tautkan dengan kegiatan tim">
               <div className="space-y-3">
                 <Medan label="Pekerjaan ini bagian dari" bantu="Pilih kegiatan bila pekerjaan ini bagian dari kegiatan tim. Pilih Pekerjaan kantor bila tidak ada kegiatannya.">
@@ -176,10 +196,10 @@ export default function Catat() {
                 {banding && pps > 0 && satuan.trim() !== "" && (
                   <div className="space-y-2">
                     {banding.peringatan ? <Peringatan>{banding.pesan}</Peringatan> : <Info>{banding.pesan}</Info>}
-                    {banding.setara.length > 0 && (
+                    {banding.setara.filter((s) => String(s.id) !== jenisId).length > 0 && (
                       <div className="text-[12.5px] text-[#3B4A57]">
                         Setara dengan:{" "}
-                        {banding.setara.map((s) => `${s.nama} (${fmt(s.poin, 1)} poin per ${s.satuan}, sekitar ${fmt(s.menit, 0)} menit)`).join("; ")}
+                        {banding.setara.filter((s) => String(s.id) !== jenisId).map((s) => `${s.nama} (${fmt(s.poin, 1)} poin per ${s.satuan}, sekitar ${fmt(s.menit, 0)} menit)`).join("; ") || "belum ada lainnya"}
                       </div>
                     )}
                     {banding.perluAlasan && (
@@ -235,7 +255,7 @@ export default function Catat() {
             </Kartu>
 
             {galat && <Galat>{galat}</Galat>}
-            {berhasil && <Info>{berhasil}</Info>}
+            {kurang.length > 0 && <p className="m-0 text-[12.5px] text-[#8A4605]">Belum lengkap: {kurang.join(", ")}.</p>}
             <button type="button" className={`${KELAS.tombolUtama} w-full`} disabled={!lengkap || mengirim} onClick={() => void kirim()}>
               {mengirim ? "Mengirim..." : "Kirim usulan ke Ketua Tim"}
             </button>
@@ -261,6 +281,11 @@ export default function Catat() {
                   <div className="text-[12.5px] text-[#3B4A57]">
                     {fmt(Math.round(persenHari), 0)}% dari kapasitas {kap} poin per hari. Setara sekitar {fmt(menitDariPoin(perHari), 0)} menit kerja per hari. Tidak termasuk pekerjaan lain Anda.
                   </div>
+                  {sebelum && persenSesudah !== null && (
+                    <div className={`rounded-lg px-3 py-2 text-[13px] leading-snug ${persenSesudah > 100 ? "bg-[#FBE9E9] text-[#9B2C2C]" : "bg-[#F1F7F6] text-[#0B524C]"}`}>
+                      Beban Anda pada rentang ini: <b>{sebelum.persen}%</b> sekarang, <b>{persenSesudah}%</b> bila usulan ini disetujui.{persenSesudah > 100 ? " Melebihi kapasitas." : ""}
+                    </div>
+                  )}
                   {tenggat < mulai && <Galat>Tenggat tidak boleh sebelum tanggal mulai.</Galat>}
                   <div className="text-[12.5px] text-[#3B4A57]">
                     {tglPendek(mulai)} sampai {tglPendek(tenggat)}

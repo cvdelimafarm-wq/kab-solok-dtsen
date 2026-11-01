@@ -36,6 +36,8 @@ export type HasilBanding = {
   median: number | null;
   rasio: number | null;
   setara: Setara[];
+  /** Pekerjaan bersatuan LAIN yang skornya paling dekat (pembanding bila satuan sama belum ada atau sedikit). */
+  setaraLain: Setara[];
   peringatan: "tinggi" | "rendah" | null;
   perluAlasan: boolean;
   menit: number;
@@ -53,9 +55,14 @@ export function bandingSkor(katalog: Pembanding[], satuan: string, poin: number,
     .sort((a, b) => Math.abs(angka(a.poin_per_satuan) - poin) - Math.abs(angka(b.poin_per_satuan) - poin) || a.id - b.id)
     .slice(0, 3)
     .map((j) => ({ id: j.id, nama: j.nama, satuan: j.satuan, poin: angka(j.poin_per_satuan), menit: menitDariPoin(angka(j.poin_per_satuan)) }));
+  const lain = katalog.filter((j) => j.aktif && j.skor_status === "disetujui" && j.id !== kecualiId && !samaSatuan(j.satuan, satuan) && angka(j.poin_per_satuan) > 0);
+  const setaraLain: Setara[] = [...lain]
+    .sort((a, b) => Math.abs(angka(a.poin_per_satuan) - poin) - Math.abs(angka(b.poin_per_satuan) - poin) || a.id - b.id)
+    .slice(0, 3)
+    .map((j) => ({ id: j.id, nama: j.nama, satuan: j.satuan, poin: angka(j.poin_per_satuan), menit: menitDariPoin(angka(j.poin_per_satuan)) }));
   if (med === null || med <= 0 || !(poin > 0)) {
     return {
-      n: sejenis.length, median: med, rasio: null, setara, peringatan: null, perluAlasan: false, menit,
+      n: sejenis.length, median: med, rasio: null, setara, setaraLain, peringatan: null, perluAlasan: false, menit,
       pesan: poin > 0 ? `Belum ada pekerjaan bersatuan ${satuan || "yang sama"} sebagai pembanding. Skor ini setara ${fmtId(menit, 0)} menit kerja per ${satuan || "satuan"}.` : "",
     };
   }
@@ -64,7 +71,7 @@ export function bandingSkor(katalog: Pembanding[], satuan: string, poin: number,
   let pesan = `Skor ini setara ${fmtId(menit, 0)} menit per ${satuan}, sekitar ${fmtId(rasio, 1)} kali median pekerjaan sejenis (${fmtId(med, 1)} poin).`;
   if (peringatan === "tinggi") pesan = `Skor ${fmtId(poin, 1)} poin per ${satuan} sekitar ${fmtId(rasio, 1)} kali median pekerjaan sejenis (${fmtId(med, 1)} poin), setara ${fmtId(menit, 0)} menit per ${satuan}. Jelaskan alasannya.`;
   if (peringatan === "rendah") pesan = `Skor ${fmtId(poin, 1)} poin per ${satuan} kurang dari separuh median pekerjaan sejenis (${fmtId(med, 1)} poin), setara ${fmtId(menit, 0)} menit per ${satuan}. Jelaskan alasannya.`;
-  return { n: sejenis.length, median: med, rasio, setara, peringatan, perluAlasan: peringatan !== null, menit, pesan };
+  return { n: sejenis.length, median: med, rasio, setara, setaraLain, peringatan, perluAlasan: peringatan !== null, menit, pesan };
 }
 
 /** Alasan skor yang kurang bila peringatan menuntutnya; null = cukup. */
