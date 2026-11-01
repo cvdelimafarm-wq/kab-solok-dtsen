@@ -9,7 +9,7 @@
 
 export const JEDA_ULANG_HARI = 5;
 export const KEDALUWARSA_JAM = 12;
-export type RiwayatUjian = { id: number; jenis: "sertifikasi" | "latihan"; mulai_at: string; selesai_at: string | null; /** null pada ujian yang dibatalkan (selesai_at terisi, tanpa skor) */ tingkat?: number | null };
+export type RiwayatUjian = { id: number; jenis: "sertifikasi" | "latihan" | "harian" | "tantangan"; mulai_at: string; selesai_at: string | null; /** null pada ujian yang dibatalkan (selesai_at terisi, tanpa skor) */ tingkat?: number | null };
 
 const MS_HARI = 86_400_000;
 const WIB = 7 * 3_600_000;

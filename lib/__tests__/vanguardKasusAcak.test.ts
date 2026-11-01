@@ -7,8 +7,8 @@ import { MIN_PILIHAN } from "../vanguard/kuesioner/templat";
 const bandingkan = (kode: string) => KASUS.find((k) => k.kode === kode)!;
 
 describe("templat kasus lama (V7c)", () => {
-  it("templat tersedia untuk level A–C (A01–A13, B01–B10, C01–C11), dan tiap kodenya ada di kasus asli", () => {
-    expect(TEMPLAT_V1.map((t) => t.kode)).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11"]);
+  it("templat tersedia untuk level A–E (A01–A13, B01–B10, C01–C11, D01–D22 kecuali D18 yang ditangguhkan, E01–E21), dan tiap kodenya ada di kasus asli", () => {
+    expect(TEMPLAT_V1.map((t) => t.kode)).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11", "D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10", "D11", "D12", "D13", "D14", "D15", "D16", "D17", "D19", "D20", "D21", "D22", "E01", "E02", "E03", "E04", "E05", "E06", "E07", "E08", "E09", "E10", "E11", "E12", "E13", "E14", "E15", "E16", "E17", "E18", "E19", "E20", "E21"]);
     for (const t of TEMPLAT_V1) { expect(punyaTemplatV1(t.kode)).toBe(true); expect(bandingkan(t.kode)).toBeDefined(); }
   });
   it(`tiap parameter >= ${MIN_PILIHAN} pilihan tanpa duplikat, dan nilai baku ada di pilihan`, () => {
@@ -23,7 +23,7 @@ describe("templat kasus lama (V7c)", () => {
   });
   it("benih sama = kasus sama; kasus tak bertemplat = undefined", () => {
     expect(kasusDariBenih("A05", 99)).toEqual(kasusDariBenih("A05", 99));
-    expect(kasusDariBenih("D01", 5)).toBeUndefined();
+    expect(kasusDariBenih("G01", 5)).toBeUndefined();
   });
   it("lintas 300 benih: tidak ada penampung tersisa, kunci menilai dirinya benar, nilai wajar, alternatif berbeda dari kunci", () => {
     for (const t of TEMPLAT_V1) for (let b = 1; b <= 300; b++) {
@@ -45,5 +45,20 @@ describe("templat kasus lama (V7c)", () => {
     const a2 = kasusDariBenih("A02", 12345)!; // hari * harga * 30/7 * 12
     const m = /selama (\d+) hari.*?Rp([\d.]+) per porsi/.exec(a2.cerita)!;
     expect(a2.kunci.e_bantuan_barangD).toBe(Math.round((Number(m[1]) * Number(m[2].replace(/\./g, "")) * 30 / 7 * 12) + Number.EPSILON));
+  });
+});
+
+describe("tidak ada angka tertinggal pada teks pendamping (V7c)", () => {
+  it("petunjuk, jebakan, pembahasan, dan keterangan 'nol' yang memuat angka bertitik ribuan harus berubah mengikuti benih (bukan angka kasus asli yang tertinggal)", () => {
+    const bidang = (k: ReturnType<typeof kasusDariBenih>) => ({ petunjuk: JSON.stringify(k!.petunjuk), jebakan: JSON.stringify(k!.jebakan), pembahasan: String(k!.pembahasan), nol: String((k as unknown as { nol?: string }).nol ?? "") });
+    for (const t of TEMPLAT_V1) {
+      const per: Record<string, Set<string>> = { petunjuk: new Set(), jebakan: new Set(), pembahasan: new Set(), nol: new Set() };
+      for (let b = 1; b <= 25; b++) { const f = bidang(kasusDariBenih(t.kode, b)); for (const k of Object.keys(per)) per[k].add(f[k as keyof typeof f]); }
+      const baku = bidang(kasusDariBenih(t.kode, 0));
+      for (const k of Object.keys(per)) {
+        const ada = /\d{1,3}(?:\.\d{3})+|Rp\d/.test(baku[k as keyof typeof baku]);
+        if (ada) expect(per[k].size, `${t.kode}.${k} memuat angka tetap: ${baku[k as keyof typeof baku].slice(0, 120)}`).toBeGreaterThan(1);
+      }
+    }
   });
 });

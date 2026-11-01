@@ -5,7 +5,9 @@
 //   GET                         -> { status, berjalan, riwayat[], sertifikat:{terbaru,tertinggi} }
 //   GET ?ujian=ID               -> { ujian, butir:[{urut, kode, jenis, judul, terjawab, ...}] }  (hasil dan rincian hanya setelah ujian selesai, atau pada latihan)
 //   GET ?ujian=ID&butir=URUT    -> { soal: { jenis, kode, benih, judul, data } }  (bahan soal tanpa kunci)
-//   POST { aksi:"mulai", jenis:"sertifikasi"|"latihan" }                   -> { ujian, jumlah } (atau dilanjutkan bila masih ada ujian berjalan)
+//   POST { aksi:"mulai", jenis:"sertifikasi"|"latihan"|"harian"|"tantangan" } -> { ujian, jumlah } (atau dilanjutkan bila masih ada ujian berjalan)
+//        (V8) "harian" = Latihan Harian 3 butir (soal hari itu tetap; satu per hari; membentuk streak); "tantangan" = Tantangan Mingguan 5 butir (sama untuk semua petugas; satu per minggu).
+//        Hanya "sertifikasi" yang menyembunyikan rincian selama ujian dan yang menjadi sertifikat; jenis lain bersifat latihan.
 //   POST { aksi:"jawab", ujian, urut, isian, durasiDtk? }                  -> { benar, poin, [rincian pada latihan], semuaTerjawab }
 //   POST { aksi:"selesai", ujian, menyerah? }                              -> { hasil:{skor, tingkat, nama, butirFatal}, review[] }
 //   POST { aksi:"batal", ujian }                                           -> { dibatalkan:true } (ujian dilepas tanpa skor; jatah sertifikasi hari itu tetap terpakai)
@@ -19,6 +21,10 @@ import { KEDALUWARSA_JAM, statusUjian, type RiwayatUjian } from "@/lib/vanguard/
 import { KOLAM, nilaiButir, sajikanButir } from "@/lib/vanguard/sertifikasi/nilai";
 import { hitungUjian, JUMLAH_BUTIR_UJIAN, VERSI_UJIAN } from "@/lib/vanguard/sertifikasi/skor";
 import { susunUjian } from "@/lib/vanguard/sertifikasi/ujian";
+import { hitungStreak } from "@/lib/vanguard/pembinaan/streak";
+import { statusKesegaran } from "@/lib/vanguard/pembinaan/segar";
+import { benihHarian, nomorMinggu, pilihTantangan } from "@/lib/vanguard/pembinaan/tantangan";
+import { hariWibNomor } from "@/lib/vanguard/sertifikasi/jeda";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +37,8 @@ function supabaseAdmin() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key);
 }
 
-type UjianRow = { id: number; akun_id: number; jenis: "sertifikasi" | "latihan"; benih: number; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; butir_fatal: number | null };
+type JenisUjian = "sertifikasi" | "latihan" | "harian" | "tantangan";
+type UjianRow = { id: number; akun_id: number; jenis: JenisUjian; benih: number; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; butir_fatal: number | null };
 type ButirRow = { id: number; ujian_id: number; urut: number; kasus: string; jenis: "k" | "v1"; benih: number; jawab_at: string | null; benar: boolean | null; poin: number | null; jml_fatal: number | null; jml_berat: number | null; jml_ringan: number | null; rincian: { jenis: string; tingkat: string; pesan: string; sel: string | null }[] | null };
 
 /** Kode Postgres 42P01 = tabel belum ada (SQL 20261101z belum dijalankan). */
@@ -55,6 +62,28 @@ async function butirUjian(db: NonNullable<ReturnType<typeof supabaseAdmin>>, uji
   if (error) throw new Error(tabelBelumAda(error) ? "TABEL" : "butir");
   return (data ?? []) as unknown as ButirRow[];
 }
+const JUMLAH_BUTIR_HARIAN = 3;
+/** Kode 23514 = pelanggaran CHECK (jenis ujian baru belum diizinkan: SQL 20261101za belum dijalankan). */
+const jenisBelumDikenal = (e: unknown): boolean => !!e && (e as { code?: string }).code === "23514";
+
+/** Tantangan minggu ini: disusun sekali (butir tersulit 7 hari terakhir + acak berimbang), disimpan, dipakai semua petugas. */
+async function tantanganMinggu(db: NonNullable<ReturnType<typeof supabaseAdmin>>, minggu: number, sekarang: Date): Promise<{ benih: number; butir: ButirUjianT[] } | null> {
+  const baca = async () => {
+    const { data, error } = await db.from("sigap_vanguard_tantangan").select("minggu, butir").eq("minggu", minggu).limit(1);
+    if (error) { if (tabelBelumAda(error)) throw new Error("TABEL"); return null; }
+    const row = ((data ?? []) as unknown as { minggu: number; butir: ButirUjianT[] }[])[0];
+    return row ? { benih: row.butir[0]?.benih ?? 0, butir: row.butir } : null;
+  };
+  const ada = await baca();
+  if (ada) return ada;
+  const { data: jw } = await db.from("sigap_vanguard_ujian_butir").select("id, kasus, poin, jawab_at").order("id", { ascending: false }).limit(5000);
+  const butir = pilihTantangan(((jw ?? []) as unknown as { kasus: string; poin: number | null; jawab_at: string | null }[]), KOLAM, minggu, sekarang);
+  const { error } = await db.from("sigap_vanguard_tantangan").insert({ minggu, butir });
+  if (error) { if (tabelBelumAda(error)) throw new Error("TABEL"); if ((error as { code?: string }).code === "23505") return baca(); return null; }
+  return { benih: butir[0]?.benih ?? 0, butir };
+}
+type ButirUjianT = { urut: number; kode: string; jenis: "k" | "v1"; benih: number };
+
 const judulButir = (b: { kasus: string; benih: number }) => sajikanButir(b.kasus, b.benih)?.judul ?? b.kasus;
 
 export async function GET(req: NextRequest) {
@@ -66,7 +95,8 @@ export async function GET(req: NextRequest) {
     const p = req.nextUrl.searchParams;
     if (!p.has("ujian")) {
       const r = await riwayatAkun(db, akun);
-      const status = statusUjian(r as RiwayatUjian[], new Date());
+      const sekarang = new Date();
+      const status = statusUjian(r as RiwayatUjian[], sekarang);
       const selesai = r.filter((u) => u.jenis === "sertifikasi" && !!u.selesai_at && u.tingkat != null);
       const terbaru = selesai[0] ?? null; // urut mulai terbaru
       const tertinggi = selesai.reduce<UjianRow | null>((a, b) => (!a || (b.tingkat as number) > (a.tingkat as number) || ((b.tingkat as number) === (a.tingkat as number) && (b.skor ?? 0) > (a.skor ?? 0)) ? b : a), null);
@@ -77,6 +107,9 @@ export async function GET(req: NextRequest) {
         jumlahButir: Math.min(JUMLAH_BUTIR_UJIAN, KOLAM.length),
         riwayat: r.slice(0, 20).map((u) => ({ ujian: u.id, jenis: u.jenis, mulai_at: u.mulai_at, selesai_at: u.selesai_at, skor: u.skor, tingkat: u.tingkat })),
         sertifikat: { terbaru: ringkas(terbaru), tertinggi: ringkas(tertinggi) },
+        kesegaran: terbaru?.selesai_at ? statusKesegaran(terbaru.selesai_at, sekarang) : null,
+        harian: { ...hitungStreak(r.filter((u) => u.jenis === "harian" && !!u.selesai_at && u.tingkat != null).map((u) => u.selesai_at), sekarang), mulaiHariIni: r.some((u) => u.jenis === "harian" && hariWibNomor(u.mulai_at) === hariWibNomor(sekarang)) },
+        tantangan: { minggu: nomorMinggu(sekarang), selesai: r.some((u) => u.jenis === "tantangan" && !!u.selesai_at && u.tingkat != null && nomorMinggu(u.mulai_at) === nomorMinggu(sekarang)) },
       });
     }
     const ujianId = id(p.get("ujian"));
@@ -92,7 +125,7 @@ export async function GET(req: NextRequest) {
       if (!soal) return galat("Butir tidak ditemukan.", 404);
       return NextResponse.json({ soal, terjawab: !!b.jawab_at });
     }
-    const buka = !!u.selesai_at || u.jenis === "latihan"; // rincian terbuka setelah selesai, dan pada latihan
+    const buka = !!u.selesai_at || u.jenis !== "sertifikasi"; // rincian terbuka setelah selesai, dan pada latihan
     return NextResponse.json({
       ujian: { id: u.id, jenis: u.jenis, jumlah: u.jumlah, mulai_at: u.mulai_at, selesai_at: u.selesai_at, skor: u.skor, tingkat: u.tingkat, kedaluwarsa: !u.selesai_at && kedaluwarsa(u) },
       butir: butir.map((b) => ({
@@ -117,17 +150,30 @@ export async function POST(req: NextRequest) {
     try { const x = await req.json(); if (!x || typeof x !== "object" || Array.isArray(x)) return galat("Permintaan tidak sah."); b = x as Record<string, unknown>; } catch { return galat("Permintaan tidak sah."); }
 
     if (b.aksi === "mulai") {
-      const jenis = b.jenis === "latihan" ? "latihan" : b.jenis === "sertifikasi" ? "sertifikasi" : null;
+      const jenis = (["sertifikasi", "latihan", "harian", "tantangan"] as const).find((j) => j === b.jenis) ?? null;
       if (!jenis) return galat("Jenis ujian tidak sah.");
       const r = await riwayatAkun(db, akun);
-      const st = statusUjian(r as RiwayatUjian[], new Date());
+      const sekarang = new Date();
+      const st = statusUjian(r as RiwayatUjian[], sekarang);
       if (st.berjalan) return NextResponse.json({ ujian: st.berjalan.id, jenis: st.berjalan.jenis, jumlah: r.find((x) => x.id === st.berjalan!.id)?.jumlah ?? 0, dilanjutkan: true });
       if (jenis === "sertifikasi" && !st.sertifikasiBoleh) return galat(st.alasan ?? "Sertifikasi belum dapat dimulai.", 403, { bukaLagi: st.bukaLagi });
-      const benih = benihBaru();
-      const daftar = susunUjian(benih, KOLAM, JUMLAH_BUTIR_UJIAN);
+      let benih = benihBaru();
+      let daftar = susunUjian(benih, KOLAM, JUMLAH_BUTIR_UJIAN);
+      if (jenis === "harian") {
+        const hari = hariWibNomor(sekarang);
+        if (r.some((u) => u.jenis === "harian" && !!u.selesai_at && u.tingkat != null && hariWibNomor(u.mulai_at) === hari)) return galat("Latihan harian hari ini sudah selesai. Sampai jumpa besok!", 409);
+        benih = benihHarian(akun, hari);
+        daftar = susunUjian(benih, KOLAM, JUMLAH_BUTIR_HARIAN);
+      } else if (jenis === "tantangan") {
+        const minggu = nomorMinggu(sekarang);
+        if (r.some((u) => u.jenis === "tantangan" && !!u.selesai_at && u.tingkat != null && nomorMinggu(u.mulai_at) === minggu)) return galat("Tantangan minggu ini sudah selesai. Tantangan baru terbit Senin.", 409);
+        const t = await tantanganMinggu(db, minggu, sekarang);
+        if (!t) return galat("Gagal menyiapkan tantangan.", 500);
+        daftar = t.butir; benih = t.benih;
+      }
       if (daftar.length === 0) return galat("Belum ada butir ujian.", 500);
-      const { data: baru, error } = await db.from("sigap_vanguard_ujian").insert({ akun_id: akun, jenis, versi: VERSI_UJIAN, benih, jumlah: daftar.length, mulai_at: new Date().toISOString() }).select("id").single();
-      if (tabelBelumAda(error)) return galat(PESAN_TABEL, 503);
+      const { data: baru, error } = await db.from("sigap_vanguard_ujian").insert({ akun_id: akun, jenis, versi: VERSI_UJIAN, benih, jumlah: daftar.length, mulai_at: sekarang.toISOString() }).select("id").single();
+      if (tabelBelumAda(error) || jenisBelumDikenal(error)) return galat(PESAN_TABEL, 503);
       if (error || !baru) return galat("Gagal memulai ujian.", 500);
       const ujian = (baru as { id: number }).id;
       const { error: eB } = await db.from("sigap_vanguard_ujian_butir").insert(daftar.map((x) => ({ ujian_id: ujian, urut: x.urut, kasus: x.kode, jenis: x.jenis, benih: x.benih })));
@@ -159,7 +205,7 @@ export async function POST(req: NextRequest) {
       const { error } = await db.from("sigap_vanguard_ujian_butir").update({ jawab_at: new Date().toISOString(), benar: h.benar, poin: h.poin, jml_fatal: h.fatal, jml_berat: h.berat, jml_ringan: h.ringan, rincian: h.rincian, isian: h.isianBersih, durasi_dtk: durasi }).eq("id", row.id);
       if (error) return galat("Gagal menyimpan jawaban.", 500);
       const semuaTerjawab = butir.filter((x) => x.id !== row.id).every((x) => !!x.jawab_at);
-      return NextResponse.json({ benar: h.benar, poin: h.poin, semuaTerjawab, ...(u.jenis === "latihan" ? { rincian: h.rincian } : {}) });
+      return NextResponse.json({ benar: h.benar, poin: h.poin, semuaTerjawab, ...(u.jenis !== "sertifikasi" ? { rincian: h.rincian } : {}) });
     }
 
     if (b.aksi === "selesai") {

@@ -10,9 +10,11 @@ import type { Kasus } from "../tipe";
 import dataA from "./templat-a.json";
 import dataB from "./templat-b.json";
 import dataC from "./templat-c.json";
+import dataD from "./templat-d.json";
+import dataE from "./templat-e.json";
 
 export type TemplatV1 = { kode: string; parameter: Record<string, ParameterT>; turunan: Record<string, string>; kasus: Record<string, unknown> };
-export const TEMPLAT_V1: TemplatV1[] = [...(dataA as unknown as TemplatV1[]), ...(dataB as unknown as TemplatV1[]), ...(dataC as unknown as TemplatV1[])];
+export const TEMPLAT_V1: TemplatV1[] = [...(dataA as unknown as TemplatV1[]), ...(dataB as unknown as TemplatV1[]), ...(dataC as unknown as TemplatV1[]), ...(dataD as unknown as TemplatV1[]), ...(dataE as unknown as TemplatV1[])];
 
 export const punyaTemplatV1 = (kode: string): boolean => TEMPLAT_V1.some((t) => t.kode === kode);
 

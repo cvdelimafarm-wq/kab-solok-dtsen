@@ -1,0 +1,1074 @@
+[
+ {
+  "kode": "E01",
+  "parameter": {
+   "nasi": {
+    "baku": 4000000,
+    "pilihan": [
+     2000000,
+     3000000,
+     4000000,
+     5000000,
+     6000000
+    ]
+   },
+   "n": {
+    "baku": 4,
+    "pilihan": [
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   },
+   "amplop": {
+    "baku": 100000,
+    "pilihan": [
+     50000,
+     75000,
+     100000,
+     150000,
+     200000
+    ]
+   },
+   "popok": {
+    "baku": 70000,
+    "pilihan": [
+     50000,
+     70000,
+     100000,
+     120000,
+     150000
+    ]
+   }
+  },
+  "turunan": {
+   "uang": "n*amplop",
+   "barang": "nasi+popok",
+   "alt": "barang+uang"
+  },
+  "kasus": {
+   "kode": "E01",
+   "level": "E",
+   "judul": "Pesta aqiqah dan sumbangan",
+   "cerita": "Saat aqiqah, rumah tangga membeli nasi kotak {nasi:rp} yang seluruhnya dibagikan ke tetangga. Setahun terakhir mereka juga menghadiri {n} pernikahan kerabat dengan amplop {amplop:rp} masing-masing, dan memberi hadiah popok {popok:rp}. Nasi kotak yang dibagikan bukan konsumsi rumah tangga, jadi tidak ada di Blok IV.1.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_uangB": "=uang",
+    "e_rtLain_barangB": "=barang"
+   },
+   "jebakan": [
+    {
+     "k": "e_rtLain_barangD",
+     "m": "Kolom (3) adalah barang yang diterima. Yang diberikan masuk kolom (5)."
+    },
+    {
+     "k": "e_nirlaba_barangB",
+     "m": "Penerimanya tetangga (rumah tangga lain), bukan lembaga nirlaba."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "e_rtLain_barangB",
+     "v": "=alt",
+     "m": "Uang amplop ({uang:rp}) dicatat di kolom (4), bukan kolom (5)."
+    }
+   ],
+   "petunjuk": [
+    "Semua ini diberikan kepada rumah tangga lain. Kolom mana untuk yang dibayar/diberikan?",
+    "Uang ke kolom (4); barang ke kolom (5). Jumlahkan barangnya."
+   ],
+   "langkah": [
+    "Uang: <code>{n} × {amplop} = {uang}</code> → Kolom (4).",
+    "Barang: nasi kotak + popok = <code>{nasi} + {popok} = {barang}</code> → Kolom (5).",
+    "Penerima rumah tangga lain → baris 3."
+   ],
+   "pembahasan": "Kolom 4 untuk transfer uang dibayar dan kolom 5 untuk barang/jasa dibayar. Nasi kotak yang dibagikan adalah transfer barang, bukan konsumsi rumah tangga.",
+   "rujukan": "Buku 4 hlm. 336, 338, dan 339"
+  }
+ },
+ {
+  "kode": "E02",
+  "parameter": {
+   "zakat": {
+    "baku": 1200000,
+    "pilihan": [
+     600000,
+     900000,
+     1200000,
+     1500000,
+     2000000
+    ]
+   },
+   "sedekah": {
+    "baku": 300000,
+    "pilihan": [
+     150000,
+     200000,
+     300000,
+     400000,
+     500000
+    ]
+   }
+  },
+  "turunan": {
+   "gab": "zakat+sedekah"
+  },
+  "kasus": {
+   "kode": "E02",
+   "level": "E",
+   "judul": "Zakat dan sedekah",
+   "cerita": "Rumah tangga menyalurkan zakat {zakat:rp} melalui BAZNAS dan bersedekah {sedekah:rp} langsung ke masjid.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_bantuan_uangB": "=zakat",
+    "e_nirlaba_uangB": "=sedekah"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "e_nirlaba_uangB",
+     "v": "=gab",
+     "m": "Zakat via BAZNAS masuk baris 1.b; hanya sedekah ke masjid di baris 4."
+    }
+   ],
+   "petunjuk": [
+    "BAZNAS adalah badan pemerintah. Masjid termasuk jenis lembaga apa?",
+    "Keduanya uang yang dibayarkan."
+   ],
+   "langkah": [
+    "Zakat via BAZNAS = transfer dibayar ke pemerintah → V.E 1.b Kolom (4) = <code>{zakat}</code>.",
+    "Sedekah ke masjid = lembaga nirlaba → V.E baris 4 Kolom (4) = <code>{sedekah}</code>."
+   ],
+   "pembahasan": "Zakat melalui BAZNAS dicatat sebagai transfer dibayar kepada pemerintah (1.b). Sumbangan langsung ke masjid atau gereja dicatat di baris 4 (lembaga nirlaba).",
+   "rujukan": "Buku 4 hlm. 335 dan 336"
+  }
+ },
+ {
+  "kode": "E03",
+  "parameter": {
+   "tanah": {
+    "baku": 100000000,
+    "pilihan": [
+     60000000,
+     80000000,
+     100000000,
+     120000000,
+     150000000
+    ]
+   },
+   "biaya": {
+    "baku": 2000000,
+    "pilihan": [
+     1000000,
+     1500000,
+     2000000,
+     2500000,
+     3000000
+    ]
+   }
+  },
+  "turunan": {
+   "gab": "tanah+biaya"
+  },
+  "kasus": {
+   "kode": "E03",
+   "level": "E",
+   "judul": "Membeli tanah",
+   "cerita": "Setahun terakhir rumah tangga membeli sebidang tanah {tanah:rp} dan membayar biaya sertifikat serta balik nama {biaya:rp}.",
+   "blok": [
+    "G"
+   ],
+   "kunci": {
+    "g_lahan_tambah": "=tanah",
+    "g_biayaPindahLahan_tambah": "=biaya"
+   },
+   "jebakan": [
+    {
+     "k": "g_bangunanTinggal_tambah",
+     "m": "Tanah tanpa bangunan bukan bangunan tempat tinggal; gunakan baris 4."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "g_lahan_tambah",
+     "v": "=gab",
+     "m": "Biaya sertifikat/balik nama dicatat terpisah di baris 3."
+    }
+   ],
+   "petunjuk": [
+    "Tanah tanpa bangunan dicatat sebagai aset apa? Biaya pindah kepemilikan punya baris sendiri.",
+    "Pembelian = penambahan, kolom (2)."
+   ],
+   "langkah": [
+    "Tanah: V.G baris 4 (lahan/tanah) Kolom (2) = <code>{tanah}</code>.",
+    "Sertifikat/balik nama: V.G baris 3 Kolom (2) = <code>{biaya}</code>.",
+    "Pembelian aset bukan konsumsi Blok IV.2."
+   ],
+   "pembahasan": "Lahan/tanah adalah aset tidak diproduksi (baris 4), sedangkan biaya pemindahan kepemilikan (sertifikat, balik nama) dicatat terpisah di baris 3. Keduanya penambahan aset, bukan konsumsi.",
+   "rujukan": "Buku 4 hlm. 341"
+  }
+ },
+ {
+  "kode": "E04",
+  "parameter": {
+   "nilai": {
+    "baku": 2000000,
+    "pilihan": [
+     1000000,
+     1500000,
+     2000000,
+     2500000,
+     3000000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "nilai*6"
+  },
+  "kasus": {
+   "kode": "E04",
+   "level": "E",
+   "judul": "Kiriman suami dari luar negeri",
+   "cerita": "Suami bekerja di luar negeri dan mengirim {nilai:rp} setiap dua bulan; setahun terakhir 6 kali kiriman.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_luarNegeri_uangD": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_rtLain_uangD",
+     "m": "Pengirim di luar negeri: gunakan baris 5, bukan rumah tangga lain."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Kiriman dari luar negeri punya baris sendiri.",
+    "Uang diterima, kolom (2)."
+   ],
+   "langkah": [
+    "<code>6 × {nilai} = {tahun}</code> → V.E baris 5, Kolom (2)."
+   ],
+   "pembahasan": "Transfer dari luar negeri (kiriman TKI, dll.) dicatat di V.E Rincian 5. Uang yang diterima masuk kolom 2.",
+   "rujukan": "Buku 4 hlm. 335"
+  }
+ },
+ {
+  "kode": "E05",
+  "parameter": {
+   "kirim": {
+    "baku": 500000,
+    "pilihan": [
+     300000,
+     400000,
+     500000,
+     600000,
+     750000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "kirim*12"
+  },
+  "kasus": {
+   "kode": "E05",
+   "level": "E",
+   "judul": "Kiriman uang dari anak",
+   "cerita": "Anak yang tinggal di kota lain mengirim {kirim:rp} setiap bulan sepanjang tahun.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_uangD": "=tahun"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "e_rtLain_uangD",
+     "v": "=kirim",
+     "m": "Nilai Anda masih sebulan. Kalikan 12."
+    }
+   ],
+   "petunjuk": [
+    "Anak yang tinggal terpisah adalah rumah tangga lain.",
+    "Nilai sebulan × 12."
+   ],
+   "langkah": [
+    "<code>{kirim} × 12 = {tahun}</code> → V.E baris 3, Kolom (2)."
+   ],
+   "pembahasan": "Kiriman uang dari anak, orang tua, atau famili yang tidak satu rumah dicatat sebagai transfer diterima dari rumah tangga lain (V.E R.3 K.2).",
+   "rujukan": "Buku 4 hlm. 335"
+  }
+ },
+ {
+  "kode": "E06",
+  "parameter": {
+   "sumbangan": {
+    "baku": 2500000,
+    "pilihan": [
+     1000000,
+     1500000,
+     2000000,
+     2500000,
+     3000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E06",
+   "level": "E",
+   "judul": "Sumbangan aqiqah diterima",
+   "cerita": "Saat aqiqah anaknya, rumah tangga menerima sumbangan uang dari tetangga sebesar {sumbangan:rp}.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_uangD": "=sumbangan"
+   },
+   "jebakan": [],
+   "alternatif": [],
+   "petunjuk": [
+    "Tetangga adalah rumah tangga lain.",
+    "Berupa uang."
+   ],
+   "langkah": [
+    "V.E baris 3, Kolom (2) = <code>{sumbangan}</code>."
+   ],
+   "pembahasan": "Sumbangan pernikahan atau kematian dari rumah tangga lain dicatat sebagai transfer berjalan diterima (V.E R.3).",
+   "rujukan": "Buku 4 hlm. 338"
+  }
+ },
+ {
+  "kode": "E07",
+  "parameter": {
+   "beri": {
+    "baku": 300000,
+    "pilihan": [
+     200000,
+     250000,
+     300000,
+     400000,
+     500000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "beri*12"
+  },
+  "kasus": {
+   "kode": "E07",
+   "level": "E",
+   "judul": "Memberi uang kepada orang tua",
+   "cerita": "Setiap bulan rumah tangga memberi uang {beri:rp} kepada orang tua yang tinggal di rumah lain.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_rtLain_uangB": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_rtLain_uangD",
+     "m": "Rumah tangga ini yang memberi: gunakan kolom dibayar (4)."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Memberi = kolom dibayar/diberikan.",
+    "Nilai sebulan × 12."
+   ],
+   "langkah": [
+    "<code>{beri} × 12 = {tahun}</code> → V.E baris 3, Kolom (4)."
+   ],
+   "pembahasan": "Uang yang diberikan kepada rumah tangga lain dicatat sebagai transfer dibayar (V.E R.3 K.4).",
+   "rujukan": "Buku 4 hlm. 335"
+  }
+ },
+ {
+  "kode": "E08",
+  "parameter": {
+   "bantuan": {
+    "baku": 1500000,
+    "pilihan": [
+     1000000,
+     1250000,
+     1500000,
+     2000000,
+     2500000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E08",
+   "level": "E",
+   "judul": "Bantuan dari yayasan",
+   "cerita": "Rumah tangga menerima bantuan uang {bantuan:rp} dari sebuah yayasan sosial.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_nirlaba_uangD": "=bantuan"
+   },
+   "jebakan": [],
+   "alternatif": [],
+   "petunjuk": [
+    "Yayasan sosial termasuk lembaga apa?",
+    "Berupa uang diterima."
+   ],
+   "langkah": [
+    "V.E baris 4 (lembaga nirlaba), Kolom (2) = <code>{bantuan}</code>."
+   ],
+   "pembahasan": "Bantuan atau sumbangan dari lembaga nirlaba (masjid, gereja, yayasan, panti) dicatat di V.E Rincian 4.",
+   "rujukan": "Buku 4 hlm. 335"
+  }
+ },
+ {
+  "kode": "E09",
+  "parameter": {
+   "klaim": {
+    "baku": 5000000,
+    "pilihan": [
+     3000000,
+     4000000,
+     5000000,
+     7500000,
+     10000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E09",
+   "level": "E",
+   "judul": "Klaim asuransi kerugian",
+   "cerita": "Mobil rumah tangga rusak karena kecelakaan, dan asuransi non-jiwa membayar klaim {klaim:rp} berupa uang tunai.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_badanUsaha_uangD": "=klaim"
+   },
+   "jebakan": [],
+   "alternatif": [],
+   "petunjuk": [
+    "Perusahaan asuransi adalah badan usaha.",
+    "Klaim berupa uang."
+   ],
+   "langkah": [
+    "V.E baris 2 (badan usaha), Kolom (2) = <code>{klaim}</code>."
+   ],
+   "pembahasan": "Klaim asuransi non-jiwa (kesehatan, kecelakaan, kerugian) dicatat sebagai transfer diterima dari badan usaha di V.E Rincian 2.",
+   "rujukan": "Buku 4 hlm. 335"
+  }
+ },
+ {
+  "kode": "E10",
+  "parameter": {
+   "gempa": {
+    "baku": 200000,
+    "pilihan": [
+     200000,
+     250000,
+     300000,
+     400000,
+     500000
+    ]
+   },
+   "pakaian": {
+    "baku": 150000,
+    "pilihan": [
+     100000,
+     120000,
+     150000,
+     175000,
+     190000
+    ]
+   }
+  },
+  "turunan": {
+   "sisa": "gempa-pakaian"
+  },
+  "kasus": {
+   "kode": "E10",
+   "level": "E",
+   "judul": "Bantuan bencana uang tunai",
+   "cerita": "Rumah tangga menerima bantuan gempa bumi dari pemerintah daerah {gempa:rp}. {pakaian:rp} di antaranya dipakai membeli pakaian.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_bantuan_uangD": "=gempa"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "e_bantuan_uangD",
+     "v": "=sisa",
+     "m": "Anda mengurangi belanja pakaian. Transfer dicatat sebesar yang diterima."
+    }
+   ],
+   "petunjuk": [
+    "Yang dicatat adalah seluruh bantuan yang diterima, bukan yang dibelanjakan.",
+    "Bentuknya uang."
+   ],
+   "langkah": [
+    "V.E 1.b, Kolom (2) = <code>{gempa}</code> (seluruh bantuan).",
+    "Pembelian pakaian {pakaian:rp} dicatat di Blok IV.2, bukan mengurangi transfer."
+   ],
+   "pembahasan": "Bantuan pemerintah berupa uang dicatat sebesar yang diterima di V.E R.1.b K.2; pembelian pakaian dicatat tersendiri di Blok IV.2.",
+   "rujukan": "Buku 4 hlm. 336"
+  }
+ },
+ {
+  "kode": "E11",
+  "parameter": {
+   "pensiun": {
+    "baku": 3000000,
+    "pilihan": [
+     2000000,
+     2500000,
+     3000000,
+     3500000,
+     4000000
+    ]
+   }
+  },
+  "turunan": {
+   "tahun": "pensiun*12"
+  },
+  "kasus": {
+   "kode": "E11",
+   "level": "E",
+   "judul": "Uang pensiun",
+   "cerita": "Seorang pensiunan PNS menerima pensiun {pensiun:rp} per bulan.",
+   "blok": [
+    "E"
+   ],
+   "kunci": {
+    "e_pensiun_uang": "=tahun"
+   },
+   "jebakan": [
+    {
+     "k": "e_bantuan_uangD",
+     "m": "Pensiun punya sub-baris 1.a sendiri, bukan 1.b (bantuan)."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Pensiun punya sub-baris sendiri di bawah Pemerintah.",
+    "Nilai sebulan × 12."
+   ],
+   "langkah": [
+    "<code>{pensiun} × 12 = {tahun}</code> → V.E baris 1.a, Kolom (2)."
+   ],
+   "pembahasan": "Uang pensiun yang diterima setelah pensiun dari pemerintahan dicatat di V.E R.1.a (hanya kolom uang diterima).",
+   "rujukan": "Buku 4 hlm. 334"
+  }
+ },
+ {
+  "kode": "E12",
+  "parameter": {
+   "t": {
+    "baku": 120000,
+    "pilihan": [
+     60000,
+     90000,
+     120000,
+     150000,
+     200000
+    ]
+   },
+   "p": {
+    "baku": 1800000,
+    "pilihan": [
+     1000000,
+     1200000,
+     1800000,
+     2400000,
+     3000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E12",
+   "level": "E",
+   "judul": "Bunga simpanan dan pinjaman",
+   "cerita": "Rumah tangga menerima bunga tabungan dan deposito {t:rp} setahun, dan membayar bunga pinjaman bank {p:rp}.",
+   "blok": [
+    "D"
+   ],
+   "kunci": {
+    "d_bunga_diterima": "=t",
+    "d_bunga_dibayar": "=p"
+   },
+   "jebakan": [],
+   "alternatif": [],
+   "petunjuk": [
+    "Bunga bisa menjadi pendapatan maupun beban. Baris yang sama, kolom berbeda.",
+    "Diterima = kolom (2); dibayar = kolom (3)."
+   ],
+   "langkah": [
+    "Bunga simpanan diterima <code>{t}</code> → baris 4, Kolom (2).",
+    "Bunga pinjaman dibayar <code>{p}</code> → baris 4, Kolom (3)."
+   ],
+   "pembahasan": "Bunga menjadi pendapatan atas aset finansial dan beban atas pinjaman. Keduanya dicatat di V.D R.4 tanpa memisahkan tujuan penggunaannya.",
+   "rujukan": "Buku 4 hlm. 334"
+  }
+ },
+ {
+  "kode": "E13",
+  "parameter": {
+   "sewa": {
+    "baku": 3000000,
+    "pilihan": [
+     2000000,
+     2500000,
+     3000000,
+     4000000,
+     5000000
+    ]
+   },
+   "bagi": {
+    "baku": 1000000,
+    "pilihan": [
+     500000,
+     750000,
+     1000000,
+     1500000,
+     2000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E13",
+   "level": "E",
+   "judul": "Sawah disewakan dan bagi hasil",
+   "cerita": "Rumah tangga menyewakan sawah dengan pembayaran {sewa:rp} setahun dan menerima bagi hasil {bagi:rp} dari usaha saudaranya yang ia modali.",
+   "blok": [
+    "D"
+   ],
+   "kunci": {
+    "d_sewaLahan_diterima": "=sewa",
+    "d_keuntunganModal_diterima": "=bagi"
+   },
+   "jebakan": [],
+   "alternatif": [],
+   "petunjuk": [
+    "Dua jenis pendapatan kepemilikan dengan baris berbeda.",
+    "Keduanya diterima."
+   ],
+   "langkah": [
+    "Sewa lahan <code>{sewa}</code> → baris 1, Kolom (2).",
+    "Bagi hasil <code>{bagi}</code> → baris 2, Kolom (2)."
+   ],
+   "pembahasan": "Sewa lahan dicatat di V.D R.1 dan keuntungan atas modal pada usaha rumah tangga (bagi hasil) di V.D R.2.",
+   "rujukan": "Buku 4 hlm. 333"
+  }
+ },
+ {
+  "kode": "E14",
+  "parameter": {
+   "nilai": {
+    "baku": 80000000,
+    "pilihan": [
+     40000000,
+     60000000,
+     80000000,
+     100000000,
+     120000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E14",
+   "level": "E",
+   "judul": "Menerima warisan tanah",
+   "cerita": "Rumah tangga menerima tanah warisan dari orang tua dengan nilai pasar {nilai:rp}.",
+   "blok": [
+    "F",
+    "G"
+   ],
+   "kunci": {
+    "f_rtLain_lahanD": "=nilai",
+    "g_lahan_tambah": "=nilai"
+   },
+   "jebakan": [],
+   "alternatif": [
+    {
+     "k": "f_rtLain_bangunanD",
+     "v": "=nilai",
+     "m": "Tanah masuk kolom lahan/barang berharga (3)."
+    }
+   ],
+   "petunjuk": [
+    "Transfer modal diterima, lalu dicatat kembali sebagai penambahan aset.",
+    "Tanah termasuk lahan."
+   ],
+   "langkah": [
+    "V.F baris 3 (rumah tangga), Kolom (3) lahan = <code>{nilai}</code>.",
+    "V.G baris 4 lahan, Kolom (2) penambahan = <code>{nilai}</code>."
+   ],
+   "pembahasan": "Jika rumah tangga menerima pemberian barang modal (V.F), senilai yang sama dicatat kembali sebagai penambahan barang modal di V.G.",
+   "rujukan": "Buku 4 hlm. 339 dan 340"
+  }
+ },
+ {
+  "kode": "E15",
+  "parameter": {
+   "jual": {
+    "baku": 60000000,
+    "pilihan": [
+     30000000,
+     45000000,
+     60000000,
+     75000000,
+     90000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E15",
+   "level": "E",
+   "judul": "Menjual tanah",
+   "cerita": "Rumah tangga menjual sebidang tanah {jual:rp} setahun terakhir.",
+   "blok": [
+    "G"
+   ],
+   "kunci": {
+    "g_lahan_kurang": "=jual"
+   },
+   "jebakan": [
+    {
+     "k": "g_lahan_tambah",
+     "m": "Menjual adalah pengurangan (kolom 3), bukan penambahan."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Penjualan aset adalah pengurangan.",
+    "Lahan punya baris sendiri."
+   ],
+   "langkah": [
+    "V.G baris 4 lahan, Kolom (3) pengurangan = <code>{jual}</code>."
+   ],
+   "pembahasan": "V.G mencatat penambahan dan pengurangan aset. Pengurangan mencakup penjualan dan pemberian kepada pihak lain.",
+   "rujukan": "Buku 4 hlm. 339"
+  }
+ },
+ {
+  "kode": "E16",
+  "parameter": {
+   "mesin": {
+    "baku": 3500000,
+    "pilihan": [
+     2000000,
+     2500000,
+     3500000,
+     4000000,
+     5000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E16",
+   "level": "E",
+   "judul": "Membeli mesin jahit untuk usaha",
+   "cerita": "Setahun terakhir rumah tangga membeli mesin jahit {mesin:rp} untuk usaha jahit rumah tangga.",
+   "blok": [
+    "G"
+   ],
+   "kunci": {
+    "g_mesin_tambah": "=mesin"
+   },
+   "jebakan": [
+    {
+     "k": "g_kendaraan_tambah",
+     "m": "Mesin jahit termasuk 1.c (mesin dan peralatan), bukan kendaraan."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Mesin dan peralatan usaha termasuk aset tetap usaha. Sub-baris yang mana?",
+    "Pembelian = penambahan."
+   ],
+   "langkah": [
+    "V.G baris 1.c (mesin, perlengkapan, peralatan), Kolom (2) = <code>{mesin}</code>."
+   ],
+   "pembahasan": "Mesin, perlengkapan, dan peralatan usaha (mesin cuci, kulkas, mesin jahit, dll.) adalah aset tetap usaha (V.G R.1.c).",
+   "rujukan": "Buku 4 hlm. 340"
+  }
+ },
+ {
+  "kode": "E17",
+  "parameter": {
+   "motor": {
+    "baku": 18000000,
+    "pilihan": [
+     12000000,
+     15000000,
+     18000000,
+     20000000,
+     25000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E17",
+   "level": "E",
+   "judul": "Motor untuk usaha ojek",
+   "cerita": "Setahun terakhir rumah tangga membeli sepeda motor {motor:rp} yang dipakai sepenuhnya untuk usaha ojek rumah tangga.",
+   "blok": [
+    "G"
+   ],
+   "kunci": {
+    "g_kendaraan_tambah": "=motor"
+   },
+   "jebakan": [],
+   "alternatif": [],
+   "petunjuk": [
+    "Kendaraan untuk usaha adalah aset tetap usaha.",
+    "Sub-baris kendaraan."
+   ],
+   "langkah": [
+    "V.G baris 1.b (kendaraan), Kolom (2) = <code>{motor}</code>."
+   ],
+   "pembahasan": "Kendaraan yang dipakai untuk usaha rumah tangga adalah aset tetap usaha (V.G R.1.b); pengeluaran usaha dipisahkan dari konsumsi.",
+   "rujukan": "Buku 4 hlm. 340"
+  }
+ },
+ {
+  "kode": "E18",
+  "parameter": {
+   "jual": {
+    "baku": 6000000,
+    "pilihan": [
+     4000000,
+     5000000,
+     6000000,
+     7000000,
+     8000000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E18",
+   "level": "E",
+   "judul": "Menjual motor usaha",
+   "cerita": "Rumah tangga menjual sepeda motor yang dulu dipakai usaha ojek seharga {jual:rp}.",
+   "blok": [
+    "G"
+   ],
+   "kunci": {
+    "g_kendaraan_kurang": "=jual"
+   },
+   "jebakan": [],
+   "alternatif": [],
+   "petunjuk": [
+    "Penjualan aset adalah pengurangan.",
+    "Sub-baris kendaraan."
+   ],
+   "langkah": [
+    "V.G baris 1.b (kendaraan), Kolom (3) pengurangan = <code>{jual}</code>."
+   ],
+   "pembahasan": "Penjualan barang modal dicatat sebagai pengurangan aset di V.G kolom 3.",
+   "rujukan": "Buku 4 hlm. 339 dan 340"
+  }
+ },
+ {
+  "kode": "E19",
+  "parameter": {
+   "dividen": {
+    "baku": 1250000,
+    "pilihan": [
+     750000,
+     1000000,
+     1250000,
+     1500000,
+     2000000
+    ]
+   },
+   "shu": {
+    "baku": 450000,
+    "pilihan": [
+     250000,
+     350000,
+     450000,
+     600000,
+     800000
+    ]
+   }
+  },
+  "turunan": {
+   "gab": "dividen+shu"
+  },
+  "kasus": {
+   "kode": "E19",
+   "level": "E",
+   "judul": "Dividen saham dan SHU koperasi",
+   "cerita": "Setahun terakhir rumah tangga menerima dividen saham sebuah PT sebesar {dividen:rp} dan sisa hasil usaha (SHU) koperasi {shu:rp}. Keduanya sudah diterima tunai. Abaikan pendapatan lainnya.",
+   "blok": [
+    "D"
+   ],
+   "kunci": {
+    "d_keuntunganSaham_diterima": "=gab"
+   },
+   "jebakan": [
+    {
+     "k": "d_bunga_diterima",
+     "m": "Dividen dan SHU bukan bunga. Bunga (baris 4) hanya untuk simpanan, pinjaman, obligasi, dan sejenisnya."
+    },
+    {
+     "k": "d_keuntunganModal_diterima",
+     "m": "Baris 2 untuk keuntungan modal usaha rumah tangga (bagi hasil), bukan saham atau koperasi."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Saham PT dan koperasi punya baris sendiri di V.D. Baris berapa, dan adakah kolom dibayar?",
+    "Jumlahkan dividen dan SHU."
+   ],
+   "langkah": [
+    "<code>{dividen} + {shu} = {gab}</code> → V.D baris 3, Kolom (2) (diterima).",
+    "Baris ini tidak punya kolom dibayar."
+   ],
+   "pembahasan": "Keuntungan atas kepemilikan saham pada PT, PT Persero, yayasan, dan koperasi (dividen, termasuk sisa hasil usaha koperasi) dicatat di V.D Rincian 3 saat sudah diterima rumah tangga.",
+   "rujukan": "Buku 4 hlm. 334"
+  }
+ },
+ {
+  "kode": "E20",
+  "parameter": {
+   "beli": {
+    "baku": 15000000,
+    "pilihan": [
+     10000000,
+     12000000,
+     15000000,
+     18000000,
+     20000000
+    ]
+   },
+   "jual": {
+    "baku": 4000000,
+    "pilihan": [
+     2000000,
+     3000000,
+     4000000,
+     5000000,
+     6000000
+    ]
+   }
+  },
+  "turunan": {
+   "selisih": "beli-jual"
+  },
+  "kasus": {
+   "kode": "E20",
+   "level": "E",
+   "judul": "Membeli dan menjual emas batangan",
+   "cerita": "Setahun terakhir rumah tangga membeli emas batangan {beli:rp} untuk disimpan sebagai penyimpan nilai, dan menjual emas batangan lama {jual:rp}. Emas itu tidak dipakai untuk usaha maupun dikonsumsi.",
+   "blok": [
+    "G"
+   ],
+   "kunci": {
+    "g_berharga_tambah": "=beli",
+    "g_berharga_kurang": "=jual"
+   },
+   "jebakan": [
+    {
+     "k": "g_mesin_tambah",
+     "m": "Emas batangan bukan mesin atau peralatan usaha. Ia barang berharga (baris 5)."
+    }
+   ],
+   "alternatif": [
+    {
+     "k": "g_berharga_tambah",
+     "v": "=selisih",
+     "m": "Penambahan dan pengurangan dicatat di kolom terpisah, bukan selisihnya."
+    }
+   ],
+   "petunjuk": [
+    "Barang yang ditahan sebagai penyimpan nilai, bukan untuk produksi atau konsumsi, masuk baris aset yang mana?",
+    "Pembelian = penambahan, penjualan = pengurangan."
+   ],
+   "langkah": [
+    "Pembelian <code>{beli}</code> → V.G baris 5 (barang berharga) Kolom (2).",
+    "Penjualan <code>{jual}</code> → V.G baris 5 Kolom (3)."
+   ],
+   "pembahasan": "Barang berharga (emas batangan, batu dan logam mulia, barang antik, lukisan) adalah barang bernilai tinggi yang ditahan sebagai penyimpan nilai. Penambahan mencakup pembelian, pengurangan mencakup penjualan.",
+   "rujukan": "Buku 4 hlm. 339 dan 342"
+  }
+ },
+ {
+  "kode": "E21",
+  "parameter": {
+   "pasir": {
+    "baku": 1500000,
+    "pilihan": [
+     1000000,
+     1250000,
+     1500000,
+     2000000,
+     2500000
+    ]
+   }
+  },
+  "turunan": {},
+  "kasus": {
+   "kode": "E21",
+   "level": "E",
+   "judul": "Membeli pasir untuk pembangunan masjid",
+   "cerita": "Pak Hendri membeli pasir seharga {pasir:rp} untuk pembangunan masjid kampung dan menyerahkannya kepada panitia pembangunan. Uangnya diambil dari tabungan. Abaikan pendapatan dan pengeluaran lainnya.",
+   "blok": [
+    "E",
+    "F",
+    "VII"
+   ],
+   "kunci": {
+    "f_nirlaba_bangunanB": "=pasir",
+    "vii_p1": "=pasir"
+   },
+   "jebakan": [
+    {
+     "k": "e_nirlaba_barangB",
+     "m": "Pemberian untuk membentuk barang modal pihak lain adalah transfer modal (V.F), bukan transfer berjalan V.E."
+    },
+    {
+     "k": "f_nirlaba_lahanB",
+     "m": "Pasir bukan lahan atau barang berharga. Gunakan kolom (4) untuk bahan bangunan."
+    },
+    {
+     "k": "vii_g1",
+     "m": "Ini bukan menabung. Dana berasal dari pengambilan tabungan, yang masuk sisi Penerimaan Rincian 1."
+    }
+   ],
+   "alternatif": [],
+   "petunjuk": [
+    "Penerimanya lembaga nirlaba dan tujuannya membentuk barang modal. Blok V mana, dan baris berapa?",
+    "Pemberi bukan pemilik aset: senilai itu juga dicatat sebagai pengambilan tabungan di VII."
+   ],
+   "langkah": [
+    "V.F baris 4 (lembaga nirlaba) Kolom (4) = <code>{pasir}</code>.",
+    "VII Penerimaan Rincian 1 Kolom (2) (pengambilan tabungan) = <code>{pasir}</code>."
+   ],
+   "pembahasan": "Jika pemberi bukan pemilik aset atau sengaja membeli untuk membentuk barang modal di pihak penerima, transfer dicatat di V.F dan senilai yang sama dicatat sebagai pengambilan tabungan di VII Rincian 1 Kolom 2. Contoh Buku 4: membeli pasir untuk pembangunan masjid, transfer dibayar ke lembaga nirlaba di V.F Kolom 4.",
+   "rujukan": "Buku 4 hlm. 340"
+  }
+ }
+]

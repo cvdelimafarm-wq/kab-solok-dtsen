@@ -10,7 +10,8 @@ import { kasusDariBenih } from "../vanguard/kasus/acak";
 
 let tabel: Tabel = {};
 let gagalTabel = false;
-vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu(tabel, () => (gagalTabel ? { code: "42P01", message: "relation does not exist" } : null)) }));
+let hook: (n: string) => { code?: string; message: string } | null = () => null;
+vi.mock("@/lib/supabaseServer", () => ({ createClient: () => buatDbPalsu(tabel, (n: string) => (gagalTabel ? { code: "42P01", message: "relation does not exist" } : hook(n))) }));
 vi.mock("@/lib/sigapAkses", () => ({
   sesiDariHeader: (h: Headers) => (h.get("x-akun") ? Number(h.get("x-akun")) : null),
   aktorDariHeader: (h: Headers) => (h.get("x-aktor") ? Number(h.get("x-aktor")) : null),
@@ -91,7 +92,7 @@ describe("pengundi ujian", () => {
     }
   });
   it("kolam memuat K01, K02, A01–A13 dan B01–B10", () => {
-    expect(KOLAM.map((x) => x.kode).sort()).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11", "K01", "K02"]);
+    expect(KOLAM.map((x) => x.kode).sort()).toEqual(["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11", "A12", "A13", "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11", "D01", "D02", "D03", "D04", "D05", "D06", "D07", "D08", "D09", "D10", "D11", "D12", "D13", "D14", "D15", "D16", "D17", "D19", "D20", "D21", "D22", "E01", "E02", "E03", "E04", "E05", "E06", "E07", "E08", "E09", "E10", "E11", "E12", "E13", "E14", "E15", "E16", "E17", "E18", "E19", "E20", "E21", "K01", "K02"]);
   });
 });
 
@@ -128,7 +129,7 @@ const ambil = (qs = "", h: Record<string, string> = kepala()) => GET(new NextReq
 const kosong = (row: Record<string, unknown>) => (row.jenis === "k" ? [] : {});
 const kunciDari = (kasus: string, jenis: string, benih: number) => (jenis === "k" ? soalK(kasus, benih)!.kunci : kasusDariBenih(kasus, benih)!.kunci);
 
-beforeEach(() => { process.env.SUPABASE_SERVICE_ROLE_KEY = "kunci-uji"; process.env.NEXT_PUBLIC_SUPABASE_URL = "http://uji.local"; tabel = {}; });
+beforeEach(() => { hook = () => null; process.env.SUPABASE_SERVICE_ROLE_KEY = "kunci-uji"; process.env.NEXT_PUBLIC_SUPABASE_URL = "http://uji.local"; tabel = {}; });
 
 describe("rute sertifikasi", () => {
   it("401 tanpa sesi; mode lihat (masuk sebagai) tidak boleh menulis", async () => {
@@ -220,5 +221,59 @@ describe("rute sertifikasi", () => {
     expect(ring.berjalan).toBeNull(); expect(ring.status.sudahBersertifikat).toBe(false); expect(ring.sertifikat.tertinggi).toBeNull();
     expect(ring.status.sertifikasiBoleh).toBe(false); // jatah hari ini terpakai
     expect((await post({ aksi: "mulai", jenis: "latihan" })).status).toBe(200); // latihan tetap boleh
+  });
+});
+
+describe("pembinaan berkelanjutan (V8)", () => {
+  const kunciButir = (row: Record<string, unknown>) => kunciDari(row.kasus as string, row.jenis as string, row.benih as number);
+  async function selesaikan(ujian: number) {
+    for (const row of tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === ujian)) await post({ aksi: "jawab", ujian, urut: row.urut, isian: kunciButir(row) });
+    return (await post({ aksi: "selesai", ujian })).json();
+  }
+  it("latihan harian: 3 butir, soal hari itu tetap bagi akun yang sama (juga setelah dibatalkan), beda antar akun", async () => {
+    const a = await (await post({ aksi: "mulai", jenis: "harian" })).json();
+    expect(a.jumlah).toBe(3);
+    const set1 = tabel.sigap_vanguard_ujian_butir.map((x) => `${x.kasus}:${x.benih}`);
+    await post({ aksi: "batal", ujian: a.ujian });
+    const b = await (await post({ aksi: "mulai", jenis: "harian" })).json();
+    expect(b.ujian).not.toBe(a.ujian);
+    expect(tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === b.ujian).map((x) => `${x.kasus}:${x.benih}`)).toEqual(set1);
+    await post({ aksi: "batal", ujian: b.ujian });
+    const c = await (await post({ aksi: "mulai", jenis: "harian" }, kepala("88"))).json();
+    expect(tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === c.ujian).map((x) => `${x.kasus}:${x.benih}`)).not.toEqual(set1);
+  });
+  it("latihan harian selesai: rincian langsung tampil, streak 1, tidak bisa dua kali, tidak menjadi sertifikat dan tidak menghabiskan jatah sertifikasi", async () => {
+    const a = await (await post({ aksi: "mulai", jenis: "harian" })).json();
+    const row = tabel.sigap_vanguard_ujian_butir.find((x) => x.ujian_id === a.ujian)!;
+    const j = await (await post({ aksi: "jawab", ujian: a.ujian, urut: row.urut, isian: kosong(row) })).json();
+    if (!j.benar) expect(Array.isArray(j.rincian)).toBe(true);
+    for (const x of tabel.sigap_vanguard_ujian_butir.filter((y) => y.ujian_id === a.ujian && y.urut !== row.urut)) await post({ aksi: "jawab", ujian: a.ujian, urut: x.urut, isian: kunciButir(x) });
+    await post({ aksi: "selesai", ujian: a.ujian, menyerah: true });
+    const ring = await (await ambil()).json();
+    expect(ring.harian).toMatchObject({ sekarang: 1, terpanjang: 1, selesaiHariIni: true });
+    expect(ring.status.sudahBersertifikat).toBe(false); expect(ring.status.sertifikasiBoleh).toBe(true); expect(ring.sertifikat.tertinggi).toBeNull();
+    const lagi = await post({ aksi: "mulai", jenis: "harian" }); expect(lagi.status).toBe(409);
+  });
+  it("tantangan mingguan: 5 butir yang SAMA untuk semua petugas, disimpan sekali, satu kali per minggu", async () => {
+    const a = await (await post({ aksi: "mulai", jenis: "tantangan" })).json();
+    expect(a.jumlah).toBe(5);
+    const set = (u: number) => tabel.sigap_vanguard_ujian_butir.filter((x) => x.ujian_id === u).map((x) => `${x.urut}:${x.kasus}:${x.benih}`);
+    const b = await (await post({ aksi: "mulai", jenis: "tantangan" }, kepala("99"))).json();
+    expect(set(b.ujian)).toEqual(set(a.ujian));
+    expect(tabel.sigap_vanguard_tantangan).toHaveLength(1);
+    const hasil = await selesaikan(a.ujian);
+    expect(hasil.hasil.skor).toBe(100);
+    expect((await post({ aksi: "mulai", jenis: "tantangan" })).status).toBe(409);
+    expect((await (await ambil()).json()).tantangan.selesai).toBe(true);
+  });
+  it("kesegaran sertifikat: segar sesaat setelah sertifikasi selesai", async () => {
+    const m = await (await post({ aksi: "mulai", jenis: "sertifikasi" })).json();
+    await selesaikan(m.ujian);
+    const ring = await (await ambil()).json();
+    expect(ring.kesegaran).toMatchObject({ status: "segar", umurHari: 0 });
+  });
+  it("SQL pembinaan belum dijalankan (CHECK jenis menolak 'harian') = 503 dengan pesan jelas", async () => {
+    hook = (n) => (n === "sigap_vanguard_ujian:insert" ? { code: "23514", message: "violates check constraint" } : null);
+    const r = await post({ aksi: "mulai", jenis: "harian" }); expect(r.status).toBe(503); expect((await r.json()).error).toMatch(/SQL/);
   });
 });

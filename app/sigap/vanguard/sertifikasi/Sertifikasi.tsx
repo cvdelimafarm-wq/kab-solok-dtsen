@@ -26,19 +26,23 @@ import type { KasusPublik, Nilai } from "@/lib/vanguard/tipe";
 import { Lambang } from "../Logo";
 import PapanIsianK, { type Isian } from "../kuesioner/PapanIsianK";
 
-type Layar = "beranda" | "ujian" | "butir" | "hasil";
+type Layar = "beranda" | "ujian" | "butir" | "hasil" | "usul";
+type JenisUjian = "sertifikasi" | "latihan" | "harian" | "tantangan";
 type Ringkas = { ujian: number; tingkat: number | null; skor: number | null; selesai_at: string | null } | null;
 type Beranda = {
   status: { sertifikasiBoleh: boolean; alasan: string | null; bukaLagi: string | null; sudahBersertifikat: boolean };
   berjalan: number | null; jumlahButir: number;
-  riwayat: { ujian: number; jenis: "sertifikasi" | "latihan"; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null }[];
+  kesegaran: { status: "segar" | "segera" | "perlu"; umurHari: number; sisaHari: number; jatuhTempo: string } | null;
+  harian: { sekarang: number; terpanjang: number; selesaiHariIni: boolean; mulaiHariIni: boolean };
+  tantangan: { minggu: number; selesai: boolean };
+  riwayat: { ujian: number; jenis: JenisUjian; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null }[];
   sertifikat: { terbaru: Ringkas; tertinggi: Ringkas };
 };
 type Rincian = { jenis: string; tingkat: string; pesan: string; sel: string | null };
 type ButirRingkas = { urut: number; kode: string; jenis: "k" | "v1"; judul: string; terjawab: boolean; benar?: boolean | null; poin?: number | null; rincian?: Rincian[] };
-type UjianDetail = { ujian: { id: number; jenis: "sertifikasi" | "latihan"; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; kedaluwarsa: boolean }; butir: ButirRingkas[] };
+type UjianDetail = { ujian: { id: number; jenis: JenisUjian; jumlah: number; mulai_at: string; selesai_at: string | null; skor: number | null; tingkat: number | null; kedaluwarsa: boolean }; butir: ButirRingkas[] };
 type Soal = { soal: { jenis: "k" | "v1"; kode: string; benih: number; judul: string; data: Record<string, unknown> }; terjawab: boolean };
-type HasilUjian = { hasil: { skor: number; butirFatal: number; tingkat: number; nama: string }; jenis: "sertifikasi" | "latihan"; review: { urut: number; kode: string; judul: string; terjawab: boolean; benar: boolean | null; poin: number; rincian: Rincian[] }[] };
+type HasilUjian = { hasil: { skor: number; butirFatal: number; tingkat: number; nama: string }; jenis: JenisUjian; review: { urut: number; kode: string; judul: string; terjawab: boolean; benar: boolean | null; poin: number; rincian: Rincian[] }[] };
 type Jawab = { benar: boolean; poin: number; semuaTerjawab: boolean; rincian?: Rincian[] };
 
 const wibTeks = (iso: string | null) => (iso ? new Date(iso).toLocaleString("id-ID", { timeZone: "Asia/Jakarta", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " WIB" : "");
@@ -48,7 +52,10 @@ const Bintang = ({ n, pop }: { n: number; pop?: boolean }) => (
     {[1, 2, 3, 4, 5].map((i) => <span key={i} className={i <= n ? "" : "off"}>★</span>)}
   </div>
 );
-const LABEL_JENIS_UJIAN = { sertifikasi: "Sertifikasi", latihan: "Latihan" } as const;
+const LABEL_JENIS_UJIAN = { sertifikasi: "Sertifikasi", latihan: "Latihan", harian: "Latihan harian", tantangan: "Tantangan mingguan" } as const;
+const LABEL_KESEGARAN = { segar: "Segar", segera: "Segera disegarkan", perlu: "Perlu disegarkan" } as const;
+type Usulanku = { id: number; judul: string; status: string; catatan_admin: string | null; dibuat_at: string };
+const LABEL_STATUS_USULAN: Record<string, string> = { baru: "Menunggu tinjauan", diterima: "Diterima", ditolak: "Belum dapat dipakai", dikerjakan: "Sedang dijadikan soal" };
 const kunciDrafUjian = (ujian: number, urut: number) => `vanguard.ujian.${ujian}.${urut}`;
 
 export default function Sertifikasi() {
@@ -86,10 +93,10 @@ export default function Sertifikasi() {
     void muatBeranda();
   }, [muatBeranda]);
 
-  const keAtas = () => { setPad(null); setLayar((l) => (l === "butir" ? "ujian" : l === "ujian" || l === "hasil" ? "beranda" : l)); if (layar === "ujian" || layar === "hasil") void muatBeranda(); skrol.current?.scrollTo({ top: 0 }); };
+  const keAtas = () => { setPad(null); setLayar((l) => (l === "butir" ? "ujian" : l === "ujian" || l === "hasil" || l === "usul" ? "beranda" : l)); if (layar === "ujian" || layar === "hasil" || layar === "usul") void muatBeranda(); skrol.current?.scrollTo({ top: 0 }); };
   useTutupDenganBack(layar !== "beranda", keAtas);
 
-  const mulai = async (jenis: "sertifikasi" | "latihan") => {
+  const mulai = async (jenis: JenisUjian) => {
     setKerja(true);
     const r = await api<{ ujian: number; jumlah: number }>("/api/sigap/vanguard/sertifikasi", { method: "POST", body: JSON.stringify({ aksi: "mulai", jenis }) });
     if (r) { const d = await muatDetail(r.ujian); if (d) { setHasil(null); setLayar("ujian"); } }
@@ -143,6 +150,18 @@ export default function Sertifikasi() {
     setKerja(false);
   };
 
+  // ---- usul kasus ----
+  const [usulanku, setUsulanku] = useState<Usulanku[]>([]);
+  const [formUsul, setFormUsul] = useState({ judul: "", cerita: "", jawaban: "", blok: "" });
+  const [usulOk, setUsulOk] = useState(false);
+  const muatUsulan = useCallback(async () => { const r = await api<{ usulan: Usulanku[] }>("/api/sigap/vanguard/usulan"); if (r) setUsulanku(r.usulan); }, [api]);
+  const kirimUsul = async () => {
+    setKerja(true); setUsulOk(false);
+    const r = await api<{ id: number }>("/api/sigap/vanguard/usulan", { method: "POST", body: JSON.stringify(formUsul) });
+    if (r) { setUsulOk(true); setFormUsul({ judul: "", cerita: "", jawaban: "", blok: "" }); await muatUsulan(); }
+    setKerja(false);
+  };
+
   // ---- lembar V–VII (butir lama) ----
   const kasusV1 = soal && soal.soal.jenis === "v1" ? (soal.soal.data as unknown as KasusPublik) : null;
   const e = useMemo(() => compute(vals), [vals]);
@@ -162,8 +181,8 @@ export default function Sertifikasi() {
 
   const terjawab = detail ? detail.butir.filter((b) => b.terjawab).length : 0;
   const total = detail ? detail.butir.length : 0;
-  const latihan = detail?.ujian.jenis === "latihan";
-  const judulLayar = layar === "hasil" ? "Hasil ujian" : layar === "butir" ? `Butir ${urut} dari ${total}` : layar === "ujian" ? (latihan ? "Latihan ujian" : "Ujian Sertifikasi") : "Sertifikasi kemampuan";
+  const latihan = !!detail && detail.ujian.jenis !== "sertifikasi"; // latihan, harian, tantangan: rincian langsung, tidak mengubah sertifikat
+  const judulLayar = layar === "hasil" ? "Hasil ujian" : layar === "usul" ? "Usul kasus" : layar === "butir" ? `Butir ${urut} dari ${total}` : layar === "ujian" ? (detail ? (detail.ujian.jenis === "sertifikasi" ? "Ujian Sertifikasi" : LABEL_JENIS_UJIAN[detail.ujian.jenis]) : "Ujian") : "Sertifikasi kemampuan";
   const persen = layar === "beranda" ? 0 : total ? (terjawab / total) * 100 : 0;
 
   return (
@@ -176,8 +195,8 @@ export default function Sertifikasi() {
       <div className="appbar">
         <div className="l1"><b>BADAN PUSAT STATISTIK · VSEN26.KP</b><span className="r">RAHASIA</span></div>
         <h1>{judulLayar}</h1>
-        {layar !== "beranda" && <div className="l3"><span>{terjawab} dari {total} butir dijawab</span>{detail && <span>{LABEL_JENIS_UJIAN[detail.ujian.jenis]}</span>}</div>}
-        {layar !== "beranda" && <div className="bar"><i style={{ width: `${persen}%` }} /></div>}
+        {layar !== "beranda" && layar !== "usul" && <div className="l3"><span>{terjawab} dari {total} butir dijawab</span>{detail && <span>{LABEL_JENIS_UJIAN[detail.ujian.jenis]}</span>}</div>}
+        {layar !== "beranda" && layar !== "usul" && <div className="bar"><i style={{ width: `${persen}%` }} /></div>}
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
@@ -193,6 +212,7 @@ export default function Sertifikasi() {
                     <Bintang n={beranda.sertifikat.tertinggi.tingkat ?? 0} />
                     <div className="nm">{NAMA_TINGKAT[beranda.sertifikat.tertinggi.tingkat ?? 1]}</div>
                     <div className="sub">Skor {beranda.sertifikat.tertinggi.skor} · {wibTeks(beranda.sertifikat.tertinggi.selesai_at)}</div>
+                    {beranda.kesegaran && <div className={`sr-segar ${beranda.kesegaran.status}`} role="status">{LABEL_KESEGARAN[beranda.kesegaran.status]}{beranda.kesegaran.status === "segera" ? ` · sisa ${beranda.kesegaran.sisaHari} hari` : beranda.kesegaran.status === "perlu" ? ` · sudah ${beranda.kesegaran.umurHari} hari` : ""}</div>}
                     {beranda.sertifikat.terbaru && beranda.sertifikat.terbaru.ujian !== beranda.sertifikat.tertinggi.ujian && <div className="sub">Ujian terbaru: {NAMA_TINGKAT[beranda.sertifikat.terbaru.tingkat ?? 1]} (skor {beranda.sertifikat.terbaru.skor})</div>}
                   </>
                 ) : (
@@ -217,6 +237,22 @@ export default function Sertifikasi() {
                 </div>
               )}
               <div className="sheet">
+                <span className="tag">Latihan harian</span>
+                <div className="sr-streak" role="status"><span className="api" aria-hidden>🔥</span><b>{beranda.harian.sekarang}</b> hari beruntun<small>terpanjang {beranda.harian.terpanjang} hari</small></div>
+                <p style={{ fontSize: 12.5, marginTop: 4 }}>3 butir (±5 menit) dengan angka berbeda tiap hari. Sabtu dan Minggu tidak memutus rangkaian, dan hari ini yang belum berlatih tidak memutus apa pun.</p>
+                <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn pri" disabled={kerja || (beranda.harian.selesaiHariIni && !beranda.berjalan)} onClick={() => void mulai("harian")}>{beranda.harian.selesaiHariIni ? "Sudah selesai hari ini ✓" : beranda.harian.mulaiHariIni ? "Lanjutkan latihan harian" : "Mulai latihan harian"}</button></div>
+              </div>
+              <div className="sheet">
+                <span className="tag">Tantangan minggu ini</span>
+                <p style={{ fontSize: 12.5 }}>5 butir yang sama untuk semua petugas minggu ini, disusun dari kesalahan yang paling sering muncul di Vanguard seminggu terakhir. Terbit tiap Senin.</p>
+                <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" disabled={kerja || (beranda.tantangan.selesai && !beranda.berjalan)} onClick={() => void mulai("tantangan")}>{beranda.tantangan.selesai ? "Tantangan minggu ini selesai ✓" : "Ikuti tantangan mingguan"}</button></div>
+              </div>
+              <div className="sheet">
+                <span className="tag">Usul kasus</span>
+                <p style={{ fontSize: 12.5 }}>Pernah menemui kasus janggal di lapangan? Usulkan sebagai soal (tanpa nama atau data asli responden). Usulan yang diterima dijadikan soal dengan nama Anda tercantum.</p>
+                <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" onClick={() => { setLayar("usul"); void muatUsulan(); }}>Usul kasus baru</button></div>
+              </div>
+              <div className="sheet">
                 <span className="tag">Tingkat kemampuan</span>
                 <ul className="sr-aturan">{[1, 2, 3, 4, 5].map((n) => <li key={n}>{"★".repeat(n)} <b>{NAMA_TINGKAT[n]}</b></li>)}</ul>
                 <p style={{ fontSize: 12, color: "#444", marginTop: 6 }}>Sertifikat ini hanya catatan kepemilikan kemampuan; belum berdampak ke penilaian atau penugasan apa pun.</p>
@@ -236,9 +272,35 @@ export default function Sertifikasi() {
           )
         )}
 
+        {layar === "usul" && (
+          <>
+            <div className="sheet">
+              <span className="tag">Usul kasus baru</span>
+              <p style={{ fontSize: 12.5, marginBottom: 6 }}>Tulis dengan contoh rekaan. Jangan menulis nama, nomor KK, atau NIK asli responden.</p>
+              <label className="kp-f"><span>Judul kasus</span><input className="teks" maxLength={120} value={formUsul.judul} onChange={(e) => setFormUsul({ ...formUsul, judul: e.target.value })} placeholder="mis. Beras raskin dibayar tunai" /></label>
+              <label className="kp-f"><span>Ceritakan kasusnya</span><textarea className="sr-area" rows={5} maxLength={1500} value={formUsul.cerita} onChange={(e) => setFormUsul({ ...formUsul, cerita: e.target.value })} placeholder="Apa yang terjadi di rumah tangga itu, dengan angka contoh." /></label>
+              <label className="kp-f"><span>Menurut Anda dicatat bagaimana? <small>(boleh kosong)</small></span><textarea className="sr-area" rows={3} maxLength={1500} value={formUsul.jawaban} onChange={(e) => setFormUsul({ ...formUsul, jawaban: e.target.value })} /></label>
+              <label className="kp-f"><span>Blok yang terkait <small>(boleh kosong)</small></span><input className="teks" maxLength={60} value={formUsul.blok} onChange={(e) => setFormUsul({ ...formUsul, blok: e.target.value })} placeholder="mis. V.E atau IV.1" /></label>
+              {usulOk && <div className="catat ya" role="status">Terima kasih! Usulan Anda terkirim dan akan ditinjau.</div>}
+              <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn pri" disabled={kerja || formUsul.judul.trim().length < 5 || formUsul.cerita.trim().length < 30} onClick={() => void kirimUsul()}>{kerja ? "Mengirim…" : "Kirim usulan"}</button></div>
+            </div>
+            {usulanku.length > 0 && (
+              <div className="sheet">
+                <span className="tag">Usulan saya</span>
+                {usulanku.map((u) => (
+                  <div key={u.id} className="item" style={{ cursor: "default" }}>
+                    <span className="num">{u.id}</span>
+                    <span className="t">{u.judul}<small>{LABEL_STATUS_USULAN[u.status] ?? u.status} · {wibTeks(u.dibuat_at)}{u.catatan_admin ? ` · Catatan: ${u.catatan_admin}` : ""}</small></span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
         {layar === "ujian" && detail && (
           <>
-            {latihan && <div className="catat tidak" role="status"><b>Latihan:</b> format sama dengan ujian, rincian kesalahan tampil langsung, dan tidak mengubah sertifikat.</div>}
+            {latihan && <div className="catat tidak" role="status"><b>{detail.ujian.jenis === "harian" ? "Latihan harian" : detail.ujian.jenis === "tantangan" ? "Tantangan mingguan" : "Latihan"}:</b> rincian kesalahan tampil langsung dan tidak mengubah sertifikat Anda.</div>}
             {detail.ujian.kedaluwarsa && <div className="catat gagal" role="alert">Ujian ini sudah lewat batas waktu. Mulai ujian baru dari beranda.</div>}
             <div className="sr-chips" role="list">
               {detail.butir.map((b) => <button key={b.urut} type="button" role="listitem" className={`sr-chip${b.terjawab ? " ya" : ""}`} aria-label={`Butir ${b.urut}${b.terjawab ? " sudah dijawab" : ""}`} onClick={() => void bukaButir(b)}>{b.terjawab ? "✓" : b.urut}</button>)}
@@ -294,12 +356,12 @@ export default function Sertifikasi() {
         {layar === "hasil" && hasil && (
           <>
             <div className="sr-kartu">
-              <div className="sub">{hasil.jenis === "sertifikasi" ? "Hasil Ujian Sertifikasi" : "Hasil latihan"}</div>
+              <div className="sub">{hasil.jenis === "sertifikasi" ? "Hasil Ujian Sertifikasi" : `Hasil ${LABEL_JENIS_UJIAN[hasil.jenis].toLowerCase()}`}</div>
               <Bintang n={hasil.hasil.tingkat} pop />
               <div className="nm">{hasil.hasil.nama}</div>
               <div className="sr-skor" style={{ marginTop: 6 }}>{hasil.hasil.skor}</div>
               <div className="sub">skor dari 100 · {hasil.hasil.butirFatal} butir memuat kesalahan fatal</div>
-              {hasil.jenis === "latihan" && <div className="sub" style={{ marginTop: 4 }}>Latihan tidak mengubah sertifikat Anda.</div>}
+              {hasil.jenis !== "sertifikasi" && <div className="sub" style={{ marginTop: 4 }}>Tingkat di atas hanya perkiraan dari latihan ini; tidak mengubah sertifikat Anda.{hasil.jenis === "harian" ? " Rangkaian harian Anda bertambah." : ""}</div>}
             </div>
             <div className="sheet"><span className="tag">Tinjauan butir</span>
               {hasil.review.map((r) => (
