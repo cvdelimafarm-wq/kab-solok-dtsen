@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { angka, awalBulan, awalMinggu, bebanDelegasiHari, tambahHari, targetHariIni, tglPendek } from "@/lib/delego/hitung";
 import { rentangMinggu, susunRekap, type SelRekap } from "@/lib/delego/rekap";
+import { teksJumlah } from "@/lib/delego/teknis";
 import { TEKS_STATUS_BUTIR, statusButir } from "@/lib/delego/tinjau";
 import { warnaBeban } from "@/lib/delego/warna";
 import { aksiKeu, useRekap, useSaya } from "../data";
@@ -88,6 +89,7 @@ export default function Jadwal() {
   const aktif = d ? d.delegasi.filter((x) => x.status === "baru" || x.status === "berjalan") : [];
   const hariIniAda = aktif.filter((x) => bebanDelegasiHari(x, hari) > 0);
   const usulan = d ? d.delegasi.filter((x) => x.status === "usulan") : [];
+  const selesaiHariIni = d ? d.delegasi.filter((x) => x.status === "selesai" && jamWibTeks(x.diubah_at).length > 0 && new Date(new Date(x.diubah_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10) === hari) : [];
 
   const judulRentang = rentang === "hari" ? tglPendek(hari) : rentang === "pekan" ? `${tglPendek(dari)} sampai ${tglPendek(sampai)}` : new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${dari}T00:00:00Z`));
   const bukaSel = baris?.sel.find((x) => x.tanggal === buka) ?? null;
@@ -145,7 +147,7 @@ export default function Jadwal() {
                     <div className="min-w-0">
                       <div className="text-[15px] font-semibold leading-snug">{x.judul}</div>
                       <div className="text-[12.5px] text-[#3B4A57]">
-                        {x.kelas === "perintah" ? "Perintah langsung · " : ""}{x.kegiatan_id ? "Bertaut kegiatan tim" : x.kelompok_nama ?? "Pekerjaan kantor"} · target hari ini {fmt(targetHariIni(x, hari), 1)} {x.perlu_hasil || x.poin_per_satuan ? x.satuan : "poin"} · tenggat {tglPendek(x.tenggat)}{x.tenggat_waktu ? ` pukul ${jamWibTeks(x.tenggat_waktu)} WIB` : ""}
+                        {x.kelas === "perintah" ? "Perintah langsung · " : ""}{x.kegiatan_id ? "Bertaut kegiatan tim" : x.kelompok_nama ?? "Pekerjaan kantor"} · target hari ini {teksJumlah(x, targetHariIni(x, hari), (n) => fmt(n, 1))} · tenggat {tglPendek(x.tenggat)}{x.tenggat_waktu ? ` pukul ${jamWibTeks(x.tenggat_waktu)} WIB` : ""}
                       </div>
                     </div>
                     <Lencana nada={st.nada}>{st.teks}</Lencana>
@@ -164,6 +166,11 @@ export default function Jadwal() {
                 </Kartu>
               );
             })}
+            {selesaiHariIni.length > 0 && (
+              <Kartu judul={`Selesai hari ini (${selesaiHariIni.length})`}>
+                <ul className="m-0 list-none space-y-1 p-0 text-[13.5px]">{selesaiHariIni.map((u) => <li key={u.id} className="flex items-center justify-between gap-2"><span>{u.judul}</span><Lencana nada="hijau">Selesai</Lencana></li>)}</ul>
+              </Kartu>
+            )}
             {usulan.length > 0 && (
               <Kartu judul={`Usulan menunggu persetujuan (${usulan.length})`}>
                 <ul className="m-0 list-none space-y-1 p-0 text-[13.5px]">{usulan.map((u) => <li key={u.id}>{u.judul} <span className="text-[#3B4A57]">· {fmt(angka(u.target_total), 1)} poin</span></li>)}</ul>

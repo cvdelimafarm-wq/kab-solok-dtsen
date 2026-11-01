@@ -91,6 +91,17 @@ describe("susunRekap", () => {
     expect(kosong.kapasitas).toBe(0);
     expect(kosong.lembur).toBe(false);
   });
+  it("pekerjaan selesai tetap dihitung sampai hari penyelesaiannya, bukan hari sesudahnya", () => {
+    const selesai = dg({ status: "selesai", mulai: "2026-11-09", tenggat: "2026-11-13", diubah_at: "2026-11-11T05:00:00Z", target_harian: "30.00" });
+    const h = susunRekap({ ...dasar, delegasi: [selesai], lapangan: [] });
+    const a = h.baris.find((b) => b.akun === 4)!;
+    expect(a.sel.find((s) => s.tanggal === "2026-11-09")!.poin).toBe(30);
+    expect(a.sel.find((s) => s.tanggal === "2026-11-11")!.poin).toBe(30);
+    expect(a.sel.find((s) => s.tanggal === "2026-11-11")!.rincian[0].judul).toContain("(selesai)");
+    expect(a.sel.find((s) => s.tanggal === "2026-11-12")!.poin).toBe(0);
+    const batal = susunRekap({ ...dasar, delegasi: [dg({ status: "batal", diubah_at: "2026-11-11T05:00:00Z" })], lapangan: [] }).baris.find((b) => b.akun === 4)!;
+    expect(batal.total).toBe(0);
+  });
   it("saringan kegiatan hanya menampilkan beban kegiatan itu", () => {
     const masukan = { ...dasar, delegasi: [dg({ kegiatan_id: 6, target_harian: "20.00" }), dg({ kegiatan_id: null, target_harian: "10.00" })], lapangan: [lap({})] };
     const semua = susunRekap(masukan).baris.find((b) => b.akun === 4)!;

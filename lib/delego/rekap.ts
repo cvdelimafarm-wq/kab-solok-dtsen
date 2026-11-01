@@ -52,6 +52,8 @@ export type HasilRekap = {
   adaAkhirPekan: boolean;
 };
 
+const wibTanggal = (iso: string | null | undefined): string | null => (iso ? new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(0, 10) : null);
+
 export const NAMA_KANTOR = "Pekerjaan kantor";
 /** Saringan kegiatan: null = semua (rekap); angka = satu kegiatan SIGAP; "kantor" = butir tanpa kegiatan. */
 export type SaringanKegiatan = number | "kantor" | null;
@@ -107,9 +109,11 @@ export function susunRekap(m: MasukanRekap): HasilRekap {
           bayangan += bebanDelegasiHari({ ...d, status: "baru" }, t);
           continue;
         }
-        const poin = bebanDelegasiHari(d, t);
+        // pekerjaan yang sudah selesai tetap dihitung sampai hari penyelesaiannya (tanggal WIB perubahan terakhir): beban hari yang sudah lewat jangan menyusut karena pekerjaannya sudah beres
+        const selesaiPada = d.status === "selesai" ? wibTanggal(d.diubah_at) : null;
+        const poin = d.status === "selesai" ? (selesaiPada !== null && t <= selesaiPada ? bebanDelegasiHari({ ...d, status: "berjalan" }, t) : 0) : bebanDelegasiHari(d, t);
         if (poin > 0) {
-          rincian.push({ sumber: "delegasi", kegiatanId: id, kegiatan: nama(id), poin, judul: d.judul });
+          rincian.push({ sumber: "delegasi", kegiatanId: id, kegiatan: nama(id), poin, judul: d.status === "selesai" ? `${d.judul} (selesai)` : d.judul });
           catat(id, nama(id));
         }
       }
