@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEL_PER_BLOK } from "../vanguard/sel";
-import { KOLOM_IV1, KOLOM_IV2, SKEMA_PANTAU, adaKolomPantau, kolomRekapIv32, petaSel, tabelKomoditas } from "../vanguard/pantau/peta";
+import { KOLOM_IV1, KOLOM_IV2, SKEMA_PANTAU, adaKolomPantau, kolomCetakKeVariabelIv1, kolomRekapIv32, namaVariabelKomoditas, petaSel, tabelKomoditas } from "../vanguard/pantau/peta";
 
 describe("pemetaan ke nama kolom PANTAU (V6-pra)", () => {
   it("skema.json memuat 10 berkas ekspor dan hanya nama/tipe kolom (tanpa data)", () => {
@@ -40,5 +40,17 @@ describe("pemetaan ke nama kolom PANTAU (V6-pra)", () => {
     for (const [k, kol] of Object.entries(KOLOM_IV1)) { expect(Number(k)).toBeGreaterThanOrEqual(5); expect(adaKolomPantau("Komoditi_Makanan_RT", kol) || kol === "KOLOM7", kol).toBe(true); }
     for (const kol of Object.values(KOLOM_IV2)) expect(adaKolomPantau("Komoditi_Non_Makanan", kol), kol).toBe(true);
     for (let r = 1; r <= 16; r++) for (const k of [3, 4, 5] as const) expect(adaKolomPantau("Rekap_B43_RT", kolomRekapIv32(r, k)), `${r}/${k}`).toBe(true);
+  });
+  it("dua dialek: V.A/V.B per baris dan barang berharga V.G punya nama berbeda pada aturan konsistensi PANTAU; selebihnya sama", () => {
+    expect(petaSel("a1_uang")).toMatchObject({ kolom: "B5AK5", aturan: "MB5AK5" });
+    expect(petaSel("b1_biaya")).toMatchObject({ kolom: "B5BK6", aturan: "MB5BK6" });
+    expect(petaSel("g_berharga_tambah")).toMatchObject({ kolom: "B5GR5K2", aturan: "B5GR5_1K2", kepastian: "dugaan" });
+    expect(petaSel("g_mesin_kurang")).toMatchObject({ kolom: "B5GR13K3", kepastian: "pasti" });
+    expect(petaSel("e_rtLain_uangB")?.aturan).toBeUndefined();
+  });
+  it("nama variabel komoditas: R{no}K{n}; kolom cetak (5)–(10) = K1–K6", () => {
+    expect([5, 6, 7, 8, 9, 10].map(kolomCetakKeVariabelIv1)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(namaVariabelKomoditas(74, 6)).toBe("R74K6");
+    expect(namaVariabelKomoditas(199, 7)).toBe("R199K7");
   });
 });

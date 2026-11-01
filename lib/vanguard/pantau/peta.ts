@@ -3,12 +3,14 @@
 // (1 Nov 2026) VANGUARD V6-pra: pemetaan nama isian Vanguard (id sel, rincian) ke nama kolom PANTAU. Dasar: skema 10 berkas ekspor "Data KP" dari PANTAU (skema.json = HANYA nama/tipe kolom, tanpa data responden).
 // Id Vanguard TIDAK diganti (sudah tersimpan pada rekaman petugas); pemetaan ini dipakai untuk ekspor sebanding dengan PANTAU dan untuk memakai aturan anomali PANTAU sebagai validasi.
 // Pola nama PANTAU: B{blok}{sub}R{rincian}K{kolom} (mis. B5ER3K4 = Blok V.E Rincian 3 Kolom 4). Tabel baris (ART): ART_B5A, ART_B5B (satu baris per catatan). Tabel komoditas: NOURUTKOMO = nomor rincian R.x.
-// kepastian: "pasti" = kolom ada di skema dan pola/nilai contoh cocok dengan kuesioner; "dugaan" = kolom ada tetapi arti barisnya disimpulkan dari pola (perlu dikonfirmasi pada data PANTAU).
+// DUA DIALEK nama: (1) kolom berkas ekspor "Data KP" (skema.json) dan (2) nama variabel pada aturan konsistensi PANTAU (tabel kp_konsistensi_rules, 3.339 aturan KP). Umumnya sama; beda pada V.A/V.B per baris (aturan: MB5AK5..., ekspor: B5AK5...)
+// dan pada barang berharga V.G (aturan: B5GR5_1, dengan B5GR5 = jumlah; ekspor: R5 diduga barang berharga dan R6 jumlah).
+// kepastian: "pasti" = kolom ada di skema DAN dipakai/diuraikan pada aturan konsistensi PANTAU; "dugaan" = hanya disimpulkan dari pola (belum dikonfirmasi).
 
 import skema from "./skema.json";
 
 export type TabelPantau = keyof typeof skema;
-export type PetaKolom = { tabel: TabelPantau; kolom: string; baris?: number; kepastian: "pasti" | "dugaan" };
+export type PetaKolom = { tabel: TabelPantau; kolom: string; baris?: number; kepastian: "pasti" | "dugaan"; /** nama variabel pada mesin aturan konsistensi PANTAU (kp_konsistensi_rules) bila berbeda dari nama kolom ekspor */ aturan?: string };
 
 export const SKEMA_PANTAU = skema as Record<string, { berkas: string; kolom: { n: string; t: string; p: number; d?: number }[] }>;
 export const adaKolomPantau = (tabel: string, kolom: string): boolean => !!SKEMA_PANTAU[tabel]?.kolom.some((k) => k.n === kolom);
@@ -24,8 +26,8 @@ const F_KOLOM: Record<string, number> = { bangunanD: 2, lahanD: 3, bangunanB: 4,
 /** Nama kolom PANTAU untuk sebuah id sel Vanguard (V.A sampai VII). null bila id tidak dikenal. */
 export function petaSel(id: string): PetaKolom | null {
   let m: RegExpExecArray | null;
-  if ((m = /^a(\d)_(uang|barang|lembur)$/.exec(id))) return { tabel: "ART_B5A", kolom: `B5AK${{ uang: 5, barang: 6, lembur: 7 }[m[2]]}`, baris: Number(m[1]), kepastian: "pasti" };
-  if ((m = /^b(\d)_(produksi|biaya)$/.exec(id))) return { tabel: "ART_B5B", kolom: `B5BK${m[2] === "produksi" ? 5 : 6}`, baris: Number(m[1]), kepastian: "pasti" };
+  if ((m = /^a(\d)_(uang|barang|lembur)$/.exec(id))) return { tabel: "ART_B5A", kolom: `B5AK${{ uang: 5, barang: 6, lembur: 7 }[m[2]]}`, baris: Number(m[1]), kepastian: "pasti", aturan: `MB5AK${{ uang: 5, barang: 6, lembur: 7 }[m[2]]}` };
+  if ((m = /^b(\d)_(produksi|biaya)$/.exec(id))) return { tabel: "ART_B5B", kolom: `B5BK${m[2] === "produksi" ? 5 : 6}`, baris: Number(m[1]), kepastian: "pasti", aturan: `MB5BK${m[2] === "produksi" ? 5 : 6}` };
   if (id === "c_sewaRumah_produksi") return { tabel: "Rekap_B5A_B5E_RT", kolom: "B5CR1K2", kepastian: "pasti" };
   if (id === "c_hasilLain_produksi") return { tabel: "Rekap_B5A_B5E_RT", kolom: "B5CR2K2", kepastian: "pasti" };
   if (id === "c_hasilLain_biaya") return { tabel: "Rekap_B5A_B5E_RT", kolom: "B5CR2K3", kepastian: "pasti" };
@@ -38,11 +40,12 @@ export function petaSel(id: string): PetaKolom | null {
   if ((m = /^f_(\w+)_(bangunanD|lahanD|bangunanB|lahanB)$/.exec(id)) && F_BARIS[m[1]]) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5FR${F_BARIS[m[1]]}K${F_KOLOM[m[2]]}`, kepastian: "pasti" };
   if ((m = /^g_(\w+)_(tambah|kurang)$/.exec(id))) {
     const r = G_SUB[m[1]] ?? G_UTAMA[m[1]];
-    if (r) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5GR${r}K${m[2] === "tambah" ? 2 : 3}`, kepastian: G_SUB[m[1]] ? "dugaan" : "pasti" };
+    if (r === 5) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5GR5K${m[2] === "tambah" ? 2 : 3}`, kepastian: "dugaan", aturan: `B5GR5_1K${m[2] === "tambah" ? 2 : 3}` };
+    if (r) return { tabel: "Rekap_B5F_B5G_RT", kolom: `B5GR${r}K${m[2] === "tambah" ? 2 : 3}`, kepastian: "pasti" };
   }
-  if (id === "vi_g1") return { tabel: "Rekap_B6_B7_RT", kolom: "B6R1K4", kepastian: "dugaan" };
-  if ((m = /^vii_p([1-5])$/.exec(id))) return { tabel: "Rekap_B6_B7_RT", kolom: `B7R${m[1]}K2`, kepastian: "dugaan" };
-  if ((m = /^vii_g([1-5])$/.exec(id))) return { tabel: "Rekap_B6_B7_RT", kolom: `B7R${m[1]}K4`, kepastian: "dugaan" };
+  if (id === "vi_g1") return { tabel: "Rekap_B6_B7_RT", kolom: "B6R1K4", kepastian: "pasti" }; // aturan PANTAU: B6R1K4 = B433R9K3 × 12 (konsumsi)
+  if ((m = /^vii_p([1-5])$/.exec(id))) return { tabel: "Rekap_B6_B7_RT", kolom: `B7R${m[1]}K2`, kepastian: "pasti" }; // R6 = jumlah (R1..R5), R7 = selisih
+  if ((m = /^vii_g([1-5])$/.exec(id))) return { tabel: "Rekap_B6_B7_RT", kolom: `B7R${m[1]}K4`, kepastian: "pasti" };
   return null;
 }
 
@@ -65,3 +68,12 @@ export const KUNCI_KOMODITAS = { rincian: "NOURUTKOMO", art: "R401", idArt: "IDA
 // ---------------------------------------------------------------- Rekap IV.3 (RT)
 /** Rekap IV.3.2 (R.1–R.16, kolom 3–5) = B432R{r}K{k}; IV.3.3 memakai nama khusus (B433R1AK3 dst.). */
 export const kolomRekapIv32 = (r: number, k: 3 | 4 | 5): string => `B432R${r}K${k}`;
+
+// ---------------------------------------------------------------- penamaan variabel umum PANTAU
+/**
+ * Nama variabel komoditas pada aturan konsistensi PANTAU: `R{nomor rincian}K{n}`, n = nomor KOLOM pada tabel data (BUKAN nomor kolom cetak).
+ * Blok IV.1: cetak (5)(6)(7)(8)(9)(10) = K1..K6; makanan jadi/rokok per ART: cetak (4) kode sumber perolehan = K7.
+ * Blok IV.2: nilai sebulan = K5, nilai setahun = K6, banyaknya (kWh, m3, liter, kg) = K7.
+ */
+export const namaVariabelKomoditas = (rincian: number, k: number): string => `R${rincian}K${k}`;
+export const kolomCetakKeVariabelIv1 = (cetak: number): number => cetak - 4; // (5)→K1 … (10)→K6
