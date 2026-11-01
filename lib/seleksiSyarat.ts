@@ -9,7 +9,7 @@
 
 import { titikSah } from "@/lib/penggunaPool";
 
-export type LevelDomisili = "kecamatan" | "nagari";
+export type LevelDomisili = "kecamatan" | "nagari" | "sls";
 export type SyaratSeleksi = {
   domisili: { aktif: boolean; level: LevelDomisili };
   jarak: { aktif: boolean; maks_km: number };
@@ -30,7 +30,8 @@ export type WilayahSeleksi = {
   kebutuhan_pml: number;
 };
 
-export type KandidatLokasi = { id: number; nama: string; kecamatan: string | null; nagari: string | null; lat: number | null; lng: number | null };
+/** `kode` = idsubsls 16 digit domisili Mitra (bencana_mitra.idsubsls_1303), bila ada; dipakai untuk pencocokan domisili berdasarkan KODE wilayah. */
+export type KandidatLokasi = { id: number; nama: string; kecamatan: string | null; nagari: string | null; lat: number | null; lng: number | null; kode?: string | null };
 
 export type HasilKelayakan = {
   status: "memenuhi" | "tidak" | "perlu_lokasi";
@@ -63,7 +64,7 @@ export function bacaSyarat(mentah: unknown): SyaratSeleksi {
   const o = (mentah ?? {}) as { domisili?: { aktif?: unknown; level?: unknown }; jarak?: { aktif?: unknown; maks_km?: unknown } };
   const km = Number(o.jarak?.maks_km);
   return {
-    domisili: { aktif: o.domisili?.aktif === true, level: o.domisili?.level === "nagari" ? "nagari" : "kecamatan" },
+    domisili: { aktif: o.domisili?.aktif === true, level: o.domisili?.level === "nagari" ? "nagari" : o.domisili?.level === "sls" ? "sls" : "kecamatan" },
     jarak: { aktif: o.jarak?.aktif === true, maks_km: Number.isFinite(km) && km > 0 && km <= MAKS_JARAK_KM ? km : SYARAT_BAWAAN.jarak.maks_km },
   };
 }
@@ -89,15 +90,32 @@ export function nilaiKelayakan(k: KandidatLokasi, wilayah: WilayahSeleksi[], s: 
   }
 
   if (s.domisili.aktif) {
-    const dom = normalWilayah(s.domisili.level === "nagari" ? k.nagari : k.kecamatan);
-    if (!dom) {
-      status = "perlu_lokasi";
-      alasan.push(s.domisili.level === "nagari" ? "Nagari domisili belum tercatat" : "Kecamatan domisili belum tercatat");
-    } else {
-      const sah = new Set(wilayah.map((w) => normalWilayah(s.domisili.level === "nagari" ? w.nagari : w.kecamatan)).filter(Boolean));
-      if (!sah.has(dom)) {
+    const lv = s.domisili.level;
+    // (1 Nov 2026) Pencocokan berdasarkan KODE wilayah (prov+kab+kec = 7 digit, +nagari = 10, +SLS = 14) bila domisili Mitra dan wilayah sampel sama-sama berkode;
+    // tidak ambigu untuk nagari bernama sama pada kecamatan berbeda. Tanpa kode: kecamatan/nagari memakai pencocokan nama (perilaku lama); tingkat SLS butuh kode.
+    const panjang = lv === "sls" ? 14 : lv === "nagari" ? 10 : 7;
+    const labelLv = lv === "sls" ? "SLS/jorong" : lv;
+    const kodeKandidat = typeof k.kode === "string" && /^\d{16}$/.test(k.kode) ? k.kode.slice(0, panjang) : null;
+    const kodeWilayah = new Set(wilayah.map((w) => (/^\d{14,16}$/.test(w.kode) ? w.kode.slice(0, panjang) : "")).filter(Boolean));
+    if (kodeKandidat && kodeWilayah.size > 0) {
+      if (!kodeWilayah.has(kodeKandidat)) {
         status = "tidak";
-        alasan.push(`Domisili ${s.domisili.level} di luar wilayah sampel`);
+        alasan.push(`Domisili ${labelLv} di luar wilayah sampel`);
+      }
+    } else if (lv === "sls") {
+      status = "perlu_lokasi";
+      alasan.push(kodeKandidat ? "Wilayah sampel belum berkode SLS" : "Kode SLS domisili belum tercatat");
+    } else {
+      const dom = normalWilayah(lv === "nagari" ? k.nagari : k.kecamatan);
+      if (!dom) {
+        status = "perlu_lokasi";
+        alasan.push(lv === "nagari" ? "Nagari domisili belum tercatat" : "Kecamatan domisili belum tercatat");
+      } else {
+        const sah = new Set(wilayah.map((w) => normalWilayah(lv === "nagari" ? w.nagari : w.kecamatan)).filter(Boolean));
+        if (!sah.has(dom)) {
+          status = "tidak";
+          alasan.push(`Domisili ${lv} di luar wilayah sampel`);
+        }
       }
     }
   }

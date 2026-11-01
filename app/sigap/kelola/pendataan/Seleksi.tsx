@@ -378,9 +378,10 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
                           <input type="checkbox" disabled={!bolehUbah} checked={form.syarat.domisili.aktif} onChange={(e) => set("syarat", { ...form.syarat, domisili: { ...form.syarat.domisili, aktif: e.target.checked } })} />
                           Domisili di wilayah sampel
                         </label>
-                        <select aria-label="Tingkat domisili" className={kolom} disabled={!bolehUbah || !form.syarat.domisili.aktif} value={form.syarat.domisili.level} onChange={(e) => set("syarat", { ...form.syarat, domisili: { ...form.syarat.domisili, level: e.target.value === "nagari" ? "nagari" : "kecamatan" } })}>
+                        <select aria-label="Tingkat domisili" className={kolom} disabled={!bolehUbah || !form.syarat.domisili.aktif} value={form.syarat.domisili.level} onChange={(e) => set("syarat", { ...form.syarat, domisili: { ...form.syarat.domisili, level: e.target.value === "nagari" ? "nagari" : e.target.value === "sls" ? "sls" : "kecamatan" } })}>
                           <option value="kecamatan">Sekecamatan dengan wilayah sampel</option>
                           <option value="nagari">Senagari dengan wilayah sampel</option>
+                          <option value="sls">Sesama SLS/jorong dengan wilayah sampel</option>
                         </select>
                       </div>
                       <div>
@@ -395,7 +396,7 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
                         </div>
                       </div>
                     </div>
-                    <p className={ket}>Mitra yang titik domisili atau nagarinya belum tercatat tidak ditolak: mereka masuk golongan <b>perlu melengkapi lokasi</b>.</p>
+                    <p className={ket}>Mitra yang titik domisili, nagari, atau kode SLS-nya belum tercatat tidak ditolak: mereka masuk golongan <b>perlu melengkapi lokasi</b>. Bila domisili Mitra dan wilayah sampel sama-sama berkode, pencocokan memakai kode (tidak tertukar untuk nagari bernama sama).</p>
                   </div>
 
                   <div className="rounded-[14px] border border-[#DDE6F3] p-3">

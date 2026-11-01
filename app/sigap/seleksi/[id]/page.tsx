@@ -156,7 +156,7 @@ export default function HalamanSeleksi() {
               {tutup && <p className="mt-3 text-[13px] text-[#44546F]">Pendaftaran ditutup <b>{tutup}</b>.</p>}
               {(d.seleksi.syarat.domisili || d.seleksi.syarat.jarak_km) && (
                 <p className="mt-2 text-[12.5px] text-[#55657D]">
-                  Syarat khusus:{d.seleksi.syarat.domisili ? ` domisili ${d.seleksi.syarat.domisili === "nagari" ? "senagari" : "sekecamatan"} dengan wilayah sampel` : ""}
+                  Syarat khusus:{d.seleksi.syarat.domisili ? ` domisili ${d.seleksi.syarat.domisili === "nagari" ? "senagari" : d.seleksi.syarat.domisili === "sls" ? "sesama SLS/jorong" : "sekecamatan"} dengan wilayah sampel` : ""}
                   {d.seleksi.syarat.domisili && d.seleksi.syarat.jarak_km ? ";" : ""}
                   {d.seleksi.syarat.jarak_km ? ` jarak rumah ke wilayah sampel terdekat paling jauh ${d.seleksi.syarat.jarak_km} km` : ""}.
                 </p>

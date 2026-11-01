@@ -35,10 +35,10 @@ async function peta<T>(ambil: (dari: number, sampai: number) => PromiseLike<{ da
   return { baris, galat: false };
 }
 
-async function petaDesa(db: Db): Promise<Map<number, string>> {
-  const { baris } = await peta<{ id: number; alamat_desa: string | null }>((a, b) => db.from("bencana_mitra").select("id, alamat_desa").order("id").range(a, b));
-  const m = new Map<number, string>();
-  for (const x of baris) if (x.alamat_desa) m.set(x.id, x.alamat_desa);
+async function petaDesa(db: Db): Promise<Map<number, { desa: string | null; kode: string | null }>> {
+  const { baris } = await peta<{ id: number; alamat_desa: string | null; idsubsls_1303: string | null }>((a, b) => db.from("bencana_mitra").select("id, alamat_desa, idsubsls_1303").order("id").range(a, b));
+  const m = new Map<number, { desa: string | null; kode: string | null }>();
+  for (const x of baris) if (x.alamat_desa || x.idsubsls_1303) m.set(x.id, { desa: x.alamat_desa ?? null, kode: x.idsubsls_1303 ?? null });
   return m;
 }
 
@@ -51,7 +51,7 @@ export async function bacaKandidat(db: Db, tahun: number): Promise<{ calon: Calo
   const desa = await petaDesa(db);
   const calon = akun
     .filter((a) => !poolSiap || ada.has(a.id))
-    .map((a) => ({ id: a.id, nama: a.nama, kecamatan: a.alamat_kecamatan, nagari: a.mitra_id ? desa.get(a.mitra_id) ?? null : null, lat: a.domisili_lat, lng: a.domisili_lng, pool: poolSiap }));
+    .map((a) => ({ id: a.id, nama: a.nama, kecamatan: a.alamat_kecamatan, nagari: a.mitra_id ? desa.get(a.mitra_id)?.desa ?? null : null, kode: a.mitra_id ? desa.get(a.mitra_id)?.kode ?? null : null, lat: a.domisili_lat, lng: a.domisili_lng, pool: poolSiap }));
   return { calon, poolSiap };
 }
 
@@ -63,9 +63,11 @@ export async function bacaCalonSatu(db: Db, akunId: number, tahun: number): Prom
   const poolSiap = !error;
   if (poolSiap && p?.status !== "aktif") return { calon: null, poolSiap, alasan: `Anda belum tercatat sebagai Mitra Kepka aktif tahun ${tahun}.` };
   let nagari: string | null = null;
+  let kode: string | null = null;
   if (a.mitra_id) {
-    const { data: m } = await db.from("bencana_mitra").select("alamat_desa").eq("id", a.mitra_id).maybeSingle();
+    const { data: m } = await db.from("bencana_mitra").select("alamat_desa, idsubsls_1303").eq("id", a.mitra_id).maybeSingle();
     nagari = (m?.alamat_desa as string | null) ?? null;
+    kode = (m?.idsubsls_1303 as string | null) ?? null;
   }
-  return { calon: { id: a.id as number, nama: a.nama as string, kecamatan: a.alamat_kecamatan as string | null, nagari, lat: a.domisili_lat as number | null, lng: a.domisili_lng as number | null, pool: poolSiap }, poolSiap, alasan: null };
+  return { calon: { id: a.id as number, nama: a.nama as string, kecamatan: a.alamat_kecamatan as string | null, nagari, kode, lat: a.domisili_lat as number | null, lng: a.domisili_lng as number | null, pool: poolSiap }, poolSiap, alasan: null };
 }
