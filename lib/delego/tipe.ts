@@ -456,3 +456,7 @@ export type Monitor = {
   usulan: { menunggu: number; lewat3: number };
   sanggah: SanggahMonitor[];
 };
+
+/** Bahan kalibrasi skor (keu_dlg_kalibrasi): menit nyata per satuan dari laporan yang mengisi jam kerja nyata, terbaru lebih dulu. */
+export type KalibrasiJenis = { id: number; nama: string; satuan: string; poin_per_satuan: string | number; n: number; menit: (string | number)[] };
+export type KalibrasiBahan = { hari_ini: string; jenis: KalibrasiJenis[] };

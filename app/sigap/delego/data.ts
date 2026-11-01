@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { bacaCache, isiCache, basi } from "@/app/portal/dataBersama";
 import { aksiKeu } from "@/app/sigap/ro/useKeu";
 import { hariWib } from "@/lib/sigapCacheKerja";
-import type { BahanSaya, BahanTim, BahanTinjau, Calon, HakDelegasi, KatalogSkor, Monitor, Rekap } from "@/lib/delego/tipe";
+import type { BahanSaya, BahanTim, BahanTinjau, Calon, HakDelegasi, KalibrasiBahan, KatalogSkor, Monitor, Rekap } from "@/lib/delego/tipe";
 
 export { useKirim, aksiKeu } from "@/app/sigap/ro/useKeu";
 
@@ -103,6 +103,9 @@ export const useKatalogSkor = () => useBacaFungsi<KatalogSkor>("keu_dlg_katalog_
 export const useRekap = (dari: string | null, sampai: string | null, aktif = true) => useBacaFungsi<Rekap>("keu_dlg_rekap", aktif ? { ...(dari ? { p_dari: dari } : {}), ...(sampai ? { p_sampai: sampai } : {}) } : null);
 /** Monitoring Kepala: tiga angka capaian, antrean tinjau, hambatan, sanggahan. */
 export const useMonitor = (dari: string | null, sampai: string | null, aktif = true) => useBacaFungsi<Monitor>("keu_dlg_monitor", aktif ? { ...(dari ? { p_dari: dari } : {}), ...(sampai ? { p_sampai: sampai } : {}) } : null);
+
+/** Menit nyata per satuan untuk kalibrasi skor (Ketua Tim, pelihat, Kepala). `aktif` false = tidak memuat. */
+export const useKalibrasi = (aktif = true) => useBacaFungsi<KalibrasiBahan>("keu_dlg_kalibrasi", aktif ? {} : null);
 
 export function useCalon(ro: string | null, ident: number | null, q: string) {
   const args = ro ? { p_ro: ro, ...(ident ? { p_ident: ident } : {}), p_q: q } : null;

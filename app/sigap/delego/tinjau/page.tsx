@@ -11,6 +11,7 @@ import { angka, tglPendek } from "@/lib/delego/hitung";
 import { MIN_HURUF, galatKeputusan, lewatBatasTinjau, sisaHariJawab, type KeputusanTinjau } from "@/lib/delego/tinjau";
 import type { LaporanTinjau, Sanggah, UsulanMenunggu } from "@/lib/delego/tipe";
 import { DaftarBukti } from "../BuktiFoto";
+import TombolSinkron from "../TombolSinkron";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { useKirim, useTinjauBahan } from "../data";
@@ -190,7 +191,7 @@ export default function Tinjau() {
     { k: "sanggah", t: "Sanggahan", n: d?.sanggah.length ?? 0 },
   ];
   return (
-    <Halaman judul="Tinjau laporan tim" sub="Setujui laporan, minta revisi, atau sanggah ke Kepala. Laporan yang belum ditinjau lebih dari 3 hari kerja ditandai.">
+    <Halaman judul="Tinjau laporan tim" sub="Setujui laporan, minta revisi, atau sanggah ke Kepala. Laporan yang belum ditinjau lebih dari 3 hari kerja ditandai." kanan={d && (d.beri || d.pemutus) ? <TombolSinkron sesudah={b.muat} /> : undefined}>
       {b.memuat && !d && <Memuat />}
       {b.galat && !d && <Galat>{b.galat}</Galat>}
       {kirim.galat && <Galat>{kirim.galat}</Galat>}

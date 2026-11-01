@@ -80,6 +80,7 @@ const BUTIR_SAYA: Butir[] = [
   { href: "/sigap/delego/lapor", label: "Lapor harian", ikon: "lapor", pendek: "Lapor" },
   { href: "/sigap/delego/catat", label: "Catat pekerjaan", ikon: "catat", pendek: "Catat" },
   { href: "/sigap/delego/skor", label: "Katalog skor", ikon: "skor", pendek: "Skor" },
+  { href: "/sigap/delego/ketersediaan", label: "Ketersediaan (cuti, izin)", ikon: "libur", pendek: "Hadir" },
   { href: "/sigap/delego/riwayat", label: "Riwayat", ikon: "riwayat", pendek: "Riwayat" },
   { href: "/sigap/delego/penilaian", label: "Penilaian saya", ikon: "penilaian", pendek: "Nilai" },
 ];

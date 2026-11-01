@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { awalBulan, awalMinggu, tambahHari, tglPendek } from "@/lib/delego/hitung";
 import { NAMA_KANTOR, rentangMinggu, susunRekap, type BarisRekap, type SaringanKegiatan, type SelRekap } from "@/lib/delego/rekap";
 import { gradienLegenda, warnaBeban } from "@/lib/delego/warna";
+import TombolSinkron from "../TombolSinkron";
 import { useBahan, useRekap } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
@@ -26,7 +27,7 @@ function hariDalamBulan(awal: string): string {
 }
 
 export default function Terpadu() {
-  const { hari } = useKonteksDelego();
+  const { hari, pemberi } = useKonteksDelego();
   const [rentang, setRentang] = useState<Rentang>("pekan");
   const [geser, setGeser] = useState(0);
   const [kegiatan, setKegiatan] = useState<string>("semua");
@@ -86,6 +87,7 @@ export default function Terpadu() {
         <span className="min-w-[170px] text-center text-[14px] font-semibold">{judulRentang}</span>
         <button type="button" className={KELAS.tombolKecil} onClick={() => setGeser((g) => g + 1)} aria-label="Berikutnya">›</button>
         {geser !== 0 && <button type="button" className={KELAS.tombolKecil} onClick={() => setGeser(0)}>Hari ini</button>}
+        {pemberi && <TombolSinkron sesudah={async () => { await bahan.muat(); await rekap.muat(); }} />}
         <select aria-label="Saring kegiatan" className={`${KELAS.isian} !w-auto min-w-[200px]`} value={kegiatan} onChange={(e) => { setKegiatan(e.target.value); setPilih(null); }}>
           <option value="semua">Semua kegiatan (rekap)</option>
           {semuaKegiatan.map((k) => (

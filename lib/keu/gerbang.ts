@@ -23,7 +23,7 @@ export const FUNGSI_BACA: readonly string[] = [
   // (26 Okt 2026) Delego: pembacaan saja (hak, bahan saya, bahan tim, calon penerima).
   "keu_dlg_hak", "keu_dlg_saya", "keu_dlg_bahan", "keu_dlg_calon",
   // (1 Nov 2026) Delego perangkum: bahan tinjau, katalog skor, rekap beban, monitoring Kepala (hanya membaca).
-  "keu_dlg_tinjau_bahan", "keu_dlg_katalog_skor", "keu_dlg_rekap", "keu_dlg_monitor",
+  "keu_dlg_tinjau_bahan", "keu_dlg_katalog_skor", "keu_dlg_rekap", "keu_dlg_monitor", "keu_dlg_kalibrasi",
 ];
 
 const RE_FUNGSI = /^keu_[a-z0-9_]{1,60}$/;

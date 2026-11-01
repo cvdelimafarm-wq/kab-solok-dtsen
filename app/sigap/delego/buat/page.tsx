@@ -13,8 +13,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { angka, bebanDelegasiMinggu, bebanPerOrang, KAPASITAS_HARIAN, kapasitasMinggu, SASARAN_BEBAN, tambahHari } from "@/lib/delego/hitung";
 import { bacaBarisLangkah, hitungTargetJenis, teksDurasi } from "@/lib/delego/teknis";
-import type { Delegasi } from "@/lib/delego/tipe";
-import { useBahan, useKirim } from "../data";
+import { NAMA_KELAS, type Delegasi, type KelasPekerjaan } from "@/lib/delego/tipe";
+import { aksiKeu, useBahan, useKatalogSkor, useKirim } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import PemilihPenerima, { type Pilihan } from "../PemilihPenerima";
@@ -58,6 +58,10 @@ export default function Buat() {
   const [perluHasil, setPerluHasil] = useState(false);
   const [perluTinjau, setPerluTinjau] = useState(false);
   const [langkahTeks, setLangkahTeks] = useState("");
+  const [kelas, setKelas] = useState<KelasPekerjaan | "">("");
+  const [kegiatanId, setKegiatanId] = useState("");
+  const [modeTutup, setModeTutup] = useState<"tinjau" | "ringan">("tinjau");
+  const katalog = useKatalogSkor();
 
   const jenis = daftarJenis.find((j) => String(j.id) === jenisId) ?? null;
   const pps = jenis ? angka(jenis.poin_per_satuan) : 0;
@@ -137,7 +141,9 @@ export default function Buat() {
 
   const simpan = async () => {
     if (galatLokal) return;
-    const ok = await kirim.kirim("keu_dlg_buat", {
+    const atur = kelas !== "" || kegiatanId !== "" || modeTutup !== "tinjau";
+    const ok = await kirim.jalankan(async () => {
+      const res = await aksiKeu<{ dibuat: number[] }>("keu_dlg_buat", {
       p_data: {
         ...(asal === "ident" ? { ident_id: ident } : asal === "tim" ? { kelompok } : { ro_kode: ro }),
         judul: judul.trim(), uraian: uraian.trim(), bobot, mulai, tenggat,
@@ -147,6 +153,15 @@ export default function Buat() {
         perlu_hasil: perluHasil, perlu_tinjau: perluTinjau, langkah: l.langkah,
         penerima: pilih.map((p) => ({ akun: p.akun, peran: p.peran, pj_bidang: p.pj.trim() })),
       },
+    });
+      if (res.ok && atur) {
+        // jenis urusan, kegiatan tertaut, dan cara tutup diatur sesudah delegasi terbentuk (fungsi terpisah)
+        for (const id of res.data.dibuat ?? []) {
+          const r2 = await aksiKeu("keu_dlg_atur_urusan", { p_id: id, p_data: { ...(kelas ? { kelas } : {}), ...(kegiatanId ? { kegiatan_id: Number(kegiatanId) } : {}), mode_tutup: modeTutup } });
+          if (!r2.ok) return r2;
+        }
+      }
+      return res;
     });
     if (ok) router.push("/sigap/delego/papan");
   };
@@ -308,6 +323,33 @@ export default function Buat() {
                 );
               }}
             />
+          </Kartu>
+
+          <Kartu judul="Jenis urusan (opsional)">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Medan label="Jenis urusan" bantu="Bila dikosongkan, dicatat sebagai pekerjaan langsung.">
+                <select className={KELAS.isian} value={kelas} onChange={(e) => setKelas(e.target.value as KelasPekerjaan | "")}>
+                  <option value="">Otomatis</option>
+                  {(Object.keys(NAMA_KELAS) as KelasPekerjaan[]).map((k) => (
+                    <option key={k} value={k}>{NAMA_KELAS[k]}</option>
+                  ))}
+                </select>
+              </Medan>
+              <Medan label="Tautkan ke kegiatan" bantu="Supaya terhitung di rekap kegiatan itu.">
+                <select className={KELAS.isian} value={kegiatanId} onChange={(e) => setKegiatanId(e.target.value)}>
+                  <option value="">Tanpa kegiatan</option>
+                  {(katalog.data?.kegiatan ?? []).filter((k) => !ro || k.ro_kode === ro).map((k) => (
+                    <option key={k.id} value={k.id}>{k.nama}</option>
+                  ))}
+                </select>
+              </Medan>
+              <Medan label="Cara menutup" bantu="Ringan: laporan langsung diakui tanpa tinjau (untuk urusan kecil).">
+                <select className={KELAS.isian} value={modeTutup} onChange={(e) => setModeTutup(e.target.value as "tinjau" | "ringan")}>
+                  <option value="tinjau">Ditinjau Ketua Tim</option>
+                  <option value="ringan">Ringan, tanpa tinjau</option>
+                </select>
+              </Medan>
+            </div>
           </Kartu>
 
           <Kartu judul="5. Periksa dan kirim">

@@ -7,11 +7,11 @@
 
 import { useMemo, useState } from "react";
 import { angka } from "@/lib/delego/hitung";
-import { bandingSkor, galatAlasanSkor, type KertasKerja } from "@/lib/delego/skor";
+import { bandingSkor, galatAlasanSkor, kalibrasi, type KertasKerja } from "@/lib/delego/skor";
 import { menitDariPoin } from "@/lib/delego/teknis";
 import { MIN_HURUF } from "@/lib/delego/tinjau";
 import type { JenisSkor, StatusSkor } from "@/lib/delego/tipe";
-import { aksiKeu, useKatalogSkor, useKirim } from "../data";
+import { aksiKeu, useKalibrasi, useKatalogSkor, useKirim } from "../data";
 import KertasKerjaPanel, { type HasilKertasPakai } from "../KertasKerja";
 import { KELAS } from "../merek";
 import type { Nada } from "../merek";
@@ -66,6 +66,7 @@ export default function Skor() {
   const kat = useKatalogSkor();
   const kirim = useKirim(kat.muat);
   const d = kat.data;
+  const kal = useKalibrasi(!!d?.boleh_putus);
   const [buka, setBuka] = useState(false);
   const [nama, setNama] = useState("");
   const [satuan, setSatuan] = useState("");
@@ -221,6 +222,46 @@ export default function Skor() {
               </table>
             </div>
           )}
+        </Kartu>
+      )}
+      {d && d.boleh_putus && kal.data && (
+        <Kartu judul="Kalibrasi dari waktu nyata">
+          {kal.data.jenis.length === 0 ? (
+            <p className="m-0 text-[13.5px] text-[#3B4A57]">Belum ada laporan yang mengisi jam kerja nyata. Pegawai dapat mengisinya (opsional) di form Lapor harian; setelah beberapa laporan terkumpul, skor yang menyimpang lebih dari 25% ditandai di sini.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] border-collapse text-left text-[13.5px]">
+                <thead>
+                  <tr className="border-b border-[#D5DCE2] text-[12.5px] text-[#3B4A57]">
+                    <th className="py-1.5 pr-3 font-semibold">Pekerjaan</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">Laporan</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">Skor (menit)</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">Nyata (rata-rata)</th>
+                    <th className="py-1.5 font-semibold">Penilaian</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {kal.data.jenis.map((j) => {
+                    const perkiraan = menitDariPoin(angka(j.poin_per_satuan));
+                    const h = kalibrasi(perkiraan, j.menit.map((m) => angka(m)));
+                    const cukup = h.n >= 3;
+                    return (
+                      <tr key={j.id} className="border-b border-[#EEF1F4]">
+                        <td className="py-1.5 pr-3 font-semibold">{j.nama} <span className="font-normal text-[#3B4A57]">per {j.satuan}</span></td>
+                        <td className="py-1.5 pr-3 text-right">{h.n}</td>
+                        <td className="py-1.5 pr-3 text-right">{fmt(perkiraan, 0)}</td>
+                        <td className="py-1.5 pr-3 text-right">{h.rata === null ? "-" : fmt(h.rata, 0)}</td>
+                        <td className="py-1.5">
+                          {!cukup ? <Lencana nada="abu">Data belum cukup (min. 3)</Lencana> : h.menyimpang ? <Lencana nada="amber">{(h.selisih ?? 0) > 0 ? "Skor kerendahan" : "Skor ketinggian"} ({fmt(Math.abs((h.selisih ?? 0) * 100), 0)}%)</Lencana> : <Lencana nada="hijau">Wajar</Lencana>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="m-0 mt-2 text-[12.5px] text-[#3B4A57]">Hanya penanda. Skor tidak berubah otomatis; Ketua Tim yang menilai apakah perlu ditinjau ulang.</p>
         </Kartu>
       )}
       {ditolak.length > 0 && (
