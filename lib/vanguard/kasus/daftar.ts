@@ -9,9 +9,9 @@ import type { KasusPublik, Level } from "../tipe";
 export const URUTAN_LEVEL: Level[] = ["A", "B", "C", "D", "E", "G", "H"];
 
 export const NAMA_LEVEL: Record<Level, string> = {
-  A: "Makanan (IV.1) ke Blok V",
+  A: "Makanan (IV.1) ke Blok V dan VII",
   B: "Rumah dan sewa (IV.2) ke Blok V",
-  C: "Layanan kesehatan ke Blok V.E",
+  C: "Layanan kesehatan ke Blok V dan VII",
   D: "Pendapatan Blok V.A–V.C",
   E: "Transfer dan aset Blok V.D–V.G",
   G: "Rumah tangga lengkap (neraca V–VII)",

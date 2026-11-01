@@ -13,10 +13,13 @@ const kasus = (kode: string): Kasus => {
 const isianBenar = (k: Kasus) => (k.lengkap ? isiOtomatisR1(k.kunci) : { ...k.kunci });
 
 describe("data kasus", () => {
-  it("71 entri: 70 bernilai + 1 kalkulator bebas; maksimal 210 bintang", () => {
-    expect(KASUS).toHaveLength(71);
-    expect(KASUS_BERNILAI).toHaveLength(70);
-    expect(MAKS_BINTANG).toBe(210);
+  it("kasus bernilai + 1 kalkulator bebas; maksimal bintang = 3 per kasus bernilai; 71 kode awal tetap ada (kode dibekukan)", () => {
+    expect(KASUS).toHaveLength(KASUS_BERNILAI.length + 1);
+    expect(KASUS_BERNILAI.length).toBeGreaterThanOrEqual(70);
+    expect(MAKS_BINTANG).toBe(KASUS_BERNILAI.length * 3);
+    const awal = [["A", 11], ["B", 8], ["C", 7], ["D", 18], ["E", 18], ["G", 8]].flatMap(([l, n]) => Array.from({ length: n as number }, (_, i) => `${l}${String(i + 1).padStart(2, "0")}`)).concat("H01");
+    expect(awal).toHaveLength(71);
+    for (const kode of awal) expect(KASUS.some((k) => k.kode === kode), kode).toBe(true);
     expect(KASUS.filter((k) => k.bebas).map((k) => k.kode)).toEqual(["H01"]);
     expect(KASUS.filter((k) => k.lengkap)).toHaveLength(8);
   });
@@ -60,7 +63,7 @@ describe("data kasus", () => {
   });
   it("kasus yang semua kotaknya harus kosong punya pesan khusus", () => {
     const kosong = KASUS_BERNILAI.filter((k) => Object.keys(k.kunci).length === 0);
-    expect(kosong.map((k) => k.kode)).toEqual(["A10", "A11", "B04", "D07"]);
+    expect(kosong.map((k) => k.kode)).toEqual(expect.arrayContaining(["A10", "A11", "B04", "D07"]));
     kosong.forEach((k) => expect(k.nol, k.kode).toBeTruthy());
   });
   it("sel isian: tidak ada id ganda dan label terbentuk untuk semua kotak", () => {
@@ -106,8 +109,8 @@ describe("(c) pesan koreksi muncul", () => {
         n++;
       }
     }
-    expect(n).toBe(37); // 37 nilai keliru khas pada 33 kasus
-    expect(KASUS_BERNILAI.filter((k) => k.alternatif.length > 0)).toHaveLength(33);
+    expect(n).toBe(KASUS_BERNILAI.reduce((a, k) => a + k.alternatif.length, 0)); // semua nilai keliru khas teruji
+    expect(n).toBeGreaterThanOrEqual(37); // 37 pada 71 kasus awal
   });
   it("setiap jebakan memunculkan pesannya (jenis jebakan, fatal)", () => {
     let n = 0;
@@ -120,8 +123,8 @@ describe("(c) pesan koreksi muncul", () => {
         n++;
       }
     }
-    expect(n).toBe(31); // 31 jebakan khas pada 26 kasus
-    expect(KASUS_BERNILAI.filter((k) => k.jebakan.length > 0)).toHaveLength(26);
+    expect(n).toBe(KASUS_BERNILAI.reduce((a, k) => a + k.jebakan.filter((x) => x.m).length, 0)); // semua jebakan teruji
+    expect(n).toBeGreaterThanOrEqual(31); // 31 pada 71 kasus awal
   });
 });
 

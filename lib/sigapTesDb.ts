@@ -34,6 +34,7 @@ import {
   type StatusTes,
   type TesBaris,
 } from "@/lib/sigapTes";
+import { pilihPelatihanPeserta } from "@/lib/sigapPelatihanPilih";
 
 export function dbAdmin(): Db | null {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -59,7 +60,7 @@ const cachePilihan = new Map<number, { sampai: number; id: number | null }>();
 
 /**
  * (31 Okt 2026) Kegiatan pelatihan yang sedang dilayani. Urutan: (1) ?kegiatan=ID bila diminta (harus kegiatan berjenis pelatihan);
- * (2) bila `akunId` diberikan (rute peserta) dan akun itu BUKAN peserta pelatihan bawaan tetapi peserta tepat satu pelatihan lain, pelatihan itu;
+ * (2) bila `akunId` diberikan (rute peserta): pelatihan aktif akun itu yang sedang berlangsung / paling dekat bila ia peserta lebih dari satu (lib/sigapPelatihanPilih.ts);
  * (3) pelatihan bawaan PSP Pascabencana (perilaku lama). Rute admin cukup memberi `req` saja.
  */
 export async function idKegiatanPelatihan(db: Db, req?: { nextUrl?: { searchParams: URLSearchParams } } | null, akunId?: number): Promise<number | null> {
@@ -74,13 +75,16 @@ export async function idKegiatanPelatihan(db: Db, req?: { nextUrl?: { searchPara
   const ada = cachePilihan.get(akunId);
   if (ada && ada.sampai > Date.now()) return ada.id ?? bawaan;
   let pilih: number | null = null;
-  if (bawaan !== null && !(await pesertaPelatihan(db, akunId, bawaan))) {
+  if (bawaan !== null) {
+    // (1 Nov 2026) peserta lebih dari satu pelatihan aktif: yang sedang berlangsung / paling dekat (lib/sigapPelatihanPilih.ts), bukan selalu pelatihan bawaan
     const { data: pen } = await db.from("sigap_penugasan").select("kegiatan_id").eq("akun_id", akunId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(50);
     const ids = Array.from(new Set(((pen ?? []) as { kegiatan_id: number }[]).map((r) => r.kegiatan_id)));
     if (ids.length > 0) {
-      const { data: keg } = await db.from("sigap_kegiatan").select("id").in("id", ids).eq("jenis", "pelatihan").eq("aktif", true);
-      const lain = ((keg ?? []) as { id: number }[]).map((r) => r.id);
-      if (lain.length === 1) pilih = lain[0];
+      const { data: keg } = await db.from("sigap_kegiatan").select("id, tanggal_mulai, tanggal_selesai").in("id", ids).eq("jenis", "pelatihan").eq("aktif", true);
+      pilih = pilihPelatihanPeserta(
+        ((keg ?? []) as { id: number; tanggal_mulai: string | null; tanggal_selesai: string | null }[]).map((r) => ({ id: r.id, tanggal_mulai: r.tanggal_mulai ?? null, tanggal_selesai: r.tanggal_selesai ?? null })),
+        tanggalWib(new Date().getTime()),
+      );
     }
   }
   cachePilihan.set(akunId, { sampai: Date.now() + 30_000, id: pilih });

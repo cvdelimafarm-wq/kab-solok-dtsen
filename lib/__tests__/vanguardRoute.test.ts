@@ -267,13 +267,14 @@ describe("hasil final pada GET (V5c)", () => {
   it("berjalan -> lulus -> tidak lulus final mengikuti riwayat uji", async () => {
     set();
     expect((await (await ambil("?kegiatan=5")).json()).final).toMatchObject({ status: "berjalan", nilai: 0, remark: null });
-    A.slice(0, 8).forEach((k, i) => tabel.sigap_vanguard_percobaan.push(p(i + 1, k.kode, 1, true)));
-    expect((await (await ambil("?kegiatan=5")).json()).final).toMatchObject({ status: "lulus", benar: 8, pendampingan: false });
+    const nLulus = Math.ceil(A.length * 0.7);
+    A.slice(0, nLulus).forEach((k, i) => tabel.sigap_vanguard_percobaan.push(p(i + 1, k.kode, 1, true)));
+    expect((await (await ambil("?kegiatan=5")).json()).final).toMatchObject({ status: "lulus", benar: nLulus, pendampingan: false });
     tabel.sigap_vanguard_percobaan = [];
     A.slice(0, 5).forEach((k, i) => tabel.sigap_vanguard_percobaan.push(p(i + 1, k.kode, 1, true)));
     A.slice(5).forEach((k, i) => [1, 2, 3].forEach((n) => tabel.sigap_vanguard_percobaan.push(p(100 + i * 3 + n, k.kode, n, false))));
     const j = await (await ambil("?kegiatan=5")).json();
-    expect(j.final).toMatchObject({ status: "tidak_lulus", nilai: 45.5, pendampingan: true });
+    expect(j.final).toMatchObject({ status: "tidak_lulus", nilai: Math.round((5 / A.length) * 1000) / 10, pendampingan: true });
     expect(j.final.remark).toMatch(/pendampingan khusus/);
   });
 });

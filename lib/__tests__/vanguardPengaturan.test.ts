@@ -133,7 +133,10 @@ describe("mode uji (V5b)", () => {
 });
 
 describe("hasil final (V5c): sampai lulus, batas percobaan, final setelah percobaan terakhir", () => {
-  const A = KASUS.filter((k) => k.level === "A" && !k.bebas); // 11 kasus bernilai
+  const A = KASUS.filter((k) => k.level === "A" && !k.bebas); // jumlah kasus level A (bertambah bersama kasus baru; tes tidak boleh mengunci angkanya)
+  const n = A.length;
+  const nLulus = Math.ceil(n * 0.7); // paling sedikit kasus benar agar nilai >= 70
+  const nilaiDari = (k: number, dari = n) => Math.round((k / dari) * 1000) / 10;
   const P70 = (o: Partial<Pengaturan> = {}) => P({ level_dibuka: ["A"], nilai_lulus: 70, maks_percobaan: 3, mode: "uji", ...o });
   const benar = (n: number) => A.slice(0, n).map((k) => ({ kasus: k.kode, percobaan: 1, benar: true }));
   const habis = (dari: number, sampai: number) => A.slice(dari, sampai).map((k) => ({ kasus: k.kode, percobaan: 3, benar: false }));
@@ -142,8 +145,9 @@ describe("hasil final (V5c): sampai lulus, batas percobaan, final setelah percob
     expect(hasilFinal(P({ level_dibuka: ["A"] }), benar(2))).toMatchObject({ status: "tanpa_batas", remark: null, pendampingan: false });
   });
   it("lulus begitu nilai tercapai, walau masih ada kasus yang belum dikerjakan (kerjakan sampai lulus)", () => {
-    const h = hasilFinal(P70(), benar(8)); // 8/11 = 72,7%
-    expect(h).toMatchObject({ status: "lulus", nilai: 72.7, benar: 8, dibuka: 11, remark: null, pendampingan: false });
+    const h = hasilFinal(P70(), benar(nLulus));
+    expect(h).toMatchObject({ status: "lulus", nilai: nilaiDari(nLulus), benar: nLulus, dibuka: n, remark: null, pendampingan: false });
+    expect(hasilFinal(P70(), benar(nLulus - 1)).status).toBe("berjalan"); // satu kasus kurang = belum lulus
   });
   it("belum lulus tetapi masih ada percobaan = berjalan (belum final, tanpa remark tidak lulus)", () => {
     const h = hasilFinal(P70(), [...benar(5), ...habis(5, 7), { kasus: A[7].kode, percobaan: 2, benar: false }]);
@@ -151,23 +155,24 @@ describe("hasil final (V5c): sampai lulus, batas percobaan, final setelah percob
     expect(h.selesai).toBe(7);
   });
   it("tidak lulus FINAL hanya setelah semua kasus benar atau percobaannya habis: remark tidak lulus, tetap boleh mendata (pendampingan)", () => {
-    const h = hasilFinal(P70(), [...benar(6), ...habis(6, 11)]); // 6/11 = 54,5% < 70, semua selesai
+    const h = hasilFinal(P70(), [...benar(6), ...habis(6, n)]); // 6 dari n < 70%, semua selesai
     expect(h.status).toBe("tidak_lulus");
-    expect(h.nilai).toBe(54.5);
+    expect(h.nilai).toBe(nilaiDari(6));
     expect(h.pendampingan).toBe(true);
     expect(h.remark).toContain("Tidak lulus");
     expect(h.remark).toContain("pendampingan khusus");
-    expect(h.remark).toContain("54.5 < 70");
+    expect(h.remark).toContain(`${nilaiDari(6)} < 70`);
   });
   it("batas percobaan memakai pengaturan kegiatan (3); kasus dengan 2 percobaan salah belum habis", () => {
-    const h = hasilFinal(P70(), [...benar(6), ...habis(6, 10), { kasus: A[10].kode, percobaan: 2, benar: false }]);
-    expect(h.status).toBe("berjalan");
-    expect(hasilFinal(P70({ maks_percobaan: 2 }), [...benar(6), ...habis(6, 10), { kasus: A[10].kode, percobaan: 2, benar: false }]).status).toBe("tidak_lulus");
+    const hampir = [...benar(6), ...habis(6, n - 1), { kasus: A[n - 1].kode, percobaan: 2, benar: false }];
+    expect(hasilFinal(P70(), hampir).status).toBe("berjalan");
+    expect(hasilFinal(P70({ maks_percobaan: 2 }), hampir).status).toBe("tidak_lulus");
   });
   it("tanpa riwayat = berjalan; level tidak dibuka tidak dihitung; tepat di batas lulus (70%) lulus", () => {
     expect(hasilFinal(P70(), [])).toMatchObject({ status: "berjalan", nilai: 0, benar: 0, selesai: 0 });
     expect(hasilFinal(P70(), [{ kasus: "B01", percobaan: 1, benar: true }]).benar).toBe(0);
-    const sepuluh = P70({ level_dibuka: ["A", "B"] }); // 19 kasus
-    expect(hasilFinal({ ...sepuluh, nilai_lulus: 50 }, [...benar(11), ...KASUS.filter((k) => k.level === "B").slice(0, 0).map((k) => ({ kasus: k.kode, percobaan: 1, benar: true }))]).nilai).toBe(57.9);
+    const nB = KASUS.filter((k) => k.level === "B" && !k.bebas).length;
+    const dua = P70({ level_dibuka: ["A", "B"] });
+    expect(hasilFinal({ ...dua, nilai_lulus: 50 }, benar(n)).nilai).toBe(nilaiDari(n, n + nB));
   });
 });

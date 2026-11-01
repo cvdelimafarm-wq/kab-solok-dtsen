@@ -328,5 +328,214 @@
   ],
   "pembahasan": "Tes kesehatan gratis dari pemerintah dicatat dengan OOP nol, kolom 5 harga perkiraan, dan diimputasi di V.E R.1.b K.3.",
   "rujukan": "Buku 4 hlm. 297"
+ },
+ {
+  "kode": "C08",
+  "level": "C",
+  "judul": "Perusahaan membayar langsung ke rumah sakit",
+  "cerita": "Bu Sari (karyawan koperasi) berobat jalan di rumah sakit swasta. Biaya Rp1.800.000 dibayar langsung oleh perusahaannya ke rumah sakit. Ia tidak membayar apa pun. Abaikan gaji dan pendapatan lainnya.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "277.a",
+     "kode": "",
+     "rin": "Rumah sakit swasta · rawat jalan · OOP",
+     "oop": 0
+    },
+    {
+     "no": "277",
+     "kode": "06219/21",
+     "rin": "Rumah sakit swasta",
+     "thn": 1800000
+    }
+   ]
+  },
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Karyawan koperasi",
+     "kat": "08",
+     "jenis": "7"
+    }
+   ]
+  },
+  "blok": [
+   "A",
+   "E"
+  ],
+  "kunci": {
+   "a1_barang": 1800000
+  },
+  "jebakan": [
+   {
+    "k": "e_badanUsaha_barangD",
+    "m": "Yang membayar pemberi kerja, bukan penjamin asuransi. Pemberi kerja langsung ke rumah sakit = V.A Kolom (6)."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Pembayarnya adalah tempat bekerja, bukan asuransi.",
+   "Pemberi kerja yang langsung membayar ke rumah sakit dicatat sebagai upah barang/jasa."
+  ],
+  "langkah": [
+   "Biaya yang dibayar pemberi kerja langsung ke rumah sakit: <code>1.800.000</code> → V.A Kolom (6).",
+   "V.E tidak diisi."
+  ],
+  "pembahasan": "Matriks Blok V jasa kesehatan: biaya dibayarkan sepenuhnya pihak lain (pemberi kerja) dan pemberi kerja membayar langsung ke rumah sakit dicatat senilai yang dibayar di Blok V.A Kolom 6.",
+  "rujukan": "Buku 4 hlm. 295 dan 296"
+ },
+ {
+  "kode": "C09",
+  "level": "C",
+  "judul": "BPJS mandiri tanpa klaim",
+  "cerita": "Pak Bayu peserta BPJS Kesehatan mandiri dan membayar premi sendiri Rp42.000 per bulan untuk dirinya. Setahun terakhir ia tidak berobat.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "338",
+     "kode": "",
+     "rin": "Asuransi kesehatan",
+     "thn": 504000
+    }
+   ]
+  },
+  "blok": [
+   "E"
+  ],
+  "kunci": {},
+  "jebakan": [
+   {
+    "k": "e_bantuan_barangD",
+    "m": "Hanya peserta PBI yang diimputasi sebagai transfer pemerintah. Premi yang dibayar sendiri tidak."
+   }
+  ],
+  "alternatif": [],
+  "nol": "Premi BPJS mandiri hanya konsumsi di R.338 (dan VII R.1 K.2). Tidak ada isian di Blok V.E.",
+  "petunjuk": [
+   "Siapa yang membayar premi: pemerintah atau rumah tangga sendiri?",
+   "Imputasi transfer pemerintah hanya untuk peserta PBI."
+  ],
+  "langkah": [
+   "Premi mandiri <code>42.000 × 12 = 504.000</code> dicatat di Blok IV.2 R.338.",
+   "V.E R.1.b tidak diisi."
+  ],
+  "pembahasan": "Peserta BPJS Kesehatan non-PBI/mandiri yang membayar premi sendiri mencatat pengeluarannya di R.338. Hanya peserta PBI yang nilainya diimputasi sebagai penerimaan transfer pemerintah (V.E R.1.b Kolom 3).",
+  "rujukan": "Buku 4 hlm. 306"
+ },
+ {
+  "kode": "C10",
+  "level": "C",
+  "judul": "Biaya berobat diganti pemberi kerja (reimburse)",
+  "cerita": "Pak Anwar (karyawan swasta) berobat ke dokter spesialis. Ia membayar sendiri dulu Rp3.000.000, lalu perusahaan mengganti Rp2.400.000. Abaikan gaji dan pendapatan lainnya.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "279.a",
+     "kode": "",
+     "rin": "Praktik dokter/poliklinik · OOP",
+     "oop": 3000000
+    },
+    {
+     "no": "279",
+     "kode": "06219/21",
+     "rin": "Praktik dokter/poliklinik",
+     "thn": 3000000
+    }
+   ]
+  },
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "Karyawan swasta",
+     "kat": "08",
+     "jenis": "7"
+    }
+   ]
+  },
+  "blok": [
+   "A",
+   "VII"
+  ],
+  "kunci": {
+   "a1_uang": 2400000,
+   "vii_p1": 3000000,
+   "vii_g1": 2400000
+  },
+  "jebakan": [
+   {
+    "k": "a1_barang",
+    "m": "Kolom (6) dipakai bila pemberi kerja membayar langsung ke rumah sakit. Pada reimburse, yang diganti dicatat di Kolom (5)."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Reimburse: responden membayar dulu, pemberi kerja mengganti kemudian.",
+   "Seluruh biaya ke VII R.1 K.2; yang diganti ke V.A Kolom (5) dan VII R.1 K.4."
+  ],
+  "langkah": [
+   "Harga seluruh biaya perawatan <code>3.000.000</code> → VII Rincian 1 Kolom (2).",
+   "Yang dibayar pemberi kerja <code>2.400.000</code> → V.A Kolom (5) dan VII Rincian 1 Kolom (4)."
+  ],
+  "pembahasan": "Matriks Blok V jasa kesehatan, pemberi kerja melalui responden (reimburse): senilai harga pasar seluruh biaya perawatan ke VII R.1 K.2; senilai yang dibayar pemberi kerja ke V.A Kolom 5 dan VII R.1 K.4.",
+  "rujukan": "Buku 4 hlm. 296"
+ },
+ {
+  "kode": "C11",
+  "level": "C",
+  "judul": "Biaya rawat inap dibiayai pinjaman",
+  "cerita": "Bu Dewi dirawat inap di rumah sakit swasta. Biaya Rp12.000.000 ia bayar sendiri dengan uang pinjaman dari koperasi (tidak ada pihak lain yang menanggung). Setahun terakhir ia sudah mencicil pokok Rp3.000.000. Abaikan Blok V dan fokus pada Blok VII.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "277.b",
+     "kode": "",
+     "rin": "Rumah sakit swasta · rawat inap · OOP",
+     "oop": 12000000
+    },
+    {
+     "no": "277",
+     "kode": "06219/21",
+     "rin": "Rumah sakit swasta",
+     "thn": 12000000
+    }
+   ]
+  },
+  "blok": [
+   "VII"
+  ],
+  "kunci": {
+   "vii_p2": 12000000,
+   "vii_g2": 3000000,
+   "vii_p1": 3000000
+  },
+  "jebakan": [
+   {
+    "k": "vii_p4",
+    "m": "Pinjaman uang dari koperasi masuk Rincian 2 (Meminjam uang), bukan Rincian 4 (Kredit barang)."
+   }
+  ],
+  "alternatif": [
+   {
+    "k": "vii_p1",
+    "v": 12000000,
+    "m": "Pengambilan tabungan hanya sebesar cicilan yang sudah dibayar, bukan seluruh biaya (biayanya dari pinjaman)."
+   }
+  ],
+  "petunjuk": [
+   "OOP yang berasal dari meminjam dicatat di Rincian 2.",
+   "Cicilan dicatat dua kali: sebagai membayar utang dan sebagai pengambilan tabungan."
+  ],
+  "langkah": [
+   "OOP dari pinjaman <code>12.000.000</code> → VII Rincian 2 Kolom (2).",
+   "Cicilan <code>3.000.000</code> → VII Rincian 2 Kolom (4) dan VII Rincian 1 Kolom (2)."
+  ],
+  "pembahasan": "Matriks Blok V jasa kesehatan, OOP yang berasal dari meminjam: senilai OOP ke VII R.2 K.2; senilai cicilan ke VII R.2 K.4 dan VII R.1 K.2.",
+  "rujukan": "Buku 4 hlm. 296"
  }
 ]

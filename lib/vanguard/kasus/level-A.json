@@ -611,5 +611,120 @@
   ],
   "pembahasan": "Pembelian bon/utang dicatat di Blok IV.1 kolom 5–6 dan di Blok VII R.2 K.2, bukan di Blok V.",
   "rujukan": "Buku 4 hlm. 350"
+ },
+ {
+  "kode": "A12",
+  "level": "A",
+  "judul": "Kue buatan sendiri dimakan sendiri",
+  "cerita": "Seminggu terakhir keluarga memakan 12 buah kue basah yang dibuat sendiri di rumah (harga pasar Rp2.500 per buah). Biaya bahan (tepung, gula, dan santan) setahun Rp900.000. Kue tidak dijual.",
+  "iv": {
+   "t": 1,
+   "rows": [
+    {
+     "no": 191,
+     "kode": "",
+     "rin": "Kue basah (kue lapis, bika ambon, lemper, dll.)",
+     "sat": "Buah",
+     "beli": null,
+     "prod": [
+      "12,00",
+      30000
+     ],
+     "jml": [
+      "12,00",
+      30000
+     ]
+    }
+   ]
+  },
+  "blok": [
+   "C"
+  ],
+  "kunci": {
+   "c_hasilLain_produksi": 1542857,
+   "c_hasilLain_biaya": 900000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "c_hasilLain_produksi",
+    "v": 30000,
+    "m": "Nilai Anda masih seminggu. Kalikan 30/7 × 12."
+   }
+  ],
+  "petunjuk": [
+   "Kue dibuat sendiri dan dimakan sendiri: produksi rumah tangga untuk dikonsumsi sendiri.",
+   "Nilai produksi = harga pasar × 30/7 × 12; biaya bahan sudah setahun."
+  ],
+  "langkah": [
+   "Nilai produksi: <code>12 × 2.500 × 30/7 × 12 = 1.542.857</code> → V.C Rincian 2 Kolom (2).",
+   "Biaya produksi: <code>900.000</code> → V.C Rincian 2 Kolom (3)."
+  ],
+  "pembahasan": "Kegiatan industri (membuat kue) untuk dikonsumsi sendiri dinilai menurut harga pasar sebagai nilai produksi di Blok V.C Rincian 2 Kolom 2, dan biaya memperolehnya (bahan) di Kolom 3. Berbeda dengan kue yang dijual, yang masuk Blok V.B.",
+  "rujukan": "Buku 4 hlm. 331 dan 350"
+ },
+ {
+  "kode": "A13",
+  "level": "A",
+  "judul": "Makan dari stok warung sendiri",
+  "cerita": "Bu Eli punya warung kelontong. Seminggu terakhir keluarganya memakai dagangan warung sendiri: 2 kg gula pasir dan 1 liter minyak goreng, dinilai dengan harga jual di warung Rp48.000. Abaikan Blok V dan fokus pada pasangan di Blok VII.",
+  "iv": {
+   "t": 1,
+   "rows": [
+    {
+     "no": 160,
+     "kode": "01181",
+     "rin": "Gula pasir",
+     "sat": "Ons",
+     "beli": [
+      "20,00",
+      30000
+     ],
+     "prod": null,
+     "jml": [
+      "20,00",
+      30000
+     ]
+    },
+    {
+     "no": 156,
+     "kode": "01151",
+     "rin": "Minyak goreng (kelapa sawit, bunga matahari)",
+     "sat": "Liter",
+     "beli": [
+      "1,00",
+      18000
+     ],
+     "prod": null,
+     "jml": [
+      "1,00",
+      18000
+     ]
+    }
+   ]
+  },
+  "blok": [
+   "VII"
+  ],
+  "kunci": {
+   "vii_p1": 2468571
+  },
+  "jebakan": [
+   {
+    "k": "vii_p2",
+    "m": "Mengambil dagangan sendiri bukan berutang. Rincian 2 (Meminjam uang) dipakai untuk pembelian bon di warung milik orang lain."
+   }
+  ],
+  "alternatif": [],
+  "petunjuk": [
+   "Konsumsi dari usaha perdagangan milik sendiri dinilai dengan harga penjualan di usaha itu.",
+   "Pasangannya ada di VII Rincian 1 Kolom (2), dan nilainya setahun."
+  ],
+  "langkah": [
+   "Harga penjualan seminggu: <code>30.000 + 18.000 = 48.000</code>.",
+   "Setahun: <code>48.000 × 30/7 × 12 = 2.468.571</code> → VII Rincian 1 Kolom (2)."
+  ],
+  "pembahasan": "Barang dagangan usaha milik sendiri yang dikonsumsi sendiri dicatat di Blok IV.1 pada harga penjualan di usaha, dan senilai harga itu × 30/7 × 12 menjadi pengambilan uang tunai dan tabungan (VII Rincian 1 Kolom 2). Tidak ada isian di Blok V.",
+  "rujukan": "Buku 4 hlm. 350"
  }
 ]

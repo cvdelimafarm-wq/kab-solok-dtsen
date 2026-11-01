@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { Lambang } from "@/app/sigap/vanguard/Logo";
+import RemarkBawahanVanguard from "@/app/sigap/vanguard/RemarkBawahanVanguard"; // (1 Nov 2026) remark pendampingan khusus untuk level di atas
 import { alamatVanguard } from "@/lib/vanguard/navigasi";
 
 type Keadaan = { mode: "bebas" | "tercatat"; boleh: boolean; riwayat: { kasus: string; benar: boolean }[] };
@@ -27,8 +28,9 @@ export default function KartuVanguardHariIni({ kegiatanId }: { kegiatanId: numbe
     return () => { batal = true; };
   }, [kegiatanId]);
 
-  if (!d) return null;
+  if (!d) return <RemarkBawahanVanguard kegiatanId={kegiatanId} />;
   return (
+    <>
     <Link href={href} aria-label="Buka Vanguard: latihan isi kuesioner, hasil Anda dicatat" className="block rounded-[18px] bg-gradient-to-br from-[#2A1763] to-[#5B34C9] p-3.5 text-white shadow-[0_8px_22px_rgba(42,23,99,.28)] active:opacity-95">
       <span className="flex items-center gap-3">
         <span className="grid h-[44px] w-[44px] flex-none place-items-center rounded-[12px] bg-white"><Lambang px={24} /></span>
@@ -40,5 +42,7 @@ export default function KartuVanguardHariIni({ kegiatanId }: { kegiatanId: numbe
       </span>
       <span className="mt-2.5 inline-flex min-h-[44px] items-center rounded-[12px] bg-[#FFC000] px-4 text-[13.5px] font-extrabold text-[#111]">Buka Vanguard</span>
     </Link>
+    <RemarkBawahanVanguard kegiatanId={kegiatanId} />
+    </>
   );
 }

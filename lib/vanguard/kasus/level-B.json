@@ -368,5 +368,100 @@
   ],
   "pembahasan": "Kayu bakar yang tidak berasal dari pembelian dianggap nilai produksi usaha rumah tangga dan dicatat di V.C Rincian 2; Blok IV.2 kolom 4 dikali 12.",
   "rujukan": "Buku 4 hlm. 290 dan 351"
+ },
+ {
+  "kode": "B09",
+  "level": "B",
+  "judul": "Listrik nyantol",
+  "cerita": "Rumah tangga Pak Ujang menyambung listrik langsung dari tiang PLN tanpa meteran dan tidak pernah membayar. Perkiraan nilai pemakaian listrik sebulan Rp90.000.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "234",
+     "kode": "04510",
+     "rin": "Listrik · nilai (perkiraan)",
+     "bln": 90000
+    }
+   ]
+  },
+  "blok": [
+   "C",
+   "E"
+  ],
+  "kunci": {},
+  "jebakan": [
+   {
+    "k": "e_badanUsaha_barangD",
+    "m": "PLN bukan pemberi transfer. Imputasi listrik nyantol berhenti di Blok IV.2."
+   },
+   {
+    "k": "e_bantuan_barangD",
+    "m": "Ini bukan bantuan pemerintah. Tidak ada isian Blok V."
+   }
+  ],
+  "alternatif": [],
+  "nol": "Listrik nyantol hanya diimputasi di Blok IV.2 (R.233 dan 234). Karena tidak ada transaksi, tidak dicatat lagi di blok berikutnya.",
+  "petunjuk": [
+   "Tidak ada bukti pembayaran: ini non-transaksi.",
+   "Imputasinya cukup di Blok IV.2; Blok V dibiarkan kosong."
+  ],
+  "langkah": [
+   "Listrik nyantol tetap dianggap membayar, dicatat di R.233 dan R.234 (Blok IV.2).",
+   "Karena non-transaksi, tidak ada isian di Blok V.C maupun V.E: biarkan kosong."
+  ],
+  "pembahasan": "Rumah tangga yang menyambung listrik langsung dari PLN dan tidak pernah membayar tetap dianggap membayar listrik (R.233 dan 234). Karena kategori non-transaksi, imputasi ini tidak dicatat lagi pada blok berikutnya.",
+  "rujukan": "Buku 4 hlm. 289"
+ },
+ {
+  "kode": "B10",
+  "level": "B",
+  "judul": "Listrik rumah dinas dibayar kantor",
+  "cerita": "Pak Hasan (PNS di bagian tata usaha) menempati rumah dinas dan listriknya dibayar kantor Rp300.000 per bulan; ia tidak membayar listrik apa pun. Abaikan gaji dan pendapatan lainnya.",
+  "iv": {
+   "t": 2,
+   "rows": [
+    {
+     "no": "234",
+     "kode": "04510",
+     "rin": "Listrik · nilai",
+     "bln": 300000
+    }
+   ]
+  },
+  "meta": {
+   "A": [
+    {
+     "no": "01",
+     "uraian": "PNS di bagian tata usaha",
+     "kat": "20",
+     "jenis": "4"
+    }
+   ]
+  },
+  "blok": [
+   "A"
+  ],
+  "kunci": {
+   "a1_barang": 3600000
+  },
+  "jebakan": [],
+  "alternatif": [
+   {
+    "k": "a1_barang",
+    "v": 300000,
+    "m": "Nilai Anda masih sebulan. Kalikan 12."
+   }
+  ],
+  "petunjuk": [
+   "Listrik yang dibayar pemberi kerja adalah fasilitas dari tempat bekerja.",
+   "Fasilitas dari pemberi kerja = upah/gaji dalam bentuk barang/jasa."
+  ],
+  "langkah": [
+   "<code>300.000 × 12 = 3.600.000</code> → V.A Kolom (6).",
+   "Kolom (5) kosong karena tidak ada upah uang pada kasus ini."
+  ],
+  "pembahasan": "Upah dan gaji dalam bentuk barang/jasa mencakup fasilitas lain seperti listrik yang dibayar pemberi kerja, dicatat di V.A Kolom 6 menurut nilainya.",
+  "rujukan": "Buku 4 hlm. 313"
  }
 ]

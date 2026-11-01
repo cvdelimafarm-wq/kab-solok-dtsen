@@ -481,7 +481,7 @@ function Beranda({ bintang, selesai, total, levelAktif, dicatat, uji, info, peng
           {KASUS_PUBLIK.map((c, i) => c.level !== lv ? null : (
             <button key={c.kode} type="button" className={`item${bintang[c.kode] != null && !c.bebas ? " done" : ""}`} onClick={() => onBuka(i)}>
               <span className="num">{c.kode}</span>
-              <span className="t">{c.judul}<small>{c.lengkap ? "Blok V–VII lengkap" : c.bebas ? "Tanpa kunci" : `Blok ${c.blok.map((b) => `V.${b}`).join(" + ")}`}</small></span>
+              <span className="t">{c.judul}<small>{c.lengkap ? "Blok V–VII lengkap" : c.bebas ? "Tanpa kunci" : `Blok ${c.blok.map((b) => (/^[A-G]$/.test(b) ? `V.${b}` : b)).join(" + ")}`}</small></span>
               <span className="st">{bintang[c.kode] != null && !c.bebas ? bintangTeks(bintang[c.kode]) : ""}</span>
             </button>
           ))}
