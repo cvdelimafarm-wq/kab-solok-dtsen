@@ -6,6 +6,7 @@
 // Dua mode (ditentukan CARA MASUK, bukan pilihan petugas):
 //   bebas    = tanpa ?k=: tidak ada panggilan ke server; bintang hanya disimpan di perangkat (localStorage, boleh gagal);
 //   tercatat = dengan ?k=ID dan boleh mencatat: tiap "Periksa" juga dikirim ke api/sigap/vanguard yang MENILAI ULANG dan mencatat. Gagal kirim tidak menghalangi umpan balik.
+// Tombol Back (di layar maupun Back HP) mundur satu langkah lewat mekanisme repo useTutupDenganBack (app/portal/lapisan.ts): kalkulator tertutup dulu, lalu kasus -> daftar -> pembuka -> keluar halaman.
 // HTML lembar, cerita, petunjuk, dan pembahasan berasal dari berkas kasus di repo (tepercaya, sama seperti prototipe); masukan petugas hanya bilangan bulat.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +14,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import "./vanguard.css";
 import { apiPortal } from "@/app/portal/sesi";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { bacaSesi } from "@/app/sigap/admin/api";
 import { compute, engineChecks, fmt, hitungBintang, isiOtomatisR1, kasusBenar, rp } from "@/lib/vanguard/engine";
 import { KASUS, KASUS_BERNILAI, MAKS_BINTANG, NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus";
@@ -63,8 +65,6 @@ export default function Vanguard() {
   const lembarRef = useRef<HTMLDivElement | null>(null);
   const skrol = useRef<HTMLDivElement | null>(null);
 
-  const layarRef = useRef<Layar>("pembuka");
-  layarRef.current = layar;
   const k: Kasus | null = layar === "kasus" ? KASUS[idx] ?? null : null;
   const dicatat = info.mode === "tercatat" && info.boleh;
 
@@ -100,24 +100,10 @@ export default function Vanguard() {
     try { window.localStorage.setItem(KUNCI_LOKAL, JSON.stringify({ bintang, tries })); } catch { /* abaikan */ }
   }, [bintang, tries, kegiatan]);
 
-  // ---------- riwayat peramban: Back = naik satu layar (pembuka -> keluar halaman) ----------
-  const maju = useCallback((l: Layar, i?: number) => {
-    // dari satu kasus ke kasus berikutnya: ganti entri (bukan tambah), supaya Back kembali ke daftar kasus
-    if (l === "kasus" && layarRef.current === "kasus") window.history.replaceState({ vg: l, idx: i ?? 0 }, "");
-    else window.history.pushState({ vg: l, idx: i ?? 0 }, "");
-    setLayar(l);
-    if (i !== undefined) setIdx(i);
-  }, []);
-  useEffect(() => {
-    const surut = (e: PopStateEvent) => {
-      const s = e.state as { vg?: Layar; idx?: number } | null;
-      setPad(null);
-      setLayar(s?.vg ?? "pembuka");
-      if (s?.vg === "kasus" && typeof s.idx === "number") { setIdx(s.idx); setVals({}); setStatus({}); setHasil(null); setCatat({ status: "tidak" }); }
-    };
-    window.addEventListener("popstate", surut);
-    return () => window.removeEventListener("popstate", surut);
-  }, []);
+  // ---------- Back: satu lapisan per tingkat layar (pad kalkulator di atas kasus, kasus di atas daftar, daftar di atas pembuka) ----------
+  useTutupDenganBack(pad !== null, () => setPad(null));
+  useTutupDenganBack(layar === "kasus" || layar === "akhir", () => { setPad(null); setLayar("beranda"); });
+  useTutupDenganBack(layar === "beranda", () => setLayar("pembuka"));
 
   // ---------- hitungan dan lembar ----------
   const e = useMemo(() => compute(vals), [vals]);
@@ -140,10 +126,11 @@ export default function Vanguard() {
     const kode = KASUS[i].kode;
     setVals({}); setStatus({}); setHasil(null); setCatat({ status: "tidak" }); setHint(hints[kode] ?? 0); setPad(null);
     mulaiRef.current = Date.now();
-    maju("kasus", i);
+    setIdx(i);
+    setLayar("kasus");
     skrol.current?.scrollTo({ top: 0 });
   };
-  const keBeranda = () => { setPad(null); window.history.pushState({ vg: "beranda", idx: 0 }, ""); setLayar("beranda"); skrol.current?.scrollTo({ top: 0 }); };
+  const keBeranda = () => { setPad(null); setLayar("beranda"); skrol.current?.scrollTo({ top: 0 }); };
 
   const kirim = async (kas: Kasus, isian: Nilai, lihatJawaban: boolean, petunjuk: number) => {
     if (!dicatat || kegiatan === null) return;
@@ -271,7 +258,7 @@ export default function Vanguard() {
             {!info.memuat && info.mode === "tercatat" && !info.boleh && info.alasan && <div className="j2" style={{ padding: "0 14px" }}>{info.alasan} Anda tetap dapat berlatih; hasilnya tidak dicatat.</div>}
           </div>
           <div className="bawah">
-            <button type="button" className="masuk" disabled={info.memuat} onClick={() => maju("beranda")}>Masuk ke Vanguard</button>
+            <button type="button" className="masuk" disabled={info.memuat} onClick={() => setLayar("beranda")}>Masuk ke Vanguard</button>
             <Link className="pulang" href={tujuan}>← Kembali ke SIGAP</Link>
             <div className="oleh">Diselenggarakan oleh <b>BPS Kabupaten Solok</b></div>
           </div>
@@ -295,7 +282,7 @@ export default function Vanguard() {
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
-        {layar === "beranda" && <Beranda bintang={bintang} selesai={selesai} dicatat={dicatat} info={info} onBuka={bukaKasus} onAkhir={() => maju("akhir")} />}
+        {layar === "beranda" && <Beranda bintang={bintang} selesai={selesai} dicatat={dicatat} info={info} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
 
         {layar === "kasus" && k && (
           <>
@@ -322,7 +309,7 @@ export default function Vanguard() {
               {hasil && (
                 <PanelHasil k={k} hasil={hasil} catat={catat} dicatat={dicatat} adaLanjut={idx < KASUS.length - 1}
                   onUlang={() => { setHasil(null); setStatus({}); setCatat({ status: "tidak" }); }} onKunci={lihatJawaban}
-                  onLanjut={() => bukaKasus(idx + 1)} onAkhir={() => maju("akhir")} />
+                  onLanjut={() => bukaKasus(idx + 1)} onAkhir={() => setLayar("akhir")} />
               )}
             </div>
           </>
@@ -333,7 +320,7 @@ export default function Vanguard() {
 
       {layar === "kasus" && k && (
         <div className="dock">
-          <button type="button" className="btn" aria-label="Daftar kasus" onClick={() => window.history.back()}>☰</button>
+          <button type="button" className="btn" aria-label="Daftar kasus" onClick={keBeranda}>☰</button>
           {k.bebas ? <button type="button" className="btn amb" onClick={isiOtomatis}>Isi R.1 otomatis</button>
             : <button type="button" className="btn" disabled={hint >= k.petunjuk.length} onClick={() => { const n = Math.min(k.petunjuk.length, hint + 1); setHint(n); setHints((h) => ({ ...h, [k.kode]: n })); }}>Petunjuk{k.petunjuk.length ? ` ${hint}/${k.petunjuk.length}` : ""}</button>}
           <button type="button" className="btn pri" disabled={catat.status === "mengirim"} onClick={periksa}>Periksa</button>
