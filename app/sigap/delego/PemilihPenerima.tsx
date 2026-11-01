@@ -30,6 +30,7 @@ export default function PemilihPenerima({
   setPilih,
   infoBeban,
   tampilPj = true,
+  tampilPeran = true,
   bebanOrang,
 }: {
   ro: string;
@@ -39,6 +40,8 @@ export default function PemilihPenerima({
   /** Teks tambahan di bawah tiap penerima terpilih (mis. beban minggu ini). */
   infoBeban?: (akun: number) => ReactNode;
   tampilPj?: boolean;
+  /** Pilihan peran per penerima (wakil, pegawai, PML, PPL). Dimatikan untuk perintah langsung: semua penerima berperan pegawai. */
+  tampilPeran?: boolean;
   /** Persen beban minggu ini per akun untuk daftar pegawai organik. */
   bebanOrang?: (akun: number) => number | null;
 }) {
@@ -70,10 +73,10 @@ export default function PemilihPenerima({
                 <span className="truncate text-[14px] font-semibold">{p.nama}{p.jenis === "mitra" && <span className="text-[12px] font-normal text-[#3B4A57]"> · mitra</span>}</span>
                 <button type="button" className={KELAS.tombolKecil} onClick={() => setPilih((x) => x.filter((y) => y.akun !== p.akun))} aria-label={`Hapus ${p.nama} dari daftar`}>Lepas</button>
               </div>
-              <div className={`mt-2 grid gap-2 ${tampilPj ? "grid-cols-2" : "grid-cols-1"}`}>
-                <select aria-label={`Peran ${p.nama}`} className={KELAS.isian} value={p.peran} onChange={(e) => ubah(p.akun, { peran: e.target.value as PeranDelegasi })}>
+              <div className={`mt-2 grid gap-2 ${tampilPj && tampilPeran ? "grid-cols-2" : "grid-cols-1"}`}>
+                {tampilPeran && <select aria-label={`Peran ${p.nama}`} className={KELAS.isian} value={p.peran} onChange={(e) => ubah(p.akun, { peran: e.target.value as PeranDelegasi })}>
                   {(p.jenis === "mitra" ? (["pml", "ppl"] as const) : (["wakil", "pegawai", "pml", "ppl"] as const)).map((r) => <option key={r} value={r}>{NAMA_PERAN[r]}</option>)}
-                </select>
+                </select>}
                 {tampilPj && <input aria-label={`PJ bidang ${p.nama}`} className={KELAS.isian} maxLength={80} placeholder="PJ bidang (opsional)" value={p.pj} onChange={(e) => ubah(p.akun, { pj: e.target.value })} />}
               </div>
               {infoBeban?.(p.akun)}

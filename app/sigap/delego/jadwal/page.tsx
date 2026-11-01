@@ -11,13 +11,14 @@ import { angka, awalBulan, awalMinggu, bebanDelegasiHari, tambahHari, targetHari
 import { rentangMinggu, susunRekap, type SelRekap } from "@/lib/delego/rekap";
 import { TEKS_STATUS_BUTIR, statusButir } from "@/lib/delego/tinjau";
 import { warnaBeban } from "@/lib/delego/warna";
-import { useRekap, useSaya } from "../data";
+import { aksiKeu, useRekap, useSaya } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, fmt } from "../ui";
 
 type Rentang = "hari" | "pekan" | "bulan";
 
+const jamWibTeks = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(11, 16);
 const akhirBulan = (awal: string) => {
   const [y, m] = awal.split("-").map(Number);
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
@@ -48,6 +49,8 @@ export default function Jadwal() {
   const [rentang, setRentang] = useState<Rentang>("hari");
   const [geser, setGeser] = useState(0);
   const [buka, setBuka] = useState<string | null>(null);
+  const [selesaiId, setSelesaiId] = useState<number | null>(null);
+  const [galatSelesai, setGalatSelesai] = useState<string | null>(null);
 
   const { dari, sampai } = useMemo(() => {
     if (rentang === "hari") return { dari: hari, sampai: hari };
@@ -69,6 +72,18 @@ export default function Jadwal() {
   }, [d, rekap.data, dari, sampai]);
   const baris = hasil?.baris[0];
   const hariIni = baris?.sel.find((x) => x.tanggal === hari);
+
+  async function tandaiSelesai(id: number) {
+    setSelesaiId(id);
+    setGalatSelesai(null);
+    const r = await aksiKeu("keu_dlg_perintah_selesai", { p_id: id });
+    setSelesaiId(null);
+    if (!r.ok) {
+      setGalatSelesai(r.pesan);
+      return;
+    }
+    await s.muat();
+  }
 
   const aktif = d ? d.delegasi.filter((x) => x.status === "baru" || x.status === "berjalan") : [];
   const hariIniAda = aktif.filter((x) => bebanDelegasiHari(x, hari) > 0);
@@ -120,6 +135,7 @@ export default function Jadwal() {
               </Kartu>
             ))}
             {hariIniAda.length === 0 && (hariIni?.rincian.length ?? 0) === 0 && <Kosong>Tidak ada pekerjaan terjadwal hari ini.</Kosong>}
+            {galatSelesai && <Galat>{galatSelesai}</Galat>}
             {hariIniAda.map((x) => {
               const st = TEKS_STATUS_BUTIR[statusButir(x, d.laporan)];
               const sudah = d.laporan.some((l) => l.delegasi_id === x.id && l.tanggal === hari);
@@ -129,13 +145,20 @@ export default function Jadwal() {
                     <div className="min-w-0">
                       <div className="text-[15px] font-semibold leading-snug">{x.judul}</div>
                       <div className="text-[12.5px] text-[#3B4A57]">
-                        {x.kelas === "perintah" ? "Perintah langsung · " : ""}{x.kegiatan_id ? "Bertaut kegiatan tim" : x.kelompok_nama ?? "Pekerjaan kantor"} · target hari ini {fmt(targetHariIni(x, hari), 1)} {x.perlu_hasil || x.poin_per_satuan ? x.satuan : "poin"} · tenggat {tglPendek(x.tenggat)}
+                        {x.kelas === "perintah" ? "Perintah langsung · " : ""}{x.kegiatan_id ? "Bertaut kegiatan tim" : x.kelompok_nama ?? "Pekerjaan kantor"} · target hari ini {fmt(targetHariIni(x, hari), 1)} {x.perlu_hasil || x.poin_per_satuan ? x.satuan : "poin"} · tenggat {tglPendek(x.tenggat)}{x.tenggat_waktu ? ` pukul ${jamWibTeks(x.tenggat_waktu)} WIB` : ""}
                       </div>
                     </div>
                     <Lencana nada={st.nada}>{st.teks}</Lencana>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Link href={`/sigap/delego/lapor?delegasi=${x.id}`} className={sudah ? KELAS.tombolKecil : KELAS.tombolKecilUtama}>{sudah ? "Perbarui laporan" : "Lapor"}</Link>
+                    {x.kelas === "perintah" && x.mode_tutup === "ringan" ? (
+                      <>
+                        <button type="button" className={KELAS.tombolKecilUtama} disabled={selesaiId === x.id} onClick={() => void tandaiSelesai(x.id)}>{selesaiId === x.id ? "Menyimpan..." : "Sudah dilaksanakan"}</button>
+                        <Link href={`/sigap/delego/lapor?delegasi=${x.id}`} className={KELAS.tombolKecil}>Lapor rinci</Link>
+                      </>
+                    ) : (
+                      <Link href={`/sigap/delego/lapor?delegasi=${x.id}`} className={sudah ? KELAS.tombolKecil : KELAS.tombolKecilUtama}>{sudah ? "Perbarui laporan" : "Lapor"}</Link>
+                    )}
                     {x.terhalang_oleh && <span className="text-[12.5px] text-[#8A4605]">Terhalang: {x.terhalang_oleh}</span>}
                   </div>
                 </Kartu>

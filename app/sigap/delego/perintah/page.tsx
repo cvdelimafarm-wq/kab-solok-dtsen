@@ -110,6 +110,7 @@ export default function Perintah() {
       setUraian("");
       setJam("");
       setPilih([]);
+      await Promise.all([bahan.muat(), rekap.muat()]); // beban penerima pada layar ikut diperbarui
       if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
@@ -185,6 +186,7 @@ export default function Perintah() {
                 pilih={pilih}
                 setPilih={setPilih}
                 tampilPj={false}
+                tampilPeran={false}
                 infoBeban={(akun) => {
                   const b = bebanHari(akun);
                   if (!b) return null;
