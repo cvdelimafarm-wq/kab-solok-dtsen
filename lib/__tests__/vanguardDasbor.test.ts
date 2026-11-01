@@ -103,7 +103,7 @@ describe("nilai lulus dan kalkulator pada dasbor", () => {
     expect(d.petugas.every((p) => p.lulus === null && p.kalkulator === 0)).toBe(true);
   });
   it("dengan nilai lulus: dihitung dari kasus bernilai pada level yang dibuka; hanya peserta dihitung pada ringkasan", () => {
-    const peng = { level_dibuka: ["A" as const], nilai_lulus: 1, buka_at: null, tutup_at: null, maks_percobaan: null };
+    const peng = { level_dibuka: ["A" as const], nilai_lulus: 1, buka_at: null, tutup_at: null, maks_percobaan: null, mode: "latihan" as const };
     const d = susunDasbor(P, PERC, KES, { 9: "Mantan" }, { pengaturan: peng, kalkulator: { 1: 4, 2: 1, 9: 7 } });
     const rina = d.petugas.find((x) => x.nama === "Rina")!, sari = d.petugas.find((x) => x.nama === "Sari")!;
     expect(rina.lulus).toBe(true); expect(rina.persenBenar).toBeGreaterThan(0);
