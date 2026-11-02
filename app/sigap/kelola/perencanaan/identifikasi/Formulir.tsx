@@ -15,7 +15,7 @@ import {
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, TglRentang, YaTidak } from "./Kontrol";
 import { BarisRelatif } from "./Relatif";
 import { WaktuIsian } from "./Waktu";
-import { mingguDariTanggal, mingguKe, namaBulan, namaHari, polaDariTanggal, recPerk, tanggalLengkap } from "@/lib/keu/waktu";
+import { mingguDariTanggal, mingguKe, namaBulan, namaHari, akhirBulanDari, polaDariTanggal, recPerk, tanggalLengkap } from "@/lib/keu/waktu";
 import { keteranganHari } from "@/lib/keu/tanggalDurasi";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
@@ -142,7 +142,10 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   const wPola = jendelaPeriode(f, pa, tahun);
   const barisPola = (sisi: "mulai" | "selesai") => {
     const m = sisi === "mulai";
-    const akhir = (m ? J.mj : J.sj) === "akhir";
+    // (2 Nov 2026) Bila periode acuan memakai pengecualian ("Tanpa pola" atau tanggal di luar pola), semua isian di sini mengubah pengecualian itu
+    // (tanggal mutlak). Pilihan "akhir bulan" milik pola jadi tidak berlaku, supaya tidak ada dua sumber yang saling bertentangan.
+    const kcF = first ? kecualiAktif(f, first) : null;
+    const akhir = !kcF && (m ? J.mj : J.sj) === "akhir";
     const bln = m ? J.mb : J.sb;
     const n = m ? J.mn : J.sn;
     const awal = first ? NAMA_PERIODE[f.periode].indexOf(first) * LEN : -1;
@@ -179,7 +182,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
         <div className="flex flex-wrap items-center gap-2">
           <span className="w-14 shrink-0 text-[13px] font-bold text-[#0F2A52]">{m ? "Mulai" : "Selesai"}</span>
           {!akhir && <Pilihan nama={`Cara mengisi ${sisi}`} nilai={mode} opsi={["Tanggal", "Minggu"] as const} mati={mati} onPilih={(v) => setModeIsi((x) => ({ ...x, [sisi]: v }))} />}
-          <Centang aktif={akhir} mati={mati} onUbah={() => setJend(m ? (akhir ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 }) : (akhir ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 }))}>{m ? "Hitung dari akhir bulan" : "Akhir bulan"}</Centang>
+          {kcF ? (!m && tglAcuan && <button type="button" disabled={mati} className={tombolKecil} onClick={() => pasang(akhirBulanDari(tglAcuan))}>Pindah ke akhir bulan</button>) : <Centang aktif={akhir} mati={mati} onUbah={() => setJend(m ? (akhir ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 }) : (akhir ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 }))}>{m ? "Hitung dari akhir bulan" : "Akhir bulan"}</Centang>}
         </div>
         {akhir ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -233,7 +236,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
       {barisPola("mulai")}
       {barisPola("selesai")}
       <ul className="m-0 list-none space-y-0.5 p-0 text-[12.5px] text-[#44546F]" aria-label="Hasil pola tiap periode">
-        {lst.slice(0, 4).map((P) => { const w = jendelaPola(f, P, tahun); return <li key={P}>{P}: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}{keteranganHari(w.mulai, w.selesai)}</li>; })}
+        {lst.slice(0, 4).map((P) => { const w = jendelaPeriode(f, P, tahun); return <li key={P}>{P}{kecualiAktif(f, P) ? " (jadwal khusus)" : ""}: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}{keteranganHari(w.mulai, w.selesai)}</li>; })}
         {lst.length > 4 && <li>… dan {lst.length - 4} periode lain</li>}
       </ul>
     </div>

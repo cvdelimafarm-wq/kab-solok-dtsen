@@ -134,3 +134,9 @@ export function tanggalLengkap(d: string): boolean {
   const th = Number(m[1]);
   return th >= 1900 && th <= 2200;
 }
+
+/** Tanggal terakhir pada bulan yang memuat d ("2026-11-10" -> "2026-11-30"). Kosong bila d bukan tanggal sah. */
+export function akhirBulanDari(d: string): string {
+  const t = tglOk(d);
+  return t ? ymd(new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0))) : "";
+}
