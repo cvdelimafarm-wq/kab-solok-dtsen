@@ -8,6 +8,7 @@
 import { useCallback, useMemo } from "react";
 import { urlBaca } from "@/lib/keu/ro";
 import { useBacaKeu } from "@/app/sigap/ro/useKeu";
+import { namaOrganik } from "@/lib/keu/pilihInstruktur";
 import type { IsiKebijakan } from "@/lib/keu/kebijakan";
 import type { StatusLanjutan } from "@/lib/keu/lanjutan";
 import type { BarisPengecualian } from "@/lib/keu/notifikasi";
@@ -32,6 +33,9 @@ export function useLanjutan(identId: number | null, tahun: number | null, ro: st
   const dok = useBacaKeu<BarisDokumen>(identId ? urlBaca("keu_v_ident_dokumen", { ident_id: identId }, { batas: 2000 }) : null);
   const pengecualian = useBacaKeu<BarisPengecualian>(identId ? urlBaca("keu_v_pengecualian", { ident_id: identId }, { urut: "-id", batas: 200 }) : null);
   const ttd = useBacaKeu<CalonTtd>(urlBaca("keu_v_ident_ttd", {}, { urut: "akun_nama", batas: 500 }));
+  // (2 Nov 2026) pegawai organik aktif untuk dropdown nama instruktur; gagal memuat (mis. SQL 20261102a belum dijalankan) = nama diketik bebas
+  const org = useBacaKeu<{ akun_id: number; nama: string }>(urlBaca("keu_v_pegawai_organik", {}, { urut: "nama", batas: 500 }));
+  const organik = useMemo(() => (org.baris ? namaOrganik(org.baris) : null), [org.baris]);
   const lembar = useBacaKeu<LembarBerlaku>(tahun ? urlBaca("keu_v_kebijakan_berlaku", { tahun }, { batas: 1 }) : null);
   const muatSemua = useCallback(async () => { await Promise.all([baris.muat(), versi.muat(), dok.muat(), pengecualian.muat()]); }, [baris, versi, dok, pengecualian]);
   const calon = useMemo(() => (ttd.baris ?? []).filter((t) => t.ro_kode === null || t.ro_kode === ro), [ttd.baris, ro]);
@@ -41,6 +45,7 @@ export function useLanjutan(identId: number | null, tahun: number | null, ro: st
     dokumen: dok.baris ?? [],
     pengecualian: pengecualian.baris ?? [],
     calon,
+    organik,
     lembar: lembar.baris?.[0] ?? null,
     lembarSiap: !tahun || lembar.baris !== null || lembar.galat !== null,
     memuat: identId !== null && !baris.baris && !baris.galat,

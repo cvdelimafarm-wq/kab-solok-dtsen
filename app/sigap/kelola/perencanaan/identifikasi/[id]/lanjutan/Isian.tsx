@@ -5,7 +5,7 @@
 // (25 Okt 2026, tahap 29) Kartu isian Identifikasi lanjutan: wilayah tugas, kelas, jumlah per peran, dan daftar petugas.
 // Hanya tampilan; aturan (pemeriksa, status Draf atau Final) ada di lib/keu/lanjutan.ts dan basis data.
 
-import type { Dispatch } from "react";
+import { useState, type Dispatch } from "react";
 import { kolom, label as kelasLabel, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
 import { JABATAN } from "@/lib/keu/kebijakan";
 import {
@@ -13,6 +13,7 @@ import {
   type IsiLanjutan, type KodePeran, type Kelas, type Petugas,
 } from "@/lib/keu/lanjutan";
 import { ASAL_INSTRUKTUR, LEVEL_INSTRUKTUR, daftarPeriode, type Form } from "@/lib/keu/identifikasi";
+import { geserSetelahHapus, namaTerpakai, nilaiPilihan, PILIHAN_LAINNYA, terapkanPilihan } from "@/lib/keu/pilihInstruktur";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl } from "../../Kontrol";
 
 export type Ubah = (fn: (g: IsiLanjutan) => void) => void;
@@ -39,7 +40,8 @@ export function KartuWilayah({ isi, ubah, mati }: Props) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-export function KartuKelas({ isi, ubah, mati, form }: Props & { form: Form | null }) {
+/** `organik` = nama pegawai organik untuk dropdown instruktur; null atau kosong (belum termuat/galat) = nama diketik bebas seperti semula. */
+export function KartuKelas({ isi, ubah, mati, form, organik }: Props & { form: Form | null; organik?: readonly string[] | null }) {
   const periode = form ? daftarPeriode(form) : [];
   const tambah = (sesi: "briefing" | "pelatihan") => ubah((g) => {
     const id = idBaru("k", g.kelas.map((k) => k.id));
@@ -51,7 +53,7 @@ export function KartuKelas({ isi, ubah, mati, form }: Props & { form: Form | nul
   return (
     <Bagian huruf="2" judul="Kelas briefing dan pelatihan" id={ID_LJ.kelas}>
       {isi.kelas.length === 0 && <Cat>Belum ada kelas. Tambahkan kelas briefing atau pelatihan; setiap kelas yang sudah pasti ditandai Fix.</Cat>}
-      {isi.kelas.map((k, i) => <KelasSatu key={k.id} k={k} i={i} isi={isi} ubah={ubah} mati={mati} periode={periode} />)}
+      {isi.kelas.map((k, i) => <KelasSatu key={k.id} k={k} i={i} isi={isi} ubah={ubah} mati={mati} periode={periode} organik={organik ?? null} />)}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={tombolKecil} disabled={mati || isi.kelas.length >= 60} onClick={() => tambah("briefing")}>+ Kelas briefing</button>
         <button type="button" className={tombolKecil} disabled={mati || isi.kelas.length >= 60} onClick={() => tambah("pelatihan")}>+ Kelas pelatihan</button>
@@ -60,7 +62,7 @@ export function KartuKelas({ isi, ubah, mati, form }: Props & { form: Form | nul
   );
 }
 
-function KelasSatu({ k, i, isi, ubah, mati, periode }: { k: Kelas; i: number; isi: IsiLanjutan; ubah: Ubah; mati: boolean; periode: string[] }) {
+function KelasSatu({ k, i, isi, ubah, mati, periode, organik }: { k: Kelas; i: number; isi: IsiLanjutan; ubah: Ubah; mati: boolean; periode: string[]; organik: readonly string[] | null }) {
   const set = <T extends keyof Kelas>(f: T, v: Kelas[T]) => ubah((g) => { const x = g.kelas.find((e) => e.id === k.id); if (x) x[f] = v; });
   const luring = k.metode === "Luring" || k.metode === "Hybrid";
   const hotel = k.tempat === "Hotel dalam kota" || k.tempat === "Hotel luar kota";
@@ -99,7 +101,7 @@ function KelasSatu({ k, i, isi, ubah, mati, periode }: { k: Kelas; i: number; is
           ))}
         </div>
       </div>
-      <InstrukturKelas k={k} i={i} ubah={ubah} mati={mati} />
+      <InstrukturKelas k={k} i={i} ubah={ubah} mati={mati} organik={organik} />
       <Isian judul="Kematangan kelas"><FixPerk perk={!k.fix} nama={`Kelas ${i + 1}`} mati={mati} onPilih={(perk) => set("fix", !perk)} /></Isian>
     </div>
   );
@@ -110,8 +112,10 @@ function KelasSatu({ k, i, isi, ubah, mati, periode }: { k: Kelas; i: number; is
  * (28 Okt 2026) Instruktur (pengajar atau narasumber) kelas: nama, level pasti (Innas atau Inda), asal (Internal BPS atau Eksternal), dan jam mengajar PER INSTRUKTUR.
  * Dasar honor pengajar pada rincian biaya. Kelas yang ditandai Fix wajib berisi instruktur yang lengkap (bila ada).
  */
-function InstrukturKelas({ k, i, ubah, mati }: { k: Kelas; i: number; ubah: Ubah; mati: boolean }) {
+function InstrukturKelas({ k, i, ubah, mati, organik }: { k: Kelas; i: number; ubah: Ubah; mati: boolean; organik: readonly string[] | null }) {
   const daftar = k.instruktur ?? [];
+  const [lainnya, setLainnya] = useState<number[]>([]); // baris yang memilih "Lainnya" (nama belum diketik)
+  const punyaDaftar = !!organik && organik.length > 0;
   const ubahDaftar = (fn: (d: NonNullable<Kelas["instruktur"]>) => void) => ubah((g) => { const x = g.kelas.find((e) => e.id === k.id); if (x) { x.instruktur = x.instruktur ?? []; fn(x.instruktur); } });
   const jamTotal = daftar.reduce((t, y) => t + y.jam, 0);
   return (
@@ -121,7 +125,29 @@ function InstrukturKelas({ k, i, ubah, mati }: { k: Kelas; i: number; ubah: Ubah
       {daftar.length > 0 && <Cat>Isi jam mengajar tiap instruktur; jumlahnya adalah jam pelatihan kelas ini. Di RAB honor dihitung jumlah kelas x jam x tarif; di POK cukup total jam x tarif.</Cat>}
       {daftar.map((y, j) => (
         <div key={j} className="grid grid-cols-2 gap-2 rounded-lg border border-[#E1E6EF] bg-white p-2 sm:grid-cols-5">
-          <input aria-label={`Nama instruktur ${j + 1} kelas ${i + 1}`} placeholder="Nama instruktur" className={`${kolom} sm:col-span-2`} maxLength={120} disabled={mati} value={y.nama} onChange={(e) => ubahDaftar((d) => { d[j].nama = e.target.value; })} />
+          {punyaDaftar ? (() => {
+            const pakai = namaTerpakai(daftar, j);
+            const nilai = nilaiPilihan(y.nama, organik, lainnya.includes(j));
+            return (
+              <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
+                <select aria-label={`Pegawai instruktur ${j + 1} kelas ${i + 1}`} className={kolom} disabled={mati} value={nilai}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setLainnya((l) => (v === PILIHAN_LAINNYA ? (l.includes(j) ? l : [...l, j]) : l.filter((x) => x !== j)));
+                    ubahDaftar((d) => { d[j] = terapkanPilihan(d[j], v, organik); });
+                  }}>
+                  <option value="">(pilih pegawai organik)</option>
+                  {organik.map((n) => <option key={n} value={n} disabled={pakai.has(n)}>{n}{pakai.has(n) ? " (sudah dipilih)" : ""}</option>)}
+                  <option value={PILIHAN_LAINNYA}>Lainnya (bukan pegawai organik, ketik nama)…</option>
+                </select>
+                {nilai === PILIHAN_LAINNYA && (
+                  <input aria-label={`Nama instruktur ${j + 1} kelas ${i + 1}`} placeholder="Ketik nama instruktur" className={kolom} maxLength={120} disabled={mati} value={y.nama} onChange={(e) => ubahDaftar((d) => { d[j].nama = e.target.value; })} />
+                )}
+              </div>
+            );
+          })() : (
+            <input aria-label={`Nama instruktur ${j + 1} kelas ${i + 1}`} placeholder="Nama instruktur" className={`${kolom} sm:col-span-2`} maxLength={120} disabled={mati} value={y.nama} onChange={(e) => ubahDaftar((d) => { d[j].nama = e.target.value; })} />
+          )}
           {opsiKolom(y.level, (v) => ubahDaftar((d) => { d[j].level = v as typeof y.level; }), mati, `Level instruktur ${j + 1} kelas ${i + 1}`, LEVEL_INSTRUKTUR, "Level")}
           {opsiKolom(y.asal, (v) => ubahDaftar((d) => { d[j].asal = v as typeof y.asal; }), mati, `Asal instruktur ${j + 1} kelas ${i + 1}`, ASAL_INSTRUKTUR, "Asal")}
           <div className="flex items-center gap-1.5">
@@ -130,7 +156,7 @@ function InstrukturKelas({ k, i, ubah, mati }: { k: Kelas; i: number; ubah: Ubah
           </div>
           <div className="col-span-2 flex items-center justify-between sm:col-span-5">
             <span className={`text-[12px] ${instrukturLengkap(y) ? "text-[#1B7A3E]" : "text-[#8A5A00]"}`}>{instrukturLengkap(y) ? "Lengkap" : "Belum lengkap: nama, level, asal, dan jam wajib"}</span>
-            <button type="button" className={tombolBahaya} disabled={mati} onClick={() => ubahDaftar((d) => { d.splice(j, 1); })}>Hapus instruktur</button>
+            <button type="button" className={tombolBahaya} disabled={mati} onClick={() => { setLainnya((l) => geserSetelahHapus(l, j)); ubahDaftar((d) => { d.splice(j, 1); }); }}>Hapus instruktur</button>
           </div>
         </div>
       ))}

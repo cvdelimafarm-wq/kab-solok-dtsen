@@ -144,7 +144,7 @@ function Isi() {
           <div className="grid min-w-0 items-start gap-3.5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
             <div className="flex min-w-0 flex-col gap-3.5">
               <KartuWilayah isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} />
-              <KartuKelas isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} form={formSah} />
+              <KartuKelas isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} form={formSah} organik={lj.organik} />
               <KartuPeran isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} />
               <KartuPetugas isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} />
             </div>
