@@ -5,7 +5,7 @@
 // (25 Okt 2026, tahap 29) Kartu isian Identifikasi lanjutan: wilayah tugas, kelas, jumlah per peran, dan daftar petugas.
 // Hanya tampilan; aturan (pemeriksa, status Draf atau Final) ada di lib/keu/lanjutan.ts dan basis data.
 
-import { useMemo, useState, type Dispatch } from "react";
+import { type Dispatch } from "react";
 import { kolom, label as kelasLabel, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
 import { JABATAN } from "@/lib/keu/kebijakan";
 import {
@@ -14,8 +14,8 @@ import {
 } from "@/lib/keu/lanjutan";
 import { ASAL_INSTRUKTUR, LEVEL_INSTRUKTUR, daftarPeriode, type Form } from "@/lib/keu/identifikasi";
 import { kelasAwal, samakanDenganAwal, tambahDariAwal, tautkanKelas, type TautKelas } from "@/lib/keu/tautAwal";
-import { calonOrganik, namaTerpakaiPeran, type CalonNama } from "@/lib/keu/pilihNama";
-import { geserSetelahHapus, namaTerpakai, nilaiPilihan, PILIHAN_LAINNYA, terapkanPilihan } from "@/lib/keu/pilihInstruktur";
+import { adaDiDaftar, cariAkunUnik, namaTerpakaiPeran, terpakaiLain, type CalonNama } from "@/lib/keu/pilihNama";
+import { PILIHAN_LAINNYA, terapkanPilihan } from "@/lib/keu/pilihInstruktur";
 import PilihNama from "../../PilihNama";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl } from "../../Kontrol";
 
@@ -44,7 +44,7 @@ export function KartuWilayah({ isi, ubah, mati }: Props) {
 
 // ---------------------------------------------------------------------------------------------------------------------
 /** `organik` = nama pegawai organik untuk dropdown instruktur; null atau kosong (belum termuat/galat) = nama diketik bebas seperti semula. */
-export function KartuKelas({ isi, ubah, mati, form, organik, tahun }: Props & { form: Form | null; organik?: readonly string[] | null; tahun?: number | null }) {
+export function KartuKelas({ isi, ubah, mati, form, organik, tahun }: Props & { form: Form | null; organik?: readonly CalonNama[] | null; tahun?: number | null }) {
   // (2 Nov 2026) Tautan ke identifikasi awal: kelas ikut awal, boleh disunting; yang menyimpang atau tambahan diberi penanda.
   const taut = tautkanKelas(isi, form, tahun ?? null);
   const periode = form ? daftarPeriode(form) : [];
@@ -79,7 +79,7 @@ export function KartuKelas({ isi, ubah, mati, form, organik, tahun }: Props & { 
   );
 }
 
-function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSamakan }: { k: Kelas; i: number; isi: IsiLanjutan; ubah: Ubah; mati: boolean; periode: string[]; organik: readonly string[] | null; taut: TautKelas | null; onSamakan: () => void }) {
+function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSamakan }: { k: Kelas; i: number; isi: IsiLanjutan; ubah: Ubah; mati: boolean; periode: string[]; organik: readonly CalonNama[] | null; taut: TautKelas | null; onSamakan: () => void }) {
   const set = <T extends keyof Kelas>(f: T, v: Kelas[T]) => ubah((g) => { const x = g.kelas.find((e) => e.id === k.id); if (x) x[f] = v; });
   const luring = k.metode === "Luring" || k.metode === "Hybrid";
   const hotel = k.tempat === "Hotel dalam kota" || k.tempat === "Hotel luar kota";
@@ -142,10 +142,10 @@ function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSamakan }:
  * (28 Okt 2026) Instruktur (pengajar atau narasumber) kelas: nama, level pasti (Innas atau Inda), asal (Internal BPS atau Eksternal), dan jam mengajar PER INSTRUKTUR.
  * Dasar honor pengajar pada rincian biaya. Kelas yang ditandai Fix wajib berisi instruktur yang lengkap (bila ada).
  */
-function InstrukturKelas({ k, i, ubah, mati, organik, catatan }: { k: Kelas; i: number; ubah: Ubah; mati: boolean; organik: readonly string[] | null; catatan: string | null }) {
+function InstrukturKelas({ k, i, ubah, mati, organik, catatan }: { k: Kelas; i: number; ubah: Ubah; mati: boolean; organik: readonly CalonNama[] | null; catatan: string | null }) {
   const daftar = k.instruktur ?? [];
-  const [lainnya, setLainnya] = useState<number[]>([]); // baris yang memilih "Lainnya" (nama belum diketik)
-  const punyaDaftar = !!organik && organik.length > 0;
+  const calonIns = organik;
+  const namaOrg = (organik ?? []).map((c) => c.nama);
   const ubahDaftar = (fn: (d: NonNullable<Kelas["instruktur"]>) => void) => ubah((g) => { const x = g.kelas.find((e) => e.id === k.id); if (x) { x.instruktur = x.instruktur ?? []; fn(x.instruktur); } });
   const jamTotal = daftar.reduce((t, y) => t + y.jam, 0);
   return (
@@ -156,29 +156,16 @@ function InstrukturKelas({ k, i, ubah, mati, organik, catatan }: { k: Kelas; i: 
       {daftar.length > 0 && <Cat>Isi jam mengajar tiap instruktur; jumlahnya adalah jam pelatihan kelas ini. Di RAB honor dihitung jumlah kelas x jam x tarif; di POK cukup total jam x tarif.</Cat>}
       {daftar.map((y, j) => (
         <div key={j} className="grid grid-cols-2 gap-2 rounded-lg border border-[#E1E6EF] bg-white p-2 sm:grid-cols-5">
-          {punyaDaftar ? (() => {
-            const pakai = namaTerpakai(daftar, j);
-            const nilai = nilaiPilihan(y.nama, organik, lainnya.includes(j));
-            return (
-              <div className="flex min-w-0 flex-col gap-1.5 sm:col-span-2">
-                <select aria-label={`Pegawai instruktur ${j + 1} kelas ${i + 1}`} className={kolom} disabled={mati} value={nilai}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setLainnya((l) => (v === PILIHAN_LAINNYA ? (l.includes(j) ? l : [...l, j]) : l.filter((x) => x !== j)));
-                    ubahDaftar((d) => { d[j] = terapkanPilihan(d[j], v, organik); });
-                  }}>
-                  <option value="">(pilih pegawai organik)</option>
-                  {organik.map((n) => <option key={n} value={n} disabled={pakai.has(n)}>{n}{pakai.has(n) ? " (sudah dipilih)" : ""}</option>)}
-                  <option value={PILIHAN_LAINNYA}>Lainnya (bukan pegawai organik, ketik nama)…</option>
-                </select>
-                {nilai === PILIHAN_LAINNYA && (
-                  <input aria-label={`Nama instruktur ${j + 1} kelas ${i + 1}`} placeholder="Ketik nama instruktur" className={kolom} maxLength={120} disabled={mati} value={y.nama} onChange={(e) => ubahDaftar((d) => { d[j].nama = e.target.value; })} />
-                )}
-              </div>
-            );
-          })() : (
-            <input aria-label={`Nama instruktur ${j + 1} kelas ${i + 1}`} placeholder="Nama instruktur" className={`${kolom} sm:col-span-2`} maxLength={120} disabled={mati} value={y.nama} onChange={(e) => ubahDaftar((d) => { d[j].nama = e.target.value; })} />
-          )}
+          <div className="min-w-0 sm:col-span-2">
+            <PilihNama
+              ariaLabel={`Nama instruktur ${j + 1} kelas ${i + 1}`} nilai={y.nama} akun={y.akun ?? null} mati={mati} placeholder="Ketik atau pilih nama instruktur" calon={calonIns}
+              terpakai={terpakaiLain(daftar.map((e) => e.nama), j)}
+              onPilih={(n, akun) => ubahDaftar((d) => {
+                // pegawai organik otomatis Asal = Internal BPS dan tertaut ke akun; nama di luar daftar melepas tautan dan asal otomatis tadi; kosong = nama dikosongkan
+                d[j] = n === "" ? terapkanPilihan(d[j], "", namaOrg) : calonIns && adaDiDaftar(calonIns, n) ? terapkanPilihan(d[j], n, namaOrg, akun) : { ...terapkanPilihan(d[j], PILIHAN_LAINNYA, namaOrg), nama: n };
+              })}
+            />
+          </div>
           {opsiKolom(y.level, (v) => ubahDaftar((d) => { d[j].level = v as typeof y.level; }), mati, `Level instruktur ${j + 1} kelas ${i + 1}`, LEVEL_INSTRUKTUR, "Level")}
           {opsiKolom(y.asal, (v) => ubahDaftar((d) => { d[j].asal = v as typeof y.asal; }), mati, `Asal instruktur ${j + 1} kelas ${i + 1}`, ASAL_INSTRUKTUR, "Asal")}
           <div className="flex items-center gap-1.5">
@@ -187,7 +174,7 @@ function InstrukturKelas({ k, i, ubah, mati, organik, catatan }: { k: Kelas; i: 
           </div>
           <div className="col-span-2 flex items-center justify-between sm:col-span-5">
             <span className={`text-[12px] ${instrukturLengkap(y) ? "text-[#1B7A3E]" : "text-[#8A5A00]"}`}>{instrukturLengkap(y) ? "Lengkap" : "Belum lengkap: nama, level, asal, dan jam wajib"}</span>
-            <button type="button" className={tombolBahaya} disabled={mati} onClick={() => { setLainnya((l) => geserSetelahHapus(l, j)); ubahDaftar((d) => { d.splice(j, 1); }); }}>Hapus instruktur</button>
+            <button type="button" className={tombolBahaya} disabled={mati} onClick={() => ubahDaftar((d) => { d.splice(j, 1); })}>Hapus instruktur</button>
           </div>
         </div>
       ))}
@@ -252,20 +239,30 @@ export function lengkapiKerangka(g: IsiLanjutan): number {
   return n;
 }
 
-/** `organik` = nama pegawai organik; `mitra` = calon mitra. Nama petugas dipilih dari daftar menurut status (Organik atau Mitra); null/kosong = ketik bebas seperti semula. */
-export function KartuPetugas({ isi, ubah, mati, organik, mitra }: Props & { organik?: readonly string[] | null; mitra?: readonly CalonNama[] | null }) {
+/**
+ * `organik` = pegawai organik; `mitra` = calon mitra (keduanya dengan id akun). Nama petugas dipilih dari daftar menurut status (Organik atau Mitra) dan TERTAUT ke akun SIGAP
+ * (id akun ikut disimpan); null atau kosong = ketik bebas seperti semula dan tidak tertaut. `galatDaftar` = daftar gagal dimuat (mis. SQL 20261102a belum dijalankan).
+ */
+export function KartuPetugas({ isi, ubah, mati, organik, mitra, galatDaftar }: Props & { organik?: readonly CalonNama[] | null; mitra?: readonly CalonNama[] | null; galatDaftar?: boolean }) {
   const j = jumlahPetugas(isi);
-  const calonOrg = useMemo(() => (organik ? calonOrganik(organik) : null), [organik]);
+  const calonOrg = organik ?? null;
+  const daftarUntuk = (p: Petugas): readonly CalonNama[] => (p.status === "Mitra" ? mitra : organik) ?? [];
+  const bernama = isi.petugas.filter((p) => !p.menyusul && p.nama.trim() !== "");
+  const tertaut = bernama.filter((p) => p.akun !== undefined).length;
+  const bisaOtomatis = bernama.filter((p) => p.akun === undefined && cariAkunUnik(daftarUntuk(p), p.nama) !== null).length;
   return (
     <Bagian huruf="4" judul="Daftar petugas" id={ID_LJ.petugas}>
       <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#44546F]">
         <span>{j.total} petugas: {j.organik} organik, {j.mitra} mitra</span>
         {j.menyusul > 0 && <span className="rounded-full bg-[#FFF4D6] px-2 py-[1px] font-semibold text-[#8A6200]">{j.menyusul} nama menyusul</span>}
         {j.baru > 0 && <span>{j.baru} petugas baru</span>}
+        {bernama.length > 0 && <span className={tertaut === bernama.length ? "font-semibold text-[#1B7A3E]" : "font-semibold text-[#8A6200]"}>{tertaut} dari {bernama.length} nama tertaut ke akun</span>}
       </div>
-      <Cat>Nama yang belum diketahui cukup ditandai menyusul. Data tetap Draf sampai semua nama terisi.</Cat>
+      <Cat>Pilih nama dari daftar agar tertaut ke akun SIGAP (dipakai untuk usulan penugasan). Nama yang belum diketahui cukup ditandai menyusul. Data tetap Draf sampai semua nama terisi.</Cat>
+      {galatDaftar && <Cat>Daftar pegawai atau mitra belum dapat dimuat, jadi nama sementara diketik bebas dan belum tertaut ke akun. Muat ulang halaman; bila tetap sama, jalankan SQL 20261102a.</Cat>}
       <div className="flex flex-wrap gap-2">
         <button type="button" className={tombolKecil} disabled={mati} onClick={() => ubah((g) => { lengkapiKerangka(g); })}>Buat baris sesuai jumlah per peran</button>
+        <button type="button" className={tombolKecil} disabled={mati || bisaOtomatis === 0} onClick={() => ubah((g) => { for (const p of g.petugas) { if (p.menyusul || p.akun !== undefined || p.nama.trim() === "") continue; const a = cariAkunUnik(daftarUntuk(p), p.nama); if (a !== null) p.akun = a; } })}>Tautkan otomatis nama yang cocok ({bisaOtomatis})</button>
         <button type="button" className={tombolKecil} disabled={mati || isi.petugas.length >= 3000} onClick={() => ubah((g) => { g.petugas.push({ id: idBaru("p", g.petugas.map((p) => p.id)), nama: "", menyusul: true, peran: "", status: "Organik", sumber: "", baru: false, jabatan: [] }); })}>+ Petugas</button>
       </div>
       {isi.petugas.length === 0 && <p className="m-0 text-[13px] text-[#5B6B84]">Belum ada petugas.</p>}
@@ -283,8 +280,8 @@ function PetugasSatu({ p, i, ubah, mati, semua, calonOrg, calonMit }: { p: Petug
       <div className="grid min-w-0 items-end gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))]">
         <Isian judul={`Nama petugas ${i + 1}`}>
           <PilihNama
-            ariaLabel={`Nama petugas ${i + 1}`} nilai={p.menyusul ? "" : p.nama} mati={mati || p.menyusul} placeholder={p.menyusul ? "(nama menyusul)" : undefined}
-            calon={p.status === "Mitra" ? calonMit : calonOrg} terpakai={namaTerpakaiPeran(semua, p)} onPilih={(n) => set((x) => { x.nama = n; })}
+            ariaLabel={`Nama petugas ${i + 1}`} nilai={p.menyusul ? "" : p.nama} akun={p.akun ?? null} mati={mati || p.menyusul} placeholder={p.menyusul ? "(nama menyusul)" : undefined}
+            calon={p.status === "Mitra" ? calonMit : calonOrg} terpakai={namaTerpakaiPeran(semua, p)} onPilih={(n, akun) => set((x) => { x.nama = n; if (akun !== undefined) x.akun = akun; else delete x.akun; })}
           />
         </Isian>
         <Isian judul="Peran">
@@ -294,7 +291,7 @@ function PetugasSatu({ p, i, ubah, mati, semua, calonOrg, calonMit }: { p: Petug
           </select>
         </Isian>
         <Isian judul="Status">
-          <Pilihan nama={`Status petugas ${i + 1}`} nilai={p.status} opsi={["Organik", "Mitra"] as const} mati={mati} onPilih={(v) => set((x) => { x.status = v; x.sumber = v === "Mitra" ? (x.sumber || "kepka") : ""; })} />
+          <Pilihan nama={`Status petugas ${i + 1}`} nilai={p.status} opsi={["Organik", "Mitra"] as const} mati={mati} onPilih={(v) => set((x) => { if (x.status !== v) delete x.akun; x.status = v; x.sumber = v === "Mitra" ? (x.sumber || "kepka") : ""; })} />
         </Isian>
         {p.status === "Mitra" && (
           <Isian judul="Sumber mitra">
@@ -305,7 +302,7 @@ function PetugasSatu({ p, i, ubah, mati, semua, calonOrg, calonMit }: { p: Petug
         )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Centang aktif={p.menyusul} mati={mati} onUbah={() => set((x) => { x.menyusul = !x.menyusul; if (x.menyusul) x.nama = ""; })}>Nama menyusul</Centang>
+        <Centang aktif={p.menyusul} mati={mati} onUbah={() => set((x) => { x.menyusul = !x.menyusul; if (x.menyusul) { x.nama = ""; delete x.akun; } })}>Nama menyusul</Centang>
         <Centang aktif={p.baru} mati={mati} onUbah={() => set((x) => { x.baru = !x.baru; })}>Petugas baru</Centang>
         <button type="button" className={`${tombolBahaya} ml-auto`} disabled={mati} onClick={() => ubah((g) => { g.petugas = g.petugas.filter((e) => e.id !== p.id); })}>Hapus</button>
       </div>

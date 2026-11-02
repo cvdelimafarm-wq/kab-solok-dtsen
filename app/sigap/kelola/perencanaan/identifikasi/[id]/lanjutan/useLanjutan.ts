@@ -8,8 +8,7 @@
 import { useCallback, useMemo } from "react";
 import { urlBaca } from "@/lib/keu/ro";
 import { useBacaKeu } from "@/app/sigap/ro/useKeu";
-import { namaOrganik } from "@/lib/keu/pilihInstruktur";
-import { calonMitra } from "@/lib/keu/pilihNama";
+import { calonMitra, calonOrganik } from "@/lib/keu/pilihNama";
 import type { IsiKebijakan } from "@/lib/keu/kebijakan";
 import type { StatusLanjutan } from "@/lib/keu/lanjutan";
 import type { BarisPengecualian } from "@/lib/keu/notifikasi";
@@ -36,7 +35,7 @@ export function useLanjutan(identId: number | null, tahun: number | null, ro: st
   const ttd = useBacaKeu<CalonTtd>(urlBaca("keu_v_ident_ttd", {}, { urut: "akun_nama", batas: 500 }));
   // (2 Nov 2026) pegawai organik aktif untuk dropdown nama instruktur; gagal memuat (mis. SQL 20261102a belum dijalankan) = nama diketik bebas
   const org = useBacaKeu<{ akun_id: number; nama: string }>(urlBaca("keu_v_pegawai_organik", {}, { urut: "nama", batas: 500 }));
-  const organik = useMemo(() => (org.baris ? namaOrganik(org.baris) : null), [org.baris]);
+  const organik = useMemo(() => (org.baris ? calonOrganik(org.baris) : null), [org.baris]);
   // mitra aktif (±760) untuk pemilih nama petugas berstatus Mitra; keterangan = kecamatan (membedakan nama kembar)
   const mit = useBacaKeu<{ akun_id: number; nama: string; kecamatan: string | null }>(urlBaca("keu_v_mitra_aktif", {}, { urut: "nama", batas: 3000 }));
   const mitra = useMemo(() => (mit.baris ? calonMitra(mit.baris) : null), [mit.baris]);
@@ -51,6 +50,7 @@ export function useLanjutan(identId: number | null, tahun: number | null, ro: st
     calon,
     organik,
     mitra,
+    daftarNamaGalat: !!(org.galat || mit.galat),
     lembar: lembar.baris?.[0] ?? null,
     lembarSiap: !tahun || lembar.baris !== null || lembar.galat !== null,
     memuat: identId !== null && !baris.baris && !baris.galat,

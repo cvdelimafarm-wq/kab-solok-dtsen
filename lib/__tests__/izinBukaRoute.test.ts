@@ -23,6 +23,12 @@ vi.mock("@/lib/sigapTesDb", () => ({
 }));
 vi.mock("@/lib/sigapAkses", () => ({ izinAkun: async () => ({ izin: {} }), catatAudit: (...a: unknown[]) => audit(...a) }));
 vi.mock("@/lib/sigapPelatihanBaruDb", () => ({ tentukanPengguna: async () => st.pengguna }));
+const beritahu = { minta: vi.fn(), putus: vi.fn(), buka: vi.fn() };
+vi.mock("@/lib/sigapIzinPush", () => ({
+  beritahuIzinDiminta: (...a: unknown[]) => beritahu.minta(...a),
+  beritahuIzinDiputuskan: (...a: unknown[]) => beritahu.putus(...a),
+  beritahuIzinDibuka: (...a: unknown[]) => beritahu.buka(...a),
+}));
 vi.mock("@/lib/sigapAturanDb", () => ({ muatAturan: async () => st.aturan }));
 vi.mock("@/lib/sigapTahapanDb", () => ({
   ajukanIzin: (...a: unknown[]) => ajukan(...a),
@@ -43,7 +49,10 @@ beforeEach(() => {
   st.peserta = { 11: { penugasan_id: 1, peran: "ppl", kelas: 1 }, 12: { penugasan_id: 2, peran: "ppl", kelas: 2 } };
   st.aturan = { versi: 2, blokir_tahap: true, izin_ajukan: true, eksplisit: true };
   st.izin = null;
-  for (const f of [ajukan, buka, putus, menunggu, audit]) f.mockReset();
+  for (const f of [ajukan, buka, putus, menunggu, audit, beritahu.minta, beritahu.putus, beritahu.buka]) f.mockReset();
+  beritahu.minta.mockResolvedValue(3);
+  beritahu.putus.mockResolvedValue(1);
+  beritahu.buka.mockResolvedValue(1);
   ajukan.mockResolvedValue({ ok: true, id: 1 });
   buka.mockResolvedValue({ ok: true, id: 2 });
   putus.mockResolvedValue({ ok: true, id: 1 });
@@ -175,5 +184,41 @@ describe("umum", () => {
   it("aksi tidak dikenal: 400; badan rusak: 400", async () => {
     expect((await hasil(POST(req({ aksi: "hapus" })))).status).toBe(400);
     expect((await hasil(POST({ url: "x", json: async () => { throw new Error("x"); } } as never))).status).toBe(400);
+  });
+});
+
+describe("notifikasi (Tahap G)", () => {
+  it("minta: kabari panitia/instruktur dengan data peserta, kelas, tahap dan alasan", async () => {
+    st.akun = { id: 11, nama: "Ani" }; st.pengguna = { jenis: "peserta" };
+    const r = await hasil(POST(req({ aksi: "minta", tahap: "posttest", alasan: "Kendala HP / sinyal" })));
+    expect(beritahu.minta).toHaveBeenCalledWith(expect.anything(), 7, { id: 11, nama: "Ani", kelas: 1 }, "posttest", "Kendala HP / sinyal", 1);
+    expect(r.body).toMatchObject({ ok: true, diberitahu: 3 });
+  });
+  it("minta yang sudah menunggu tidak mengirim ulang", async () => {
+    st.akun = { id: 11, nama: "Ani" }; st.pengguna = { jenis: "peserta" };
+    ajukan.mockResolvedValue({ ok: true, id: 1, sudah: true });
+    await POST(req({ aksi: "minta", tahap: "pretest", alasan: "Terlambat datang" }));
+    expect(beritahu.minta).not.toHaveBeenCalled();
+  });
+  it("putuskan: peserta yang mengajukan dikabari (setuju / tolak)", async () => {
+    st.izin = { id: 5, akun_id: 11, tahap: "posttest" };
+    await POST(req({ aksi: "putuskan", id: 5, setuju: true }));
+    expect(beritahu.putus).toHaveBeenCalledWith(expect.anything(), 11, true, "posttest", "Budi", 5);
+    await POST(req({ aksi: "putuskan", id: 5, setuju: false }));
+    expect(beritahu.putus).toHaveBeenLastCalledWith(expect.anything(), 11, false, "posttest", "Budi", 5);
+  });
+  it("putuskan gagal (sudah diputuskan): tidak mengirim", async () => {
+    st.izin = { id: 5, akun_id: 11, tahap: "posttest" };
+    putus.mockResolvedValue({ ok: false, pesan: "Permintaan ini sudah diputuskan." });
+    await POST(req({ aksi: "putuskan", id: 5, setuju: true }));
+    expect(beritahu.putus).not.toHaveBeenCalled();
+  });
+  it("buka langsung: peserta bersangkutan dikabari; gagal simpan tidak mengirim", async () => {
+    await POST(req({ aksi: "buka", akun_id: 12, tahap: "pretest", alasan: "Terlambat datang" }));
+    expect(beritahu.buka).toHaveBeenCalledWith(expect.anything(), 12, "pretest", "Budi");
+    beritahu.buka.mockClear();
+    buka.mockResolvedValue({ ok: false, pesan: "x" });
+    await POST(req({ aksi: "buka", akun_id: 12, tahap: "pretest", alasan: "Terlambat datang" }));
+    expect(beritahu.buka).not.toHaveBeenCalled();
   });
 });

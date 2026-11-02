@@ -46,7 +46,8 @@ export type Kelas = {
   instruktur?: Instruktur[];
 };
 /** Satu instruktur pada satu kelas: nama, level pasti (Innas atau Inda), asal, dan jam mengajar PER INSTRUKTUR pada kelas itu (cek aturan untuk tarif). */
-export type Instruktur = { nama: string; level: LevelInstruktur; asal: AsalInstruktur; jam: number };
+/** `akun` (2 Nov 2026) = id akun SIGAP bila namanya dipilih dari daftar pegawai organik (tertaut); kosong = nama di luar daftar atau data lama. */
+export type Instruktur = { nama: string; level: LevelInstruktur; asal: AsalInstruktur; jam: number; akun?: number };
 export const MAKS_INSTRUKTUR = 20;
 export const instrukturKosongLj = (): Instruktur => ({ nama: "", level: "", asal: "", jam: 0 });
 /** Lengkap = nama, level, asal terisi dan jam minimal 1. */
@@ -61,6 +62,8 @@ export type Petugas = {
   sumber: SumberMitra;
   baru: boolean;
   jabatan: KodeJabatan[];
+  /** (2 Nov 2026) id akun SIGAP bila nama dipilih dari daftar pegawai organik atau mitra (tertaut); kosong = nama di luar daftar atau data lama (dicocokkan lewat nama). */
+  akun?: number;
 };
 export type IsiLanjutan = { v: 1; wilayah: string; kelas: Kelas[]; peran: Record<KodePeran, PeranLanjutan>; petugas: Petugas[] };
 export type StatusLanjutan = "draf" | "final";
@@ -256,6 +259,8 @@ export function alasanDraf(isi: IsiLanjutan): string[] {
 // ---------------------------------------------------------------------------------------------------------------------
 // Isi awal dari identifikasi awal
 // ---------------------------------------------------------------------------------------------------------------------
+/** id akun yang sah (bilangan bulat positif) atau tanpa kunci sama sekali, supaya bentuk data lama tidak berubah. */
+const idAkun = (x: unknown): { akun: number } | Record<string, never> => (typeof x === "number" && Number.isInteger(x) && x > 0 ? { akun: x } : {});
 const tanpaNol = (n: unknown): number => (typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
 
 /** Jumlah hari (inklusif) antara dua tanggal; 0 bila belum lengkap. */
@@ -319,6 +324,7 @@ function normalisasiInstruktur(masuk: unknown): Instruktur[] {
     level: (LEVEL_INSTRUKTUR as readonly string[]).includes(String(y.level)) ? (y.level as LevelInstruktur) : "",
     asal: (ASAL_INSTRUKTUR as readonly string[]).includes(String(y.asal)) ? (y.asal as AsalInstruktur) : "",
     jam: Math.min(500, tanpaNol(y.jam)),
+    ...idAkun(y.akun),
   }));
 }
 
@@ -344,6 +350,7 @@ export function normalisasiLanjutan(masuk: unknown): IsiLanjutan {
     peran: (KODE_PERAN as readonly string[]).includes(String(e.peran)) ? (e.peran as KodePeran) : "", status: e.status === "Mitra" ? "Mitra" : "Organik",
     sumber: (SUMBER_MITRA as readonly string[]).includes(String(e.sumber)) ? (e.sumber as SumberMitra) : "", baru: e.baru === true,
     jabatan: Array.isArray(e.jabatan) ? (e.jabatan.filter((x, j, arr) => (KODE_JABATAN as readonly string[]).includes(String(x)) && arr.indexOf(x) === j) as KodeJabatan[]) : [],
+    ...idAkun(e.akun),
   }));
   return { v: 1, wilayah: adalahTeks(a.wilayah) ? a.wilayah : "", kelas, peran, petugas };
 }

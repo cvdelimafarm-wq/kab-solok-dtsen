@@ -146,7 +146,7 @@ function Isi() {
               <KartuWilayah isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} />
               <KartuKelas isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} form={formSah} organik={lj.organik} tahun={tahun} />
               <KartuPeran isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} />
-              <KartuPetugas isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} organik={lj.organik} mitra={lj.mitra} />
+              <KartuPetugas isi={isi} ubah={ubah} mati={!bolehSusun || kirim.mengirim} organik={lj.organik} mitra={lj.mitra} galatDaftar={lj.daftarNamaGalat} />
             </div>
             <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px] xl:max-h-[calc(100vh-84px)] xl:overflow-y-auto xl:pr-1 xl:[scrollbar-width:thin]">
               <KartuStatusLj
