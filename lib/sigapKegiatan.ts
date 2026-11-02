@@ -4,6 +4,7 @@
 // Layer 2 = tahapan bernomor di dalam satu kegiatan; Layer 3 = halaman kerja yang sudah ada.
 // Berkas ini murni (tanpa React/DB): tipe bersama server-klien, ringkasan kegiatan dari data pelatihan/kartu, pengurutan mendesak-dulu.
 
+import { tautanPelatihan } from "@/lib/tautanPelatihan";
 import { bagiFoto, keadaanHari } from "@/lib/sigapPresensi";
 import { AMBANG_MENDESAK_DETIK, type Kekurangan } from "@/lib/sigapKekurangan";
 import { tugasUtamaPelatihan, type HubTugas, type IkonKode, type KartuRingkas, type TugasUtama } from "@/lib/sigapTugasUtama";
@@ -155,7 +156,7 @@ export function ringkasPelatihan(hub: HubKegiatan, nowMs: number): RingkasKegiat
     total,
     sub: `${selesai}/${total} · ${sub}`,
     peringatan: nada === "merah" || nada === "emas",
-    href: "/sigap/pelatihan",
+    href: tautanPelatihan("/sigap/pelatihan", hub.kegiatan_id),
   };
 }
 

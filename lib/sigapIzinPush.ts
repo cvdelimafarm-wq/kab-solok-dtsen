@@ -52,18 +52,18 @@ async function kirim(db: Db, penerima: number[], pesan: PesanIzin): Promise<numb
 export async function beritahuIzinDiminta(db: Db, kegiatanId: number, peserta: { id: number; nama: string; kelas: number | null }, tahap: string, alasan: string, izinId?: number | null): Promise<number> {
   try {
     const [panitia, instruktur] = await Promise.all([akunPanitiaPelatihan(db), akunInstrukturKelas(db, kegiatanId, peserta.kelas)]);
-    return await kirim(db, gabungPenerimaIzin([panitia, instruktur], peserta.id), pesanIzinDiminta(peserta.nama, tahap, alasan, izinId));
+    return await kirim(db, gabungPenerimaIzin([panitia, instruktur], peserta.id), pesanIzinDiminta(peserta.nama, tahap, alasan, izinId, kegiatanId));
   } catch {
     return 0;
   }
 }
 
 /** Keputusan -> peserta yang mengajukan. */
-export async function beritahuIzinDiputuskan(db: Db, akunId: number, setuju: boolean, tahap: string, oleh: string, izinId?: number | null): Promise<number> {
-  return kirim(db, [akunId], pesanIzinDiputuskan(setuju, tahap, oleh, izinId));
+export async function beritahuIzinDiputuskan(db: Db, akunId: number, setuju: boolean, tahap: string, oleh: string, izinId?: number | null, kegiatanId?: number | null): Promise<number> {
+  return kirim(db, [akunId], pesanIzinDiputuskan(setuju, tahap, oleh, izinId, kegiatanId));
 }
 
 /** Buka langsung -> peserta bersangkutan. */
-export async function beritahuIzinDibuka(db: Db, akunId: number, tahap: string, oleh: string): Promise<number> {
-  return kirim(db, [akunId], pesanIzinDibuka(tahap, oleh, akunId));
+export async function beritahuIzinDibuka(db: Db, akunId: number, tahap: string, oleh: string, kegiatanId?: number | null): Promise<number> {
+  return kirim(db, [akunId], pesanIzinDibuka(tahap, oleh, akunId, kegiatanId));
 }

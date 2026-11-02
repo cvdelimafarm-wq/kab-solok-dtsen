@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       const hasil = await putuskanIzin(db, kegiatanId, id, body.setuju, akun.nama, sekarang);
       if (!hasil.ok) return galat(hasil.pesan, hasil.pesan.includes("sudah diputuskan") ? 409 : 500);
       await catatAudit(db, akun.id, body.setuju ? "pelatihan_izin_disetujui" : "pelatihan_izin_ditolak", { kegiatan_id: kegiatanId, izin_id: id, akun_id: baris.akun_id, tahap: baris.tahap });
-      const diberitahu = await beritahuIzinDiputuskan(db, baris.akun_id, body.setuju, baris.tahap, akun.nama, id);
+      const diberitahu = await beritahuIzinDiputuskan(db, baris.akun_id, body.setuju, baris.tahap, akun.nama, id, kegiatanId);
       return NextResponse.json({ ok: true, diberitahu });
     }
 
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
       const hasil = await bukaLangsung(db, kegiatanId, akunId, v.izin.tahap, v.izin.alasan, akun.nama, sekarang);
       if (!hasil.ok) return galat(hasil.pesan, 500);
       await catatAudit(db, akun.id, "pelatihan_izin_dibuka", { kegiatan_id: kegiatanId, akun_id: akunId, tahap: v.izin.tahap, alasan: v.izin.alasan });
-      const diberitahu = await beritahuIzinDibuka(db, akunId, v.izin.tahap, akun.nama);
+      const diberitahu = await beritahuIzinDibuka(db, akunId, v.izin.tahap, akun.nama, kegiatanId);
       return NextResponse.json({ ok: true, diberitahu });
     }
 

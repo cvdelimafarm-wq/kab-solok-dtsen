@@ -16,6 +16,7 @@ import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
 import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { InfoUndangan, JenisTes, StatusTes } from "@/lib/sigapTes";
 import { useInfoPelatihan } from "./infoPelatihan";
+import { PemilihPelatihan } from "./PemilihPelatihan"; // (3 Nov 2026) hanya tampil bila peserta punya >= 2 pelatihan aktif
 import { useDataPel } from "./dataPel"; // (3 Nov 2026) data hub lewat simpanan bersama
 import { judulPelatihan, tujuanKembali } from "@/lib/sigapPelatihanNama";
 import { KUIS_BELUM_ADA, hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah } from "@/lib/alurPelatihan"; // (2 Nov 2026) penunjuk langkah pelatihan di HP
@@ -256,6 +257,7 @@ export function Kerangka({
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         {/* (2 Nov 2026) pop-up konfirmasi nomor pulsa hanya sampai dikonfirmasi; kartu statusnya redup di bawah tab Hari ini (hari-ini/page.tsx) */}
         <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />
+        <PemilihPelatihan />
         {langkah || geser ? (
           <AlurKerangka kode={langkah ?? null} hub={hub} selesai={langkahSelesai} tersembunyi={alurTersembunyi}>
             {children}

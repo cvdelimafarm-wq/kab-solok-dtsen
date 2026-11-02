@@ -203,9 +203,9 @@ describe("notifikasi (Tahap G)", () => {
   it("putuskan: peserta yang mengajukan dikabari (setuju / tolak)", async () => {
     st.izin = { id: 5, akun_id: 11, tahap: "posttest" };
     await POST(req({ aksi: "putuskan", id: 5, setuju: true }));
-    expect(beritahu.putus).toHaveBeenCalledWith(expect.anything(), 11, true, "posttest", "Budi", 5);
+    expect(beritahu.putus).toHaveBeenCalledWith(expect.anything(), 11, true, "posttest", "Budi", 5, 7);
     await POST(req({ aksi: "putuskan", id: 5, setuju: false }));
-    expect(beritahu.putus).toHaveBeenLastCalledWith(expect.anything(), 11, false, "posttest", "Budi", 5);
+    expect(beritahu.putus).toHaveBeenLastCalledWith(expect.anything(), 11, false, "posttest", "Budi", 5, 7);
   });
   it("putuskan gagal (sudah diputuskan): tidak mengirim", async () => {
     st.izin = { id: 5, akun_id: 11, tahap: "posttest" };
@@ -215,7 +215,7 @@ describe("notifikasi (Tahap G)", () => {
   });
   it("buka langsung: peserta bersangkutan dikabari; gagal simpan tidak mengirim", async () => {
     await POST(req({ aksi: "buka", akun_id: 12, tahap: "pretest", alasan: "Terlambat datang" }));
-    expect(beritahu.buka).toHaveBeenCalledWith(expect.anything(), 12, "pretest", "Budi");
+    expect(beritahu.buka).toHaveBeenCalledWith(expect.anything(), 12, "pretest", "Budi", 7);
     beritahu.buka.mockClear();
     buka.mockResolvedValue({ ok: false, pesan: "x" });
     await POST(req({ aksi: "buka", akun_id: 12, tahap: "pretest", alasan: "Terlambat datang" }));

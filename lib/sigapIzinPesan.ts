@@ -7,6 +7,7 @@
 // Judul <= 80 huruf, isi <= 240 huruf (batas lib/sigapPushUtil).
 
 import { LABEL_TAHAP, tahapTesValid } from "@/lib/sigapTahapan";
+import { tautanPelatihan } from "@/lib/tautanPelatihan";
 
 export type PesanIzin = { judul: string; isi: string; url: string; tag: string };
 
@@ -21,18 +22,18 @@ const labelTahap = (tahap: string): string => (tahapTesValid(tahap) ? LABEL_TAHA
 const panggil = (nama: string): string => rapi(nama).split(",")[0].trim() || "Peserta";
 
 /** Peserta mengajukan buka kunci -> untuk panitia / instruktur. */
-export function pesanIzinDiminta(nama: string, tahap: string, alasan: string, izinId?: number | null): PesanIzin {
+export function pesanIzinDiminta(nama: string, tahap: string, alasan: string, izinId?: number | null, kegiatanId?: number | null): PesanIzin {
   const t = labelTahap(tahap);
   return {
     judul: potong(`Permintaan buka kunci ${t}`, MAKS_JUDUL),
     isi: potong(`${panggil(nama)} meminta ${t} dibuka. Alasan: ${rapi(alasan)}`, MAKS_ISI),
-    url: URL_PENGELOLA,
+    url: tautanPelatihan(URL_PENGELOLA, kegiatanId),
     tag: izinId ? `izin-minta-${izinId}` : "izin-minta",
   };
 }
 
 /** Keputusan atas permintaan -> untuk peserta yang mengajukan. */
-export function pesanIzinDiputuskan(setuju: boolean, tahap: string, oleh: string, izinId?: number | null): PesanIzin {
+export function pesanIzinDiputuskan(setuju: boolean, tahap: string, oleh: string, izinId?: number | null, kegiatanId?: number | null): PesanIzin {
   const t = labelTahap(tahap);
   const siapa = panggil(oleh);
   return {
@@ -43,18 +44,18 @@ export function pesanIzinDiputuskan(setuju: boolean, tahap: string, oleh: string
         : `${siapa} belum dapat membuka ${t}. Selesaikan tahapan sebelumnya, atau hubungi panitia/instruktur.`,
       MAKS_ISI
     ),
-    url: URL_PESERTA,
+    url: tautanPelatihan(URL_PESERTA, kegiatanId),
     tag: izinId ? `izin-putus-${izinId}` : "izin-putus",
   };
 }
 
 /** Pengelola membuka langsung -> untuk peserta bersangkutan. */
-export function pesanIzinDibuka(tahap: string, oleh: string, akunId?: number | null): PesanIzin {
+export function pesanIzinDibuka(tahap: string, oleh: string, akunId?: number | null, kegiatanId?: number | null): PesanIzin {
   const t = labelTahap(tahap);
   return {
     judul: potong(`${t} dibuka untuk Anda`, MAKS_JUDUL),
     isi: potong(`${panggil(oleh)} membuka ${t}. Dapat dikerjakan sampai pukul 23.59 WIB hari ini.`, MAKS_ISI),
-    url: URL_PESERTA,
+    url: tautanPelatihan(URL_PESERTA, kegiatanId),
     tag: akunId ? `izin-buka-${akunId}-${tahap}` : "izin-buka",
   };
 }

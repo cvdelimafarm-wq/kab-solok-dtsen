@@ -7,6 +7,7 @@
 //   Kegiatan lain (dari kartu beranda): Transport Lokal 50/45 (masa tenggang), bencana 48, penyisiran 42, DTSEN operator 41.
 
 import { keadaanHari, type RingkasHari } from "@/lib/sigapPresensi";
+import { tautanPelatihan } from "@/lib/tautanPelatihan";
 
 export type IkonKode = "motor" | "pedia" | "surat" | "langkah" | "tes" | "kuis" | "hadir" | "arsip" | "kelola" | "akses" | "kontrak" | "peta" | "grafik" | "periode" | "dtsen" | "bencana";
 export type NadaLencana = "merah" | "emas" | "biru" | "hijau" | "abu";
@@ -65,7 +66,9 @@ export function tugasUtamaPelatihan(hub: HubTugas, nowMs: number): TugasUtama | 
   // progres umum: undangan, instrumen, pretest, presensi, posttest, foto
   const langkahSelesai = [!!L?.undangan_dibuka, !!L?.instrumen_diunduh, selesaiTes(pre), !!hub.presensi?.sudah, selesaiTes(post), fotoLengkap].filter(Boolean).length;
   const progres = { selesai: langkahSelesai, total: 6 };
-  const dasar = { label: "LANGKAH PELATIHAN", progres, href: "/sigap/pelatihan" };
+  // (3 Nov 2026) setiap tautan membawa ?kegiatan=ID hub ini: peserta dua pelatihan berdekatan tidak dibuka ke pelatihan yang salah
+  const tk = (p: string) => tautanPelatihan(p, hub.kegiatan_id);
+  const dasar = { label: "LANGKAH PELATIHAN", progres, href: tk("/sigap/pelatihan") };
   const kandidat: TugasUtama[] = [];
 
   if (hub.kuis?.ada_ruang_aktif) {
@@ -77,7 +80,7 @@ export function tugasUtamaPelatihan(hub: HubTugas, nowMs: number): TugasUtama | 
       judul: hub.kuis.sudah_gabung ? "Adu Sigap sedang berlangsung" : "Adu Sigap dibuka, ayo gabung",
       uraian: hub.kuis.sudah_gabung ? "Anda sudah bergabung. Kembali ke layar kuis." : "Kuis langsung dipimpin pemandu. Jawab dari HP Anda.",
       lencana: { teks: "Live", nada: "hijau" },
-      href: `/sigap/pelatihan/kuis?kelas=${hub.kuis.kelas ?? 1}&gabung=1`,
+      href: tk(`/sigap/pelatihan/kuis?kelas=${hub.kuis.kelas ?? 1}&gabung=1`),
       aksi: hub.kuis.sudah_gabung ? "Masuk kembali ke kuis" : "Gabung kuis",
     });
   }
@@ -96,7 +99,7 @@ export function tugasUtamaPelatihan(hub: HubTugas, nowMs: number): TugasUtama | 
         judul: `Lanjutkan ${nm}`,
         uraian: `Terjawab ${t.sesi.terjawab} dari ${t.jumlah_soal} soal. Jawaban tersimpan otomatis.`,
         lencana: { teks: `sisa ${sisaTeks(sisa)}`, nada: sisa < 300 ? "merah" : "emas" },
-        href: `/sigap/pelatihan/tes/${t.jenis}`,
+        href: tk(`/sigap/pelatihan/tes/${t.jenis}`),
         aksi: "Lanjutkan mengerjakan",
       });
     } else if (t.status === "buka") {
@@ -108,7 +111,7 @@ export function tugasUtamaPelatihan(hub: HubTugas, nowMs: number): TugasUtama | 
         judul: `Kerjakan ${nm}`,
         uraian: `${t.jumlah_soal} soal, ${t.durasi_menit} menit sejak Mulai. Sesi ditutup pukul ${jamWibMs(tutup)} WIB.`,
         lencana: { teks: `tutup ${jamWibMs(tutup)}`, nada: (tutup - nowMs) / 1000 < 1800 ? "merah" : "emas" },
-        href: `/sigap/pelatihan/tes/${t.jenis}`,
+        href: tk(`/sigap/pelatihan/tes/${t.jenis}`),
         aksi: `Mulai ${nm}`,
       });
     } else if (t.status === "belum_buka") {
@@ -155,17 +158,17 @@ export function tugasUtamaPelatihan(hub: HubTugas, nowMs: number): TugasUtama | 
       uraian: "Foto kegiatan pelatihan untuk Transport Lokal. Boleh satu per satu, batas 23.59 WIB.",
       lencana: sisa > 0 ? { teks: `sisa ${sisaTeks(sisa)}`, nada: sisa < 7200 ? "merah" : "emas" } : undefined,
       progres: { selesai: L.foto, total: L.foto_total },
-      href: hub.token_translok ? `/sigap/translok/${hub.token_translok}` : "/sigap/pelatihan",
+      href: hub.token_translok ? `/sigap/translok/${hub.token_translok}` : tk("/sigap/pelatihan"),
       aksi: L.foto > 0 ? "Lanjutkan unggah foto" : "Unggah foto",
     });
   }
 
   // (3 Nov 2026) Dari Beranda SIGAP, pelatihan selalu dibuka di tab Hari ini (/sigap/pelatihan mengalihkan ke sana pada tampilan lima tab); undangan dan instrumen dibuka dari kartu / tab di dalamnya.
   if (L && !L.undangan_dibuka) {
-    kandidat.push({ ...dasar, skor: 60, ikon: "surat", label: "MULAI DARI SINI", judul: "Baca undangan pelatihan", uraian: "Kelas, jam, dan pakaian ada di sana. Cukup dibuka sekali.", href: "/sigap/pelatihan", aksi: "Buka undangan" });
+    kandidat.push({ ...dasar, skor: 60, ikon: "surat", label: "MULAI DARI SINI", judul: "Baca undangan pelatihan", uraian: "Kelas, jam, dan pakaian ada di sana. Cukup dibuka sekali.", href: tk("/sigap/pelatihan"), aksi: "Buka undangan" });
   }
   if (L && !L.instrumen_diunduh) {
-    kandidat.push({ ...dasar, skor: 55, ikon: "pedia", label: "PERSIAPAN", judul: "Pelajari instrumen", uraian: "Unduh kuesioner dan buku pedoman agar siap saat pretest.", href: "/sigap/pelatihan", aksi: "Buka instrumen" });
+    kandidat.push({ ...dasar, skor: 55, ikon: "pedia", label: "PERSIAPAN", judul: "Pelajari instrumen", uraian: "Unduh kuesioner dan buku pedoman agar siap saat pretest.", href: tk("/sigap/pelatihan"), aksi: "Buka instrumen" });
   }
 
   if (kandidat.length === 0) {

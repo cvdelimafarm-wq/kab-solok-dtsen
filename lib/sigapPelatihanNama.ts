@@ -5,7 +5,27 @@
 
 import { KODE_KEGIATAN_PELATIHAN } from "@/lib/sigapTes";
 
-export type InfoPelatihan = { kegiatan_id: number | null; nama: string; kode: string; induk_kode: string | null };
+export type PilihanPelatihan = { id: number; nama: string; kode: string; tanggal_mulai: string | null; tanggal_selesai: string | null };
+/** `pilihan`: (3 Nov 2026) semua pelatihan aktif akun ini, HANYA bila ada dua atau lebih (untuk pemilih pelatihan); selain itu tidak ada. */
+export type InfoPelatihan = { kegiatan_id: number | null; nama: string; kode: string; induk_kode: string | null; pilihan?: PilihanPelatihan[] };
+
+/** Urutan pemilih: yang belum selesai dulu (paling awal mulainya), lalu yang sudah selesai (terbaru dulu). Mengembalikan [] bila kurang dari dua. */
+export function urutkanPilihan(daftar: readonly PilihanPelatihan[], hariIni: string): PilihanPelatihan[] {
+  if (daftar.length < 2) return [];
+  const akhir = (p: PilihanPelatihan) => p.tanggal_selesai ?? p.tanggal_mulai;
+  const belum = daftar.filter((p) => { const a = akhir(p); return a === null || a >= hariIni; });
+  const sudah = daftar.filter((p) => !belum.includes(p));
+  belum.sort((a, b) => (a.tanggal_mulai ?? "9999-12-31").localeCompare(b.tanggal_mulai ?? "9999-12-31") || a.id - b.id);
+  sudah.sort((a, b) => (akhir(b) ?? "").localeCompare(akhir(a) ?? "") || a.id - b.id);
+  return [...belum, ...sudah];
+}
+
+/** Tautan ke pelatihan lain pada halaman yang sedang dibuka: ganti/tambah ?kegiatan=ID, parameter lain dipertahankan. */
+export function alamatGantiPelatihan(path: string, search: string, id: number): string {
+  const p = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  p.set("kegiatan", String(id));
+  return `${path}?${p.toString()}`;
+}
 
 /** Nama pendek untuk judul. PSP tetap memakai judul lamanya; pelatihan lain memakai nama kegiatannya. Info belum termuat -> "Pelatihan". */
 export function judulPelatihan(info: Pick<InfoPelatihan, "nama" | "kode"> | null | undefined): string {
