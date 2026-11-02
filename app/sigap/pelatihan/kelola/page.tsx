@@ -17,6 +17,7 @@ import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
 import KuisPraKelola from "./kuisPra"; // (31 Okt 2026) tab Kuis Pra
 import KelasIdentKelola from "./kelasIdent"; // (1 Nov 2026) tab Kelas (perencanaan, hanya baca)
+import TampilanKelola from "./tampilan"; // (2 Nov 2026) tab Tampilan baru: saklar 5 tab, ketentuan undangan, hierarki
 import PengumumanKelola from "./pengumuman";
 import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard (tampil bila kegiatan memakai Vanguard)
 import RapatKelola from "./rapat"; // (9 Okt 2026) tab Rapat Zoom
@@ -48,7 +49,7 @@ const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600
 const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
-type TabK = "soal" | "monitoring" | "kuis" | "kuispra" | "kelas" | "administrasi" | "pengumuman" | "notifikasi" | "rapat";
+type TabK = "soal" | "monitoring" | "kuis" | "kuispra" | "kelas" | "administrasi" | "pengumuman" | "notifikasi" | "rapat" | "tampilan";
 
 export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("soal");
@@ -139,7 +140,7 @@ export default function KelolaPelatihan() {
     if (!bacaSesi()) return keMasuk();
     try {
       const t = new URLSearchParams(window.location.search).get("tab");
-      if (t === "monitoring" || t === "kuis" || t === "kuispra" || t === "kelas" || t === "administrasi" || t === "pengumuman" || t === "notifikasi" || t === "rapat") setTab(t);
+      if (t === "monitoring" || t === "kuis" || t === "kuispra" || t === "kelas" || t === "administrasi" || t === "pengumuman" || t === "notifikasi" || t === "rapat" || t === "tampilan") setTab(t);
     } catch {
       /* abaikan */
     }
@@ -192,6 +193,7 @@ export default function KelolaPelatihan() {
         { kode: "notifikasi", label: "🔔 Notifikasi" },
         { kode: "monitoring", label: "Monitoring" },
         { kode: "kelas", label: "🏫 Kelas" },
+        { kode: "tampilan", label: "🧭 Tampilan baru" },
         { kode: "kuispra", label: "🧠 Kuis Pra" },
         { kode: "administrasi", label: "🗂 Administrasi" },
       ]}
@@ -222,6 +224,7 @@ export default function KelolaPelatihan() {
       {ringkas && tab === "kuis" && <KuisLive key={kegId ?? 0} bisaKelolaAwal={ringkas.boleh_kelola} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian key={kegId ?? 0} />}
       {ringkas && tab === "kelas" && <KelasIdentKelola key={kegId ?? 0} />}
+      {ringkas && tab === "tampilan" && <TampilanKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuispra" && <KuisPraKelola key={kegId ?? 0} />}
       {ringkas && tab === "administrasi" && <Administrasi key={kegId ?? 0} />}
       {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}

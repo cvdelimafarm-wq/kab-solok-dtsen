@@ -12,6 +12,7 @@ import { bukaBlob, fetchJson, pesanGalat } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, Kartu, Memuat, Pesan } from "../../admin/ui";
 import KartuVanguardHariIni from "../../KartuVanguardHariIni";
 import { Kerangka } from "../komponen";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { lupakanBenderaTab } from "../TabPelatihan";
 import { MAKS_ALASAN } from "@/lib/ketentuanPelatihan";
 import type { StatusUndangan, TeksKartuUndangan } from "@/lib/ketentuanPelatihan";
@@ -44,6 +45,7 @@ function ModalKetentuan({ d, onTutup, onSelesai }: { d: Data; onTutup: () => voi
   const [kirim, setKirim] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const sudahTerima = d.status === "diterima";
+  useTutupDenganBack(true, onTutup); // Back HP menutup modal ketentuan (penjaga Back, lib/__tests__/sigapBackGuard.test.ts)
 
   useEffect(() => {
     const tombol = (e: KeyboardEvent) => e.key === "Escape" && onTutup();
