@@ -13,7 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan, undanganUntuk } from "@/lib/sigapTesDb";
 import { ketentuanBerubah, ketentuanDiubah, periksaRespons, statusUndangan, teksKartuUndangan } from "@/lib/ketentuanPelatihan";
-import { muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons } from "@/lib/sigapPelatihanBaruDb";
+import { muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
+import { tabPerPeran } from "@/lib/sigapAbsen";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
       izinAkun(db, akun.id),
     ]);
     const ketentuan = tampilan.ketentuan;
+    const pengguna = await tentukanPengguna(db, kegiatanId, akun.id, izin);
     const respons = peserta ? await muatRespons(db, kegiatanId, akun.id) : null;
     const status = statusUndangan(respons);
     const berubah = ketentuanBerubah(respons, ketentuan);
@@ -58,6 +60,7 @@ export async function GET(req: NextRequest) {
       berubah,
       kartu: teksKartuUndangan(status, berubah),
       kamera_href: kameraHref,
+      tab: tabPerPeran(pengguna.jenis, !!peserta),
       boleh_lihat_kelola: boleh(izin, "pelatihan.kelola", "lihat", kegiatanId),
       boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId),
     });

@@ -39,6 +39,44 @@ export function calonBelumTertaut(calon: CalonKegiatan[]): CalonKegiatan[] {
 }
 
 /** Fungsi tautan yang wajar untuk kegiatan itu, dari jenisnya (hanya usulan awal pada pilihan). */
+// (2 Nov 2026) Pilihan tautan kegiatan yang tidak membingungkan: dikelompokkan, tanpa kode teknis, dan nama kembar dibedakan.
+const JENIS_PENDEK: Record<FungsiKegiatan, string> = { pendataan: "Pendataan", pelatihan: "Pelatihan", lain: "Lainnya" };
+/** Kegiatan data uji: nama berawalan "UJI" atau memuat "data uji". Ditaruh paling bawah bersama kegiatan nonaktif. */
+export const adalahDataUji = (c: Pick<CalonKegiatan, "nama">): boolean => /^\s*uji\b/i.test(c.nama) || /data uji/i.test(c.nama);
+/** "Pelatihan · Nama kegiatan": jenis di depan supaya pelatihan dan pendataan untuk survei yang sama langsung terbedakan. */
+export const labelCalon = (c: Pick<CalonKegiatan, "nama" | "jenis">): string => `${JENIS_PENDEK[fungsiBawaan(c.jenis)]} · ${c.nama}`;
+export type KelompokCalon = { kunci: "disarankan" | "lain" | "bekas"; judul: string; calon: CalonKegiatan[] };
+/** Calon yang belum ditautkan dalam tiga kelompok (kelompok kosong dibuang): disarankan (kode RO sama), kegiatan lain, nonaktif dan data uji. */
+export function kelompokkanCalon(calon: CalonKegiatan[]): KelompokCalon[] {
+  const belum = calonBelumTertaut(calon);
+  const bekas = (c: CalonKegiatan) => !c.aktif || adalahDataUji(c);
+  const hasil: KelompokCalon[] = [
+    { kunci: "disarankan", judul: "★ Disarankan: kode anggaran memuat kode RO identifikasi ini", calon: belum.filter((c) => !bekas(c) && c.disarankan) },
+    { kunci: "lain", judul: "Kegiatan lain", calon: belum.filter((c) => !bekas(c) && !c.disarankan) },
+    { kunci: "bekas", judul: "Nonaktif dan data uji", calon: belum.filter(bekas) },
+  ];
+  return hasil.filter((k) => k.calon.length > 0);
+}
+/** Teks pilihan: nama kembar (jenis dan nama sama) dibedakan dengan kode; selain itu kode teknis tidak ditampilkan. */
+export function labelPilihan(c: CalonKegiatan, semua: CalonKegiatan[]): string {
+  const dasar = labelCalon(c);
+  const kembar = semua.some((x) => x.kegiatan_id !== c.kegiatan_id && labelCalon(x) === dasar);
+  return `${c.disarankan && c.aktif && !adalahDataUji(c) ? "★ " : ""}${dasar}${kembar ? ` (${c.kode})` : ""}${c.aktif ? "" : " (nonaktif)"}`;
+}
+/** Peringatan lunak bila fungsi yang dipilih tidak sama dengan jenis kegiatan. Tidak memblokir. */
+export function peringatanFungsi(c: Pick<CalonKegiatan, "jenis">, fungsi: FungsiKegiatan): string | null {
+  const bawaan = fungsiBawaan(c.jenis);
+  if (bawaan === "lain" || bawaan === fungsi) return null;
+  return `Kegiatan ini berjenis ${JENIS_PENDEK[bawaan].toLowerCase()}, tetapi fungsi yang dipilih ${NAMA_FUNGSI[fungsi].toLowerCase()}. Pastikan memang itu yang dimaksud.`;
+}
+/** Bila kegiatan pelatihan DAN pendataan sama-sama disarankan (RO yang sama), jelaskan bahwa keduanya benar dan ditautkan satu per satu. */
+export function catatanKembarDisarankan(calon: CalonKegiatan[]): string | null {
+  const ds = calonBelumTertaut(calon).filter((c) => c.aktif && c.disarankan && !adalahDataUji(c));
+  const fungsi = new Set(ds.map((c) => fungsiBawaan(c.jenis)));
+  return fungsi.has("pelatihan") && fungsi.has("pendataan")
+    ? "Ada kegiatan pelatihan dan kegiatan pendataan yang sama-sama ★ karena kode RO-nya sama. Keduanya benar: tautkan satu per satu, fungsinya mengikuti jenis kegiatan."
+    : null;
+}
 export function fungsiBawaan(jenis: string | null | undefined): FungsiKegiatan {
   const j = (jenis ?? "").toLowerCase();
   return j === "pelatihan" ? "pelatihan" : j === "pendataan" ? "pendataan" : "lain";

@@ -10,7 +10,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchJson } from "../admin/api";
 
-export type TabAktif = "hari-ini" | "instrumen" | "pelatihan" | "kamera" | "monitoring";
+export type TabAktif = "hari-ini" | "instrumen" | "pelatihan" | "absen" | "kamera" | "monitoring";
+
+/** Tab yang tampil: peserta melihat Pelatihan; panitia/instruktur melihat "Absen peserta" sebagai gantinya; peran ganda melihat keduanya. */
+export type TabPeran = { pelatihan: boolean; absen: boolean };
+export const TAB_PESERTA: TabPeran = { pelatihan: true, absen: false };
 
 type Tab = { kode: TabAktif; label: string; href: string | null; ikon: React.ReactNode };
 
@@ -34,6 +38,13 @@ const IKON: Record<TabAktif, React.ReactNode> = {
       <path d="M7 11.5V16c0 1.5 2.5 3 5 3s5-1.5 5-3v-4.5" />
     </svg>
   ),
+  absen: (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden {...GARIS}>
+      <path d="M9 11.5l2 2 4-4.5" />
+      <rect x="5" y="4" width="14" height="17" rx="3" />
+      <path d="M9 4V3h6v1" />
+    </svg>
+  ),
   kamera: (
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden {...GARIS}>
       <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
@@ -48,23 +59,28 @@ const IKON: Record<TabAktif, React.ReactNode> = {
 };
 
 /** Daftar tab. `kameraHref` kosong (bukan peserta / belum punya token) -> tab Kamera tetap tampil tetapi nonaktif. */
-export function daftarTab(kameraHref: string | null): Tab[] {
-  return [
+export function daftarTab(kameraHref: string | null, peran: TabPeran = TAB_PESERTA): Tab[] {
+  const tab: Tab[] = [
     { kode: "hari-ini", label: "Hari ini", href: "/sigap/pelatihan/hari-ini", ikon: IKON["hari-ini"] },
     { kode: "instrumen", label: "Instrumen", href: "/sigap/pelatihan/instrumen", ikon: IKON.instrumen },
-    { kode: "pelatihan", label: "Pelatihan", href: "/sigap/pelatihan?tab=pelatihan", ikon: IKON.pelatihan },
+  ];
+  if (peran.pelatihan) tab.push({ kode: "pelatihan", label: "Pelatihan", href: "/sigap/pelatihan?tab=pelatihan", ikon: IKON.pelatihan });
+  if (peran.absen) tab.push({ kode: "absen", label: "Absen peserta", href: "/sigap/pelatihan/absen", ikon: IKON.absen });
+  tab.push(
     { kode: "kamera", label: "Kamera", href: kameraHref, ikon: IKON.kamera },
     { kode: "monitoring", label: "Monitoring", href: "/sigap/pelatihan/monitoring", ikon: IKON.monitoring },
-  ];
+  );
+  return tab;
 }
 
-export function TabPelatihan({ aktif, kameraHref }: { aktif: TabAktif; kameraHref: string | null }) {
+export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA }: { aktif: TabAktif; kameraHref: string | null; peran?: TabPeran }) {
+  const tab = daftarTab(kameraHref, peran);
   return (
     <>
       <div aria-hidden className="h-[76px]" />
       <nav aria-label="Menu pelatihan" className="fixed inset-x-0 bottom-0 z-30 border-t border-[#DDE6F3] bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
-        <ul className="mx-auto grid max-w-3xl grid-cols-5">
-          {daftarTab(kameraHref).map((t) => {
+        <ul className="mx-auto grid max-w-3xl" style={{ gridTemplateColumns: `repeat(${tab.length}, minmax(0, 1fr))` }}>
+          {tab.map((t) => {
             const sedang = t.kode === aktif;
             const warna = sedang ? "text-[#1F5FD1]" : "text-[#6B7A90]";
             const isi = (
@@ -93,7 +109,7 @@ export function TabPelatihan({ aktif, kameraHref }: { aktif: TabAktif; kameraHre
   );
 }
 
-type Bendera = { tab_baru: boolean; kamera_href: string | null; kegiatan_id: number };
+type Bendera = { tab_baru: boolean; kamera_href: string | null; kegiatan_id: number; tab: TabPeran };
 // Bendera disimpan selama sesi tab peramban supaya perpindahan antar-halaman tidak memuat ulang dan bilah tidak berkedip.
 let cacheBendera: { nilai: Bendera; sampai: number } | null = null;
 
@@ -104,7 +120,7 @@ export function useBenderaTab(): Bendera | null {
     let batal = false;
     fetchJson<Bendera>("/api/sigap/pelatihan/ketentuan")
       .then((r) => {
-        const nilai = { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id };
+        const nilai: Bendera = { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id, tab: r.tab ?? TAB_PESERTA };
         cacheBendera = { nilai, sampai: Date.now() + 60_000 };
         if (!batal) setB(nilai);
       })
@@ -120,7 +136,7 @@ export function useBenderaTab(): Bendera | null {
 export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
   const b = useBenderaTab();
   if (!b || !b.tab_baru) return null;
-  return <TabPelatihan aktif={aktif} kameraHref={b.kamera_href} />;
+  return <TabPelatihan aktif={aktif} kameraHref={b.kamera_href} peran={b.tab} />;
 }
 
 /** Untuk pengujian / pembaruan setelah pengelola mengubah saklar. */

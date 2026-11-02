@@ -184,7 +184,7 @@ export function Kerangka({
   alurTersembunyi,
   children,
 }: {
-  aktif: "undangan" | "pelatihan" | "instrumen" | "hari-ini" | "monitoring";
+  aktif: "undangan" | "pelatihan" | "instrumen" | "hari-ini" | "monitoring" | "absen";
   judul: React.ReactNode;
   sub?: React.ReactNode;
   nama?: string;
@@ -202,7 +202,7 @@ export function Kerangka({
   // (9 Okt 2026) Pelatihan kini tahap dalam garis waktu Pendataan Pascabencana -> panah kembali naik ke sana.
   const info = useInfoPelatihan();
   // (2 Nov 2026) halaman tab baru (Hari ini, Monitoring) adalah halaman puncak pelatihan: panah kembali naik ke induk pelatihan, bukan ke /sigap/pelatihan (yang mengalihkan ke Hari ini).
-  const induk = aktif === "pelatihan" || aktif === "hari-ini" || aktif === "monitoring" ? tujuanKembali(info) : "/sigap/pelatihan"; // (1 Nov 2026) induk pelatihan ini (bukan selalu Pascabencana)
+  const induk = aktif === "pelatihan" || aktif === "hari-ini" || aktif === "monitoring" || aktif === "absen" ? tujuanKembali(info) : "/sigap/pelatihan"; // (1 Nov 2026) induk pelatihan ini (bukan selalu Pascabencana)
   const tabAktif: TabAktif = aktif === "undangan" ? "hari-ini" : aktif;
   return (
     <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">

@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { Catatan, Chip, kolom, label, tombolKecil, tombolUtama } from "@/app/sigap/keu-ui";
 import { tglIndo } from "@/lib/keu/identifikasi";
 import {
-  agendaEvaluasi, calonBelumTertaut, fungsiBawaan, FUNGSI_KEGIATAN, ID_PL, kalimatHasilTerap, kodeSiap, LABEL_USULAN, NAMA_FUNGSI, ringkasLaporan, ringkasUsulan,
+  adalahDataUji, agendaEvaluasi, calonBelumTertaut, catatanKembarDisarankan, fungsiBawaan, FUNGSI_KEGIATAN, ID_PL, kalimatHasilTerap, kelompokkanCalon, kodeSiap, labelCalon, labelPilihan, LABEL_USULAN, NAMA_FUNGSI, peringatanFungsi, ringkasLaporan, ringkasUsulan,
   selarasJadwal, urutkanUsulan, type BarisBiaya, type ButirPencairan, type CalonKegiatan, type FungsiKegiatan, type HasilTerap, type KegiatanBahan, type KegiatanTertaut,
 } from "@/lib/keu/pelaksanaan";
 import type { Form } from "@/lib/keu/identifikasi";
@@ -26,6 +26,8 @@ export function KartuTautan(p: {
   onTautkan: (kegiatanId: number, fungsi: FungsiKegiatan, catatan: string) => Promise<boolean>; onLepas: (kegiatanId: number) => Promise<boolean>;
 }) {
   const belum = useMemo(() => calonBelumTertaut(p.calon), [p.calon]);
+  const kelompok = useMemo(() => kelompokkanCalon(p.calon), [p.calon]);
+  const catatanKembar = useMemo(() => catatanKembarDisarankan(p.calon), [p.calon]);
   const [pilih, setPilih] = useState<number | "">("");
   const [fungsi, setFungsi] = useState<FungsiKegiatan>("pendataan");
   const [catatan, setCatatan] = useState("");
@@ -39,8 +41,9 @@ export function KartuTautan(p: {
   return (
     <Bagian huruf="A" judul="Kegiatan pelaksanaan tertaut" id={ID_PL.tautan}>
       <Catatan>
-        Tautkan identifikasi ini ke kegiatan di SIGAP (Kelola translok) agar penugasan, laporan harian, dan evaluasi dapat dipantau. Tautan dipilih manual; kegiatan yang
-        kode anggarannya memuat kode RO diberi tanda &ldquo;disarankan&rdquo;. Tautan tidak mengubah kegiatan itu sendiri.
+        Tautkan identifikasi ini ke kegiatan di SIGAP (Kelola translok) agar penugasan, laporan harian, dan evaluasi dapat dipantau. Satu identifikasi boleh ditautkan ke beberapa kegiatan,
+        misalnya satu kegiatan <strong>Pelatihan</strong> dan satu kegiatan <strong>Pendataan</strong>; pilih satu per satu. Tanda ★ berarti kode anggaran kegiatan memuat kode RO identifikasi ini.
+        Tautan tidak mengubah kegiatan itu sendiri.
       </Catatan>
       {p.tertaut.length === 0 ? <p className="m-0 text-[13px] text-[#5B6B84]">Belum ada kegiatan tertaut.</p> : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -64,11 +67,15 @@ export function KartuTautan(p: {
             <span className={label}>Tautkan kegiatan</span>
             <select className={kolom} value={pilih} onChange={(e) => pilihKegiatan(e.target.value)} disabled={p.mengirim || belum.length === 0}>
               <option value="">{belum.length === 0 ? "Tidak ada kegiatan lain" : "Pilih kegiatan…"}</option>
-              {belum.map((c) => <option key={c.kegiatan_id} value={c.kegiatan_id}>{c.disarankan ? "★ " : ""}{c.nama} ({c.kode}){c.aktif ? "" : " — nonaktif"}</option>)}
+              {kelompok.map((g) => (
+                <optgroup key={g.kunci} label={g.judul}>
+                  {g.calon.map((c) => <option key={c.kegiatan_id} value={c.kegiatan_id}>{labelPilihan(c, belum)}</option>)}
+                </optgroup>
+              ))}
             </select>
           </label>
           <label className="block min-w-0">
-            <span className={label}>Fungsi</span>
+            <span className={label}>Fungsi (mengikuti jenis kegiatan)</span>
             <select className={kolom} value={fungsi} onChange={(e) => setFungsi(e.target.value as FungsiKegiatan)} disabled={p.mengirim}>
               {FUNGSI_KEGIATAN.map((f) => <option key={f} value={f}>{NAMA_FUNGSI[f]}</option>)}
             </select>
@@ -77,7 +84,15 @@ export function KartuTautan(p: {
             <span className={label}>Catatan (opsional, maks. 300 huruf)</span>
             <input className={kolom} maxLength={300} value={catatan} onChange={(e) => setCatatan(e.target.value)} disabled={p.mengirim} />
           </label>
+          {catatanKembar && !terpilih && <p className="m-0 text-[12.5px] text-[#44546F] sm:col-span-2">{catatanKembar}</p>}
+          {terpilih && (
+            <div className="min-w-0 rounded-lg border border-[#DCE3EE] bg-[#F7F9FC] px-3 py-2 sm:col-span-2">
+              <p className="m-0 text-[13.5px] font-semibold text-[#0F2A52]">{labelCalon(terpilih)}</p>
+              <p className="m-0 break-words text-[12px] text-[#5B6B84]">Kode {terpilih.kode} · {periode(terpilih.mulai, terpilih.selesai)}{terpilih.aktif ? "" : " · nonaktif"}{adalahDataUji(terpilih) ? " · data uji" : ""}</p>
+            </div>
+          )}
           {terpilih && !terpilih.disarankan && <p className="m-0 text-[12.5px] text-[#8A6200] sm:col-span-2">Kode anggaran kegiatan ini tidak memuat kode RO; pastikan memang kegiatan yang dimaksud.</p>}
+          {terpilih && peringatanFungsi(terpilih, fungsi) && <p className="m-0 text-[12.5px] text-[#8A6200] sm:col-span-2">{peringatanFungsi(terpilih, fungsi)}</p>}
           <div className="sm:col-span-2">
             <button type="button" className={tombolUtama} disabled={p.mengirim || pilih === ""}
               onClick={() => { if (pilih !== "") void p.onTautkan(pilih, fungsi, catatan.trim()).then((ok) => { if (ok) { setPilih(""); setCatatan(""); } }); }}>

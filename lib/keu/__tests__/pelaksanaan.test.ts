@@ -7,7 +7,7 @@ import vektor from "./lanjutan.vektor.json";
 import { awalForm, normalisasi } from "../identifikasi";
 import type { BarisRincian, IsiLanjutan } from "../lanjutan";
 import {
-  agendaEvaluasi, calonBelumTertaut, fungsiBawaan, kalimatHasilTerap, kesiapanBiaya, kesiapanPencairan, kodeSiap, normalisasiBahan, normalisasiHasilTerap, normalisasiUsulan,
+  agendaEvaluasi, adalahDataUji, calonBelumTertaut, catatanKembarDisarankan, fungsiBawaan, kelompokkanCalon, labelCalon, labelPilihan, peringatanFungsi, kalimatHasilTerap, kesiapanBiaya, kesiapanPencairan, kodeSiap, normalisasiBahan, normalisasiHasilTerap, normalisasiUsulan,
   petugasBernama, ringkasLaporan, ringkasUsulan, selarasJadwal, urutkanUsulan, type CalonKegiatan, type KegiatanBahan,
 } from "../pelaksanaan";
 
@@ -233,5 +233,48 @@ describe("kesiapan Bendahara: syarat pencairan", () => {
     const r = kesiapanPencairan({ isi: isiDasar(), status: "final", kebijakanVer: 1, kegiatanTertaut: 1, penugasanSigap: 4, suratTerbit: 4, biaya: { adaLaporan: true, kurang: 2 } });
     expect(r[5].siap).toBe(false);
     expect(r[5].ket).toBe("2 akun kebutuhannya melebihi sisa pagu.");
+  });
+});
+
+describe("pilihan tautan kegiatan (2 Nov 2026)", () => {
+  const k = (id: number, nama: string, jenis: string | null, o: Partial<CalonKegiatan> = {}): CalonKegiatan => ({ ident_id: 1, kegiatan_id: id, kode: `kode_${id}`, nama, kode_anggaran: null, jenis, aktif: true, mulai: null, selesai: null, disarankan: false, tertaut: false, ...o });
+  const SERUTI = [
+    k(1, "Pelatihan Petugas Seruti Triwulan IV 2026", "pelatihan", { disarankan: true }),
+    k(2, "Seruti Triwulan IV 2026", "pendataan", { disarankan: true }),
+    k(3, "Pelatihan Petugas PSP Pascabencana 2026", "pelatihan"),
+    k(4, "SPDT NTP 2026", "pendataan"),
+    k(5, "UJI Pelatihan SPDT NTP (data uji, boleh dinonaktifkan)", "pelatihan"),
+    k(6, "UJI Fiktif Pelaksanaan", "pendataan", { aktif: false }),
+  ];
+  it("data uji dikenali dari nama", () => {
+    expect(adalahDataUji(k(1, "UJI Fiktif Pelaksanaan", null))).toBe(true);
+    expect(adalahDataUji(k(1, "Pelatihan X (data uji)", null))).toBe(true);
+    expect(adalahDataUji(k(1, "Pendataan Ujian Nasional", null))).toBe(false);
+    expect(adalahDataUji(k(1, "Seruti Triwulan IV 2026", null))).toBe(false);
+  });
+  it("tiga kelompok berurutan: disarankan, lain, nonaktif dan data uji; kelompok kosong dibuang", () => {
+    const g = kelompokkanCalon(SERUTI);
+    expect(g.map((x) => x.kunci)).toEqual(["disarankan", "lain", "bekas"]);
+    expect(g[0].calon.map((c) => c.kegiatan_id)).toEqual([1, 2]);
+    expect(g[1].calon.map((c) => c.kegiatan_id)).toEqual([3, 4]);
+    expect(g[2].calon.map((c) => c.kegiatan_id).sort()).toEqual([5, 6]);
+    expect(kelompokkanCalon([k(9, "Rapat", null)]).map((x) => x.kunci)).toEqual(["lain"]);
+    expect(kelompokkanCalon([k(9, "Rapat", null, { tertaut: true })])).toEqual([]);
+  });
+  it("label memuat jenis di depan dan tanpa kode teknis; nama kembar dibedakan kode", () => {
+    expect(labelCalon(SERUTI[0])).toBe("Pelatihan · Pelatihan Petugas Seruti Triwulan IV 2026");
+    expect(labelPilihan(SERUTI[1], SERUTI)).toBe("★ Pendataan · Seruti Triwulan IV 2026");
+    expect(labelPilihan(SERUTI[1], SERUTI)).not.toContain("kode_2");
+    expect(labelPilihan(SERUTI[5], SERUTI)).toBe("Pendataan · UJI Fiktif Pelaksanaan (nonaktif)");
+    const kembar = [k(7, "Survei Harga", "pendataan"), k(8, "Survei Harga", "pendataan")];
+    expect(labelPilihan(kembar[0], kembar)).toBe("Pendataan · Survei Harga (kode_7)");
+    expect(labelPilihan(kembar[1], kembar)).toBe("Pendataan · Survei Harga (kode_8)");
+  });
+  it("catatan kembar hanya bila pelatihan dan pendataan sama-sama disarankan; peringatan fungsi lunak", () => {
+    expect(catatanKembarDisarankan(SERUTI)).toContain("tautkan satu per satu");
+    expect(catatanKembarDisarankan([SERUTI[0], SERUTI[2]])).toBeNull();
+    expect(peringatanFungsi(SERUTI[0], "pendataan")).toContain("berjenis pelatihan");
+    expect(peringatanFungsi(SERUTI[0], "pelatihan")).toBeNull();
+    expect(peringatanFungsi(k(9, "Rapat", "rapat"), "pendataan")).toBeNull();
   });
 });

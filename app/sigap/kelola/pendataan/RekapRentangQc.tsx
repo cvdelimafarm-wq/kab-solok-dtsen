@@ -8,6 +8,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
+import SalinGambar from "@/app/components/SalinGambar";
 import { BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan } from "../../admin/ui";
 import {
   LABEL_STATUS_RENTANG,
@@ -124,6 +125,7 @@ export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari, api }:
           </Kartu>
 
           {d.hari.length > 0 && (
+            <SalinGambar nama={`Mengisi per hari ${tglPendekQc(d.dari)} ${tglPendekQc(d.sampai)}`}>
             <Kartu judul="Mengisi per hari" ket="Ketuk satu hari untuk membukanya di tampilan Per tanggal.">
               <div className="-mx-1 flex items-end gap-2 overflow-x-auto px-1 pb-1" role="list">
                 {d.per_hari.map((h) => {
@@ -143,6 +145,7 @@ export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari, api }:
               </div>
               <p className="mt-1.5 text-[11.5px] text-[#6B7A90]">Tinggi batang = persen yang sudah mengisi; bagian biru tua = yang lulus di antara mereka.</p>
             </Kartu>
+            </SalinGambar>
           )}
 
           {d.hari.length > 0 && hitung && (

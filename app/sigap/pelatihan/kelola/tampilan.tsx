@@ -3,13 +3,15 @@
 // app/sigap/pelatihan/kelola/tampilan.tsx
 //
 // (2 Nov 2026) Tab "Persiapan" di Kelola Pelatihan: (1) tampilan peserta (OTOMATIS bawaan: lima tab selama pelatihan belum selesai; dapat dipaksa baru / lama),
-// (2) ketentuan undangan. Setiap setelan diberi penanda Bawaan / Diubah. API: /api/sigap/pelatihan/ketentuan.
+// (2) ketentuan undangan, (3) pengaturan Absen peserta (sesi, jendela, radius). Setiap setelan diberi penanda Bawaan / Diubah.
+// API: /api/sigap/pelatihan/ketentuan dan /api/sigap/pelatihan/absen (aksi "atur").
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { MAKS_BUTIR, MAKS_PANJANG_BUTIR } from "@/lib/ketentuanPelatihan";
 import { lupakanBenderaTab } from "../TabPelatihan";
+import { JENDELA_MENIT_BAWAAN, RADIUS_RADAR_BAWAAN_M, SESI_BAWAAN, type SesiRencana } from "@/lib/sigapAbsen";
 import { ChipSetelan } from "./GrupTab";
 
 type Data = {
@@ -27,6 +29,112 @@ const PILIHAN: { nilai: boolean | null; label: string; ket: string }[] = [
   { nilai: true, label: "Selalu lima tab", ket: "Peserta selalu melihat Hari ini · Instrumen · Pelatihan · Kamera · Monitoring." },
   { nilai: false, label: "Selalu Langkah lama", ket: "Peserta melihat daftar Langkah pelatihan seperti sebelumnya." },
 ];
+
+type AturAbsen = { sesi: SesiRencana[]; jendela_menit: number; radius_m: number };
+const sama = (a: AturAbsen, b: AturAbsen) => JSON.stringify(a) === JSON.stringify(b);
+const BAWAAN_ABSEN: AturAbsen = { sesi: SESI_BAWAAN.map((x) => ({ ...x })), jendela_menit: JENDELA_MENIT_BAWAAN, radius_m: RADIUS_RADAR_BAWAAN_M };
+
+/** Pengaturan Absen peserta: daftar sesi (label + jam rencana), jendela absen, radius radar. */
+function KartuAturAbsen({ bisa }: { bisa: boolean }) {
+  const [asal, setAsal] = useState<AturAbsen | null>(null);
+  const [f, setF] = useState<AturAbsen>(BAWAAN_ABSEN);
+  const [ada, setAda] = useState(true);
+  const [sibuk, setSibuk] = useState(false);
+  const [galat, setGalat] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const muat = useCallback(async () => {
+    try {
+      const r = await fetchJson<{ atur: AturAbsen; tersedia?: boolean }>(urlPelatihan("/api/sigap/pelatihan/absen"));
+      setAsal(r.atur);
+      setF(r.atur);
+      setAda(r.tersedia !== false);
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    }
+  }, []);
+  useEffect(() => {
+    if (!bacaSesi()) return;
+    void muat();
+  }, [muat]);
+
+  async function simpan(isi: AturAbsen, pesan: string) {
+    setSibuk(true);
+    setGalat(null);
+    setOk(null);
+    try {
+      await fetchJson(urlPelatihan("/api/sigap/pelatihan/absen"), { method: "POST", body: JSON.stringify({ aksi: "atur", ...isi }) });
+      setOk(pesan);
+      await muat();
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    } finally {
+      setSibuk(false);
+    }
+  }
+
+  if (!asal && !galat) return <Memuat />;
+  const diubah = !!asal && !sama(asal, BAWAAN_ABSEN);
+  const berubah = !!asal && !sama(asal, f);
+  const ubahSesi = (i: number, k: "label" | "jam", v: string) => setF((x) => ({ ...x, sesi: x.sesi.map((r, j) => (j === i ? { ...r, [k]: k === "label" ? v.slice(0, 40) : v } : r)) }));
+  const tambah = () =>
+    setF((x) => {
+      const terpakai = new Set(x.sesi.map((r) => r.no));
+      let no = 1;
+      while (terpakai.has(no)) no++;
+      return no > 12 ? x : { ...x, sesi: [...x.sesi, { no, label: `Sesi ${no}`, jam: "08:00" }].sort((a, b) => a.no - b.no) };
+    });
+
+  return (
+    <Kartu judul="Absen peserta" kanan={<ChipSetelan diubah={diubah} teksBawaan="Bawaan · 4 sesi, 30 menit, 25 m" teksDiubah="Diubah" />}>
+      {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      {ok && <Pesan jenis="ok">{ok}</Pesan>}
+      {!ada && <Pesan jenis="info">Fitur Absen peserta belum aktif di basis data (SQL 20261102zk belum dijalankan). Pengaturan di sini baru dapat disimpan setelah itu.</Pesan>}
+      <p className="text-[12.5px] text-[#6B7A90]">
+        Daftar sesi hanya saran: pengelola tetap memulai sesi kapan saja dari tab Absen peserta. Jendela absen adalah lama sesi terbuka sejak dimulai; radius dipakai metode radar.
+      </p>
+      <ol className="mt-2 space-y-2">
+        {f.sesi.map((r, i) => (
+          <li key={r.no} className="flex flex-wrap items-center gap-1.5">
+            <span className="w-5 text-right text-[12px] text-[#6B7A90]">{r.no}.</span>
+            <input value={r.label} onChange={(e) => ubahSesi(i, "label", e.target.value)} disabled={!bisa} className={`${INPUT} min-w-0 flex-1`} aria-label={`Nama sesi ${r.no}`} />
+            <input type="time" value={r.jam} onChange={(e) => ubahSesi(i, "jam", e.target.value)} disabled={!bisa} className={`${INPUT} w-[7.5rem]`} aria-label={`Jam rencana sesi ${r.no}`} />
+            {bisa && f.sesi.length > 1 && (
+              <button type="button" className={BTN_R} onClick={() => setF((x) => ({ ...x, sesi: x.sesi.filter((_, j) => j !== i) }))} aria-label={`Hapus sesi ${r.no}`}>
+                ✕
+              </button>
+            )}
+          </li>
+        ))}
+      </ol>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="text-[13px]">
+          <span className="font-semibold">Jendela absen (menit)</span>
+          <input type="number" inputMode="numeric" min={5} max={240} value={f.jendela_menit} onChange={(e) => setF((x) => ({ ...x, jendela_menit: Number(e.target.value) }))} disabled={!bisa} className={`${INPUT} mt-1 w-full`} />
+        </label>
+        <label className="text-[13px]">
+          <span className="font-semibold">Radius radar (meter)</span>
+          <input type="number" inputMode="numeric" min={10} max={500} value={f.radius_m} onChange={(e) => setF((x) => ({ ...x, radius_m: Number(e.target.value) }))} disabled={!bisa} className={`${INPUT} mt-1 w-full`} />
+        </label>
+      </div>
+      {bisa && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" className={BTN_O} onClick={tambah} disabled={f.sesi.length >= 12}>
+            + Tambah sesi
+          </button>
+          <button type="button" className={BTN} onClick={() => simpan(f, "Pengaturan absen disimpan.")} disabled={sibuk || !berubah || !ada}>
+            {sibuk ? "Menyimpan…" : "Simpan pengaturan"}
+          </button>
+          {diubah && (
+            <button type="button" className={BTN_O} onClick={() => simpan(BAWAAN_ABSEN, "Pengaturan absen dikembalikan ke bawaan.")} disabled={sibuk || !ada}>
+              Kembalikan ke bawaan
+            </button>
+          )}
+        </div>
+      )}
+    </Kartu>
+  );
+}
 
 export default function PersiapanKelola() {
   const [d, setD] = useState<Data | null>(null);
@@ -166,6 +274,8 @@ export default function PersiapanKelola() {
           </div>
         )}
       </Kartu>
+
+      <KartuAturAbsen bisa={bisa} />
     </div>
   );
 }

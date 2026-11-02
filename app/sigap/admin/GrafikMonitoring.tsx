@@ -13,6 +13,7 @@
 // identitas tidak hanya lewat warna: legenda + tooltip + tabel di bawahnya.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import SalinGambar from "@/app/components/SalinGambar";
 import { bulanSingkat, tglAngka, tglPanjang, tglPendek } from "./api";
 
 export type StatusHari = "lengkap" | "sebagian" | "terlewat" | "rencana";
@@ -148,6 +149,7 @@ export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hari
   const xTip = hover != null ? m.l + slot * hover + slot / 2 : 0;
 
   return (
+    <SalinGambar nama="Tren harian monitoring">
     <section className={KARTU}>
       <div className="mb-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="text-[13.5px] font-extrabold">Tren harian</h3>
@@ -272,6 +274,7 @@ export function TrenHarian({ tanggal, hariIni, rows }: { tanggal: string[]; hari
         )}
       </div>
     </section>
+    </SalinGambar>
   );
 }
 
@@ -322,6 +325,7 @@ export function KepatuhanKecamatan({ hariIni, rows }: { hariIni: string; rows: B
       : `Kepatuhan per kecamatan tujuan ST, persen hari lengkap dari hari kerja yang sudah lewat atau hari ini. Tertinggi ${data[0].kec} ${Math.round(data[0].p * 100)} persen, terendah ${data[data.length - 1].kec} ${Math.round(data[data.length - 1].p * 100)} persen.`;
 
   return (
+    <SalinGambar nama="Kepatuhan per kecamatan">
     <section className={KARTU}>
       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h3 className="text-[13.5px] font-extrabold">Kepatuhan per kecamatan</h3>
@@ -365,5 +369,6 @@ export function KepatuhanKecamatan({ hariIni, rows }: { hariIni: string; rows: B
       </div>
       {kosong > 0 && <p className="mt-1.5 text-[11px] text-[#7B8794]">{kosong} kecamatan belum punya hari kerja yang sudah lewat.</p>}
     </section>
+    </SalinGambar>
   );
 }

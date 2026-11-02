@@ -8,6 +8,7 @@
 
 import { Fragment, useMemo } from "react";
 import { kartu } from "@/app/sigap/keu-ui";
+import SalinGambar from "@/app/components/SalinGambar";
 import { petaJadwal, posisiBar, tandaBulan, tandaMinggu, type BarisPeta, type KelompokPeta } from "@/lib/keu/petaJadwal";
 import { tglIndo, type Form } from "@/lib/keu/identifikasi";
 
@@ -43,6 +44,7 @@ export default function PetaJadwal({ f, P, tahun, daftarP, onPilihP, hariIni }: 
   const KOL = "grid-cols-[104px_minmax(0,1fr)]";
 
   return (
+    <SalinGambar nama={`Peta jadwal ${f.nama || ""} ${P}`.trim()}>
     <section className={`${kartu} flex flex-col gap-2.5`} aria-labelledby="h-peta">
       <header className="flex flex-wrap items-center gap-2">
         <h3 id="h-peta" className="m-0 text-[15px] font-extrabold text-[#0F2A52]">Peta jadwal</h3>
@@ -102,5 +104,6 @@ export default function PetaJadwal({ f, P, tahun, daftarP, onPilihP, hariIni }: 
         </div>
       )}
     </section>
+    </SalinGambar>
   );
 }
