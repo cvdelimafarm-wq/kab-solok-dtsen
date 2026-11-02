@@ -8,11 +8,12 @@ import type { Db } from "@/lib/sigap";
 import { versiBawaan } from "@/lib/sigapAturanTes";
 import { keadaanVanguard } from "@/lib/vanguardAkses";
 import {
-  ATURAN_VANGUARD_BAWAAN, JENIS_SESI_VANGUARD, hariWib, hitungRuntutanVanguard, periksaKelayakan, rapikanAturanVanguard,
-  type AturanVanguard, type HasilRuntutan, type KelayakanRuntutan, type SesiVanguard,
+  ATURAN_VANGUARD_BAWAAN, JENIS_SESI_VANGUARD, adalahTanggalSah, hariWib, hitungRuntutanVanguard, periksaKelayakan, rapikanAturanVanguard, tentukanTenggat,
+  type AturanVanguard, type HasilRuntutan, type KelayakanRuntutan, type SesiVanguard, type TenggatVanguard,
 } from "@/lib/runtutanVanguard";
 
 export const PESAN_SQL_VANGUARD = "Kolom aturan Vanguard belum ada di database. Jalankan SQL 20261102zp_vanguard_aturan_pelatihan.sql, lalu simpan ulang.";
+export const PESAN_SQL_TENGGAT = "Kolom tenggat Vanguard belum ada di database. Jalankan SQL 20261102zq_vanguard_tenggat.sql, lalu simpan ulang.";
 const KOLOM = "vanguard_mode, vanguard_hari_berturut, vanguard_sesi_min_per_hari, vanguard_nilai_minimal";
 const HARI_MS = 86_400_000;
 const galatKolom = (m: string | undefined) => /column|relation|does not exist|schema cache/i.test(m ?? "");
@@ -24,6 +25,30 @@ export async function muatAturanVanguard(db: Db, kegiatanId: number): Promise<At
     return rapikanAturanVanguard((data as Record<string, unknown> | null) ?? null);
   } catch {
     return { ...ATURAN_VANGUARD_BAWAAN };
+  }
+}
+
+/** Tenggat eksplisit (hari terakhir sesi dihitung). null = tidak diatur atau kolom belum ada (SQL 20261102zq). */
+export async function muatTenggatVanguard(db: Db, kegiatanId: number): Promise<string | null> {
+  try {
+    const { data, error } = await db.from("sigap_pelatihan_aturan").select("vanguard_tenggat").eq("kegiatan_id", kegiatanId).maybeSingle();
+    if (error) return null;
+    const t = (data as { vanguard_tenggat?: unknown } | null)?.vanguard_tenggat;
+    return typeof t === "string" && adalahTanggalSah(t.slice(0, 10)) ? t.slice(0, 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Simpan tenggat (null = hapus). Baris aturan harus sudah ada (dibuat oleh simpanAturanVanguard). */
+export async function simpanTenggatVanguard(db: Db, kegiatanId: number, tenggat: string | null, oleh: string): Promise<{ ok: true } | { ok: false; pesan: string }> {
+  if (tenggat !== null && !adalahTanggalSah(tenggat)) return { ok: false, pesan: "Tanggal tenggat tidak sah." };
+  try {
+    const { error } = await db.from("sigap_pelatihan_aturan").update({ vanguard_tenggat: tenggat, diubah_oleh: oleh.slice(0, 120), diubah_at: new Date().toISOString() }).eq("kegiatan_id", kegiatanId);
+    if (error) return { ok: false, pesan: galatKolom(error.message) ? PESAN_SQL_TENGGAT : error.message };
+    return { ok: true };
+  } catch {
+    return { ok: false, pesan: PESAN_SQL_TENGGAT };
   }
 }
 
@@ -94,6 +119,9 @@ export type RuntutanBatch = {
   /** Mengunci Pretest: mode wajib DAN berlaku. */
   mengunci: boolean;
   tanggal_pretest: string | null;
+  /** Hari terakhir sesi dihitung (eksplisit atau sehari sebelum Pretest) dan asalnya. */
+  tenggat: string | null;
+  tenggat_sumber: TenggatVanguard["sumber"];
   hari_ini: string;
   peta: Map<number, RuntutanAkun>;
 };
@@ -101,7 +129,7 @@ export type RuntutanBatch = {
 export async function muatRuntutanBatch(db: Db, kegiatanId: number, akunIds: readonly number[], sekarang: number, tanggalPretest: string | null, aturanDiketahui?: AturanVanguard): Promise<RuntutanBatch> {
   const aturan = aturanDiketahui ?? (await muatAturanVanguard(db, kegiatanId));
   const hariIni = hariWib(sekarang) as string;
-  const kosong: RuntutanBatch = { aturan, menyala: false, berlaku: false, mengunci: false, tanggal_pretest: tanggalPretest, hari_ini: hariIni, peta: new Map() };
+  const kosong: RuntutanBatch = { aturan, menyala: false, berlaku: false, mengunci: false, tanggal_pretest: tanggalPretest, tenggat: null, tenggat_sumber: null, hari_ini: hariIni, peta: new Map() };
   if (aturan.mode === "tidak_ada") return kosong;
   let menyala = false;
   try {
@@ -111,15 +139,16 @@ export async function muatRuntutanBatch(db: Db, kegiatanId: number, akunIds: rea
   }
   if (!menyala) return kosong;
   const sesi = await muatSesiVanguard(db, akunIds, sekarang);
+  const tg = tentukanTenggat(await muatTenggatVanguard(db, kegiatanId), tanggalPretest);
   const peta = new Map<number, RuntutanAkun>();
   for (const id of akunIds) {
     const r = hitungRuntutanVanguard(sesi.get(id) ?? [], hariIni, aturan);
-    peta.set(id, { ...r, kelayakan: periksaKelayakan(r, hariIni, tanggalPretest) });
+    peta.set(id, { ...r, kelayakan: periksaKelayakan(r, hariIni, tg.acuan) });
   }
-  return { aturan, menyala: true, berlaku: true, mengunci: aturan.mode === "wajib", tanggal_pretest: tanggalPretest, hari_ini: hariIni, peta };
+  return { aturan, menyala: true, berlaku: true, mengunci: aturan.mode === "wajib", tanggal_pretest: tanggalPretest, tenggat: tg.tenggat, tenggat_sumber: tg.sumber, hari_ini: hariIni, peta };
 }
 
-export type RuntutanPeserta = RuntutanAkun & { mode: AturanVanguard["mode"]; tanggal_pretest: string | null; hari_ini: string };
+export type RuntutanPeserta = RuntutanAkun & { mode: AturanVanguard["mode"]; tanggal_pretest: string | null; tenggat: string | null; tenggat_sumber: TenggatVanguard["sumber"]; hari_ini: string };
 
 /** Runtutan satu akun untuk kartu di Hari ini (Vanguard sudah dipastikan menyala oleh pemanggil, tetapi tetap diperiksa). null = tidak diatur / tidak menyala. */
 export async function ringkasRuntutanAkun(db: Db, kegiatanId: number, akunId: number, sekarang: number): Promise<RuntutanPeserta | null> {
@@ -130,7 +159,7 @@ export async function ringkasRuntutanAkun(db: Db, kegiatanId: number, akunId: nu
     const b = await muatRuntutanBatch(db, kegiatanId, [akunId], sekarang, tanggalBukaPretest((data ?? []) as { jenis: string; aktif?: boolean; buka_at?: string | null }[]), aturan);
     const r = b.peta.get(akunId);
     if (!b.berlaku || !r) return null;
-    return { ...r, mode: aturan.mode, tanggal_pretest: b.tanggal_pretest, hari_ini: b.hari_ini };
+    return { ...r, mode: aturan.mode, tanggal_pretest: b.tanggal_pretest, tenggat: b.tenggat, tenggat_sumber: b.tenggat_sumber, hari_ini: b.hari_ini };
   } catch {
     return null;
   }

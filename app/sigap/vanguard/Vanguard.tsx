@@ -27,6 +27,9 @@ import { labelSel } from "@/lib/vanguard/sel";
 import { bacaPengaturan, hasilFinal, hitungLulus, isoKeInputWib, levelDibuka, maksPercobaan, type HasilFinal, type Pengaturan, type StatusJadwal } from "@/lib/vanguard/pengaturan";
 import type { Kasus, KasusPublik, KasusRahasia, Koreksi, Kontrol, Level, Nilai, PeriksaEngine } from "@/lib/vanguard/tipe";
 import { Lambang, LogoPenuh } from "./Logo";
+import PanduanPelatihan, { LabelWajib } from "./PanduanPelatihan"; // (2 Nov 2026) konteks pelatihan peserta
+import { useKonteksPelatihan } from "./useKonteksPelatihan";
+import { kartuTampil, type KonteksPelatihan } from "@/lib/konteksVanguard";
 
 type PengKirim = Pengaturan & { status: StatusJadwal };
 type Layar = "pembuka" | "beranda" | "kasus" | "akhir";
@@ -57,6 +60,8 @@ export default function Vanguard() {
   const kegiatan = useMemo(() => { const v = q.get("k"); return v && /^\d{1,9}$/.test(v) && Number(v) > 0 ? Number(v) : null; }, [q]);
   const tujuan = useMemo(() => tujuanAman(q.get("dari")), [q]);
 
+  const { konteks, siap } = useKonteksPelatihan(); // null = bukan peserta pelatihan: tampilan lama
+  const [semua, setSemua] = useState(false); // "Tampilkan semua latihan"
   const [layar, setLayar] = useState<Layar>("pembuka");
   const [idx, setIdx] = useState(0);
   const [vals, setVals] = useState<Nilai>({});
@@ -366,7 +371,7 @@ export default function Vanguard() {
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
-        {layar === "beranda" && <Beranda balik={alamatVanguard({ kegiatan, dari: tujuan })} kegiatanK={dicatat ? kegiatan : null} bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} fin={fin} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
+        {layar === "beranda" && <Beranda konteks={konteks} siap={siap} semua={semua} onSemua={setSemua} balik={alamatVanguard({ kegiatan, dari: tujuan })} kegiatanK={dicatat ? kegiatan : null} bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} fin={fin} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
 
         {layar === "kasus" && k && (
           <>
@@ -441,24 +446,31 @@ export default function Vanguard() {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-function Beranda({ balik, kegiatanK, bintang, selesai, total, levelAktif, dicatat, uji, info, peng, lulus, fin, saran, lemah, onBuka, onAkhir }: { balik: string; kegiatanK: number | null; bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; uji: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; fin: HasilFinal | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
+function Beranda({ konteks, siap, semua, onSemua, balik, kegiatanK, bintang, selesai, total, levelAktif, dicatat, uji, info, peng, lulus, fin, saran, lemah, onBuka, onAkhir }: { konteks: KonteksPelatihan | null; siap: boolean; semua: boolean; onSemua: (v: boolean) => void; balik: string; kegiatanK: number | null; bintang: Record<string, number>; selesai: number; total: number; levelAktif: Set<Level>; dicatat: boolean; uji: boolean; info: Info; peng: PengKirim | null; lulus: ReturnType<typeof hitungLulus> | null; fin: HasilFinal | null; saran: Saran[]; lemah: Kelemahan[]; onBuka: (i: number) => void; onAkhir: () => void }) {
+  const caraMain = (
+    <div className="sheet"><span className="tag">Cara main</span><p style={{ fontSize: 13 }}>Baca hasil wawancara dan kutipan Blok IV, lalu isi Blok V (dan VI–VII pada kasus lengkap) seperti di kuesioner. <b>Ketuk kotak isian</b> untuk memasukkan angka; kalkulator ada di lembar isian. Sel <span className="sw" style={{ background: "#a6a6a6", width: 11, height: 11 }} /> abu-abu tidak berlaku. Kotak bertinta biru adalah isian Anda; kotak abu muda dihitung otomatis.</p></div>
+  );
   return (
     <>
+      {konteks && <PanduanPelatihan konteks={konteks} hrefLatihan={`/sigap/vanguard/sertifikasi?mulai=harian&dari=${encodeURIComponent(balik)}`} semua={semua} onSemua={onSemua} />}
+      {!siap && <div className="sheet" role="status">Memuat…</div>}
+      {siap && (<>
       <div className={`catat ${dicatat ? "ya" : "tidak"}`} role="status">
         {uji ? <><b>Mode uji:</b> tanpa petunjuk, kunci, atau pembahasan. Setiap kali Anda menekan Periksa, jawaban dinilai server dan dicatat; hasilnya menentukan kelulusan.</>
           : dicatat ? <><b>Pelatihan:</b> setiap kali Anda menekan Periksa, percobaan dicatat untuk BPS Kabupaten Solok (kesalahan dan jumlah percobaan).</>
           : <><b>Simulasi bebas:</b> jawaban Anda tidak dicatat dan tidak menentukan apa pun. Berlatihlah sebebasnya.{info.mode === "tercatat" && info.alasan ? ` (${info.alasan})` : ""}</>}
       </div>
-      <div className="sheet"><span className="tag">Cara main</span><p style={{ fontSize: 13 }}>Baca hasil wawancara dan kutipan Blok IV, lalu isi Blok V (dan VI–VII pada kasus lengkap) seperti di kuesioner. <b>Ketuk kotak isian</b> untuk memasukkan angka; kalkulator ada di lembar isian. Sel <span className="sw" style={{ background: "#a6a6a6", width: 11, height: 11 }} /> abu-abu tidak berlaku. Kotak bertinta biru adalah isian Anda; kotak abu muda dihitung otomatis.</p></div>
-      <div className="panel"><div className="jd">RINGKASAN SAYA</div><div style={{ fontSize: 13, marginTop: 3 }}>{selesai} dari {total} kasus sudah dikerjakan.</div></div>
+      {konteks && !semua ? <details className="pg-lipat"><summary>Cara main</summary>{caraMain}</details> : caraMain}
+      {kartuTampil(konteks, "ringkasan", semua) && <div className="panel"><div className="jd">RINGKASAN SAYA</div><div style={{ fontSize: 13, marginTop: 3 }}>{selesai} dari {total} kasus sudah dikerjakan.</div></div>}
       <div className="panel" role="region" aria-label="Sertifikasi kemampuan">
-        <div className="jd">SERTIFIKASI KEMAMPUAN · BARU</div>
+        <div className="jd">SERTIFIKASI KEMAMPUAN{konteks ? "" : " · BARU"}<LabelWajib konteks={konteks} kartu="sertifikasi" /></div>
+        {konteks && <div style={{ fontSize: 12.5, marginTop: 3 }}><b>Latihan harian</b>, latihan format sertifikasi, dan ujian sertifikasi ada di sini dan dihitung untuk pelatihan. Latihan harian paling singkat (3 butir, ±5 menit).</div>}
         <div style={{ fontSize: 12.5, marginTop: 3 }}>Ujian 15 butir acak dan berimbang (angka berbeda tiap ujian), hasilnya tingkat 1–5 bintang: Pemula sampai Expert. Hanya kepemilikan, belum berdampak ke penilaian.</div>
         <Link className="item" style={{ marginTop: 6, textDecoration: "none", color: "inherit" }} href={`/sigap/vanguard/sertifikasi?dari=${encodeURIComponent(balik)}`}>
-          <span className="num">★</span><span className="t">Ujian Sertifikasi<small>Cek kemampuan Anda dan raih bintang</small></span><span className="st">▶</span>
+          <span className="num">★</span><span className="t">{konteks ? "Latihan harian dan ujian" : "Ujian Sertifikasi"}<small>{konteks ? "Pilih Latihan harian, latihan format sertifikasi, atau ujian" : "Cek kemampuan Anda dan raih bintang"}</small></span><span className="st">▶</span>
         </Link>
       </div>
-      <div className="panel" role="region" aria-label="Mode Kuesioner Penuh">
+      {kartuTampil(konteks, "kuesioner", semua) && <div className="panel" role="region" aria-label="Mode Kuesioner Penuh">
         <div className="jd">MODE KUESIONER PENUH · UJI COBA</div>
         <div style={{ fontSize: 12.5, marginTop: 3 }}>Isi Blok IV.1 (konsumsi makanan) seperti di kuesioner asli dari catatan belanja satu rumah tangga. {kegiatanK ? "Percobaan dicatat seperti kasus lain." : "Hanya latihan, tidak dicatat."}</div>
         {[{ k: "K01", t: "Dapur Bu Maryati", s: "Minyak, bumbu, minuman, bahan lainnya" }, { k: "K02", t: "Keluarga Pak Sucipto", s: "Makanan jadi dan rokok per anggota" }].map((c) => (
@@ -466,7 +478,8 @@ function Beranda({ balik, kegiatanK, bintang, selesai, total, levelAktif, dicata
             <span className="num">{c.k}</span><span className="t">{c.t}<small>{c.s}</small></span><span className="st">▶</span>
           </Link>
         ))}
-      </div>
+        <div style={{ fontSize: 11.5, marginTop: 6 }}><LabelWajib konteks={konteks} kartu="kuesioner" /></div>
+      </div>}
       {peng && (peng.nilai_lulus !== null || peng.maks_percobaan !== null || peng.tutup_at) && (
         <div className="panel" role="region" aria-label="Aturan kegiatan">
           <div className="jd">ATURAN KEGIATAN INI</div>
@@ -477,7 +490,7 @@ function Beranda({ balik, kegiatanK, bintang, selesai, total, levelAktif, dicata
           </div>
         </div>
       )}
-      {saran.length > 0 && (
+      {saran.length > 0 && kartuTampil(konteks, "saran", semua) && (
         <div className="panel" role="region" aria-label="Latihan kesalahan saya">
           <div className="jd">LATIHAN KESALAHAN SAYA</div>
           {lemah[0] && <div style={{ fontSize: 12.5, marginTop: 3 }}>Kesalahan Anda yang paling sering: <b>{LABEL_JENIS[lemah[0].jenis]}</b> ({lemah[0].jumlah}×). Kasus berikut disarankan untuk mengulangnya.</div>}
@@ -491,7 +504,8 @@ function Beranda({ balik, kegiatanK, bintang, selesai, total, levelAktif, dicata
           </div>
         </div>
       )}
-      {URUTAN_LEVEL.filter((lv) => levelAktif.has(lv)).map((lv) => (
+      {konteks && semua && <div className="catat tidak" role="note">Daftar kasus di bawah <LabelWajib konteks={konteks} kartu="kasus" />: boleh dikerjakan sebagai latihan tambahan.</div>}
+      {kartuTampil(konteks, "kasus", semua) && URUTAN_LEVEL.filter((lv) => levelAktif.has(lv)).map((lv) => (
         <div key={lv}>
           <div><span className="lv">{lv} · {NAMA_LEVEL[lv]}</span></div>
           {KASUS_PUBLIK.map((c, i) => c.level !== lv ? null : (
@@ -503,7 +517,8 @@ function Beranda({ balik, kegiatanK, bintang, selesai, total, levelAktif, dicata
           ))}
         </div>
       ))}
-      {total > 0 && selesai >= total && <button type="button" className="btn pri" style={{ width: "100%" }} onClick={onAkhir}>Lihat hasil akhir</button>}
+      {kartuTampil(konteks, "kasus", semua) && total > 0 && selesai >= total && <button type="button" className="btn pri" style={{ width: "100%" }} onClick={onAkhir}>Lihat hasil akhir</button>}
+      </>)}
     </>
   );
 }

@@ -16,6 +16,10 @@ export type KeadaanVanguardKelola = {
   aturan: AturanVanguard;
   blokir_tahap: boolean;
   tanggal_pretest: string | null;
+  /** (2 Nov 2026) tenggat yang diatur eksplisit (null = ikut tanggal buka Pretest), tenggat yang berlaku, dan asalnya. */
+  tenggat_atur?: string | null;
+  tenggat?: string | null;
+  tenggat_sumber?: "atur" | "pretest" | null;
   batas_mulai: string | null;
   ringkas: RingkasRuntutan | null;
 };
@@ -84,6 +88,8 @@ export type RuntutanKartu = {
   petak: Petak[];
   kelayakan: KelayakanRuntutan;
   tanggal_pretest: string | null;
+  /** (2 Nov 2026) hari terakhir sesi dihitung (eksplisit atau sehari sebelum Pretest). */
+  tenggat?: string | null;
 };
 
 const tglPendek = (t: string): string => new Date(`${t}T00:00:00Z`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });

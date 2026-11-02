@@ -169,3 +169,25 @@ export function periksaKelayakan(r: HasilRuntutan, hariIni: string, tanggalBukaP
   const mungkin = tersedia >= sisa;
   return { batas_mulai: batas, mungkin, cadangan_hari: mungkin ? tersedia - sisa : null, hari_terakhir_mulai: r.berturut === 0 && !r.hari_ini_sudah && hariIni === batas };
 }
+
+// ---------- tenggat (2 Nov 2026) ----------
+
+export type TenggatVanguard = {
+  /** Hari TERAKHIR sesi masih dihitung (YYYY-MM-DD). */
+  tenggat: string | null;
+  sumber: "atur" | "pretest" | null;
+  /** Tanggal acuan untuk periksaKelayakan: sehari sesudah tenggat (= tanggal Pretest dibuka bila tenggat berasal dari Pretest). */
+  acuan: string | null;
+};
+
+export const adalahTanggalSah = (x: unknown): x is string => typeof x === "string" && POLA_TGL.test(x) && !Number.isNaN(Date.parse(`${x}T00:00:00Z`)) && new Date(`${x}T00:00:00Z`).toISOString().slice(0, 10) === x;
+
+/**
+ * Tenggat eksplisit (kolom vanguard_tenggat, diatur pengelola) menang; bila kosong, tenggat = sehari sebelum Pretest dibuka (cara lama);
+ * bila keduanya tidak ada, tenggat tidak diketahui.
+ */
+export function tentukanTenggat(eksplisit: string | null | undefined, tanggalBukaPretest: string | null | undefined): TenggatVanguard {
+  if (adalahTanggalSah(eksplisit)) return { tenggat: eksplisit, sumber: "atur", acuan: tambahHari(eksplisit, 1) };
+  if (adalahTanggalSah(tanggalBukaPretest)) return { tenggat: tambahHari(tanggalBukaPretest, -1), sumber: "pretest", acuan: tanggalBukaPretest };
+  return { tenggat: null, sumber: null, acuan: null };
+}

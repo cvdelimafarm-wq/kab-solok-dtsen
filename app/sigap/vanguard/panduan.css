@@ -1,0 +1,35 @@
+/* app/sigap/vanguard/panduan.css  (2 Nov 2026) Kartu Panduan pelatihan, label WAJIB/OPSIONAL, dan tombol "Tampilkan semua latihan". Dicakup di bawah .vg. */
+.vg .pg{background:#fff;border:1.5px solid #000;border-left:7px solid var(--u-mid);padding:11px 12px}
+.vg .pg.kuning{border-left-color:#d49a00;background:#fffbe6}
+.vg .pg.merah{border-left-color:var(--bad);background:#fff5f4}
+.vg .pg.hijau{border-left-color:var(--good);background:#f1faf4}
+.vg .pg .pg-atas{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.vg .pg .pg-tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--amber);display:inline-block;padding:1px 7px}
+.vg .pg .pg-keg{font-size:11.5px;color:#333;margin-top:4px}
+.vg .pg .pg-banner{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-top:8px;padding:7px 9px;border:1.5px solid #000;background:#fff;font-size:12.5px}
+.vg .pg.kuning .pg-banner{background:var(--warn-bg);border-color:#8a5a00}
+.vg .pg.merah .pg-banner{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.vg .pg.hijau .pg-banner{background:var(--good-bg);border-color:var(--good);color:var(--good)}
+.vg .pg .pg-banner b{font-size:13.5px}
+.vg .pg h2{font-size:15px;margin-top:9px}
+.vg .pg .pg-petak{display:flex;gap:6px;margin-top:8px}
+.vg .pg .pg-petak span{flex:1;min-height:36px;display:grid;place-items:center;font-size:12px;font-weight:800;border:1.5px solid #000;background:#eee;color:#555}
+.vg .pg .pg-petak span.selesai{background:#3ddc97;color:#06351f}
+.vg .pg .pg-petak span.hari_ini{background:#fff;border:2.5px solid var(--amber);color:var(--warn)}
+.vg .pg p{font-size:13px;margin-top:7px}
+.vg .pg .pg-langkah{font-weight:700}
+.vg .pg .pg-aksi{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.vg .pg .pg-btn{min-height:44px;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;font-size:13.5px;font-weight:800;border:1.5px solid #000;background:var(--amber);color:#111;text-decoration:none}
+.vg .pg .pg-btn.diam{background:#fff;color:#333;font-weight:700}
+.vg .pg .pg-btn:disabled{opacity:.6}
+.vg .pg details{margin-top:9px;font-size:12.5px}
+.vg .pg summary{cursor:pointer;min-height:36px;display:flex;align-items:center;font-weight:700}
+.vg .pg details ul{margin:4px 0 0 18px}
+.vg .pg details li{margin-bottom:3px}
+.vg .pg .pg-semua{margin-top:8px;min-height:44px;width:100%;border:1.5px dashed #000;background:#fff;font-size:12.5px;font-weight:700}
+.vg .pg-label{display:inline-block;margin-left:6px;padding:1px 7px;font-size:10px;font-weight:800;letter-spacing:.05em;vertical-align:middle;border:1.5px solid #000;background:#fff;color:#333}
+.vg .pg-label.wajib{background:#2a1763;color:#fff;border-color:#2a1763}
+.vg .pg-label.dihitung{background:var(--good-bg);color:var(--good);border-color:var(--good)}
+.vg .pg-lipat{background:#fff;border:1.5px solid #000;padding:0 12px}
+.vg .pg-lipat summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:12.5px;font-weight:700}
+.vg .pg-lipat .sheet{border:0;padding:0 0 10px}

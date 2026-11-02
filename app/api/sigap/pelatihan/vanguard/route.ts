@@ -7,6 +7,8 @@
 // GET                          -> { kegiatan_id, menyala, sumber:"centang"|"identifikasi"|"mati", centang:true|false|null, percobaan, boleh_kelola,
 //                                    aturan:{mode,hari_berturut,sesi_min_per_hari,nilai_minimal}, blokir_tahap, tanggal_pretest, batas_mulai, ringkas:{...}|null }
 // POST {menyala:true|false|null} -> true/false = centang manual (menang atas Identifikasi survei); null = hapus centang (ikuti Identifikasi survei) -> sama seperti GET
+// POST {aturan:{...}, tenggat?:"YYYY-MM-DD"|null} -> (2 Nov 2026 malam) `tenggat` = hari TERAKHIR sesi dihitung (kolom vanguard_tenggat, SQL 20261102zq); kosong = sehari sebelum Pretest dibuka.
+//        GET menambah tenggat_atur (eksplisit), tenggat (yang berlaku), tenggat_sumber (atur|pretest|null).
 // POST {aturan:{mode,hari_berturut,sesi_min_per_hari,nilai_minimal}} -> (2 Nov 2026) aturan "latihan Vanguard N hari berturut-turut" (kolom vanguard_* pada sigap_pelatihan_aturan, SQL 20261102zp);
 //        mode "wajib" mengunci Pretest sampai tuntas (bila Blokir antar tahapan menyala). Audit pelatihan_vanguard_aturan.
 
@@ -17,8 +19,8 @@ import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb"
 import { KODE_FITUR_VANGUARD, keadaanVanguard } from "@/lib/vanguardAkses";
 import { muatAturan } from "@/lib/sigapAturanDb";
 import { muatTesDaftar } from "@/lib/sigapTesDb";
-import { periksaAturanVanguard, tambahHari } from "@/lib/runtutanVanguard";
-import { muatAturanVanguard, muatRuntutanBatch, simpanAturanVanguard, tanggalBukaPretest } from "@/lib/vanguardRuntutanDb";
+import { adalahTanggalSah, periksaAturanVanguard, tambahHari, tentukanTenggat } from "@/lib/runtutanVanguard";
+import { muatAturanVanguard, muatRuntutanBatch, muatTenggatVanguard, simpanAturanVanguard, simpanTenggatVanguard, tanggalBukaPretest } from "@/lib/vanguardRuntutanDb";
 import { ringkasRuntutanPeserta } from "@/lib/vanguardPelatihan";
 
 export const runtime = "nodejs";
@@ -59,6 +61,8 @@ async function keadaan(db: Db, kegiatanId: number, bisaKelola: boolean) {
   ]);
   const aktif = (c as { aktif?: unknown } | null)?.aktif;
   const tanggalPretest = tanggalBukaPretest(tes);
+  const tenggatAtur = await muatTenggatVanguard(db, kegiatanId);
+  const tg = tentukanTenggat(tenggatAtur, tanggalPretest);
   let ringkas: ReturnType<typeof ringkasRuntutanPeserta> | null = null;
   if (aturan.mode !== "tidak_ada" && kd.menyala) {
     const ids = await akunPeserta(db, kegiatanId);
@@ -67,7 +71,7 @@ async function keadaan(db: Db, kegiatanId: number, bisaKelola: boolean) {
   }
   return {
     kegiatan_id: kegiatanId, menyala: kd.menyala, sumber: kd.sumber, centang: typeof aktif === "boolean" ? aktif : null, percobaan: count ?? 0, boleh_kelola: bisaKelola,
-    aturan, blokir_tahap: aturanNilai.blokir_tahap, tanggal_pretest: tanggalPretest, batas_mulai: tanggalPretest ? tambahHari(tanggalPretest, -aturan.hari_berturut) : null, ringkas,
+    aturan, blokir_tahap: aturanNilai.blokir_tahap, tanggal_pretest: tanggalPretest, tenggat_atur: tenggatAtur, tenggat: tg.tenggat, tenggat_sumber: tg.sumber, batas_mulai: tg.acuan ? tambahHari(tg.acuan, -aturan.hari_berturut) : null, ringkas,
   };
 }
 
@@ -86,13 +90,23 @@ export async function POST(req: NextRequest) {
     const p = await siapkan(req);
     if ("err" in p) return p.err;
     if (!p.bisaKelola) return galat("Tidak punya izin mengubah Vanguard pelatihan ini.", 403);
-    const body = (await req.json().catch(() => null)) as { menyala?: unknown; aturan?: unknown } | null;
+    const body = (await req.json().catch(() => null)) as { menyala?: unknown; aturan?: unknown; tenggat?: unknown } | null;
     if (body && body.aturan !== undefined) {
       const cek = periksaAturanVanguard(body.aturan);
       if (!cek.ok) return galat(cek.pesan);
+      const tg = (body as { tenggat?: unknown }).tenggat;
+      if (tg !== undefined && tg !== null && tg !== "" && !adalahTanggalSah(tg)) return galat("Tanggal tenggat tidak sah (format YYYY-MM-DD).");
       const simpan = await simpanAturanVanguard(p.db, p.kegiatanId, cek.aturan, p.akun.nama);
       if (!simpan.ok) return galat(simpan.pesan, 409);
-      await catatAudit(p.db, p.akun.id, "pelatihan_vanguard_aturan", { kegiatan_id: p.kegiatanId, ...cek.aturan });
+      // (2 Nov 2026) tenggat eksplisit; "" / null = hapus (kembali mengikuti tanggal buka Pretest). Tanpa SQL 20261102zq hanya penghapusan yang lolos tanpa galat.
+      if (tg !== undefined) {
+        const baru = typeof tg === "string" && tg !== "" ? tg : null;
+        if (baru !== null || (await muatTenggatVanguard(p.db, p.kegiatanId)) !== null) {
+          const st = await simpanTenggatVanguard(p.db, p.kegiatanId, baru, p.akun.nama);
+          if (!st.ok) return galat(st.pesan, 409);
+        }
+      }
+      await catatAudit(p.db, p.akun.id, "pelatihan_vanguard_aturan", { kegiatan_id: p.kegiatanId, ...cek.aturan, tenggat: typeof tg === "string" && tg !== "" ? tg : null });
       return NextResponse.json(await keadaan(p.db, p.kegiatanId, p.bisaKelola));
     }
     if (!body || !(body.menyala === true || body.menyala === false || body.menyala === null)) return galat("Pilihan tidak valid.");

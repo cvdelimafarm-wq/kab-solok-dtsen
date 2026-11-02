@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN, Chip, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { alamatDasbor } from "@/lib/vanguard/navigasi";
-import { LABEL_MODE_VANGUARD, MODE_VANGUARD, tambahHari, type AturanVanguard, type ModeVanguard } from "@/lib/runtutanVanguard";
+import { LABEL_MODE_VANGUARD, MODE_VANGUARD, adalahTanggalSah, tambahHari, tentukanTenggat, type AturanVanguard, type ModeVanguard } from "@/lib/runtutanVanguard";
 import { teksModeVanguard } from "@/lib/vanguardPelatihan";
 import { PILIHAN_VANGUARD, pilihanDari, teksSumberVanguard, type KeadaanVanguardKelola, type PilihanVanguard } from "@/lib/vanguardPelatihan";
 
@@ -22,6 +22,7 @@ export default function VanguardKelola() {
   const [sibuk, setSibuk] = useState(false);
   const [dari, setDari] = useState("/");
   const [at, setAt] = useState<AturanVanguard | null>(null);
+  const [tg, setTg] = useState(""); // (2 Nov 2026) tenggat eksplisit: hari terakhir sesi dihitung ("" = ikut tanggal buka Pretest)
 
   const muat = useCallback(async () => {
     try {
@@ -29,6 +30,7 @@ export default function VanguardKelola() {
       setD(r);
       setPilih(pilihanDari(r.centang));
       setAt(r.aturan);
+      setTg(r.tenggat_atur ?? "");
       setGalat(null);
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
@@ -43,8 +45,9 @@ export default function VanguardKelola() {
   if (!d && !galat) return <Memuat />;
   if (!d) return <Pesan jenis="galat">{galat}</Pesan>;
   const berubah = pilih !== pilihanDari(d.centang);
-  const atBerubah = !!at && (at.mode !== d.aturan.mode || at.hari_berturut !== d.aturan.hari_berturut || at.sesi_min_per_hari !== d.aturan.sesi_min_per_hari || at.nilai_minimal !== d.aturan.nilai_minimal);
-  const batasMulai = d.tanggal_pretest && at ? tambahHari(d.tanggal_pretest, -at.hari_berturut) : null;
+  const atBerubah = !!at && (at.mode !== d.aturan.mode || at.hari_berturut !== d.aturan.hari_berturut || at.sesi_min_per_hari !== d.aturan.sesi_min_per_hari || at.nilai_minimal !== d.aturan.nilai_minimal || tg !== (d.tenggat_atur ?? ""));
+  const tgEfektif = tentukanTenggat(adalahTanggalSah(tg) ? tg : null, d.tanggal_pretest);
+  const batasMulai = tgEfektif.acuan && at ? tambahHari(tgEfektif.acuan, -at.hari_berturut) : null;
   const tglTeks = (t: string) => new Date(`${t}T00:00:00Z`).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 
   async function simpanAturan() {
@@ -53,9 +56,10 @@ export default function VanguardKelola() {
     setGalat(null);
     setOk(null);
     try {
-      const r = await fetchJson<KeadaanVanguardKelola>("/api/sigap/pelatihan/vanguard", { method: "POST", body: JSON.stringify({ aturan: at }) });
+      const r = await fetchJson<KeadaanVanguardKelola>("/api/sigap/pelatihan/vanguard", { method: "POST", body: JSON.stringify({ aturan: at, tenggat: adalahTanggalSah(tg) ? tg : null }) });
       setD(r);
       setAt(r.aturan);
+      setTg(r.tenggat_atur ?? "");
       setOk("Aturan latihan Vanguard disimpan.");
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
@@ -123,7 +127,7 @@ export default function VanguardKelola() {
         </div>
         {d.menyala && (
           <p className="mt-2.5 text-[12px] text-[#6B7A90]">
-            Di dasbor: skor dan kesalahan per peserta, level yang dibuka, jadwal buka/tutup, maksimal percobaan, dan mode latihan/ujian. Aturan &quot;wajib 3 hari berturut-turut&quot; yang mengunci Pretest belum aktif (masih rancangan).
+            Di dasbor: skor dan kesalahan per peserta, level yang dibuka, jadwal buka/tutup, maksimal percobaan, dan mode latihan/ujian. Aturan &quot;wajib N hari berturut-turut&quot; yang mengunci Pretest diatur di kartu berikutnya.
           </p>
         )}
       </Kartu>
@@ -161,13 +165,31 @@ export default function VanguardKelola() {
             </label>
           </div>
           {at.mode !== "tidak_ada" && (
+            <div className="mt-3">
+              <label className="block text-[12.5px] font-semibold text-[#34455F]">
+                Tenggat: hari terakhir latihan masih dihitung
+                <input type="date" className="mt-1 block min-h-[44px] w-full rounded-xl border border-[#CBD6E6] px-3 text-[14px] sm:w-64" value={tg} disabled={!d.boleh_kelola || sibuk} onChange={(e) => setTg(e.target.value)} />
+              </label>
+              <p className="mt-1 text-[12px] text-[#6B7A90]">
+                Contoh: ketentuan &quot;2 s.d. 8 November&quot; berarti tenggat 8 November. Kosongkan untuk memakai sehari sebelum Pretest dibuka.
+                {tg !== "" && (
+                  <>
+                    {" "}
+                    <button type="button" className="font-bold text-[#1F5FD1] underline" disabled={!d.boleh_kelola || sibuk} onClick={() => setTg("")}>Hapus tenggat</button>
+                  </>
+                )}
+              </p>
+            </div>
+          )}
+          {at.mode !== "tidak_ada" && (
             <div className="mt-3 rounded-xl border border-[#D8CCF5] bg-[#F5F0FF] px-3 py-2.5 text-[13px] text-[#3B1F8F]">
-              {d.tanggal_pretest && batasMulai ? (
+              {tgEfektif.tenggat && batasMulai ? (
                 <>
-                  Pretest dibuka <b>{tglTeks(d.tanggal_pretest)}</b>. Batas mulai latihan: <b>{tglTeks(batasMulai)}</b> (lewat itu, petugas tidak sempat menuntaskan {at.hari_berturut} hari berturut-turut sebelum Pretest, kecuali PJ membuka kunci atau menggeser jadwal).
+                  Tenggat latihan: <b>{tglTeks(tgEfektif.tenggat)}</b> ({tgEfektif.sumber === "atur" ? "diatur di sini" : "sehari sebelum Pretest dibuka"}). Batas mulai latihan: <b>{tglTeks(batasMulai)}</b> (lewat itu, petugas tidak sempat menuntaskan {at.hari_berturut} hari berturut-turut, kecuali PJ membuka kunci atau menggeser jadwal).
+                  {d.tanggal_pretest && tgEfektif.sumber === "atur" && tgEfektif.tenggat >= d.tanggal_pretest && <> Perhatian: Pretest dibuka {tglTeks(d.tanggal_pretest)}, tidak sesudah tenggat ini.</>}
                 </>
               ) : (
-                <>Tanggal buka Pretest belum diatur, jadi batas mulai belum bisa dihitung. Atur di Soal &amp; Jadwal.</>
+                <>Tenggat belum bisa dihitung: isi tenggat di atas atau jadwalkan Pretest di Soal &amp; Jadwal.</>
               )}
             </div>
           )}

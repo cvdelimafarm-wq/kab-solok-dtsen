@@ -16,9 +16,12 @@ const st = {
   gagalTulis: false,
   blokir: true,
   gagalAturan: false,
+  tenggat: null as string | null,
+  gagalTenggat: false,
   aturanV: { mode: "tidak_ada", hari_berturut: 3, sesi_min_per_hari: 1, nilai_minimal: 0 } as { mode: string; hari_berturut: number; sesi_min_per_hari: number; nilai_minimal: number },
 };
 const simpanAturan = vi.fn();
+const simpanTenggat = vi.fn();
 const audit = vi.fn();
 const tulis = { upsert: vi.fn(), hapus: vi.fn() };
 
@@ -46,6 +49,8 @@ vi.mock("@/lib/sigapAturanDb", () => ({ muatAturan: async () => ({ versi: 2, blo
 vi.mock("@/lib/vanguardRuntutanDb", () => ({
   muatAturanVanguard: async () => st.aturanV,
   simpanAturanVanguard: async (...a: unknown[]) => { simpanAturan(...a); return st.gagalAturan ? { ok: false, pesan: "Kolom aturan Vanguard belum ada" } : (st.aturanV = a[2] as typeof st.aturanV, { ok: true }); },
+  muatTenggatVanguard: async () => st.tenggat,
+  simpanTenggatVanguard: async (...a: unknown[]) => { simpanTenggat(...a); if (st.gagalTenggat) return { ok: false, pesan: "Kolom tenggat Vanguard belum ada. Jalankan SQL 20261102zq" }; st.tenggat = a[2] as string | null; return { ok: true }; },
   tanggalBukaPretest: () => "2026-11-09",
   muatRuntutanBatch: async () => ({ peta: new Map([[1, { tuntas: true, terputus: false, berturut: 3, kelayakan: { mungkin: true } }], [2, { tuntas: false, terputus: false, berturut: 0, kelayakan: { mungkin: false } }]]) }),
 }));
@@ -73,6 +78,9 @@ beforeEach(() => {
   st.gagalTulis = false;
   st.blokir = true;
   st.gagalAturan = false;
+  st.tenggat = null;
+  st.gagalTenggat = false;
+  simpanTenggat.mockClear();
   st.aturanV = { mode: "tidak_ada", hari_berturut: 3, sesi_min_per_hari: 1, nilai_minimal: 0 };
   simpanAturan.mockClear();
   audit.mockClear();
@@ -168,6 +176,48 @@ describe("aturan latihan N hari berturut-turut", () => {
     expect(r.status).toBe(409);
     expect(String(r.body.error)).toMatch(/Kolom aturan Vanguard/);
     expect(audit).not.toHaveBeenCalled();
+  });
+});
+
+describe("tenggat eksplisit (SQL 20261102zq)", () => {
+  const aturan = { mode: "wajib", hari_berturut: 3, sesi_min_per_hari: 1, nilai_minimal: 0 };
+  it("GET: tanpa tenggat atur, tenggat = sehari sebelum Pretest; dengan tenggat atur, batas mulai mengikutinya", async () => {
+    expect((await hasil(GET(req()))).body).toMatchObject({ tenggat_atur: null, tenggat: "2026-11-08", tenggat_sumber: "pretest", batas_mulai: "2026-11-06" });
+    st.tenggat = "2026-11-12";
+    expect((await hasil(GET(req()))).body).toMatchObject({ tenggat_atur: "2026-11-12", tenggat: "2026-11-12", tenggat_sumber: "atur", batas_mulai: "2026-11-10", tanggal_pretest: "2026-11-09" });
+  });
+  it("POST aturan + tenggat menyimpan keduanya dan mencatatnya di audit", async () => {
+    const r = await hasil(POST(req({ aturan, tenggat: "2026-11-08" })));
+    expect(r.status).toBe(200);
+    expect(simpanTenggat).toHaveBeenCalledWith(expect.anything(), 7, "2026-11-08", "Budi");
+    expect(r.body).toMatchObject({ tenggat_atur: "2026-11-08", tenggat_sumber: "atur" });
+    expect(audit).toHaveBeenCalledWith(expect.anything(), 1, "pelatihan_vanguard_aturan", expect.objectContaining({ tenggat: "2026-11-08" }));
+  });
+  it("POST tanpa kunci tenggat tidak menyentuh tenggat", async () => {
+    st.tenggat = "2026-11-08";
+    await hasil(POST(req({ aturan })));
+    expect(simpanTenggat).not.toHaveBeenCalled();
+    expect(st.tenggat).toBe("2026-11-08");
+  });
+  it("kosong / null menghapus tenggat; bila memang belum ada, tidak menulis apa pun (aman sebelum SQL zq)", async () => {
+    st.tenggat = "2026-11-08";
+    await hasil(POST(req({ aturan, tenggat: "" })));
+    expect(simpanTenggat).toHaveBeenCalledWith(expect.anything(), 7, null, "Budi");
+    simpanTenggat.mockClear();
+    st.tenggat = null;
+    st.gagalTenggat = true;
+    const r = await hasil(POST(req({ aturan, tenggat: null })));
+    expect(r.status).toBe(200);
+    expect(simpanTenggat).not.toHaveBeenCalled();
+  });
+  it("menolak tanggal tidak sah sebelum menyimpan apa pun; SQL zq belum dijalankan = 409 dengan petunjuk", async () => {
+    const buruk = await hasil(POST(req({ aturan, tenggat: "08-11-2026" })));
+    expect(buruk.status).toBe(400);
+    expect(simpanAturan).not.toHaveBeenCalled();
+    st.gagalTenggat = true;
+    const r = await hasil(POST(req({ aturan, tenggat: "2026-11-08" })));
+    expect(r.status).toBe(409);
+    expect(String(r.body.error)).toContain("20261102zq");
   });
 });
 

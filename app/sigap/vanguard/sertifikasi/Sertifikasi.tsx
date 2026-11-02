@@ -26,6 +26,9 @@ import { NAMA_TINGKAT } from "@/lib/vanguard/sertifikasi/skor";
 import type { KasusPublik, Nilai } from "@/lib/vanguard/tipe";
 import { Lambang } from "../Logo";
 import PapanIsianK, { type Isian } from "../kuesioner/PapanIsianK";
+import PanduanPelatihan, { LabelWajib } from "../PanduanPelatihan"; // (2 Nov 2026) konteks pelatihan peserta
+import { useKonteksPelatihan } from "../useKonteksPelatihan";
+import { kartuTampil } from "@/lib/konteksVanguard";
 
 type Layar = "beranda" | "ujian" | "butir" | "hasil" | "usul";
 type JenisUjian = "sertifikasi" | "latihan" | "harian" | "tantangan";
@@ -115,6 +118,8 @@ function KoreksiButir({ daftar, penjelasan, bisaSorot, onLihat }: { daftar: Rinc
 export default function Sertifikasi() {
   const q = useSearchParams();
   const tujuan = useMemo(() => { const d = q.get("dari"); return d ? tujuanAman(d) : "/sigap/vanguard"; }, [q]);
+  const { konteks, siap } = useKonteksPelatihan(); // null = bukan peserta pelatihan: tampilan lama
+  const [semua, setSemua] = useState(false); // "Tampilkan semua latihan"
   const [layar, setLayar] = useState<Layar>("beranda");
   const [beranda, setBeranda] = useState<Beranda | null>(null);
   const [detail, setDetail] = useState<UjianDetail | null>(null);
@@ -180,6 +185,17 @@ export default function Sertifikasi() {
     setKerja(false);
   };
   const lanjutkan = async (id: number) => { setKerja(true); const d = await muatDetail(id); if (d) { setHasil(null); setLayar("ujian"); } setKerja(false); };
+
+  // (2 Nov 2026) Tombol "Latihan hari ini" di layar Vanguard membawa ?mulai=harian: langsung memulai Latihan harian (sekali), kecuali hari ini sudah selesai atau ada ujian lain yang berjalan
+  // (bagian atas layar sudah menawarkan Lanjutkan / Batalkan untuk yang berjalan; tidak dibuka diam-diam).
+  const mulaiOtomatis = useRef(false);
+  const mintaMulai = q.get("mulai") === "harian";
+  useEffect(() => {
+    if (!mintaMulai || mulaiOtomatis.current || !beranda || !siap) return;
+    mulaiOtomatis.current = true;
+    if (!beranda.berjalan && !beranda.harian.selesaiHariIni) void mulai("harian");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mintaMulai, beranda, siap]);
 
   const bukaButir = async (b: ButirRingkas) => {
     if (!detail) return;
@@ -281,8 +297,9 @@ export default function Sertifikasi() {
         {galat && <div className="catat gagal" role="alert">{galat}</div>}
 
         {layar === "beranda" && (
-          !beranda ? <div className="sheet">{galat ? <button type="button" className="btn" onClick={() => void muatBeranda()}>Coba lagi</button> : "Memuat…"}</div> : (
+          !beranda || !siap ? <div className="sheet">{galat ? <button type="button" className="btn" onClick={() => void muatBeranda()}>Coba lagi</button> : "Memuat…"}</div> : (
             <>
+              {konteks && <PanduanPelatihan konteks={konteks} mulai={kerja} semua={semua} onSemua={setSemua} onLatihan={() => void mulai(beranda.harian.selesaiHariIni ? "latihan" : "harian")} />}
               <div className="sr-kartu">
                 {beranda.sertifikat.tertinggi ? (
                   <>
@@ -305,7 +322,7 @@ export default function Sertifikasi() {
               {beranda.berjalan && <div className="catat ya" role="status"><b>Ada ujian yang belum selesai.</b> <button type="button" className="tog" disabled={kerja} onClick={() => void lanjutkan(beranda.berjalan as number)}>Lanjutkan</button> <button type="button" className="tog" disabled={kerja} onClick={() => void batalkan(beranda.berjalan as number)}>Batalkan</button></div>}
               {!beranda.berjalan && (
                 <div className="sheet">
-                  <span className="tag">Ujian Sertifikasi</span>
+                  <span className="tag">Ujian Sertifikasi</span><LabelWajib konteks={konteks} kartu="sertifikasi" />
                   <p style={{ fontSize: 13 }}>{beranda.jumlahButir} butir acak dan berimbang dari berbagai blok kuesioner. Jawaban dinilai server; tiap butir dijawab sekali. Hasilnya tingkat 1–5 bintang.</p>
                   {!beranda.status.sertifikasiBoleh && <div className="catat tidak" role="status" style={{ marginTop: 6 }}>{beranda.status.alasan}{beranda.status.bukaLagi ? ` (terbuka ${wibTeks(beranda.status.bukaLagi)})` : ""}</div>}
                   <div className="btns" style={{ padding: "10px 0 0", border: 0 }}>
@@ -315,26 +332,32 @@ export default function Sertifikasi() {
                 </div>
               )}
               <div className="sheet">
-                <span className="tag">Latihan harian</span>
+                <span className="tag">Latihan harian</span><LabelWajib konteks={konteks} kartu="harian" />
                 <div className="sr-streak" role="status"><span className="api" aria-hidden>🔥</span><b>{beranda.harian.sekarang}</b> hari beruntun<small>terpanjang {beranda.harian.terpanjang} hari</small></div>
-                <p style={{ fontSize: 12.5, marginTop: 4 }}>3 butir (±5 menit) dengan angka berbeda tiap hari. Sabtu dan Minggu tidak memutus rangkaian, dan hari ini yang belum berlatih tidak memutus apa pun.</p>
+                <p style={{ fontSize: 12.5, marginTop: 4 }}>{konteks && konteks.mode !== "tidak_ada" ? "3 butir (±5 menit) dengan angka berbeda tiap hari. Untuk pelatihan, setiap hari kalender dihitung, termasuk Sabtu dan Minggu; angka 🔥 di atas adalah rangkaian harian biasa." : "3 butir (±5 menit) dengan angka berbeda tiap hari. Sabtu dan Minggu tidak memutus rangkaian, dan hari ini yang belum berlatih tidak memutus apa pun."}</p>
                 <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn pri" disabled={kerja || (beranda.harian.selesaiHariIni && !beranda.berjalan)} onClick={() => void mulai("harian")}>{beranda.harian.selesaiHariIni ? "Sudah selesai hari ini ✓" : beranda.harian.mulaiHariIni ? "Lanjutkan latihan harian" : "Mulai latihan harian"}</button></div>
               </div>
+              {kartuTampil(konteks, "tantangan", semua) && (
               <div className="sheet">
-                <span className="tag">Tantangan minggu ini</span>
+                <span className="tag">Tantangan minggu ini</span><LabelWajib konteks={konteks} kartu="tantangan" />
                 <p style={{ fontSize: 12.5 }}>5 butir yang sama untuk semua petugas minggu ini, disusun dari kesalahan yang paling sering muncul di Vanguard seminggu terakhir. Terbit tiap Senin.</p>
                 <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" disabled={kerja || (beranda.tantangan.selesai && !beranda.berjalan)} onClick={() => void mulai("tantangan")}>{beranda.tantangan.selesai ? "Tantangan minggu ini selesai ✓" : beranda.riwayat.some((r) => r.jenis === "tantangan" && !r.selesai_at) ? "Lanjutkan tantangan mingguan" : "Ikuti tantangan mingguan"}</button></div>
               </div>
+              )}
+              {kartuTampil(konteks, "usul", semua) && (
               <div className="sheet">
-                <span className="tag">Usul kasus</span>
+                <span className="tag">Usul kasus</span><LabelWajib konteks={konteks} kartu="usul" />
                 <p style={{ fontSize: 12.5 }}>Pernah menemui kasus janggal di lapangan? Usulkan sebagai soal (tanpa nama atau data asli responden). Usulan yang diterima dijadikan soal dengan nama Anda tercantum.</p>
                 <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn" onClick={() => { setLayar("usul"); void muatUsulan(); }}>Usul kasus baru</button></div>
               </div>
+              )}
+              {kartuTampil(konteks, "tingkat", semua) && (
               <div className="sheet">
-                <span className="tag">Tingkat kemampuan</span>
+                <span className="tag">Tingkat kemampuan</span><LabelWajib konteks={konteks} kartu="tingkat" />
                 <ul className="sr-aturan">{[1, 2, 3, 4, 5].map((n) => <li key={n}>{"★".repeat(n)} <b>{NAMA_TINGKAT[n]}</b></li>)}</ul>
                 <p style={{ fontSize: 12, color: "#444", marginTop: 6 }}>Sertifikat ini hanya catatan kepemilikan kemampuan; belum berdampak ke penilaian atau penugasan apa pun.</p>
               </div>
+              )}
               {beranda.riwayat.length > 0 && (
                 <div className="sheet">
                   <span className="tag">Riwayat ujian</span>
