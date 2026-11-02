@@ -190,8 +190,8 @@ function Tombol({ tahap, arah, onPilih }: { tahap: TahapAlur; arah: "sebelumnya"
   );
 }
 
-/** `judul` (sub-alur): teks kecil di atas tombol, mis. "Langkah dalam tahap 7 · Administrasi & SPJ", agar tidak tertukar dengan tombol tahap di bawahnya. */
-export function NavAlur({ posisi, onPilih, peringatan, judul }: Umum & { onPilih?: (kode: string) => void; peringatan?: string | null; judul?: string }) {
+/** `teksAkhir` (2 Nov 2026): kalimat pengganti di langkah terakhir (mis. "Langkah terakhir pelatihan"). `judul` (sub-alur): teks kecil di atas tombol, mis. "Langkah dalam tahap 7 · Administrasi & SPJ", agar tidak tertukar dengan tombol tahap di bawahnya. */
+export function NavAlur({ posisi, onPilih, peringatan, judul, teksAkhir }: Umum & { onPilih?: (kode: string) => void; peringatan?: string | null; judul?: string; teksAkhir?: string }) {
   if (!posisi) return null;
   const adaTombol = posisi.sebelumnya || posisi.berikutnya;
   if (!adaTombol) return null;
@@ -201,7 +201,7 @@ export function NavAlur({ posisi, onPilih, peringatan, judul }: Umum & { onPilih
       {peringatan && <p role="status" className="m-0 rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-semibold text-[#7A5600]">{peringatan}</p>}
       <div className="flex gap-2.5">
         {posisi.sebelumnya ? <Tombol tahap={posisi.sebelumnya} arah="sebelumnya" onPilih={onPilih} /> : <span className="flex-1" />}
-        {posisi.berikutnya ? <Tombol tahap={posisi.berikutnya} arah="berikutnya" onPilih={onPilih} /> : tahapTerakhir(posisi) ? <p className="m-0 flex flex-1 items-center justify-end text-[12.5px] font-bold text-[#13794B]">{judul ? "Langkah terakhir di tahap ini" : "Tahap terakhir alur"}</p> : null}
+        {posisi.berikutnya ? <Tombol tahap={posisi.berikutnya} arah="berikutnya" onPilih={onPilih} /> : tahapTerakhir(posisi) ? <p className="m-0 flex flex-1 items-center justify-end text-[12.5px] font-bold text-[#13794B]">{teksAkhir ?? (judul ? "Langkah terakhir di tahap ini" : "Tahap terakhir alur")}</p> : null}
       </div>
     </nav>
   );

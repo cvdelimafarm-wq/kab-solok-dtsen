@@ -2,6 +2,7 @@
 
 // app/sigap/pelatihan/undangan/page.tsx
 //
+// (2 Nov 2026) Kerangka diberi langkah="undangan": penunjuk "Langkah 1 dari n" + Sebelumnya/Berikutnya (lib/alurPelatihan.ts). Langkah ditandai selesai karena halaman ini mencatatnya saat dibuka.
 // (7 Okt 2026) SIGAP > Pelatihan -- tab "Undangan": undangan pribadi (nama, peran, kelas, jadwal, tempat,
 // pakaian, ketentuan transpor lokal 5 foto) + unduh PDF. Pilihan user: "Halaman undangan pribadi + unduh PDF".
 
@@ -47,7 +48,7 @@ export default function HalamanUndangan() {
   }
 
   return (
-    <Kerangka aktif="undangan" nama={data?.nama} judul="Undangan Pelatihan" sub={u && u.nomor ? `Nomor surat: ${u.nomor}` : undefined}>
+    <Kerangka aktif="undangan" nama={data?.nama} judul="Undangan Pelatihan" sub={u && u.nomor ? `Nomor surat: ${u.nomor}` : undefined} langkah="undangan" hub={data} langkahSelesai={!!data?.peserta}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!data && !galat && <Memuat />}
       {data && u && !data.peserta && (

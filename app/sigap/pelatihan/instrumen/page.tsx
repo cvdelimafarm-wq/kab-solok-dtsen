@@ -109,7 +109,7 @@ export default function HalamanInstrumen() {
   }
 
   return (
-    <Kerangka aktif="instrumen" judul="Instrumen Pelatihan" sub="Kuesioner, buku pedoman, dan PPT materi — dapat diunduh">
+    <Kerangka aktif="instrumen" judul="Instrumen Pelatihan" sub="Kuesioner, buku pedoman, dan PPT materi — dapat diunduh" langkah="instrumen">
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
       {info && <Pesan jenis="ok" onTutup={() => setInfo(null)}>{info}</Pesan>}
       {!data && !galat && <Memuat />}

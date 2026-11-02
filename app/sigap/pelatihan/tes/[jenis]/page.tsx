@@ -224,7 +224,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   // ------------------------------------------------ tampilan
   if (!k)
     return (
-      <Kerangka aktif="pelatihan" judul={judul}>
+      <Kerangka aktif="pelatihan" judul={judul} langkah={jenis}>
         {galat ? <Pesan jenis="galat">{galat}</Pesan> : <Memuat />}
       </Kerangka>
     );
@@ -258,7 +258,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   ) : null;
 
   return (
-    <Kerangka aktif="pelatihan" judul={k.tes.judul} sub={`${tglPanjang(new Date(new Date(k.tes.buka_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10))} · dibuka ${jamWib(k.tes.buka_at)} · ditutup ${jamWib(k.tes.tutup_at)} WIB`}>
+    <Kerangka aktif="pelatihan" judul={k.tes.judul} sub={`${tglPanjang(new Date(new Date(k.tes.buka_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10))} · dibuka ${jamWib(k.tes.buka_at)} · ditutup ${jamWib(k.tes.tutup_at)} WIB`} langkah={jenis} langkahSelesai={status === "selesai"} alurTersembunyi={mengerjakan}>
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
 
       {/* ------------------------------------------------ belum bisa dimulai */}

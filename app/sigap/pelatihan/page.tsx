@@ -29,6 +29,8 @@ import KartuKuisPra from "./kartuKuisPra"; // (31 Okt 2026) kuis pra pelatihan (
 import KartuKelas, { useKelasSaya } from "./kartuKelas"; // (1 Nov 2026) kelas dari perencanaan: mode daring/luring/hybrid + jadwal (tampil bila tertaut)
 import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 import PresensiZoom from "./presensiZoom"; // (1 Nov 2026) presensi daring lewat rapat Zoom + token
+import { bacaLangkahDariAlamat, hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah, type LangkahPelatihan } from "@/lib/alurPelatihan"; // (2 Nov 2026) urutan + status langkah: satu sumber untuk semua halaman
+import { StripPelatihan } from "./AlurPelatihan"; // (2 Nov 2026) lajur ikon langkah di kartu "Langkah Anda"
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -109,13 +111,7 @@ function Ikon({ n, className = "h-[22px] w-[22px]" }: { n: "lonceng" | "info" | 
 const TOMBOL = "mt-2 inline-flex min-h-[44px] w-full items-center justify-center rounded-[13px] px-4 py-2.5 text-[14px] font-extrabold transition sm:w-auto";
 const TOMBOL_O = `${TOMBOL} border border-[#CBD6E6] bg-white text-[#1B2B4B] hover:bg-[#F5F8FE]`;
 
-/** Jam mulai & selesai pelatihan (ms epoch) dari tanggal_iso + "pukul" undangan, mis. "08.00–16.00 WIB". */
-function jendelaPelatihan(u: Hub["undangan"]): { mulai: number; selesai: number } {
-  const m = String(u.pukul).match(/(\d{1,2})[.:](\d{2})\s*[–-]\s*(\d{1,2})[.:](\d{2})/);
-  const [h1, m1, h2, m2] = m ? [m[1], m[2], m[3], m[4]] : ["8", "00", "16", "00"];
-  const at = (h: string, mm: string) => new Date(`${u.tanggal_iso}T${h.padStart(2, "0")}:${mm}:00+07:00`).getTime();
-  return { mulai: at(h1, m1), selesai: at(h2, m2) };
-}
+// (2 Nov 2026) jendelaPelatihan() dipindah ke lib/alurPelatihan.ts (dipakai juga oleh Kerangka halaman Undangan/Instrumen/Tes).
 
 /** Isi langkah Pretest/Posttest (hitung mundur, tombol, skor). Berisi hook pemicu muat-ulang saat jam terlewati. */
 function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => number; segarkan: () => void }) {
@@ -754,6 +750,8 @@ export default function HalamanPelatihan() {
   const peserta = data?.peserta ?? null;
 
   let langkah: Langkah[] = [];
+  /** (2 Nov 2026) status langkah dari lib/alurPelatihan.ts -- sama persis dengan yang ditampilkan halaman Undangan/Instrumen/Tes. */
+  let alur: LangkahPelatihan[] = [];
   if (data && peserta && u) {
     const { mulai } = jendelaPelatihan(u);
     // (8 Okt 2026) langkah foto "menyala" hanya pada HARI pelatihan (00.00-23.59 WIB); di luar itu diredupkan
@@ -762,12 +760,14 @@ export default function HalamanPelatihan() {
     const pre = data.tes.find((t) => t.jenis === "pretest");
     const post = data.tes.find((t) => t.jenis === "posttest");
     const L = data.langkah;
+    alur = hitungLangkahPelatihan({ langkah: data.langkah, tes: data.tes, presensi: data.presensi, kuis: data.kuis, fotoTranslok, mulaiMs: mulai, now });
+    const st = (k: string) => alur.find((x) => x.kode === k);
     const tes = (t: TesHub | undefined, judul: string, kode: string): Langkah => ({
       kode,
       judul,
-      selesai: t?.status === "selesai",
-      terlewat: t?.status === "terlewat",
-      bisaSekarang: t?.status === "buka" || t?.status === "mengerjakan",
+      selesai: st(kode)?.selesai ?? false,
+      terlewat: st(kode)?.terlewat ?? false,
+      bisaSekarang: st(kode)?.bisaSekarang ?? false,
       badan: t ? <IsiTes t={t} sekarangMs={jam.sekarang} segarkan={muat} /> : <p className="text-[13px] text-[#5B6B84]">Belum dijadwalkan panitia.</p>,
     });
     const tautan = (href: string, label: string, selesai: boolean) =>
@@ -785,13 +785,13 @@ export default function HalamanPelatihan() {
     /** Satu langkah foto (cicil satu per satu): daftar slot yang jadi tanggung jawab langkah ini. */
     const langkahFoto = (kode: "foto_awal" | "foto_akhir", slotIni: number[], judul: string, petunjuk: string): Langkah => {
       const ada = slotIni.filter((sl) => L?.slot.includes(sl)).length;
-      const selesai = slotIni.length > 0 && ada >= slotIni.length;
+      const selesai = st(kode)?.selesai ?? false;
       return {
         kode,
         judul,
         selesai,
         terlewat: false,
-        bisaSekarang: now >= mulai,
+        bisaSekarang: st(kode)?.bisaSekarang ?? false,
         tombolAktif: hariPelatihan && !!data.token_translok,
         redup: !hariPelatihan,
         badan: (
@@ -831,9 +831,9 @@ export default function HalamanPelatihan() {
       {
         kode: "undangan",
         judul: "Baca undangan",
-        selesai: !!L?.undangan_dibuka,
+        selesai: st("undangan")?.selesai ?? false,
         terlewat: false,
-        bisaSekarang: true,
+        bisaSekarang: st("undangan")?.bisaSekarang ?? true,
         badan: (
           <>
             <p className="text-[13px] text-[#5B6B84]">Kelas, jam, dan pakaian.</p>
@@ -844,9 +844,9 @@ export default function HalamanPelatihan() {
       {
         kode: "instrumen",
         judul: "Pelajari instrumen",
-        selesai: !!L?.instrumen_diunduh,
+        selesai: st("instrumen")?.selesai ?? false,
         terlewat: false,
-        bisaSekarang: true,
+        bisaSekarang: st("instrumen")?.bisaSekarang ?? true,
         badan: (
           <>
             <p className="text-[13px] text-[#5B6B84]">Kuesioner &amp; buku pedoman.</p>
@@ -858,10 +858,11 @@ export default function HalamanPelatihan() {
       {
         kode: "hadir",
         judul: "Presensi di lokasi pelatihan",
-        selesai: !!data.presensi?.sudah,
         // (8 Okt 2026) per sesi: terlewat = ada sesi hari ini yang lewat tanpa tercatat & tidak ada sesi lain yang masih bisa; sekarang = ada sesi dibuka
-        terlewat: !!data.presensi && !keadaanHari(data.presensi.hari, now).lengkap && !keadaanHari(data.presensi.hari, now).aktif && !keadaanHari(data.presensi.hari, now).berikutnya,
-        bisaSekarang: !!data.presensi && (!!keadaanHari(data.presensi.hari, now).aktif || keadaanHari(data.presensi.hari, now, data.presensi.pengaturan.susulan_sampai).susulan.length > 0),
+        // (2 Nov 2026) aturan ini kini dihitung di lib/alurPelatihan.ts (hitungLangkahPelatihan)
+        selesai: st("hadir")?.selesai ?? false,
+        terlewat: st("hadir")?.terlewat ?? false,
+        bisaSekarang: st("hadir")?.bisaSekarang ?? false,
         badan: (
           <>
             <LabelHari tglIso={u.tanggal_iso} nowMs={now} jam={`pelatihan ${u.pukul}`} />
@@ -880,9 +881,9 @@ export default function HalamanPelatihan() {
             {
               kode: "kuis",
               judul: "Ikuti Adu Sigap",
-              selesai: data.kuis.pernah_ikut,
-              terlewat: !data.kuis.pernah_ikut && data.kuis.ada_ruang_selesai && !data.kuis.ada_ruang_aktif,
-              bisaSekarang: data.kuis.ada_ruang_aktif,
+              selesai: st("kuis")?.selesai ?? false,
+              terlewat: st("kuis")?.terlewat ?? false,
+              bisaSekarang: st("kuis")?.bisaSekarang ?? false,
               tambahan: true,
               badan: <IsiKuis k={data.kuis} segarkan={muat} />,
             } as Langkah,
@@ -903,12 +904,28 @@ export default function HalamanPelatihan() {
     if (i === pertama) return { g: "now", chip: "Berikutnya" };
     return { g: "wait", chip: "Menyusul" };
   });
+  const statusAlur = statusLangkah(alur);
   const wajib = langkah.filter((l) => !l.tambahan);
   const nSelesai = wajib.filter((l) => l.selesai).length;
   const pemandu = data && peserta && u ? susunPemandu(langkah, data, now, jendelaPelatihan(u).mulai, hanyaZoom) : null;
   const terlewatDaftar = data && peserta ? daftarTerlewat(langkah, data.presensi ? keadaanHari(data.presensi.hari, now).sesi : null) : [];
 
   // (7 Okt 2026) Modal "Yeay": langkah yang baru selesai (belum pernah dirayakan di browser ini) dirayakan sekali.
+  // (2 Nov 2026) Tombol Sebelumnya/Berikutnya dari halaman lain membuka /sigap/pelatihan?langkah=<kode>: gulirkan ke kartu langkah itu setelah data tiba, lalu bersihkan alamat.
+  const diminta = useRef<KodeLangkah | null>(null);
+  useEffect(() => {
+    diminta.current = bacaLangkahDariAlamat(new URLSearchParams(window.location.search).get("langkah"));
+  }, []);
+  const adaLangkah = langkah.length > 0;
+  useEffect(() => {
+    const k = diminta.current;
+    if (!adaLangkah || !k) return;
+    diminta.current = null;
+    window.history.replaceState(null, "", window.location.pathname);
+    const t = setTimeout(() => document.getElementById(`langkah-${k}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 200);
+    return () => clearTimeout(t);
+  }, [adaLangkah]);
+
   const kunciSelesai = langkah.filter((l) => l.selesai).map((l) => l.kode).join(",");
   const idPeserta = peserta ? String(peserta.penugasan_id) : "";
   const langkahRef = useRef(langkah);
@@ -1005,11 +1022,9 @@ export default function HalamanPelatihan() {
               </span>
             }
           >
-            <div className="grid gap-[5px]" style={{ gridTemplateColumns: `repeat(${Math.max(1, wajib.length)}, minmax(0, 1fr))` }} role="img" aria-label={`${nSelesai} dari ${wajib.length} langkah selesai`}>
-              {wajib.map((l) => (
-                <span key={l.kode} className={`h-1.5 rounded-[3px] ${l.selesai ? "bg-[#19A463]" : l.terlewat ? "bg-[#E5484D]" : l.bisaSekarang ? "bg-[#1F5FD1]" : "bg-[#E1E9F6]"}`} />
-              ))}
-            </div>
+            {/* (2 Nov 2026) lajur ikon langkah (warna = status; ketuk untuk ke kartunya atau membuka halamannya) menggantikan batang segmen */}
+            <p className="sr-only">{nSelesai} dari {wajib.length} langkah selesai</p>
+            <StripPelatihan daftar={alur} status={statusAlur} aktif={null} onGulir={lanjutRayakan} />
             <p className="mt-2 text-[12px] text-[#6B7A90]">Sekarang: {waktuWib(new Date(now).toISOString())}</p>
             <ol className="mt-3">
               {langkah.map((l, i) => {

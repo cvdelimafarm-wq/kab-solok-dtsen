@@ -1,7 +1,8 @@
 // app/sigap/kelola/IkonTahap.tsx
 //
 // (1 Nov 2026) Ikon tahap untuk lajur ikon di atas halaman beralur (AlurKelola.tsx). Gambar garis 24x24, tanpa pustaka ikon.
-// Dipetakan per KODE tahap (kode tab Kelola Pendataan dan kode tahap Identifikasi survei); kode lain memakai titik bundar.
+// Dipetakan per KODE tahap (kode tab Kelola Pendataan, tahap Identifikasi survei, dan langkah pelatihan peserta); kode lain memakai titik bundar.
+// (2 Nov 2026) + ikon buku, pena, kuis, kamera untuk langkah pelatihan di HP (lib/alurPelatihan.ts).
 // Hiasan saja: selalu aria-hidden, arti tahap tetap ada pada teks.
 
 import type { ReactNode } from "react";
@@ -142,6 +143,26 @@ const G = {
       <path d="M8.5 17c1.2-2 2-2 2.4-.6.3 1 .9 1 1.6-.4" />
     </>
   ),
+  buku: () => (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" />
+      <path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20" />
+      <path d="M9 8h7" />
+    </>
+  ),
+  pena: () => (
+    <>
+      <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z" />
+      <path d="m14.5 7.5 3 3" />
+    </>
+  ),
+  kuis: () => <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z" />,
+  kamera: () => (
+    <>
+      <path d="M4 8h3l1.6-2.5h6.8L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+      <circle cx="12" cy="13.5" r="3.5" />
+    </>
+  ),
   titik: () => <circle cx="12" cy="12" r="3" />,
 } satisfies Record<string, () => ReactNode>;
 
@@ -166,6 +187,14 @@ const PETA: Record<string, NamaIkon> = {
   pelatihan: "latih",
   pendataan: "lokasi",
   gap: "selisih",
+  // Langkah pelatihan peserta (HP)
+  undangan: "surat",
+  instrumen: "buku",
+  pretest: "pena",
+  posttest: "pena",
+  hadir: "lokasi",
+  foto_awal: "kamera",
+  foto_akhir: "kamera",
 };
 
 export const adaIkonTahap = (kode: string): boolean => kode in PETA;

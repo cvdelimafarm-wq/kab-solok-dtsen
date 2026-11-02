@@ -5,7 +5,7 @@
 // (7 Okt 2026) SIGAP > Pelatihan -- bagian bersama halaman peserta: kerangka (header + tab
 // Undangan | Langkah | Instrumen | Transport Lokal), pengambil data hub, jam server & hitung mundur. Mockup disetujui user.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "../admin/api";
 import { HeaderAdmin, Memuat, Pesan } from "../admin/ui";
 import TombolKembali from "@/app/components/TombolKembali";
@@ -17,6 +17,10 @@ import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { InfoUndangan, JenisTes, StatusTes } from "@/lib/sigapTes";
 import { useInfoPelatihan } from "./infoPelatihan";
 import { judulPelatihan, tujuanKembali } from "@/lib/sigapPelatihanNama";
+import { hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah } from "@/lib/alurPelatihan"; // (2 Nov 2026) penunjuk langkah pelatihan di HP
+import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
+import { useKelasSaya } from "./kartuKelas";
+import { NavPelatihan, PenunjukPelatihan } from "./AlurPelatihan";
 
 export type TesHub = {
   jenis: JenisTes;
@@ -92,8 +96,11 @@ export function useJamServer() {
   return { setujukan, sekarang };
 }
 
-/** Ambil data hub (/api/sigap/pelatihan). `interval` ms utk segar otomatis (0 = tidak). */
-export function useHub(interval = 0) {
+/**
+ * Ambil data hub (/api/sigap/pelatihan). `interval` ms utk segar otomatis (0 = tidak).
+ * (2 Nov 2026) `aktif=false`: tidak memuat apa pun (dipakai Kerangka saat halaman sudah punya data hub sendiri, supaya tidak memuat dua kali).
+ */
+export function useHub(interval = 0, aktif = true) {
   const [data, setData] = useState<Hub | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const jam = useJamServer();
@@ -109,14 +116,15 @@ export function useHub(interval = 0) {
     }
   }, [setujukan]);
   useEffect(() => {
+    if (!aktif) return;
     if (!bacaSesi()) return keMasuk();
     muat();
-  }, [muat]);
+  }, [muat, aktif]);
   useEffect(() => {
-    if (!interval) return;
+    if (!interval || !aktif) return;
     const t = setInterval(muat, interval);
     return () => clearInterval(t);
-  }, [interval, muat]);
+  }, [interval, muat, aktif]);
   return { data, galat, muat, jam };
 }
 
@@ -135,17 +143,55 @@ export function useSaatLewat(targetIso: string | null, sekarangMs: () => number,
   });
 }
 
+/**
+ * (2 Nov 2026) Penunjuk langkah di atas isi + Sebelumnya/Berikutnya di bawah isi, untuk halaman yang merupakan satu langkah pelatihan
+ * (Undangan, Instrumen, Pretest, Posttest). `hub`: data hub milik halaman (null = masih memuat); undefined = muat sendiri.
+ * `selesai`: halaman tahu langkahnya sudah selesai padahal data hub belum diperbarui (mis. undangan baru dibuka, tes baru dikirim).
+ * `tersembunyi`: sembunyikan sementara tanpa melepas isi (mis. saat mengerjakan tes), supaya state isi halaman tidak hilang.
+ */
+function AlurKerangka({ kode, hub: hubLuar, selesai, tersembunyi, children }: { kode: KodeLangkah; hub?: Hub | null; selesai?: boolean; tersembunyi?: boolean; children: React.ReactNode }) {
+  const sendiri = useHub(0, hubLuar === undefined);
+  const hub = hubLuar === undefined ? sendiri.data : hubLuar;
+  const kelas = useKelasSaya();
+  const fotoTranslok = perluFotoTranslok(kelas?.aturan);
+  const sekarangServer = hub?.sekarang;
+  const selisih = useMemo(() => (sekarangServer ? new Date(sekarangServer).getTime() - Date.now() : 0), [sekarangServer]);
+  const daftar = useMemo(() => {
+    if (!hub || !hub.peserta) return null;
+    const d = hitungLangkahPelatihan({ langkah: hub.langkah, tes: hub.tes, presensi: hub.presensi, kuis: hub.kuis, fotoTranslok, mulaiMs: jendelaPelatihan(hub.undangan).mulai, now: Date.now() + selisih });
+    return selesai ? d.map((l) => (l.kode === kode ? { ...l, selesai: true, terlewat: false } : l)) : d;
+  }, [hub, fotoTranslok, selisih, selesai, kode]);
+  const status = useMemo(() => (daftar ? statusLangkah(daftar) : []), [daftar]);
+  const tampil = !tersembunyi && !!daftar && daftar.some((l) => l.kode === kode);
+  return (
+    <>
+      {tampil && daftar && <PenunjukPelatihan daftar={daftar} status={status} aktif={kode} />}
+      {children}
+      {tampil && daftar && <NavPelatihan daftar={daftar} aktif={kode} />}
+    </>
+  );
+}
+
 export function Kerangka({
   aktif,
   judul,
   sub,
   nama,
+  langkah,
+  hub,
+  langkahSelesai,
+  alurTersembunyi,
   children,
 }: {
   aktif: "undangan" | "pelatihan" | "instrumen";
   judul: React.ReactNode;
   sub?: React.ReactNode;
   nama?: string;
+  /** Kode langkah pelatihan yang ditampilkan halaman ini; bila diisi, penunjuk langkah dan Sebelumnya/Berikutnya dipasang. */
+  langkah?: KodeLangkah;
+  hub?: Hub | null;
+  langkahSelesai?: boolean;
+  alurTersembunyi?: boolean;
   children: React.ReactNode;
 }) {
   const [sesiDetak] = useState(() => (typeof window === "undefined" ? null : bacaSesi()));
@@ -172,7 +218,13 @@ export function Kerangka({
       </HeaderAdmin>
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         <PulsaPeserta />
-        {children}
+        {langkah ? (
+          <AlurKerangka kode={langkah} hub={hub} selesai={langkahSelesai} tersembunyi={alurTersembunyi}>
+            {children}
+          </AlurKerangka>
+        ) : (
+          children
+        )}
         {/* (8 Okt 2026) notifikasi wajib di aplikasi terpasang (permintaan user) */}
         <PengaturanAwal />
       </main>
