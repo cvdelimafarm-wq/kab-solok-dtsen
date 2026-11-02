@@ -13,7 +13,8 @@ import { apiPortal } from "@/app/portal/sesi";
 import {
   API_SAMPEL_ADMIN, MAKS_BARIS_SAMPEL, PETUNJUK_TEMPLAT, kelompokPpl, kodeSlsPendek, templatSampel, type DataSampelAdmin, type KonfigSampel, type SampelRow,
 } from "@/lib/sampelSls";
-import type { PratinjauSampel } from "@/lib/portal/sampel";
+import type { HasilImporSampel, PratinjauSampel } from "@/lib/portal/sampel";
+import { LABEL_PERAN_TIM } from "@/lib/timSampel";
 import { BTN, BTN_O, BTN_R, BTN_T, Chip, Kartu, Memuat, Pesan, TD, TH } from "../../admin/ui";
 
 const fmt = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -25,7 +26,7 @@ async function unduhTemplat() {
   const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(templatSampel());
-  ws["!cols"] = [{ wch: 20 }, { wch: 28 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 30 }];
+  ws["!cols"] = [{ wch: 20 }, { wch: 28 }, { wch: 34 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }];
   XLSX.utils.book_append_sheet(wb, ws, "Templat");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Petunjuk"], ...PETUNJUK_TEMPLAT.map((t) => [t])]), "Petunjuk");
   XLSX.writeFile(wb, "templat_alokasi_sampel.xlsx");
@@ -48,6 +49,8 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
   const [sibuk, setSibuk] = useState<"" | "baca" | "simpan" | "konfig">("");
   const [info, setInfo] = useState<Info | null>(null);
   const [paksa, setPaksa] = useState(false);
+  // (2 Nov 2026) satu kali impor: petugas yang namanya ada di berkas tetapi belum ditugaskan ikut ditugaskan, dan susunan atasan (PPL, PML, korwil, supervisor) tersimpan.
+  const [otomatis, setOtomatis] = useState(true);
   const [konfig, setKonfig] = useState<KonfigSampel | null>(null);
   const [buka, setBuka] = useState<Set<string>>(new Set());
   const input = useRef<HTMLInputElement>(null);
@@ -87,7 +90,7 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
       const b = await bacaBerkas(file);
       if (b.baris.length > MAKS_BARIS_SAMPEL) throw new Error(`Berkas memuat ${fmt(b.baris.length)} baris; batas satu unggahan ${fmt(MAKS_BARIS_SAMPEL)}.`);
       setBerkas(b);
-      setPratinjau(await apiPortal<PratinjauSampel>(API_SAMPEL_ADMIN, { method: "POST", body: JSON.stringify({ aksi: "pratinjau", k: kegiatanId, baris: b.baris }) }));
+      setPratinjau(await apiPortal<PratinjauSampel>(API_SAMPEL_ADMIN, { method: "POST", body: JSON.stringify({ aksi: "pratinjau", k: kegiatanId, baris: b.baris, otomatis }) }));
     } catch (e) {
       setBerkas(null);
       setInfo({ jenis: "galat", teks: e instanceof Error ? e.message : "Berkas tidak terbaca." });
@@ -97,16 +100,32 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
     }
   }
 
+  /** Mengubah pilihan "Tugaskan otomatis": pratinjau dihitung ulang dari berkas yang sama (tidak perlu memilih berkas lagi). */
+  async function ubahOtomatis(nilai: boolean) {
+    setOtomatis(nilai);
+    if (!berkas) return;
+    setSibuk("baca");
+    setInfo(null);
+    try {
+      setPratinjau(await apiPortal<PratinjauSampel>(API_SAMPEL_ADMIN, { method: "POST", body: JSON.stringify({ aksi: "pratinjau", k: kegiatanId, baris: berkas.baris, otomatis: nilai }) }));
+    } catch (e) {
+      setInfo({ jenis: "galat", teks: e instanceof Error ? e.message : "Pratinjau gagal dihitung ulang." });
+    } finally {
+      setSibuk("");
+    }
+  }
+
   async function simpan() {
     if (!berkas || !pratinjau) return;
     setSibuk("simpan");
     setInfo(null);
     try {
-      const r = await apiPortal<{ jumlah: number; utama: number; cadangan: number }>(API_SAMPEL_ADMIN, {
+      const r = await apiPortal<HasilImporSampel>(API_SAMPEL_ADMIN, {
         method: "POST",
-        body: JSON.stringify({ aksi: "impor", k: kegiatanId, baris: berkas.baris, nama_berkas: berkas.nama, paksa }),
+        body: JSON.stringify({ aksi: "impor", k: kegiatanId, baris: berkas.baris, nama_berkas: berkas.nama, paksa, otomatis }),
       });
-      setInfo({ jenis: "ok", teks: `Alokasi tersimpan: ${fmt(r.jumlah)} sampel (${fmt(r.utama)} utama, ${fmt(r.cadangan)} cadangan).` });
+      const tambahan = otomatis ? ` Susunan tim tersimpan (${fmt(r.tim)} orang), ${fmt(r.penugasan_baru)} ditugaskan baru.` : "";
+      setInfo({ jenis: "ok", teks: `Alokasi tersimpan: ${fmt(r.jumlah)} sampel (${fmt(r.utama)} utama, ${fmt(r.cadangan)} cadangan).${tambahan}` });
       setBerkas(null);
       setPratinjau(null);
       setPaksa(false);
@@ -158,7 +177,7 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
   return (
     <Kartu
       judul="Alokasi sampel per SLS"
-      ket={`Alokasi sampel ${nama}: tiap PPL mendapat SLS dan sampelnya dari templat Excel (format mengikuti unggahan FASIH). Petugas melihatnya di HP.`}
+      ket={`Alokasi sampel ${nama}: tiap PPL mendapat SLS dan sampelnya dari templat Excel (format mengikuti unggahan FASIH). Berkas yang sama menetapkan siapa PPL, PML, korwil, dan supervisor sehingga petugas tidak perlu diinput ulang. Petugas melihatnya di HP.`}
       kanan={
         <div className="flex flex-wrap gap-2">
           <button type="button" className={BTN_O} onClick={() => void unduhTemplat()}>
@@ -175,7 +194,15 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
       {galatMuat && <Pesan>{galatMuat}</Pesan>}
       {data && !data.siap && <Pesan jenis="info">Penyimpanan alokasi belum aktif di basis data (migrasi 20261030g belum dijalankan).</Pesan>}
       {data && data.siap && !data.boleh_kelola && <Pesan jenis="info">Anda hanya dapat melihat alokasi; mengunggah memerlukan akses kelola.</Pesan>}
-      {data && data.siap && data.petugas.ppl === 0 && <Pesan jenis="peringatan">Belum ada PPL yang ditugaskan pada kegiatan ini. Nama PPL/PML pada Excel dicocokkan ke penugasan, jadi tambahkan petugas di tab 2 · Tim &amp; Surat Tugas dahulu.</Pesan>}
+      {data && data.siap && data.petugas.ppl === 0 && !otomatis && <Pesan jenis="peringatan">Belum ada PPL yang ditugaskan pada kegiatan ini. Tanpa pilihan &ldquo;Tugaskan otomatis&rdquo;, nama PPL/PML pada Excel hanya dicocokkan ke penugasan, jadi tambahkan petugas di tab 2 · Tim &amp; Surat Tugas dahulu atau centang pilihan itu.</Pesan>}
+      {data && data.siap && kelola && (
+        <label className="mt-3 flex items-start gap-2 text-[12.5px] text-[#1B2B4B]">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[#12305E]" checked={otomatis} disabled={sibuk !== ""} onChange={(e) => void ubahOtomatis(e.target.checked)} />
+          <span>
+            <b>Tugaskan otomatis</b> petugas yang namanya ada di berkas tetapi belum ditugaskan pada kegiatan ini, dan simpan susunan atasannya (PPL &rarr; PML &rarr; korwil &rarr; supervisor). Nama dicocokkan ke akun SIGAP. Tanpa centang, nama hanya dicocokkan ke petugas yang sudah ditugaskan di tab Tim.
+          </span>
+        </label>
+      )}
       {info && <Pesan jenis={info.jenis}>{info.teks}</Pesan>}
 
       {data && data.siap && (
@@ -197,6 +224,44 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
             {fmt(pratinjau.baris_berkas)} baris dibaca{pratinjau.dilewati > 0 ? `, ${fmt(pratinjau.dilewati)} kosong dilewati` : ""} · {fmt(pratinjau.rekap.utama)} utama, {fmt(pratinjau.rekap.cadangan)} cadangan ·{" "}
             {fmt(pratinjau.rekap.sls)} SLS · {fmt(pratinjau.rekap.ppl)} PPL · {fmt(pratinjau.rekap.pml)} PML
           </p>
+
+          <div className="mt-2 rounded-lg border border-[#DDE6F3] bg-white p-2.5 text-[12.5px] text-[#1B2B4B]">
+            <p className="font-semibold">Susunan tim dari berkas</p>
+            <p className="mt-0.5 text-[#55657D]">
+              {(["supervisor", "korwil", "pml", "ppl"] as const).map((p) => `${fmt(pratinjau.tim.ringkas.per_peran[p])} ${LABEL_PERAN_TIM[p]}`).join(" · ")} · {fmt(pratinjau.tim.ringkas.ada_atasan)} punya atasan
+            </p>
+            {pratinjau.otomatis ? (
+              pratinjau.tim.baru_total > 0 ? (
+                <details className="mt-1" open={pratinjau.tim.baru_total <= 12}>
+                  <summary className="cursor-pointer font-semibold text-[#12305E]">{fmt(pratinjau.tim.baru_total)} petugas akan ditugaskan baru saat disimpan</summary>
+                  <ul className="mt-1 max-h-40 list-disc space-y-0.5 overflow-auto pl-5">
+                    {pratinjau.tim.baru.map((b, i) => (
+                      <li key={i}>
+                        {b.nama} <span className="text-[#55657D]">({LABEL_PERAN_TIM[b.peran]})</span>
+                      </li>
+                    ))}
+                    {pratinjau.tim.baru_total > pratinjau.tim.baru.length && <li>… dan {fmt(pratinjau.tim.baru_total - pratinjau.tim.baru.length)} lainnya.</li>}
+                  </ul>
+                </details>
+              ) : (
+                <p className="mt-1 text-[#11502B]">Semua petugas pada berkas sudah ditugaskan pada kegiatan ini.</p>
+              )
+            ) : (
+              <p className="mt-1 text-[#55657D]">Penugasan tidak ditambah (pilihan &ldquo;Tugaskan otomatis&rdquo; mati); hanya susunan atasan dan alokasi yang disimpan.</p>
+            )}
+            {pratinjau.tim.ringkas.tanpa_atasan.length > 0 && (
+              <p className="mt-1 text-[#8A6200]">
+                {fmt(pratinjau.tim.ringkas.tanpa_atasan.length)} PPL/PML belum punya atasan di berkas (kolom Nama Korwil/Supervisor kosong). Boleh, tetapi layar pemantauan tidak dapat mengelompokkan mereka.
+              </p>
+            )}
+            {pratinjau.tim.peringatan.length > 0 && (
+              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[#8A6200]">
+                {pratinjau.tim.peringatan.map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {pratinjau.galat_total > 0 && (
             <div className="mt-2">
@@ -239,8 +304,8 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
             </div>
           )}
 
-          <details className="mt-2" open={pratinjau.pemetaan.some((p) => !p.akun_id || p.mirip)}>
-            <summary className="cursor-pointer text-[12.5px] font-semibold text-[#1B2B4B]">Pencocokan nama petugas ({fmt(pratinjau.pemetaan.length)})</summary>
+          <details className="mt-2" open={[...pratinjau.pemetaan, ...pratinjau.tim.pemetaan_atasan].some((p) => !p.akun_id || p.mirip)}>
+            <summary className="cursor-pointer text-[12.5px] font-semibold text-[#1B2B4B]">Pencocokan nama petugas ({fmt(pratinjau.pemetaan.length + pratinjau.tim.pemetaan_atasan.length)})</summary>
             <div className="mt-1 max-h-60 overflow-auto rounded-lg border border-[#DDE6F3] bg-white">
               <table className="w-full text-[12.5px]">
                 <thead>
@@ -251,7 +316,7 @@ export default function AlokasiSampel({ kegiatanId, nama }: { kegiatanId: number
                   </tr>
                 </thead>
                 <tbody>
-                  {pratinjau.pemetaan.map((p, i) => (
+                  {[...pratinjau.pemetaan, ...pratinjau.tim.pemetaan_atasan].map((p, i) => (
                     <tr key={i}>
                       <td className={TD}>{p.peran.toUpperCase()}</td>
                       <td className={TD}>{p.nama_excel}</td>

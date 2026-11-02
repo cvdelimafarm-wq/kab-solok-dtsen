@@ -3,8 +3,8 @@
 // (30 Okt 2026) Alokasi sampel per SLS -- sisi admin (Kelola Pendataan > tab 1 · Persiapan). Izin menu `bencana.admin` PADA KEGIATAN itu:
 // "lihat" = melihat, "kelola" = mengunggah/mengubah. Mode "masuk sebagai" hanya melihat. Perubahan dicatat di sigap_audit.
 // GET  ?k=<kegiatan>                                      -> DataSampelAdmin
-// POST { aksi: "pratinjau", k, baris: [...] }              -> PratinjauSampel (tidak menyimpan; baris = baris mentah dari sheet_to_json)
-// POST { aksi: "impor", k, baris, nama_berkas, paksa? }    -> { ok, unggah_id, jumlah, utama, cadangan } (409 ADA_PENGGANTIAN bila ada penggantian tercatat dan paksa tidak diset)
+// POST { aksi: "pratinjau", k, baris: [...], otomatis? }   -> PratinjauSampel (tidak menyimpan; baris = baris mentah dari sheet_to_json; otomatis = tugaskan petugas yang belum ditugaskan)
+// POST { aksi: "impor", k, baris, nama_berkas, paksa?, otomatis? } -> { ok, unggah_id, jumlah, utama, cadangan, penugasan_baru, tim } (409 ADA_PENGGANTIAN bila ada penggantian tercatat dan paksa tidak diset)
 // POST { aksi: "konfig", k, konfig }                       -> { ok, konfig }
 // POST { aksi: "batal_ganti", k, cadangan_id }             -> { ok } (admin membatalkan penggantian)
 
@@ -55,11 +55,11 @@ export async function POST(req: NextRequest) {
     const { izin } = await izinAkun(db, akun.id);
     if (!boleh(izin, MENU, "kelola", k)) return galat("Tidak punya akses kelola untuk kegiatan ini.", 403);
 
-    if (body.aksi === "pratinjau") return NextResponse.json(await pratinjauSampel(db, k, body.baris));
+    if (body.aksi === "pratinjau") return NextResponse.json(await pratinjauSampel(db, k, body.baris, body.otomatis === true));
     if (body.aksi === "impor") {
       const nama = typeof body.nama_berkas === "string" ? body.nama_berkas : "";
-      const hasil = await imporSampel(db, akun, k, nama, body.baris, body.paksa === true);
-      await catatAudit(db, akun.id, "sampel_sls_impor", { kegiatan_id: k, berkas: nama.slice(0, 200), ...hasil, paksa: body.paksa === true });
+      const hasil = await imporSampel(db, akun, k, nama, body.baris, body.paksa === true, body.otomatis === true);
+      await catatAudit(db, akun.id, "sampel_sls_impor", { kegiatan_id: k, berkas: nama.slice(0, 200), ...hasil, paksa: body.paksa === true, otomatis: body.otomatis === true });
       return NextResponse.json({ ok: true, ...hasil });
     }
     if (body.aksi === "konfig") {

@@ -30,6 +30,9 @@ export type BarisSampel = {
   lng: number | null;
   ppl_nama: string;
   pml_nama: string;
+  /** (2 Nov 2026) opsional: atasan PML. Hanya ada bila kolomnya terisi pada berkas. */
+  korwil_nama?: string;
+  supervisor_nama?: string;
 };
 export type BarisSampelCocok = BarisSampel & { ppl_akun_id: number; pml_akun_id: number };
 
@@ -67,9 +70,9 @@ export type GalatBaris = { baris: number; pesan: string };
 // Kolom dan pembacaan baris Excel
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-export const KOLOM_TEMPLAT_SAMPEL = ["Kode Wilayah", "Nama Responden", "Nama Anggota Ruta Lain", "Status Sampel", "Latitude", "Longitude", "Nama PPL", "Nama PML"] as const;
+export const KOLOM_TEMPLAT_SAMPEL = ["Kode Wilayah", "Nama Responden", "Nama Anggota Ruta Lain", "Status Sampel", "Latitude", "Longitude", "Nama PPL", "Nama PML", "Nama Korwil", "Nama Supervisor"] as const;
 
-type Medan = "kode" | "responden" | "anggota" | "status" | "lat" | "lng" | "ppl" | "pml";
+type Medan = "kode" | "responden" | "anggota" | "status" | "lat" | "lng" | "ppl" | "pml" | "korwil" | "supervisor";
 const ALIAS: Record<Medan, string[]> = {
   kode: ["kodewilayah", "kode", "kodesls", "kodesubsls", "idsubsls", "kodewil", "kodebs"],
   responden: ["namaresponden", "responden", "namakrt", "namakk", "namakepalakeluarga", "nama", "namausaha", "namaperusahaan"],
@@ -79,9 +82,11 @@ const ALIAS: Record<Medan, string[]> = {
   lng: ["longitude", "long", "lng", "lon", "koordinatlong", "koordinatlng", "koordinatlongitude", "garisbujur"],
   ppl: ["namappl", "ppl", "petugaspencacah", "pencacah", "namapencacah"],
   pml: ["namapml", "pml", "pengawas", "namapengawas"],
+  korwil: ["namakorwil", "korwil", "koordinatorwilayah", "namakoordinatorwilayah", "kortim", "namakortim"],
+  supervisor: ["namasupervisor", "supervisor", "spv", "namaspv"],
 };
 const WAJIB: Medan[] = ["kode", "responden", "status", "ppl", "pml"];
-const LABEL: Record<Medan, string> = { kode: "Kode Wilayah", responden: "Nama Responden", anggota: "Nama Anggota Ruta Lain", status: "Status Sampel", lat: "Latitude", lng: "Longitude", ppl: "Nama PPL", pml: "Nama PML" };
+const LABEL: Record<Medan, string> = { kode: "Kode Wilayah", responden: "Nama Responden", anggota: "Nama Anggota Ruta Lain", status: "Status Sampel", lat: "Latitude", lng: "Longitude", ppl: "Nama PPL", pml: "Nama PML", korwil: "Nama Korwil", supervisor: "Nama Supervisor" };
 
 const rapat = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 const teks = (v: unknown): string => (v === null || v === undefined ? "" : String(v).replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").trim());
@@ -168,6 +173,9 @@ export function periksaBarisSampel(baris: readonly Record<string, unknown>[]): H
     const pml = ambil(b, "pml");
     if (!ppl) masalah.push("Nama PPL kosong.");
     if (!pml) masalah.push("Nama PML kosong.");
+    const korwil = ambil(b, "korwil");
+    const supervisor = ambil(b, "supervisor");
+    if (korwil.length > 200 || supervisor.length > 200) masalah.push("Nama Korwil atau Nama Supervisor lebih dari 200 huruf.");
     const anggota = ambil(b, "anggota");
     if (anggota.length > 500) masalah.push("Nama Anggota Ruta Lain lebih dari 500 huruf.");
 
@@ -195,7 +203,11 @@ export function periksaBarisSampel(baris: readonly Record<string, unknown>[]): H
     if (pertama !== undefined) peringatan.push({ baris: no, pesan: `Sama dengan baris ${pertama} (kode wilayah, nama responden, dan status sama).` });
     else sudah.set(kunci, no);
     nomor.push(no);
-    hasil.push({ kode_wilayah: kode.kode, kode_sls: kodeSls(kode.kode), nama_responden: responden, anggota_lain: anggota || null, status, lat, lng, ppl_nama: ppl, pml_nama: pml });
+    hasil.push({
+      kode_wilayah: kode.kode, kode_sls: kodeSls(kode.kode), nama_responden: responden, anggota_lain: anggota || null, status, lat, lng, ppl_nama: ppl, pml_nama: pml,
+      ...(korwil ? { korwil_nama: korwil } : {}),
+      ...(supervisor ? { supervisor_nama: supervisor } : {}),
+    });
   });
   return { baris: hasil, nomor, galat, peringatan, dilewati };
 }
@@ -243,15 +255,15 @@ export function cocokkanNama(nama: string, kandidat: readonly Kandidat[]): Hasil
 }
 
 export type Pemetaan = { peran: "ppl" | "pml"; nama_excel: string; nama_akun: string | null; akun_id: number | null; mirip: boolean; pesan: string | null; baris: number };
-export type HasilCocokPetugas = { cocok: BarisSampelCocok[]; galat: GalatBaris[]; pemetaan: Pemetaan[] };
+export type HasilCocokPetugas<T extends BarisSampel = BarisSampel> = { cocok: (T & { ppl_akun_id: number; pml_akun_id: number })[]; galat: GalatBaris[]; pemetaan: Pemetaan[] };
 
 /**
  * Mencocokkan nama PPL dan PML tiap baris ke akun. `ppl` dan `pml` = petugas yang SUDAH ditugaskan pada kegiatan itu dengan peran tersebut.
  * Nomor baris = nomor baris Excel; `nomor` (opsional) memetakan indeks baris ke nomor Excel asalnya bila ada baris yang sudah tersaring.
  */
-export function cocokkanPetugasSampel(baris: readonly BarisSampel[], ppl: readonly Kandidat[], pml: readonly Kandidat[], nomor?: readonly number[]): HasilCocokPetugas {
+export function cocokkanPetugasSampel<T extends BarisSampel = BarisSampel>(baris: readonly T[], ppl: readonly Kandidat[], pml: readonly Kandidat[], nomor?: readonly number[]): HasilCocokPetugas<T> {
   const galat: GalatBaris[] = [];
-  const cocok: BarisSampelCocok[] = [];
+  const cocok: (T & { ppl_akun_id: number; pml_akun_id: number })[] = [];
   const memo = new Map<string, HasilCocok>();
   const pemetaan = new Map<string, Pemetaan>();
   const cari = (peran: "ppl" | "pml", nama: string, no: number): HasilCocok => {
@@ -438,15 +450,16 @@ export const kodeSlsPendek = (kode: string): string => (kode.length > 6 ? `…${
 export function templatSampel(): string[][] {
   return [
     [...KOLOM_TEMPLAT_SAMPEL],
-    ["1303010001000100", "Contoh Responden Satu", "Anggota ruta lain (boleh dikosongkan)", "Utama", "-0.7894210", "100.6502310", "Nama PPL (sesuai penugasan)", "Nama PML (sesuai penugasan)"],
-    ["1303010001000100", "Contoh Responden Dua", "", "Utama", "-0.7897120", "100.6509940", "Nama PPL (sesuai penugasan)", "Nama PML (sesuai penugasan)"],
-    ["1303010001000100", "Contoh Cadangan Satu", "", "Cadangan", "", "", "Nama PPL (sesuai penugasan)", "Nama PML (sesuai penugasan)"],
+    ["1303010001000100", "Contoh Responden Satu", "Anggota ruta lain (boleh dikosongkan)", "Utama", "-0.7894210", "100.6502310", "Nama PPL (nama akun)", "Nama PML (nama akun)", "Nama Korwil (boleh kosong)", "Nama Supervisor (boleh kosong)"],
+    ["1303010001000100", "Contoh Responden Dua", "", "Utama", "-0.7897120", "100.6509940", "Nama PPL (nama akun)", "Nama PML (nama akun)", "", ""],
+    ["1303010001000100", "Contoh Cadangan Satu", "", "Cadangan", "", "", "Nama PPL (nama akun)", "Nama PML (nama akun)", "", ""],
   ];
 }
 export const PETUNJUK_TEMPLAT = [
   "Satu baris = satu sampel. Kode Wilayah ditulis sebagai TEKS (10-16 digit); SLS = 14 digit pertama.",
   "Status Sampel diisi Utama atau Cadangan. Latitude/Longitude boleh dikosongkan; pisah desimal dengan titik atau koma.",
-  "Nama PPL dan Nama PML harus sama dengan nama petugas yang sudah ditugaskan pada kegiatan ini (gelar di belakang koma boleh dihilangkan).",
+  "Nama PPL dan Nama PML harus sama dengan nama akun SIGAP petugas (gelar di belakang koma boleh dihilangkan). Dengan pilihan \"Tugaskan otomatis\", petugas yang belum ditugaskan pada kegiatan ini ditugaskan saat berkas disimpan.",
+  "Nama Korwil dan Nama Supervisor boleh dikosongkan. Bila diisi, atasan PML dan atasan korwil ikut tersimpan sebagai susunan tim kegiatan.",
   "Baris contoh pada lembar Templat harus dihapus sebelum diunggah.",
 ];
 
