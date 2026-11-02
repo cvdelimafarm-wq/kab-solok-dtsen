@@ -49,6 +49,8 @@ const PROFIL: [string, Profil][] = [
   ["/api/sigap/pelatihan/monitoring", { ...dasar, segarMs: 45 * 1000, interval: 60 * 1000, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
   ["/api/sigap/pelatihan/kelas", { ...dasar, segarMs: 5 * MENIT, interval: 0, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
   ["/api/sigap/pelatihan/info", { ...dasar, segarMs: 10 * MENIT, interval: 0, umurMaksMs: PEL_UMUR_MAKS }],
+  // (3 Nov 2026) Keadaan Vanguard peserta (kartu Hari ini + langkah pelatihan): berubah setelah berlatih, jadi segar 20 detik; tampil seketika dari simpanan.
+  ["/api/sigap/vanguard", { ...dasar, segarMs: 20 * 1000, interval: 0, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
   // tugas/tahapan terlewat boleh tertunda ±10 menit; status "mendesak" bergantung hari -> ikut basi saat ganti hari
   ["/api/portal/induk", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],
   ["/api/portal/kegiatan", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],

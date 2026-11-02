@@ -56,17 +56,17 @@ export function StripPelatihan({ daftar, status, aktif, onGulir, hrefAlih, cekGu
   }, [fokus]);
   const n = daftar.length;
   return (
-    <ol ref={wadah} className="m-0 flex list-none gap-0 overflow-x-auto px-1 pb-1 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Ikon langkah pelatihan">
+    <ol ref={wadah} className="m-0 flex list-none gap-0 overflow-x-auto px-0.5 pb-0.5 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Ikon langkah pelatihan">
       {daftar.map((l, i) => {
         const s = status[i];
         const ini = l.kode === aktif;
-        const kelas = "relative flex w-full flex-col items-center rounded-lg px-0.5 pb-1 pt-0.5 text-center";
+        const kelas = "relative flex w-full flex-col items-center rounded-lg px-0.5 pb-0.5 pt-0.5 text-center";
         const isi = (
           <>
-            <span className={`relative z-10 grid h-9 w-9 place-items-center rounded-full transition ${WARNA_BULAT[s]} ${ini ? "outline outline-2 outline-offset-2 outline-[#0F2A52]" : ""} ${s === "sekarang" && !ini ? "shadow-[0_0_0_4px_#DCE8FB]" : ""}`}>
-              {s === "selesai" ? <Centang /> : <IkonTahap kode={l.kode} />}
+            <span className={`relative z-10 grid h-8 w-8 place-items-center rounded-full transition ${l.kode === "vanguard" && s === "sekarang" ? "bg-[#FFC000] text-[#2A1763] shadow-[0_0_0_3px_#FFE9A6]" : WARNA_BULAT[s]} ${ini ? "outline outline-2 outline-offset-2 outline-[#0F2A52]" : ""} ${s === "sekarang" && !ini && l.kode !== "vanguard" ? "shadow-[0_0_0_3px_#DCE8FB]" : ""}`}>
+              {s === "selesai" ? <Centang /> : <IkonTahap kode={l.kode} ukuran={17} />}
             </span>
-            <span className={`mt-1 line-clamp-2 w-full px-0.5 text-center text-[10.5px] leading-tight ${ini ? "font-extrabold text-[#0F2A52]" : "font-semibold text-[#55657D]"}`}>
+            <span className={`mt-0.5 line-clamp-2 w-full px-0.5 text-center text-[10.5px] leading-[1.15] ${ini ? "font-extrabold text-[#0F2A52]" : "font-semibold text-[#55657D]"}`}>
               <b className="mr-0.5">{i + 1}</b>
               {l.singkat}
               <span className="sr-only">, {teksStatusLangkah(s).toLowerCase()}</span>
@@ -75,8 +75,8 @@ export function StripPelatihan({ daftar, status, aktif, onGulir, hrefAlih, cekGu
         );
         return (
           <li key={l.kode} className="relative min-w-[68px] flex-1" data-fokus={l.kode === fokus ? "1" : undefined}>
-            {i > 0 && <span aria-hidden className={`absolute left-0 right-1/2 top-[19px] h-0.5 ${status[i - 1] === "selesai" ? "bg-[#7FCBA5]" : "bg-[#D5DDE9]"}`} />}
-            {i < n - 1 && <span aria-hidden className={`absolute left-1/2 right-0 top-[19px] h-0.5 ${s === "selesai" ? "bg-[#7FCBA5]" : "bg-[#D5DDE9]"}`} />}
+            {i > 0 && <span aria-hidden className={`absolute left-0 right-1/2 top-[17px] h-0.5 ${status[i - 1] === "selesai" ? "bg-[#7FCBA5]" : "bg-[#D5DDE9]"}`} />}
+            {i < n - 1 && <span aria-hidden className={`absolute left-1/2 right-0 top-[17px] h-0.5 ${s === "selesai" ? "bg-[#7FCBA5]" : "bg-[#D5DDE9]"}`} />}
             {ini ? (
               <div className={kelas} aria-current="step" title={`Anda di langkah ${i + 1}: ${l.judul}`}>
                 {isi}
@@ -109,6 +109,21 @@ export function StripPelatihan({ daftar, status, aktif, onGulir, hrefAlih, cekGu
   );
 }
 
+/** (3 Nov 2026) Bilah progres tipis + "2/7" kecil (menggantikan kalimat "2 dari 7 langkah selesai"). */
+function BilahLangkah({ selesai, wajib }: { selesai: number; wajib: number }) {
+  const persen = wajib > 0 ? Math.round((selesai / wajib) * 100) : 0;
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <span className="h-1 flex-1 overflow-hidden rounded-full bg-[#E1E9F6]" role="progressbar" aria-valuemin={0} aria-valuemax={wajib} aria-valuenow={selesai} aria-label={`${selesai} dari ${wajib} langkah wajib selesai`}>
+        <span className="block h-full rounded-full bg-[#19A463] transition-[width]" style={{ width: `${persen}%` }} />
+      </span>
+      <span className="flex-none text-[11px] font-bold tabular-nums text-[#6B7A90]">
+        {selesai}/{wajib}
+      </span>
+    </div>
+  );
+}
+
 /** Kartu penunjuk di atas halaman langkah: "Langkah 3 dari 8 · Pretest", status, lajur ikon, dan jumlah langkah wajib yang selesai. */
 export function PenunjukPelatihan({ daftar, status, aktif, hrefAlih }: Data & { aktif: string; hrefAlih?: Partial<Record<string, string>> }) {
   const posisi = posisiLangkah(daftar, aktif);
@@ -116,22 +131,15 @@ export function PenunjukPelatihan({ daftar, status, aktif, hrefAlih }: Data & { 
   const s = status[posisi.indeks];
   const p = progresLangkah(daftar);
   return (
-    <section aria-label="Posisi dalam langkah pelatihan" className="rounded-xl border border-[#DDE6F3] bg-white px-3.5 py-2.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[.4px] text-[#6B7A90]">Langkah pelatihan</p>
-          <p className="m-0 text-[14.5px] font-extrabold text-[#0F2A52]" aria-current="step">
-            {teksLangkah(posisi)}
-          </p>
-        </div>
-        <span className={`mt-0.5 flex-none rounded-full px-2 py-0.5 text-[11px] font-extrabold ${WARNA_CHIP[s]}`}>{teksStatusLangkah(s)}</span>
+    <section aria-label="Posisi dalam langkah pelatihan" className="rounded-xl border border-[#DDE6F3] bg-white px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="m-0 min-w-0 truncate text-[14px] font-extrabold text-[#0F2A52]" aria-current="step">
+          {teksLangkah(posisi)}
+        </p>
+        <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-extrabold ${WARNA_CHIP[s]}`}>{teksStatusLangkah(s)}</span>
       </div>
-      <div className="mt-2.5">
-        <StripPelatihan daftar={daftar} status={status} aktif={aktif} hrefAlih={hrefAlih} />
-      </div>
-      <p className="mb-0 mt-1 text-[12px] text-[#6B7A90]">
-        {p.selesai} dari {p.wajib} langkah selesai
-      </p>
+      <StripPelatihan daftar={daftar} status={status} aktif={aktif} hrefAlih={hrefAlih} />
+      <BilahLangkah selesai={p.selesai} wajib={p.wajib} />
     </section>
   );
 }
@@ -148,20 +156,13 @@ export function LangkahGeser({ daftar, status, hrefAlih, onGulir, cekGulir }: Da
   const berikut = p.semua ? null : daftar[idx];
   const s = berikut ? status[idx] : "selesai";
   return (
-    <section aria-label="Langkah pelatihan" className="rounded-xl border border-[#DDE6F3] bg-white px-3.5 py-2.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="m-0 text-[11px] font-bold uppercase tracking-[.4px] text-[#6B7A90]">Langkah pelatihan</p>
-          <p className="m-0 text-[14.5px] font-extrabold text-[#0F2A52]">{berikut ? `Berikutnya: ${berikut.singkat} · langkah ${idx + 1} dari ${daftar.length}` : "Semua langkah wajib selesai"}</p>
-        </div>
-        <span className={`mt-0.5 flex-none rounded-full px-2 py-0.5 text-[11px] font-extrabold ${WARNA_CHIP[s]}`}>{teksStatusLangkah(s)}</span>
+    <section aria-label="Langkah pelatihan" className="rounded-xl border border-[#DDE6F3] bg-white px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <p className="m-0 min-w-0 truncate text-[14px] font-extrabold text-[#0F2A52]">{berikut ? `Berikutnya: ${berikut.singkat} · langkah ${idx + 1}/${daftar.length}` : "Semua langkah wajib selesai"}</p>
+        <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-extrabold ${WARNA_CHIP[s]}`}>{teksStatusLangkah(s)}</span>
       </div>
-      <div className="mt-2.5">
-        <StripPelatihan daftar={daftar} status={status} aktif={null} hrefAlih={hrefAlih} onGulir={onGulir} cekGulir={cekGulir} />
-      </div>
-      <p className="mb-0 mt-1 text-[12px] text-[#6B7A90]">
-        {p.selesai} dari {p.wajib} langkah selesai · geser ikon ke samping untuk melihat semuanya
-      </p>
+      <StripPelatihan daftar={daftar} status={status} aktif={null} hrefAlih={hrefAlih} onGulir={onGulir} cekGulir={cekGulir} />
+      <BilahLangkah selesai={p.selesai} wajib={p.wajib} />
     </section>
   );
 }

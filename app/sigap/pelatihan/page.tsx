@@ -28,6 +28,7 @@ import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
 import { KUIS_KOSONG, Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hub, type TesHub } from "./komponen";
 import { IsiKuis } from "./IsiKuis"; // (3 Nov 2026) dipakai bersama tab Hari ini
 import { ringkasAbsenSaya, useAbsenSaya } from "./absenSaya"; // (3 Nov 2026) langkah Absen sesi di lajur ikon
+import { useVanguardSaya } from "../vanguardSaya"; // (3 Nov 2026) langkah Vanguard di lajur ikon
 import KartuTerkunci from "./KartuTerkunci"; // (2 Nov 2026) blokir antar tahapan + minta buka kunci
 import { ModalPengumuman } from "./pengumumanUi";
 import KartuTranslokPelatihan from "./translok";
@@ -734,6 +735,7 @@ export default function HalamanPelatihan() {
   const modeBaru: boolean | null = bendera ? bendera.tab_baru : tungguBendera ? null : false;
   // (3 Nov 2026) tampilan lima tab: langkah "Absen sesi" dan "Adu Sigap" selalu ada (kuis: status "belum ada ruang" sampai panitia membuatnya)
   const absenSaya = useAbsenSaya(modeBaru === true);
+  const vgSaya = useVanguardSaya(modeBaru === true && data?.peserta ? data.kegiatan_id ?? null : null);
   const kuisEf = modeBaru === true ? data?.kuis ?? KUIS_KOSONG : data?.kuis ?? null;
   useEffect(() => {
     if (!bendera?.tab_baru || !data?.peserta) return;
@@ -757,7 +759,7 @@ export default function HalamanPelatihan() {
     const pre = data.tes.find((t) => t.jenis === "pretest");
     const post = data.tes.find((t) => t.jenis === "posttest");
     const L = data.langkah;
-    alur = hitungLangkahPelatihan({ langkah: data.langkah, tes: data.tes, presensi: data.presensi, kuis: modeBaru === true ? data.kuis ?? KUIS_BELUM_ADA : data.kuis, absenSesi: modeBaru === true ? ringkasAbsenSaya(absenSaya.data, now) : null, fotoTranslok, mulaiMs: mulai, now });
+    alur = hitungLangkahPelatihan({ langkah: data.langkah, tes: data.tes, presensi: data.presensi, kuis: modeBaru === true ? data.kuis ?? KUIS_BELUM_ADA : data.kuis, absenSesi: modeBaru === true ? ringkasAbsenSaya(absenSaya.data, now) : null, vanguard: modeBaru === true ? vgSaya.langkah : null, fotoTranslok, mulaiMs: mulai, now });
     const st = (k: string) => alur.find((x) => x.kode === k);
     const tes = (t: TesHub | undefined, judul: string, kode: string): Langkah => ({
       kode,

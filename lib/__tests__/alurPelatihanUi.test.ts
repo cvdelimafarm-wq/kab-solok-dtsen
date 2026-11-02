@@ -31,7 +31,7 @@ describe("komponen langkah pelatihan", () => {
     expect(h.match(/<li /g)?.length).toBe(daftar.length);
     expect(h).toContain('aria-current="step"');
     expect(h).toContain("Undangan");
-    expect(h).toContain("Foto akhir");
+    expect(h).toContain("Foto Translok"); // (3 Nov 2026) nama pendek langkah foto
     expect(h).toContain("selesai"); // teks status untuk pembaca layar
     expect(h).toContain("terlewat");
   });
@@ -49,7 +49,9 @@ describe("komponen langkah pelatihan", () => {
     const h = renderToStaticMarkup(e(PenunjukPelatihan, { daftar, status, aktif: "pretest" }));
     expect(h).toContain(`Langkah 3 dari ${daftar.length} · Pretest`);
     expect(h).toContain("Terlewat");
-    expect(h).toContain(`2 dari ${daftar.length} langkah selesai`);
+    // (3 Nov 2026) kalimat "x dari y langkah selesai" diganti bilah progres tipis + "x/y"
+    expect(h).toContain(`aria-label="2 dari ${daftar.length} langkah wajib selesai"`);
+    expect(h).toContain(`2/${daftar.length}`);
     expect(h).not.toContain("Lihat semua langkah"); // daftar langkah bernomor sudah dihapus (membingungkan)
   });
   it("penunjuk: kode tak dikenal -> kosong", () => {
@@ -67,7 +69,7 @@ describe("komponen langkah pelatihan", () => {
   it("navigasi: catatan kuning bila langkah berikutnya belum saatnya", () => {
     // dari Presensi (sekarang) -> Foto awal masih "menyusul": ada catatan; dari Pretest -> Presensi berstatus "sekarang": tanpa catatan
     const h = renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "hadir" }));
-    expect(h).toContain("Foto awal belum bisa dikerjakan sekarang");
+    expect(h).toContain("Foto Translok belum bisa dikerjakan sekarang");
     expect(renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "pretest" }))).not.toContain("belum bisa dikerjakan");
   });
   it("navigasi: langkah terakhir -> kalimat penutup, tanpa Berikutnya", () => {

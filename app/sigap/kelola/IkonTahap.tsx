@@ -157,6 +157,13 @@ const G = {
     </>
   ),
   kuis: () => <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z" />,
+  // (3 Nov 2026) perisai: langkah Vanguard
+  perisai: () => (
+    <>
+      <path d="M12 3 4.5 6v5.5c0 4.5 3.2 8 7.5 9.5 4.3-1.5 7.5-5 7.5-9.5V6z" />
+      <path d="m9 12 2.2 2.2L15.5 9.8" />
+    </>
+  ),
   kamera: () => (
     <>
       <path d="M4 8h3l1.6-2.5h6.8L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
@@ -194,6 +201,7 @@ const PETA: Record<string, NamaIkon> = {
   posttest: "pena",
   hadir: "lokasi",
   sesi: "cek", // (3 Nov 2026) absen sesi pelatihan
+  vanguard: "perisai", // (3 Nov 2026) latihan Vanguard
   foto_awal: "kamera",
   foto_akhir: "kamera",
 };

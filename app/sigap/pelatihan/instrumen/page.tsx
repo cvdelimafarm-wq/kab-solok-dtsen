@@ -16,6 +16,7 @@ import BagianMateri from "./BagianMateri"; // (2 Nov 2026) Tahap C: video + taut
 import { JudulIkon } from "./IkonInstrumen"; // (2 Nov 2026) ikon SVG menggantikan emoji
 import { unduhBerkas } from "./unduhBerkas";
 import { idBerkasTersimpan } from "@/lib/berkasLokal";
+import { namaBerkasTambahan } from "@/lib/instrumenTampil"; // (3 Nov 2026) nama berkas tidak ditulis dua kali
 import { GRUP_BERKAS, ukuranTeks, type BerkasInstrumen } from "@/lib/instrumenBerkas";
 
 type Daftar = { boleh_kelola: boolean; berkas: BerkasInstrumen[] };
@@ -87,19 +88,23 @@ export default function HalamanInstrumen() {
                   {daftar.map((b) => {
                     const tersimpan = diHp.has(b.id);
                     return (
-                      <li key={b.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 ${tersimpan ? "border-[#BFE5D0] bg-[#F5FBF8]" : "border-[#DDE6F3]"}`}>
+                      <li key={b.id} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 ${tersimpan ? "border-[#BFE5D0] bg-[#F5FBF8]" : "border-[#DDE6F3]"}`}>
                         <div className="min-w-0 flex-1">
-                          <p className="text-[13.5px] font-semibold leading-snug">{b.judul}</p>
-                          <p className="text-[11.5px] text-[#6B7A90]">
-                            {b.nama_file}
-                            {b.ukuran ? ` · ${ukuranTeks(b.ukuran)}` : ""} · diunggah {tglSedang(b.diunggah_at)}
-                          </p>
-                          <p className="mt-1">
-                            <Chip w={tersimpan ? "ok" : "mut"}>{tersimpan ? "✓ Sudah diunduh · tersimpan di HP" : "Belum diunduh"}</Chip>
+                          <p className="m-0 text-[13.5px] font-semibold leading-snug">{b.judul}</p>
+                          {(() => {
+                            const lain = namaBerkasTambahan(b.judul, b.nama_file);
+                            return lain ? <p className="m-0 break-words text-[11.5px] text-[#6B7A90]">{lain}</p> : null;
+                          })()}
+                          <p className="m-0 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <Chip w={tersimpan ? "ok" : "mut"}>{tersimpan ? "✓ Tersimpan di HP" : "Belum diunduh"}</Chip>
+                            <span className="text-[11.5px] text-[#6B7A90]">
+                              {b.ukuran ? `${ukuranTeks(b.ukuran)} · ` : ""}
+                              {tglSedang(b.diunggah_at)}
+                            </span>
                           </p>
                         </div>
                         {/* (3 Nov 2026) dua keadaan dibedakan jelas: biru "Unduh" (belum ada di HP) dan hijau "Buka" (sudah tersimpan, langsung terbuka tanpa unduh) */}
-                        <button type="button" className={`${tersimpan ? BTN_G : BTN} min-h-[44px] min-w-[112px] !px-4 !text-[14px] !font-extrabold`} disabled={sibuk === b.id} onClick={() => void buka(b)}>
+                        <button type="button" className={`${tersimpan ? BTN_G : BTN} min-h-[44px] min-w-[96px] flex-none !px-3.5 !text-[14px] !font-extrabold`} disabled={sibuk === b.id} onClick={() => void buka(b)}>
                           {sibuk === b.id ? "Menyiapkan…" : tersimpan ? "↗ Buka" : "⬇ Unduh"}
                         </button>
                       </li>

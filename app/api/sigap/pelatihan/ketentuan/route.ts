@@ -3,7 +3,7 @@
 // (2 Nov 2026) Pelatihan 5 tab: kartu undangan + ketentuan + jawaban terima/tolak.
 //
 // GET  (Bearer sesi; ?kegiatan=ID opsional) -> { kegiatan_id, instrumen_belum, tab_baru (berlaku), tab_pengaturan (true|false|null=otomatis), otomatis, kegiatan_selesai, ketentuan:{butir,versi,diubah}, undangan:{hari_tanggal,pukul,tempat,tanggal_iso,pdf},
-//        peserta:{peran,kelas}|null, respons, status, berubah, kartu:{judul,ket,tombol,nada}, kamera_href|null, boleh_kelola }
+//        peserta:{peran,kelas}|null, jadwal_pendataan:{sumber,periode:[{periode,mulai,selesai,perkiraan}]}|null, respons, status, berubah, kartu:{judul,ket,tombol,nada}, kamera_href|null, boleh_kelola }
 // POST {aksi:"respons", respons:"terima"|"tolak", alasan?}       (peserta)  -> { ok, status }
 // POST {aksi:"simpan", butir?:string[], tab_baru?:boolean|null}  (izin pelatihan.kelola = kelola; null = kembali ke otomatis) -> { ok, ketentuan }
 //
@@ -16,6 +16,7 @@ import { ketentuanBerubah, ketentuanDiubah, periksaRespons, statusUndangan, teks
 import { muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { tabPerPeran } from "@/lib/sigapAbsen";
 import { muatStatusMateriBatch } from "@/lib/sigapMateriDb";
+import { muatJadwalPendataanTertaut } from "@/lib/portal/jadwalPendataanTertaut";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,8 +54,11 @@ export async function GET(req: NextRequest) {
         instrumenBelum = 0;
       }
     }
+    // (3 Nov 2026) Jadwal pendataan dari Identifikasi survei yang tertaut (kartu "Jadwal pendataan" di Hari ini). Hanya untuk peserta; gagal / tanpa tautan = null.
+    const jadwalPendataan = peserta ? await muatJadwalPendataanTertaut(db, kegiatanId) : null;
     return NextResponse.json({
       kegiatan_id: kegiatanId,
+      jadwal_pendataan: jadwalPendataan,
       instrumen_belum: instrumenBelum,
       tab_baru: tampilan.tab_baru,
       tab_pengaturan: ketentuan.tab_pengaturan,

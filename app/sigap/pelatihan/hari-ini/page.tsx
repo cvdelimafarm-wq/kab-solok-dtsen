@@ -21,6 +21,9 @@ import { TeksBaris } from "../TeksBaris";
 import { useInfoPelatihan } from "../infoPelatihan";
 import { useDataPel } from "../dataPel";
 import KartuKuis from "../KartuKuis"; // (3 Nov 2026) kartu kuis selalu tampil
+import KartuJadwalPendataan from "../KartuJadwalPendataan"; // (3 Nov 2026) jadwal pendataan dari Identifikasi survei
+import { useVanguardSaya } from "../../vanguardSaya"; // (3 Nov 2026) Vanguard didahulukan bila perlu perhatian
+import type { JadwalPendataanKartu } from "@/lib/jadwalPendataanTampil";
 import { bacaLangkahDariAlamat } from "@/lib/alurPelatihan";
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
@@ -34,6 +37,8 @@ type Data = {
   ketentuan: { butir: string[]; versi: number };
   undangan: { hari_tanggal: string; pukul: string; tempat: string; tanggal_iso: string; pdf: string };
   peserta: { peran: string; kelas: number | null } | null;
+  /** (3 Nov 2026) jadwal pendataan dari Identifikasi survei yang tertaut; null = tidak ada / bukan peserta. */
+  jadwal_pendataan?: JadwalPendataanKartu | null;
   respons: { respons: "terima" | "tolak"; alasan: string | null } | null;
   status: StatusUndangan;
   berubah: boolean;
@@ -211,6 +216,7 @@ export default function HalamanHariIni() {
 
   const nada = d ? NADA[d.kartu.nada] : null;
   const info = useInfoPelatihan();
+  const vg = useVanguardSaya(d?.peserta ? d.kegiatan_id : null);
   return (
     <Kerangka aktif="hari-ini" geser judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
@@ -228,6 +234,8 @@ export default function HalamanHariIni() {
       {d && <KartuIzinBuka />}
       {d && d.peserta && nada && (
         <>
+          {/* (3 Nov 2026) Vanguard yang perlu perhatian sekarang disorot dan didahulukan (di atas undangan); selain itu tetap di bawah undangan */}
+          {vg.mendesak && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
           <section className={`rounded-[18px] border p-4 ${nada.kotak}`} aria-label="Undangan pelatihan">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Undangan pelatihan</h2>
@@ -250,7 +258,8 @@ export default function HalamanHariIni() {
               </div>
             )}
           </section>
-          <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />
+          <KartuJadwalPendataan jadwal={d.jadwal_pendataan} />
+          {!vg.mendesak && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
           <AbsenPeserta />
           <KartuKuis />
           {/* (2 Nov 2026) nomor pulsa: dikonfirmasi sekali lewat pop-up; di sini hanya kartu redup di bagian bawah (permintaan user) */}

@@ -5,13 +5,13 @@
 // tombol Sebelumnya/Berikutnya. Berkas ini SATU-SATUNYA tempat yang menentukan urutan dan status langkah (selesai / terlewat / bisa dikerjakan),
 // dipakai oleh halaman Langkah (page.tsx) dan oleh Kerangka halaman-halaman lain, supaya status di semua halaman selalu sama.
 //
-// Urutan: 1 undangan · 2 instrumen · 3 pretest · 4 presensi · (Adu Sigap, tambahan, bila admin membuat kuis) · (foto sebelum posttest, bila kelas perlu foto)
+// Urutan: 1 undangan · 2 instrumen · (Vanguard, lima tab) · 3 pretest · 4 presensi · (Adu Sigap, tambahan, bila admin membuat kuis) · (foto sebelum posttest, bila kelas perlu foto)
 //         · posttest · (foto sesudah posttest). Aturan status disalin dari page.tsx lama tanpa perubahan arti.
 
 import { bagiFoto, keadaanHari, type PengaturanPresensi, type RingkasHari } from "./sigapPresensi";
 import { posisiAlur, type PosisiAlur, type TahapAlur } from "./alurKelola";
 
-export type KodeLangkah = "undangan" | "instrumen" | "pretest" | "hadir" | "sesi" | "kuis" | "foto_awal" | "posttest" | "foto_akhir";
+export type KodeLangkah = "undangan" | "instrumen" | "vanguard" | "pretest" | "hadir" | "sesi" | "kuis" | "foto_awal" | "posttest" | "foto_akhir";
 
 export type StatusLangkah = "selesai" | "terlewat" | "sekarang" | "menyusul";
 
@@ -45,6 +45,11 @@ export type MasukanLangkah = {
    * `total` = sesi hari ini untuk kelas peserta, `hadir` = yang tercatat hadir, `terbukaBelum` = sesi yang sedang dibuka dan belum diisi.
    */
   absenSesi?: { total: number; hadir: number; terbukaBelum: number } | null;
+  /**
+   * (3 Nov 2026) Latihan Vanguard (tab Hari ini): diisi HANYA pada tampilan lima tab bila Vanguard menyala untuk peserta ini (mode tercatat); null/tidak diisi = langkah tidak ada.
+   * `wajib` = mode "N hari berturut-turut" (langkah wajib, dihitung dalam progres); selain itu langkah tambahan. `tuntas` = runtutan selesai; `benar` = jumlah kasus yang sudah benar.
+   */
+  vanguard?: { wajib: boolean; tuntas: boolean; hariIniSudah: boolean; benar: number } | null;
   /** Kelas luring/hybrid/belum tertaut = true; kelas Daring = false (tanpa foto Transport Lokal). */
   fotoTranslok: boolean;
   /** Jam mulai pelatihan (ms epoch); langkah foto "menyala" sejak saat ini. */
@@ -94,8 +99,19 @@ export function hitungLangkahPelatihan(m: MasukanLangkah): LangkahPelatihan[] {
   const hasil: LangkahPelatihan[] = [
     { ...dasar("undangan", "Baca undangan", "Undangan", true, `${ALAMAT_LANGKAH}/undangan`), selesai: !!L?.undangan_dibuka, bisaSekarang: true },
     { ...dasar("instrumen", "Pelajari instrumen", "Instrumen", true, `${ALAMAT_LANGKAH}/instrumen`), selesai: !!L?.instrumen_diunduh, bisaSekarang: true },
-    langkahTes("pretest", "Kerjakan Pretest", "Pretest"),
   ];
+
+  // (3 Nov 2026) Latihan Vanguard: sebelum Pretest (mode wajib mengunci Pretest sampai runtutan tuntas). Mode wajib = langkah wajib; selain itu tambahan.
+  if (m.vanguard) {
+    const v = m.vanguard;
+    hasil.push({
+      ...dasar("vanguard", "Latihan Vanguard", "Vanguard", false, `${ALAMAT_LANGKAH}/hari-ini?langkah=vanguard`),
+      selesai: v.wajib ? v.tuntas : v.benar > 0,
+      bisaSekarang: v.wajib ? !v.tuntas && !v.hariIniSudah : v.benar === 0,
+      tambahan: !v.wajib,
+    });
+  }
+  hasil.push(langkahTes("pretest", "Kerjakan Pretest", "Pretest"));
 
   // presensi: terlewat = ada sesi hari ini yang lewat tanpa tercatat dan tidak ada sesi lain yang masih bisa; sekarang = ada sesi dibuka atau susulan terbuka
   const p = m.presensi;
@@ -134,9 +150,9 @@ export function hitungLangkahPelatihan(m: MasukanLangkah): LangkahPelatihan[] {
     const ada = slotIni.filter((sl) => L?.slot.includes(sl)).length;
     return { ...dasar(kode, judul, singkat, false, alamatDalamLangkah(kode)), selesai: slotIni.length > 0 && ada >= slotIni.length, bisaSekarang: m.now >= m.mulaiMs };
   };
-  if (m.fotoTranslok && awal.length) hasil.push(langkahFoto("foto_awal", awal, `Unggah ${awal.length} foto sebelum Posttest`, "Foto awal"));
+  if (m.fotoTranslok && awal.length) hasil.push(langkahFoto("foto_awal", awal, `Unggah ${awal.length} foto Translok sebelum Posttest`, "Foto Translok"));
   hasil.push(langkahTes("posttest", "Kerjakan Posttest", "Posttest"));
-  if (m.fotoTranslok && akhir.length) hasil.push(langkahFoto("foto_akhir", akhir, `Unggah ${akhir.length} foto sesudah Posttest`, "Foto akhir"));
+  if (m.fotoTranslok && akhir.length) hasil.push(langkahFoto("foto_akhir", akhir, `Unggah ${akhir.length} foto Translok sesudah Posttest`, "Foto Translok"));
   return hasil;
 }
 
@@ -190,8 +206,23 @@ export function catatanBerikutnya(daftar: readonly LangkahPelatihan[], aktif: st
   return `${b.singkat} belum bisa dikerjakan sekarang. Buka saja untuk melihat jadwal atau syaratnya.`;
 }
 
-const KODE_VALID: readonly string[] = ["undangan", "instrumen", "pretest", "hadir", "sesi", "kuis", "foto_awal", "posttest", "foto_akhir"];
+const KODE_VALID: readonly string[] = ["undangan", "instrumen", "vanguard", "pretest", "hadir", "sesi", "kuis", "foto_awal", "posttest", "foto_akhir"];
 /** Nilai ?langkah= dari alamat -> kode yang dikenal, selain itu null (alamat sembarangan tidak boleh dipakai mencari elemen). */
 export function bacaLangkahDariAlamat(q: string | null | undefined): KodeLangkah | null {
   return q && KODE_VALID.includes(q) ? (q as KodeLangkah) : null;
+}
+
+/** Jawaban GET /api/sigap/vanguard?kegiatan=ID -> masukan langkah Vanguard (null = Vanguard tidak menyala untuk akun ini / belum dimuat). */
+export function masukanVanguard(
+  d: { mode: string; boleh: boolean; riwayat: { benar: boolean }[]; runtutan?: { mode: string; tuntas: boolean; hari_ini_sudah: boolean } | null } | null | undefined
+): MasukanLangkah["vanguard"] {
+  if (!d || d.mode !== "tercatat" || !d.boleh) return null;
+  const r = d.runtutan ?? null;
+  return { wajib: r?.mode === "wajib", tuntas: !!r?.tuntas, hariIniSudah: !!r?.hari_ini_sudah, benar: d.riwayat.filter((x) => x.benar).length };
+}
+
+/** Vanguard perlu perhatian sekarang (kartunya disorot dan didahulukan): mode wajib belum tuntas dan hari ini belum berlatih; selain itu belum pernah ada kasus benar. */
+export function vanguardMendesak(v: MasukanLangkah["vanguard"]): boolean {
+  if (!v) return false;
+  return v.wajib ? !v.tuntas && !v.hariIniSudah : v.benar === 0;
 }
