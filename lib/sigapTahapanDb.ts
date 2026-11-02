@@ -12,6 +12,7 @@ import { pesertaKelas } from "@/lib/sigapAbsenDb";
 import { muatStatusMateriBatch } from "@/lib/sigapMateriDb";
 import { tesTuntas, type TesBaris } from "@/lib/sigapTes";
 import { TAHAP_KOSONG, akhirHariWib, izinBerlaku, type BarisIzin, type KodeTahap, type MasukanTahapan } from "@/lib/sigapTahapan";
+import { muatRuntutanBatch, tanggalBukaPretest, type RuntutanBatch } from "@/lib/vanguardRuntutanDb"; // (2 Nov 2026) Vanguard 3 hari berturut-turut
 
 export const PESAN_SQL_IZIN = "Tabel izin buka kunci belum ada di database. Jalankan SQL 20261102zl_aturan_nilai_v2.sql lebih dulu.";
 const KOLOM_IZIN = "id, akun_id, tahap, alasan, asal, status, diputuskan_oleh, berlaku_sampai, dibuat_at, diputuskan_at";
@@ -77,15 +78,19 @@ export type KeadaanTahapanBatch = {
   tes: TesBaris[];
   masukan: Map<number, MasukanTahapan>;
   kuis_ada: boolean;
+  /** (2 Nov 2026) Aturan + runtutan Vanguard per akun (mode, hari ini, batas mulai). `berlaku` false = Vanguard tidak diatur / tidak menyala. */
+  vanguard: RuntutanBatch;
 };
 
 /**
  * Masukan tahapan beberapa akun sekaligus. Video TERHUBUNG (Tahap C): `ada` bila kegiatan punya video yang diatur WAJIB; tuntas bila semua video wajib selesai (terbukti ditonton, atau ditandai manual).
- * Vanguard BELUM terhubung (aturan Vanguard 3 hari menyusul): `ada = false`. Tabel materi belum ada -> video `ada = false` (tidak memblokir).
+ * Vanguard (2 Nov 2026): `ada` bila aturan Vanguard kegiatan bermode "wajib" DAN Vanguard menyala; tuntas bila ada N hari berturut-turut yang memenuhi (lib/runtutanVanguard.ts).
+ * Mode "opsional" / "tidak_ada" tidak mengunci (`ada = false`); runtutan tetap dihitung untuk tampilan. Tabel materi belum ada -> video `ada = false` (tidak memblokir).
  * Pretest / posttest `ada` bila tesnya aktif; tuntas menurut `tesTuntas` (wajib 100 = skor 100). Sesi yang batas waktunya lewat tetapi belum dinilai dianggap selesai.
  */
 export async function muatTahapanBatch(db: Db, kegiatanId: number, akunIds: readonly number[], sekarang: number, aturanDiketahui?: AturanPelatihan): Promise<KeadaanTahapanBatch> {
   const [aturan, daftar, kuis, materi] = await Promise.all([aturanDiketahui ? Promise.resolve(aturanDiketahui) : muatAturan(db, kegiatanId), muatTesDaftar(db, kegiatanId), muatKuisBatch(db, kegiatanId, akunIds), muatStatusMateriBatch(db, kegiatanId, akunIds)]);
+  const vanguard = await muatRuntutanBatch(db, kegiatanId, akunIds, sekarang, tanggalBukaPretest(daftar));
   const tes = daftar.filter((t) => t.aktif && (t.jenis === "pretest" || t.jenis === "posttest"));
   const sesiPerTes = new Map<number, Map<number, { selesai_at: string | null; batas_at: string | null; skor: number | string | null; skor_terbaik: number | string | null }>>();
   if (tes.length > 0 && akunIds.length > 0) {
@@ -112,9 +117,10 @@ export async function muatTahapanBatch(db: Db, kegiatanId: number, akunIds: read
     }
     m.kuis = { ada: kuis.ada, tuntas: kuis.ikut.has(akun) };
     m.video = { ada: materi.video_wajib_ada, tuntas: materi.video_tuntas.has(akun) };
+    m.vanguard = { ada: vanguard.mengunci, tuntas: vanguard.peta.get(akun)?.tuntas ?? false };
     masukan.set(akun, m);
   }
-  return { aturan, tes, masukan, kuis_ada: kuis.ada };
+  return { aturan, tes, masukan, kuis_ada: kuis.ada, vanguard };
 }
 
 // ---------- tulis ----------

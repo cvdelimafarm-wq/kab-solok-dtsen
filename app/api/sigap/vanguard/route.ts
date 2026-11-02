@@ -6,6 +6,7 @@
 //                         tanpa ?kegiatan -> { mode:"bebas", boleh:false, riwayat:[] } (simulasi bebas: tidak ada rekaman)
 //        (V5b) kegiatan bermode uji memakai buku uji: riwayat dan lulus hanya dari percobaan bermode "uji"; batas percobaan dan bintang juga dihitung dari percobaan uji saja.
 //        (V5b) pengaturan.mode = "latihan" | "uji"; `uji` = mode uji sedang berlaku (jadwal buka); `kemampuan` (jenis kesalahan per kasus, dasar saran) hanya pada latihan.
+//        (2 Nov 2026) `runtutan` = { mode, tuntas, berturut, hari_berturut, hari_ini_sudah, terputus, petak:[{status,tanggal}], kelayakan:{batas_mulai,mungkin,cadangan_hari,hari_terakhir_mulai}, tanggal_pretest } | null
 //   POST { kegiatan, kasus, isian, petunjuk, lihatJawaban, durasiDtk, kalkulator } -> menilai ulang di server, mencatat, dan membalas { dicatat, nomor, benar, bintang, koreksi, pemeriksaan }
 //        (V5b) pada MODE UJI yang berlaku: petunjuk diabaikan (0), "Lihat jawaban" ditolak (400), percobaan dicatat bermode "uji", dan balasan hanya { dicatat, uji:true, nomor, benar, bintang, jmlSalah }
 //        (tanpa koreksi, pemeriksaan, atau kotak mana yang salah: kunci tidak bocor lewat balasan).
@@ -23,6 +24,7 @@ import { KASUS } from "@/lib/vanguard/kasus";
 import { adalahKasusK } from "@/lib/vanguard/kuesioner/publik";
 import { petaKemampuan } from "@/lib/vanguard/remedial";
 import { muatPengaturan, tambahKalkulator } from "@/lib/vanguardPengaturanDb";
+import { ringkasRuntutanAkun } from "@/lib/vanguardRuntutanDb"; // (2 Nov 2026) runtutan "N hari berturut-turut" untuk kartu Hari ini
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,8 +60,9 @@ export async function GET(req: NextRequest) {
     const riwayat = ringkasRiwayat(baris);
     const riwayatK = ringkasRiwayat(semuaBaris.filter((b) => adalahKasusK(b.kasus))); // Mode Kuesioner Penuh: terpisah dari bintang dan kelulusan
     const uji = ujiBerlaku(peng, Date.now());
+    const runtutan = await ringkasRuntutanAkun(db as Db, kegiatan as number, akunId, Date.now()); // null bila aturan tidak diatur / Vanguard tidak menyala
     return NextResponse.json({
-      mode: "tercatat", boleh: true, alasan: null, riwayat, riwayatK, lemah: ringkasLemah(((ks ?? []) as { jenis: string; kasus: string }[]).filter((k) => !adalahKasusK(k.kasus))),
+      mode: "tercatat", boleh: true, alasan: null, runtutan, riwayat, riwayatK, lemah: ringkasLemah(((ks ?? []) as { jenis: string; kasus: string }[]).filter((k) => !adalahKasusK(k.kasus))),
       uji, ...(uji ? {} : { kemampuan: petaKemampuan(KASUS) }),
       pengaturan: { ...peng, status: statusJadwal(peng, Date.now()) },
       lulus: hitungLulus(peng, riwayat.filter((r) => r.benar).map((r) => r.kasus)),
