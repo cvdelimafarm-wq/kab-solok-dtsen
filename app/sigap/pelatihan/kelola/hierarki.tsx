@@ -4,18 +4,18 @@
 //
 // (2 Nov 2026) Tab "Tim & Peserta" di Kelola Pelatihan: hierarki instruktur > korwil > PML > PPL (satu kartu) dan Kelas (perencanaan, hanya baca) sebagai pilihan bagian.
 // Penyimpanan atasan/peran BERJALAN DI LATAR BELAKANG per baris: pilihan langsung tampil, tidak ada yang dikunci, tidak ada muat ulang; gagal -> baris kembali ke nilai
-// tersimpan dengan keterangan di baris itu. Impor dari template Excel (lib/hierarkiImpor.ts) dengan pratinjau sebelum diterapkan. API: /api/sigap/pelatihan/hierarki.
+// tersimpan. Status penyimpanan (Menyimpan, Tersimpan, galat) tampil sebagai pemberitahuan di POJOK KANAN BAWAH layar (Toast), bukan di baris. Impor dari template Excel (lib/hierarkiImpor.ts) dengan pratinjau sebelum diterapkan. API: /api/sigap/pelatihan/hierarki.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH } from "../../admin/ui";
+import { Toast, useToast } from "../../admin/Toast";
 import { LABEL_PERAN_PELATIHAN, periksaHierarki, type PeranPelatihan, type SimpulHierarki } from "@/lib/hierarkiPelatihan";
 import { PETUNJUK_TEMPLATE, bacaImpor, barisTemplate, type HasilImpor } from "@/lib/hierarkiImpor";
 import KelasIdentKelola from "./kelasIdent";
 import { ChipSetelan, PilihSub, useSub, type ItemSub } from "./GrupTab";
 
 type Data = { tersedia: boolean; simpul: SimpulHierarki[]; boleh_kelola: boolean };
-type StatusBaris = { s: "simpan" | "ok" | "galat"; pesan?: string };
 
 const URUT_PERAN: Record<PeranPelatihan, number> = { korwil: 0, pml: 1, ppl: 2 };
 const ASAL: Record<NonNullable<SimpulHierarki["asal"]>, { teks: string; w: "mut" | "ok" | "wait" }> = {
@@ -34,7 +34,8 @@ function KartuHierarki() {
   const [simpul, setSimpul] = useState<SimpulHierarki[]>([]);
   const [galat, setGalat] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
-  const [status, setStatus] = useState<Record<number, StatusBaris>>({});
+  const toast = useToast();
+  const berjalan = useRef(0); // jumlah penyimpanan yang sedang berjalan (antar-baris paralel)
   const [menyalin, setMenyalin] = useState(false);
   const [impor, setImpor] = useState<(HasilImpor & { nama: string }) | null>(null);
   const [menerapkan, setMenerapkan] = useState(false);
@@ -94,23 +95,30 @@ function KartuHierarki() {
     // `terkini` diperbarui SEKETIKA (bukan menunggu render) supaya pengiriman di latar belakang membaca nilai terbaru
     terkini.current = terkini.current.map((s) => (s.akun_id === akunId ? { ...s, ...patch, asal: "manual" as const } : s));
     setSimpul(terkini.current);
-    setStatus((t) => ({ ...t, [akunId]: { s: "simpan" } }));
+    berjalan.current += 1;
+    toast.tampil("simpan", berjalan.current > 1 ? `Menyimpan ${berjalan.current} perubahan…` : "Menyimpan…");
     const sebelum = antrean.current.get(akunId) ?? Promise.resolve();
     const kerja = sebelum.then(async () => {
       const baris = terkini.current.find((s) => s.akun_id === akunId);
-      if (!baris) return;
+      if (!baris) {
+        berjalan.current = Math.max(0, berjalan.current - 1);
+        return;
+      }
       try {
         await fetchJson(urlPelatihan("/api/sigap/pelatihan/hierarki"), { method: "POST", body: JSON.stringify({ aksi: "atur", akun_id: akunId, atasan_akun_id: baris.atasan_akun_id, peran: baris.peran }) });
         tersimpan.current.set(akunId, baris);
-        setStatus((t) => ({ ...t, [akunId]: { s: "ok" } }));
-        setTimeout(() => setStatus((t) => (t[akunId]?.s === "ok" ? Object.fromEntries(Object.entries(t).filter(([k]) => Number(k) !== akunId)) : t)), 2500);
+        berjalan.current = Math.max(0, berjalan.current - 1);
+        if (berjalan.current === 0) toast.tampil("ok", "Tersimpan");
+        else toast.tampil("simpan", berjalan.current > 1 ? `Menyimpan ${berjalan.current} perubahan…` : "Menyimpan…");
       } catch (e) {
+        berjalan.current = Math.max(0, berjalan.current - 1);
         const asli = tersimpan.current.get(akunId);
         if (asli) {
           terkini.current = terkini.current.map((s) => (s.akun_id === akunId ? asli : s));
           setSimpul(terkini.current);
         }
-        setStatus((t) => ({ ...t, [akunId]: { s: "galat", pesan: e instanceof SesiBerakhir ? "Sesi berakhir, masuk kembali." : pesanGalat(e) } }));
+        const siapa = terkini.current.find((s) => s.akun_id === akunId)?.nama ?? "Peserta";
+        toast.tampil("galat", `${siapa}: tidak tersimpan, dikembalikan ke nilai sebelumnya. ${e instanceof SesiBerakhir ? "Sesi berakhir, masuk kembali." : pesanGalat(e)}`);
       }
     });
     antrean.current.set(akunId, kerja);
@@ -290,7 +298,6 @@ function KartuHierarki() {
           </thead>
           <tbody>
             {urut.map((s) => {
-              const st = status[s.akun_id];
               const turunan = bisa ? keturunan(s.akun_id) : new Set<number>();
               const asal = ASAL[s.asal ?? "bawaan"];
               return (
@@ -341,9 +348,6 @@ function KartuHierarki() {
                   <td className={TD}>
                     <span className="flex flex-wrap items-center gap-1.5">
                       <Chip w={asal.w}>{asal.teks}</Chip>
-                      {st?.s === "simpan" && <span className="text-[11.5px] text-[#6B7A90]">Menyimpan…</span>}
-                      {st?.s === "ok" && <span className="text-[11.5px] font-semibold text-[#13794B]">✓ Tersimpan</span>}
-                      {st?.s === "galat" && <span className="text-[11.5px] font-semibold text-[#B42329]">✕ {st.pesan}</span>}
                     </span>
                   </td>
                 </tr>
@@ -359,6 +363,7 @@ function KartuHierarki() {
           </tbody>
         </table>
       </div>
+      <Toast isi={toast.isi} onTutup={toast.tutup} />
     </Kartu>
   );
 }
