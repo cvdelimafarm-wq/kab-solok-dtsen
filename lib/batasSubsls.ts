@@ -122,13 +122,42 @@ export function tampakDiKanvas(f: Pick<FiturBatas, "bb">, proj: Pick<Proyeksi, "
   return Math.max(x1, x2) >= -longgar && Math.min(x1, x2) <= proj.lebar + longgar && Math.max(y1, y2) >= -longgar && Math.min(y1, y2) <= proj.tinggi + longgar;
 }
 
+/**
+ * Yang digambar bila ada Sub SLS aktif: Sub SLS itu dan tetangga yang kotaknya bersinggungan (dilebarkan `longgar` derajat).
+ * Tanpa Sub SLS aktif (atau idnya tidak ada di `fitur`): semuanya. Mencegah peta menjadi "jaring laba-laba" ketika KK tersebar jauh.
+ */
+export function tetanggaDekat(fitur: readonly FiturBatas[], aktifId: string | null, longgar = 0.0003): FiturBatas[] {
+  const a = aktifId ? fitur.find((f) => f.id === aktifId) : undefined;
+  if (!a) return [...fitur];
+  const k: Bb = [a.bb[0] - longgar, a.bb[1] - longgar, a.bb[2] + longgar, a.bb[3] + longgar];
+  return fitur.filter((f) => f.id === aktifId || beririsan(f.bb, k));
+}
+
+export type PandangBatas = { cx: number; cy: number; z: number };
+
+/** Pandangan (pusat dan zoom) yang memuat kotak `bb` dengan ruang `margin` di sekelilingnya; zoom dibatasi 1..zMaks dan pusat dijaga tetap di dalam kanvas. */
+export function pandangUntukBb(bb: Bb, proj: Pick<Proyeksi, "x" | "y" | "lebar" | "tinggi">, margin = 0.25, zMaks = 8): PandangBatas {
+  const x1 = proj.x(bb[0]);
+  const x2 = proj.x(bb[2]);
+  const y1 = proj.y(bb[3]);
+  const y2 = proj.y(bb[1]);
+  const w = Math.abs(x2 - x1);
+  const h = Math.abs(y2 - y1);
+  const zFit = Math.min(proj.lebar / Math.max(w * (1 + 2 * margin), 1e-6), proj.tinggi / Math.max(h * (1 + 2 * margin), 1e-6));
+  const z = Math.max(1, Math.min(zMaks, zFit));
+  const hw = proj.lebar / 2 / z;
+  const hh = proj.tinggi / 2 / z;
+  const klem = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  return { cx: klem((x1 + x2) / 2, hw, proj.lebar - hw), cy: klem((y1 + y2) / 2, hh, proj.tinggi - hh), z };
+}
+
 export type FiturGambar = { id: string; nm: string; d: string };
 
-/** Fitur yang tampak di kanvas beserta jalurnya, Sub SLS aktif (`aktifId`) di urutan terakhir supaya tergambar di atas tetangganya. */
+/** Fitur yang tampak di kanvas beserta jalurnya (Sub SLS aktif dan tetangganya bila ada aktif), Sub SLS aktif di urutan terakhir supaya tergambar di atas tetangganya. */
 export function siapkanGambarBatas(fitur: readonly FiturBatas[], proj: Proyeksi | null, aktifId: string | null): FiturGambar[] {
   if (!proj) return [];
   const hasil: FiturGambar[] = [];
-  for (const f of fitur) {
+  for (const f of tetanggaDekat(fitur, aktifId)) {
     if (!tampakDiKanvas(f, proj, 40)) continue;
     const d = jalurBatas(f, proj);
     if (d) hasil.push({ id: f.id, nm: f.nm, d });

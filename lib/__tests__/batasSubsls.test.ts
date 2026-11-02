@@ -12,7 +12,9 @@ import {
   kecamatanUntukKotak,
   kotakKk,
   kunciKotak,
+  pandangUntukBb,
   siapkanGambarBatas,
+  tetanggaDekat,
   tampakDiKanvas,
   type FiturBatas,
 } from "@/lib/batasSubsls";
@@ -166,5 +168,54 @@ describe("gabungFitur dan jalur cache", () => {
   });
   it("kunci cache memakai awalan /peta-cache/batas/", () => {
     expect(jalurCacheBatas("batas-1303060.json")).toBe("/peta-cache/batas/batas-1303060.json");
+  });
+});
+
+describe("tetanggaDekat", () => {
+  const a = kotakKecil("1303060001000101", 100.02, -0.98, 100.05, -0.95);
+  const b = kotakKecil("1303060001000102", 100.05, -0.98, 100.08, -0.95); // bersinggungan dengan a
+  const c = kotakKecil("1303060001000103", 100.5, -0.5, 100.6, -0.4); // jauh
+  it("Sub SLS aktif + tetangga yang bersinggungan; yang jauh tidak ikut", () => {
+    expect(tetanggaDekat([a, b, c], a.id).map((f) => f.id)).toEqual([a.id, b.id]);
+  });
+  it("tanpa aktif, atau id aktif tidak ada di daftar: semuanya", () => {
+    expect(tetanggaDekat([a, b, c], null)).toHaveLength(3);
+    expect(tetanggaDekat([a, b, c], "1303060001000999")).toHaveLength(3);
+  });
+  it("data sungguhan: Sub SLS di kecamatan 1303080 hanya punya segelintir tetangga, bukan ratusan", () => {
+    const f = bacaBerkasBatas(bacaJson("batas-1303080.json"))!.fitur;
+    const dekat = tetanggaDekat(f, "1303080004000703");
+    expect(dekat.length).toBeGreaterThan(1);
+    expect(dekat.length).toBeLessThan(20);
+    expect(dekat[0].id === "1303080004000703" || dekat.some((x) => x.id === "1303080004000703")).toBe(true);
+  });
+});
+
+describe("pandangUntukBb", () => {
+  const proj = buatProyeksi([{ lat: -1, lng: 100 }, { lat: -0.5, lng: 100.5 }], 360, 440, 28)!;
+  it("kotak kecil di tengah: zoom naik (dibatasi zMaks) dan pusat tepat di kotak", () => {
+    const bb: [number, number, number, number] = [100.24, -0.76, 100.26, -0.74];
+    const p = pandangUntukBb(bb, proj, 0.25, 8);
+    expect(p.z).toBe(8);
+    expect(p.cx).toBeCloseTo((proj.x(bb[0]) + proj.x(bb[2])) / 2, 6);
+    expect(p.cy).toBeCloseTo((proj.y(bb[1]) + proj.y(bb[3])) / 2, 6);
+  });
+  it("kotak sebesar seluruh kanvas: zoom 1 dan pusat di tengah", () => {
+    const p = pandangUntukBb([100, -1, 100.5, -0.5], proj, 0.25, 8);
+    expect(p.z).toBe(1);
+    expect(p.cx).toBeCloseTo(180, 6);
+    expect(p.cy).toBeCloseTo(220, 6);
+  });
+  it("kotak di pojok: pusat dijaga di dalam kanvas (pandangan tidak keluar)", () => {
+    const p = pandangUntukBb([100.0, -1, 100.01, -0.99], proj, 0.25, 8);
+    expect(p.cx - 360 / 2 / p.z).toBeGreaterThanOrEqual(-1e-9);
+    expect(p.cy + 440 / 2 / p.z).toBeLessThanOrEqual(440 + 1e-9);
+  });
+  it("hasil dapat dipakai langsung: seluruh kotak masuk pandangan (zoom tidak terbatas zMaks)", () => {
+    const bb: [number, number, number, number] = [100.2, -0.8, 100.3, -0.7];
+    const p = pandangUntukBb(bb, proj, 0.25, 8);
+    const hw = 360 / 2 / p.z;
+    expect(proj.x(bb[0])).toBeGreaterThanOrEqual(p.cx - hw - 1e-6);
+    expect(proj.x(bb[2])).toBeLessThanOrEqual(p.cx + hw + 1e-6);
   });
 });

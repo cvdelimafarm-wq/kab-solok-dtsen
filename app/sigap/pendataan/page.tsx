@@ -33,7 +33,7 @@ import KontrolPetaDasar from "./KontrolPetaDasar";
 import { useDasarTim } from "./useDasar";
 import { TombolBatas } from "./LapisBatas";
 import { useBatasSubsls } from "./useBatas";
-import { idKecamatan, kotakKk } from "@/lib/batasSubsls";
+import { idKecamatan, kotakKk, pandangUntukBb } from "@/lib/batasSubsls";
 import type { StatusDasar } from "./PetaDasar";
 import { namaTampil } from "@/lib/namaTampil";
 import { KETERANGAN_TERKUNCI, PESAN_HARI_TERKUNCI, penandaanTerkunci, tindakanDiizinkan } from "@/lib/kunciPenandaan";
@@ -316,6 +316,8 @@ export default function LembarPendataan() {
   const kotakBatas = useMemo(() => kotakKk(kk.filter((k) => k.lat !== null && k.lng !== null).map((k) => ({ lat: k.lat as number, lng: k.lng as number }))), [kk]);
   const kecamatanTim = useMemo(() => (data ? data.sub.map((s) => idKecamatan(s.idsubsls)) : []), [data]);
   const batas = useBatasSubsls(tab === "peta" && !!proj, kotakBatas, kecamatanTim);
+  // "perbesar ke Sub SLS ini": KK yang menyimpang jauh membuat kanvas sangat luas dan Sub SLS yang dibuka tampak kecil
+  const fiturAktif = useMemo(() => (subId && batas.tampil ? batas.fitur.find((f) => f.id === subId) ?? null : null), [batas.fitur, batas.tampil, subId]);
   // sumber peta berganti (mis. selesai diunduh, atau sinyal kembali): coba lagi dari awal, jangan terjebak status "gagal" yang lama
   const kunciDasar = !dasar.sumber ? "" : dasar.sumber.tipe === "blob" ? `b:${dasar.sumber.nama}:${dasar.sumber.blob.size}` : `o:${dasar.sumber.url}`;
   useEffect(() => {
@@ -895,7 +897,7 @@ export default function LembarPendataan() {
                     <Ik n="semua" />
                   </button>
                 </div>
-                <TombolBatas tampil={batas.tampil} status={batas.status} onUbah={batas.setTampil} posisi="right-2.5 top-[140px]" ukuran="h-[40px] w-[40px]" />
+                <TombolBatas tampil={batas.tampil} status={batas.status} onUbah={batas.setTampil} posisi="right-2.5 top-[140px]" ukuran="h-[40px] w-[40px]" onFokus={fiturAktif && proj ? () => setPandang(pandangUntukBb(fiturAktif.bb, proj, 0.25, 8)) : undefined} />
                 {/* lokasi saya: kanan bawah, di atas tombol "Keluarga baru" yang mengambang (perilaku lama: urut terdekat) */}
                 <button type="button" aria-label="Terdekat dari saya" onClick={cariPosisi} className="absolute bottom-[92px] right-2.5 grid h-[40px] w-[40px] place-items-center rounded-[12px] bg-white text-[#1F5FD1] shadow-[0_4px_12px_rgba(15,42,82,.15)] active:bg-[#F1F5FC]">
                   <Ik n="lokasi" />
