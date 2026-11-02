@@ -17,6 +17,7 @@ import AbsenPeserta from "../AbsenPeserta";
 import KartuIzinBuka from "../KartuIzinBuka";
 import { Kerangka } from "../komponen";
 import { PulsaPeserta } from "../pulsa";
+import { TeksBaris } from "../TeksBaris";
 import { useInfoPelatihan } from "../infoPelatihan";
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
@@ -98,7 +99,9 @@ function ModalKetentuan({ d, onTutup, onSelesai }: { d: Data; onTutup: () => voi
         {d.ketentuan.butir.length > 0 ? (
           <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[13.5px] leading-relaxed">
             {d.ketentuan.butir.map((b, i) => (
-              <li key={i}>{b}</li>
+              <li key={i}>
+                <TeksBaris teks={b} />
+              </li>
             ))}
           </ol>
         ) : (

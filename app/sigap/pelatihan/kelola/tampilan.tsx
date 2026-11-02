@@ -6,10 +6,11 @@
 // (2) ketentuan undangan, (3) pengaturan Absen peserta (sesi, jendela, radius), (4) aturan nilai dan kelulusan (versi lama / baru). Setiap setelan diberi penanda Bawaan / Diubah.
 // API: /api/sigap/pelatihan/ketentuan, /api/sigap/pelatihan/absen (aksi "atur") dan /api/sigap/pelatihan/nilai (aksi "simpan_aturan").
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
-import { MAKS_BUTIR, MAKS_PANJANG_BUTIR } from "@/lib/ketentuanPelatihan";
+import { LABEL_GAYA, MAKS_BUTIR, MAKS_PANJANG_BUTIR, butirBergaya, terapkanGaya, type GayaTeks } from "@/lib/ketentuanPelatihan";
+import { TeksBaris } from "../TeksBaris";
 import { lupakanBenderaTab } from "../TabPelatihan";
 import { LABEL_VERSI, type VersiAturan } from "@/lib/sigapAturanTes";
 import { JENDELA_MENIT_BAWAAN, RADIUS_RADAR_BAWAAN_M, SESI_BAWAAN, type SesiRencana } from "@/lib/sigapAbsen";
@@ -236,6 +237,10 @@ export default function PersiapanKelola() {
   const [butir, setButir] = useState<string[]>([]);
   const [simpanTab, setSimpanTab] = useState(false);
   const [simpanButir, setSimpanButir] = useState(false);
+  // gaya teks butir (tebal, miring, garis bawah, sorot): butir yang sedang dipilih kursornya + pesan penolakan bila gaya tidak dapat diterapkan
+  const refButir = useRef<(HTMLTextAreaElement | null)[]>([]);
+  const [fokus, setFokus] = useState(-1);
+  const [infoGaya, setInfoGaya] = useState("");
 
   const muat = useCallback(async () => {
     try {
@@ -274,6 +279,19 @@ export default function PersiapanKelola() {
   if (!d) return <Pesan jenis="galat">{galat}</Pesan>;
   const bisa = d.boleh_kelola;
   const ubah = (i: number, v: string) => setButir((b) => b.map((x, j) => (j === i ? v.slice(0, MAKS_PANJANG_BUTIR) : x)));
+  const gayaKe = (i: number, gaya: GayaTeks) => {
+    const ta = refButir.current[i];
+    if (!ta || i < 0 || i >= butir.length) return;
+    const h = terapkanGaya(butir[i] ?? "", ta.selectionStart, ta.selectionEnd, gaya, MAKS_PANJANG_BUTIR);
+    setInfoGaya(h.pesan ?? "");
+    if (h.pesan) return;
+    setButir((b) => b.map((x, j) => (j === i ? h.teks : x)));
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(h.awal, h.akhir);
+    });
+  };
+  const aktifGaya = fokus >= 0 && fokus < butir.length ? fokus : -1;
   const geser = (i: number, arah: -1 | 1) =>
     setButir((b) => {
       const j = i + arah;
@@ -327,11 +345,58 @@ export default function PersiapanKelola() {
         <p className="text-[12.5px] text-[#6B7A90]">
           Waktu dan tempat diambil otomatis dari data undangan. Butir di bawah tampil di modal ketentuan peserta. Mengubah butir menaikkan versi; peserta yang sudah menerima hanya diberi tahu, tanpa persetujuan ulang.
         </p>
+        {bisa && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-[#F3F6FB] p-2" role="toolbar" aria-label="Gaya teks butir">
+            <span className="text-[12px] text-[#6B7A90]">Pilih kata di dalam butir, lalu klik:</span>
+            {(["tebal", "miring", "garis", "sorot"] as GayaTeks[]).map((g) => (
+              <button
+                key={g}
+                type="button"
+                className={BTN_O}
+                disabled={aktifGaya < 0}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => gayaKe(aktifGaya, g)}
+                aria-label={LABEL_GAYA[g]}
+                title={g === "tebal" ? "Tebal (Ctrl+B)" : g === "miring" ? "Miring (Ctrl+I)" : g === "garis" ? "Garis bawah (Ctrl+U)" : "Sorot"}
+              >
+                {g === "tebal" && <b>B</b>}
+                {g === "miring" && <i>I</i>}
+                {g === "garis" && <u>U</u>}
+                {g === "sorot" && <mark style={{ background: "#FFE680", padding: "0 3px", borderRadius: 3 }}>Sorot</mark>}
+              </button>
+            ))}
+            <span className="text-[11.5px] text-[#6B7A90]">Klik lagi pada kata yang sama untuk mencabut. Satu kata hanya satu gaya.</span>
+            {infoGaya && <span className="w-full text-[12px] font-semibold text-[#8A6200]">{infoGaya}</span>}
+          </div>
+        )}
         <ol className="mt-2 space-y-2">
           {butir.map((b, i) => (
-            <li key={i} className="flex items-start gap-1.5">
+            <li key={i}>
+              <div className="flex items-start gap-1.5">
               <span className="mt-2 w-5 text-right text-[12px] text-[#6B7A90]">{i + 1}.</span>
-              <textarea value={b} onChange={(e) => ubah(i, e.target.value)} rows={2} disabled={!bisa} className={`${INPUT} min-w-0 flex-1`} aria-label={`Butir ketentuan ${i + 1}`} />
+              <textarea
+                ref={(el) => {
+                  refButir.current[i] = el;
+                }}
+                value={b}
+                onChange={(e) => {
+                  setInfoGaya("");
+                  ubah(i, e.target.value);
+                }}
+                onFocus={() => setFokus(i)}
+                onKeyDown={(e) => {
+                  // Ctrl/Cmd + B, I, U = tebal, miring, garis bawah (Ctrl+U biasanya "lihat sumber" peramban, jadi dicegah di kotak ini)
+                  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+                  const gaya: GayaTeks | null = e.key === "b" || e.key === "B" ? "tebal" : e.key === "i" || e.key === "I" ? "miring" : e.key === "u" || e.key === "U" ? "garis" : null;
+                  if (!gaya) return;
+                  e.preventDefault();
+                  gayaKe(i, gaya);
+                }}
+                rows={2}
+                disabled={!bisa}
+                className={`${INPUT} min-w-0 flex-1`}
+                aria-label={`Butir ketentuan ${i + 1}`}
+              />
               {bisa && (
                 <span className="flex flex-col gap-1">
                   <button type="button" className={BTN_O} onClick={() => geser(i, -1)} disabled={i === 0} aria-label="Naikkan">
@@ -346,6 +411,13 @@ export default function PersiapanKelola() {
                 <button type="button" className={BTN_R} onClick={() => setButir((x) => x.filter((_, j) => j !== i))} aria-label="Hapus butir">
                   ✕
                 </button>
+              )}
+              </div>
+              {butirBergaya(b) && (
+                <p className="ml-6 mt-1 text-[12.5px] text-[#3B4A60]">
+                  <span className="text-[#6B7A90]">Tampil bagi peserta: </span>
+                  <TeksBaris teks={b} />
+                </p>
               )}
             </li>
           ))}

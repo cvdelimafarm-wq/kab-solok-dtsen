@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { Lambang } from "@/app/sigap/vanguard/Logo";
+import ModalVanguardWajib from "@/app/sigap/ModalVanguardWajib"; // (2 Nov 2026) modal urgent mode wajib
 import RemarkBawahanVanguard from "@/app/sigap/vanguard/RemarkBawahanVanguard"; // (1 Nov 2026) remark pendampingan khusus untuk level di atas
 import { alamatVanguard } from "@/lib/vanguard/navigasi";
 import { teksRuntutan, type RuntutanKartu } from "@/lib/vanguardPelatihan";
@@ -33,6 +34,7 @@ export default function KartuVanguardHariIni({ kegiatanId }: { kegiatanId: numbe
   const t = d.runtutan ? teksRuntutan(d.runtutan) : null;
   return (
     <>
+    {d.runtutan && d.runtutan.mode === "wajib" && <ModalVanguardWajib kegiatanId={kegiatanId} runtutan={d.runtutan} />}
     <Link href={href} aria-label="Buka Vanguard: latihan isi kuesioner, hasil Anda dicatat" className="block rounded-[18px] bg-gradient-to-br from-[#2A1763] to-[#5B34C9] p-3.5 text-white shadow-[0_8px_22px_rgba(42,23,99,.28)] active:opacity-95">
       <span className="flex items-center gap-3">
         <span className="grid h-[44px] w-[44px] flex-none place-items-center rounded-[12px] bg-white"><Lambang px={24} /></span>

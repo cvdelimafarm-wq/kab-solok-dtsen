@@ -171,6 +171,11 @@ export default function VanguardKelola() {
               )}
             </div>
           )}
+          {at.mode === "wajib" && (
+            <p className="mt-2 text-[12.5px] text-[#34455F]">
+              Pengingat otomatis: push ke petugas yang hari itu belum berlatih pukul 07.00 dan 16.00 WIB (runtutan belum mulai, hampir terputus, terputus, hari terakhir mulai, batas terlewat). Di tab Hari ini muncul pengingat dan ucapan saat tuntas. Panitia dikabari sekali sehari pukul 16.00 bila ada peserta yang tidak sempat tuntas.
+            </p>
+          )}
           {at.mode !== "tidak_ada" && !d.menyala && <p className="mt-2 text-[12.5px] font-semibold text-[#8A4B00]">Vanguard belum menyala untuk pelatihan ini (pilihan di atas), jadi aturan ini belum berlaku. Nyalakan dulu.</p>}
           {at.mode === "wajib" && !d.blokir_tahap && (
             <p className="mt-2 text-[12.5px] font-semibold text-[#8A4B00]">Pengunciannya belum bekerja karena &quot;Blokir antar tahapan&quot; mati. Nyalakan di Persiapan &gt; Pengaturan &gt; Aturan nilai, kelulusan, dan urutan tahapan.</p>

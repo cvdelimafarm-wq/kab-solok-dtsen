@@ -106,3 +106,56 @@ export function teksKartuUndangan(status: StatusUndangan, berubah: boolean): Tek
     ? { judul: "Diterima · ketentuan diperbarui", ket: "PJ memperbarui ketentuan pelatihan. Silakan baca kembali; tidak perlu menyetujui ulang.", tombol: "Baca ketentuan", nada: "emas" }
     : { judul: "Diterima", ket: "Terima kasih. Ketentuan dapat dibaca kembali kapan saja.", tombol: "Baca ketentuan", nada: "hijau" };
 }
+
+// ------------------------------------------------------------------ gaya teks pada butir (tebal, miring, garis bawah, sorot)
+// Butir tetap TEKS dengan penanda sederhana yang sama dengan pengumuman (lib/sigapPengumuman.ts): **tebal**  __miring__  ++garis bawah++  ==sorot==.
+// Penanda tidak bersarang: satu potongan teks hanya satu gaya.
+
+export type GayaTeks = "tebal" | "miring" | "garis" | "sorot";
+export const PENANDA_GAYA: Record<GayaTeks, string> = { tebal: "**", miring: "__", garis: "++", sorot: "==" };
+export const LABEL_GAYA: Record<GayaTeks, string> = { tebal: "Tebal", miring: "Miring", garis: "Garis bawah", sorot: "Sorot" };
+
+/** Butir memuat penanda gaya? (untuk menampilkan pratinjau). */
+export const butirBergaya = (t: string): boolean => /\*\*.+?\*\*|==.+?==|__.+?__|\+\+.+?\+\+/.test(t);
+
+export type HasilGaya = { teks: string; awal: number; akhir: number; pesan?: string };
+
+/**
+ * Menerapkan atau mencabut satu gaya pada pilihan [awal, akhir) di `teks`.
+ *  - tanpa pilihan: menyisipkan penanda di sekitar kata contoh "teks" yang terpilih;
+ *  - pilihan yang sudah berpenanda gaya itu (di dalam atau tepat di luar pilihan): penanda DICABUT;
+ *  - pilihan yang memuat penanda gaya LAIN: ditolak (tidak bersarang);
+ *  - hasil melebihi `maks` huruf: ditolak.
+ * Hasil `awal`/`akhir` = teks di dalam penanda, siap dipilih kembali.
+ */
+export function terapkanGaya(teks: string, awal: number, akhir: number, gaya: GayaTeks, maks: number = MAKS_PANJANG_BUTIR): HasilGaya {
+  const p = PENANDA_GAYA[gaya];
+  let a = Math.max(0, Math.min(awal, akhir, teks.length));
+  let b = Math.max(0, Math.min(Math.max(awal, akhir), teks.length));
+  // rapatkan pilihan ke teks (spasi di tepi tidak ikut bergaya)
+  while (a < b && /\s/.test(teks[a])) a++;
+  while (b > a && /\s/.test(teks[b - 1])) b--;
+  const tolak = (pesan: string): HasilGaya => ({ teks, awal, akhir, pesan });
+
+  if (a === b) {
+    const baru = teks.slice(0, a) + p + "teks" + p + teks.slice(b);
+    if (baru.length > maks) return tolak("Butir sudah terlalu panjang untuk ditambah gaya.");
+    return { teks: baru, awal: a + p.length, akhir: a + p.length + 4 };
+  }
+  const isi = teks.slice(a, b);
+  // 1) pilihan sudah memuat penanda di kedua ujungnya: cabut
+  if (isi.length > 2 * p.length && isi.startsWith(p) && isi.endsWith(p)) {
+    const dalam = isi.slice(p.length, isi.length - p.length);
+    return { teks: teks.slice(0, a) + dalam + teks.slice(b), awal: a, akhir: a + dalam.length };
+  }
+  // 2) penanda tepat di luar pilihan: cabut
+  if (a >= p.length && teks.slice(a - p.length, a) === p && teks.slice(b, b + p.length) === p) {
+    return { teks: teks.slice(0, a - p.length) + isi + teks.slice(b + p.length), awal: a - p.length, akhir: a - p.length + isi.length };
+  }
+  // 3) gaya lain di dalam pilihan: tidak bersarang
+  const lain = (Object.keys(PENANDA_GAYA) as GayaTeks[]).filter((g) => g !== gaya).map((g) => PENANDA_GAYA[g]);
+  if (isi.includes(p) || lain.some((x) => isi.includes(x))) return tolak("Satu kata hanya boleh satu gaya (tidak bisa digabung). Pilih bagian yang belum bergaya.");
+  const baru = teks.slice(0, a) + p + isi + p + teks.slice(b);
+  if (baru.length > maks) return tolak("Butir sudah terlalu panjang untuk ditambah gaya.");
+  return { teks: baru, awal: a + p.length, akhir: a + p.length + isi.length };
+}

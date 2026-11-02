@@ -40,6 +40,7 @@ import type { Db } from "@/lib/sigap";
 import { bacaPengaturanSemua, catatDenyut, klaimTahap, selesaiKlaim } from "@/lib/portal/pushTerkelola";
 import { bacaTranslok, kunciKlaimTranslok, tahapJatuhTempo, tanggalWib, type SetelanTranslok, type TahapTranslok } from "@/lib/pushPengaturan";
 import { kunciKirimTranslok, putusanTranslok } from "@/lib/pushTranslok";
+import { jalankanPengingatVanguard } from "@/lib/vanguardPengingatDb"; // (2 Nov 2026) pengingat urgent Vanguard N hari berturut-turut
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -200,7 +201,16 @@ async function jalankan(req: NextRequest) {
   if (sSlot === "auto") {
     // uji kering boleh memaksa satu tahap di luar jamnya: &uji=1&tahap=1|2|3 (tidak mengklaim, tidak mengirim)
     const t = Number(req.nextUrl.searchParams.get("tahap"));
-    return jalankanAuto(db, uji, mulai, uji && (t === 1 || t === 2 || t === 3) ? t : null);
+    // (2 Nov 2026) pengingat Vanguard berjalan di cron yang sama (hanya bekerja di jendela 07.00 / 16.00 WIB dan untuk kegiatan bermode "wajib"); galatnya tidak boleh mengganggu pengingat biasa
+    const jv = req.nextUrl.searchParams.get("vg");
+    const vg = await jalankanPengingatVanguard(db, mulai, uji, uji && (jv === "pagi" || jv === "sore") ? jv : null).catch((e) => ({ galat: e instanceof Error ? e.message : String(e) }));
+    const resp = await jalankanAuto(db, uji, mulai, uji && (t === 1 || t === 2 || t === 3) ? t : null);
+    try {
+      const badan = (await resp.json()) as Record<string, unknown>;
+      return NextResponse.json({ ...badan, vanguard: vg }, { status: resp.status });
+    } catch {
+      return resp;
+    }
   }
   if (sSlot !== null && !adalahSlotPush(sSlot)) return NextResponse.json({ error: "slot harus pagi, siang, sore, atau malam." }, { status: 400 });
   const slot = sSlot !== null ? sSlot : slotDariJam(mulai);

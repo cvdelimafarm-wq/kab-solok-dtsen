@@ -5,7 +5,7 @@
 // modal yang tampil (jadwal, sasaran), dan kunci "sekali per peserta".
 //
 // Isi pesan = teks biasa dengan penanda sederhana (TIDAK memakai HTML, jadi aman dari kode berbahaya):
-//   **tebal**   ==sorot==   __miring__   [teks](https://tautan)
+//   **tebal**   ==sorot==   __miring__   ++garis bawah++   [teks](https://tautan)
 //   baris diawali "- " = daftar berpoin, "1. " = daftar bernomor, "## " = subjudul
 // Hanya tautan https:// yang diterima. Penanda tidak bersarang (satu potongan teks hanya satu gaya).
 
@@ -83,14 +83,15 @@ export type Sebaris =
   | { t: "tebal"; teks: string }
   | { t: "sorot"; teks: string }
   | { t: "miring"; teks: string }
+  | { t: "garis"; teks: string }
   | { t: "tautan"; teks: string; url: string };
 /** `daftar` berpoin (bernomor tidak diisi) atau bernomor (`bernomor: true`); `judul` = subjudul satu baris. */
 export type BlokIsi = { tipe: "p"; baris: Sebaris[] } | { tipe: "daftar"; butir: Sebaris[][]; bernomor?: true } | { tipe: "judul"; baris: Sebaris[] };
 
-/** Pecah satu baris menjadi potongan teks/tebal/sorot/miring/tautan (tanpa bersarang). */
+/** Pecah satu baris menjadi potongan teks/tebal/sorot/miring/garis bawah/tautan (tanpa bersarang). */
 export function uraiSebaris(baris: string): Sebaris[] {
   const out: Sebaris[] = [];
-  const re = /\*\*(.+?)\*\*|==(.+?)==|__(.+?)__|\[([^\]]+?)\]\((\S+?)\)/g;
+  const re = /\*\*(.+?)\*\*|==(.+?)==|__(.+?)__|\[([^\]]+?)\]\((\S+?)\)|\+\+(.+?)\+\+/g;
   let akhir = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(baris))) {
@@ -98,6 +99,7 @@ export function uraiSebaris(baris: string): Sebaris[] {
     if (m[1] !== undefined) out.push({ t: "tebal", teks: m[1] });
     else if (m[2] !== undefined) out.push({ t: "sorot", teks: m[2] });
     else if (m[3] !== undefined) out.push({ t: "miring", teks: m[3] });
+    else if (m[6] !== undefined) out.push({ t: "garis", teks: m[6] });
     else if (urlAman(m[5])) out.push({ t: "tautan", teks: m[4], url: m[5] });
     else out.push({ t: "teks", teks: m[4] }); // tautan tidak aman: tampil sebagai teks biasa
     akhir = m.index + m[0].length;

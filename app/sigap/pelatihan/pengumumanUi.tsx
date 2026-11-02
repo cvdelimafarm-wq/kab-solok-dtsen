@@ -17,7 +17,7 @@ const GAYA: Record<JenisPengumuman, { ikon: string; judul: string }> = {
   penting: { ikon: "bg-[#FDE8E8]", judul: "text-[#B42329]" },
 };
 
-function Potongan({ s }: { s: Sebaris }) {
+export function Potongan({ s }: { s: Sebaris }) {
   switch (s.t) {
     case "tebal":
       return <b>{s.teks}</b>;
@@ -25,6 +25,8 @@ function Potongan({ s }: { s: Sebaris }) {
       return <mark className="rounded px-0.5" style={{ background: "#FFE680" }}>{s.teks}</mark>;
     case "miring":
       return <i>{s.teks}</i>;
+    case "garis":
+      return <u>{s.teks}</u>;
     case "tautan":
       return (
         <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-bold text-[#1F5FD1] underline">
