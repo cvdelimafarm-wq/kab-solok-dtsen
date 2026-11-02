@@ -6,12 +6,16 @@
 //     tes: [{jenis, judul, buka_at, tutup_at, durasi_menit,
 //     status, jumlah_soal, sesi?, hasil_tertunda, skor?}], langkah: {undangan_dibuka, instrumen_diunduh, foto, foto_total}|null,
 //   token_translok|null, sekarang, boleh_lihat_kelola, boleh_kelola }
+// (2 Nov 2026) tiap tes peserta kini juga membawa: wajib_100, tuntas, aturan_versi, terkunci ({oleh, oleh_label, pesan, izin, boleh_minta} | null) -- blokir tahapan (lib/sigapTahapan.ts).
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { keadaanHari, susunHari } from "@/lib/sigapPresensi";
 import { KOLOM_PENGUMUMAN, keBentukPeserta, tampilUntuk, type Pengumuman } from "@/lib/sigapPengumuman";
 import { statusTes } from "@/lib/sigapTes";
+import { muatAturan } from "@/lib/sigapAturanDb";
+import { hitungTahapan, kunciUntuk, ringkasIzin, tesDenganIzin } from "@/lib/sigapTahapan";
+import { izinBerlakuPerTahap, muatIzin, muatTahapanBatch, type BarisIzinLengkap } from "@/lib/sigapTahapanDb";
 import { ringkasanKuisHub } from "@/lib/sigapKuisDb";
 import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, undanganUntuk, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatRekamPresensi, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
@@ -32,18 +36,35 @@ export async function GET(req: NextRequest) {
     const sekarang = new Date();
     const [peserta, daftar, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), muatTesDaftar(db, kegiatanId), izinAkun(db, akun.id)]);
     const nSoal = await jumlahSoal(db, daftar.map((t) => t.id));
+    // (2 Nov 2026) blokir tahapan + jendela pribadi dari izin buka kunci (hanya peserta). Tahan SQL belum dijalankan: blokir mati, tanpa izin.
+    const sekarangMs = sekarang.getTime();
+    let aturanIzinAjukan = false;
+    let barisIzin: BarisIzinLengkap[] = [];
+    let hasilTahap: ReturnType<typeof hitungTahapan> = [];
+    if (peserta) {
+      const aturan = await muatAturan(db, kegiatanId);
+      aturanIzinAjukan = aturan.izin_ajukan;
+      barisIzin = (await muatIzin(db, kegiatanId, [akun.id], sekarangMs)).peta.get(akun.id) ?? [];
+      if (aturan.blokir_tahap) {
+        const masukan = (await muatTahapanBatch(db, kegiatanId, [akun.id], sekarangMs, aturan)).masukan.get(akun.id);
+        if (masukan) hasilTahap = hitungTahapan(masukan, true, barisIzin, sekarangMs);
+      }
+    }
+    const izinPerTahap = izinBerlakuPerTahap(barisIzin, sekarangMs);
     // (10 Okt 2026) Keadaan tiap tes dihitung BERSAMAAN (tadinya satu per satu, tiap tes beberapa query) -- permintaan user: pindah layer terlalu lama.
     const tes = await Promise.all(
       daftar
         .filter((t) => t.aktif)
         .map(async (t) => {
           if (peserta) {
-            const k = await susunKeadaan(db, t, akun.id, sekarang);
+            const tEfektif = t.jenis === "pretest" || t.jenis === "posttest" ? tesDenganIzin(t, izinPerTahap[t.jenis], sekarangMs) : t;
+            const k = await susunKeadaan(db, tEfektif, akun.id, sekarang);
+            const kunci = t.jenis === "pretest" || t.jenis === "posttest" ? kunciUntuk(hasilTahap, t.jenis) : null;
             return {
               jenis: t.jenis,
               judul: t.judul,
-              buka_at: t.buka_at,
-              tutup_at: t.tutup_at,
+              buka_at: tEfektif.buka_at,
+              tutup_at: tEfektif.tutup_at,
               durasi_menit: t.durasi_menit,
               status: k.status,
               jumlah_soal: k.jumlah_soal,
@@ -55,6 +76,10 @@ export async function GET(req: NextRequest) {
               skor: k.hasil?.skor ?? null,
               benar: k.hasil?.benar ?? null,
               total: k.hasil?.total ?? null,
+              wajib_100: k.wajib_100,
+              tuntas: k.tuntas,
+              aturan_versi: k.aturan_versi,
+              terkunci: kunci ? { ...kunci, izin: ringkasIzin(barisIzin, t.jenis, sekarangMs), boleh_minta: aturanIzinAjukan } : null,
             };
           }
           return {

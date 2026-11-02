@@ -159,14 +159,16 @@ function KartuAturanNilai({ bisa }: { bisa: boolean }) {
     void muat();
   }, [muat]);
 
-  async function pilih(versi: VersiAturan) {
-    if (!a || a.versi === versi) return;
+  /** Simpan satu perubahan; dua setelan lain dibawa apa adanya (server menyimpan ketiganya sekaligus). */
+  async function simpan(ubah: Partial<Pick<AturanKeg, "versi" | "blokir_tahap" | "izin_ajukan">>, pesanOk: string) {
+    if (!a) return;
     setSibuk(true);
     setGalat(null);
     setOk(null);
     try {
-      await fetchJson(urlPelatihan("/api/sigap/pelatihan/nilai"), { method: "POST", body: JSON.stringify({ aksi: "simpan_aturan", aturan: { versi, blokir_tahap: a.blokir_tahap, izin_ajukan: a.izin_ajukan } }) });
-      setOk(versi === 2 ? "Aturan baru berlaku: nilai percobaan pertama, lulus bila lebih dari ambang." : "Aturan lama berlaku: nilai tertinggi, lulus bila memenuhi ambang.");
+      const aturan = { versi: a.versi, blokir_tahap: a.blokir_tahap, izin_ajukan: a.izin_ajukan, ...ubah };
+      await fetchJson(urlPelatihan("/api/sigap/pelatihan/nilai"), { method: "POST", body: JSON.stringify({ aksi: "simpan_aturan", aturan }) });
+      setOk(pesanOk);
       await muat();
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
@@ -175,10 +177,15 @@ function KartuAturanNilai({ bisa }: { bisa: boolean }) {
     }
   }
 
+  async function pilih(versi: VersiAturan) {
+    if (!a || a.versi === versi) return;
+    await simpan({ versi }, versi === 2 ? "Aturan baru berlaku: nilai percobaan pertama, lulus bila lebih dari ambang." : "Aturan lama berlaku: nilai tertinggi, lulus bila memenuhi ambang.");
+  }
+
   if (!a && !galat) return <Memuat />;
   if (!a) return <Pesan jenis="galat">{galat}</Pesan>;
   return (
-    <Kartu judul="Aturan nilai dan kelulusan" kanan={<ChipSetelan diubah={a.eksplisit} teksBawaan={`Bawaan · ${a.versi === 2 ? "aturan baru" : "aturan lama"}`} teksDiubah={`Diubah · ${a.versi === 2 ? "aturan baru" : "aturan lama"}`} />}>
+    <Kartu judul="Aturan nilai, kelulusan, dan urutan tahapan" kanan={<ChipSetelan diubah={a.eksplisit} teksBawaan={`Bawaan · ${a.versi === 2 ? "aturan baru" : "aturan lama"}`} teksDiubah={`Diubah · ${a.versi === 2 ? "aturan baru" : "aturan lama"}`} />}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {ok && <Pesan jenis="ok">{ok}</Pesan>}
       <div role="radiogroup" aria-label="Aturan nilai" className="grid gap-2 sm:grid-cols-2">
@@ -199,6 +206,24 @@ function KartuAturanNilai({ bisa }: { bisa: boolean }) {
         Kelulusan hanya penanda untuk laporan ke pimpinan; tidak memblokir pendataan. Mengubah aturan mengubah cara nilai dihitung untuk semua peserta kegiatan ini, termasuk yang sudah mengerjakan. Pelatihan PSP Pascabencana tetap aturan lama bila tidak diubah.
         Ambang kelulusan nilai akhir diatur di Soal &amp; Jadwal (skema nilai), bawaan 70. Pengulangan sampai 100 diatur per tes di Soal &amp; Jadwal (centang &quot;Wajib 100&quot;).
       </p>
+      <fieldset className="mt-3 border-t border-[#EDF0F4] pt-3">
+        <legend className="text-[13.5px] font-extrabold text-[#0F2A52]">Urutan tahapan</legend>
+        <label className="mt-1.5 flex items-start gap-2.5 text-[13px]">
+          <input type="checkbox" className="mt-0.5 h-5 w-5 accent-[#1F5FD1]" checked={a.blokir_tahap} disabled={!bisa || sibuk} onChange={(e) => void simpan({ blokir_tahap: e.target.checked }, e.target.checked ? "Urutan tahapan dinyalakan: Posttest menunggu Pretest dan Kuis selesai." : "Urutan tahapan dimatikan: semua tes terbuka sesuai jadwal.")} />
+          <span>
+            <b>Tahapan yang belum selesai mengunci tahapan berikutnya</b>
+            <span className="block text-[12px] text-[#6B7A90]">Pretest → Kuis Adu Sigap → Posttest. Tes &quot;Wajib 100&quot; baru dianggap selesai di nilai 100. Kuis tidak dikunci (dikerjakan bersama di kelas) tetapi ikut menentukan kapan Posttest terbuka. Video dan Vanguard ikut terhubung setelah fiturnya jadi.</span>
+          </span>
+        </label>
+        <label className="mt-2.5 flex items-start gap-2.5 text-[13px]">
+          <input type="checkbox" className="mt-0.5 h-5 w-5 accent-[#1F5FD1]" checked={a.izin_ajukan} disabled={!bisa || sibuk} onChange={(e) => void simpan({ izin_ajukan: e.target.checked }, e.target.checked ? "Petugas kini dapat meminta buka kunci; permintaan muncul di Hari ini panitia dan instruktur." : "Pengajuan buka kunci dimatikan; panitia dan instruktur tetap dapat membukanya dari Monitoring.")} />
+          <span>
+            <b>Petugas boleh meminta buka kunci</b>
+            <span className="block text-[12px] text-[#6B7A90]">Tombol &quot;Minta buka kunci&quot; muncul pada tes yang terkunci; permintaan tampil sebagai kartu di tab Hari ini panitia dan instruktur kelas itu. Izin berlaku sampai 23.59 WIB hari yang sama.</span>
+          </span>
+        </label>
+        {a.blokir_tahap && !a.izin_ajukan && <p className="mt-2 text-[12px] text-[#8A6200]">Pengajuan dimatikan: petugas yang terkunci harus menghubungi panitia / instruktur, yang membuka kunci dari Monitoring.</p>}
+      </fieldset>
     </Kartu>
   );
 }

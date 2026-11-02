@@ -22,6 +22,7 @@ import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 import { useKelasSaya } from "./kartuKelas";
 import { NavPelatihan, PenunjukPelatihan } from "./AlurPelatihan";
 import { TabPelatihanOtomatis, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
+import type { KunciTes } from "./KartuTerkunci";
 
 export type TesHub = {
   jenis: JenisTes;
@@ -40,6 +41,12 @@ export type TesHub = {
   skor: number | null;
   benar: number | null;
   total: number | null;
+  /** (2 Nov 2026) Wajib 100: mengulang tanpa batas sampai skor 100; `tuntas` = langkah tes selesai; `aturan_versi` 2 = nilai resmi percobaan PERTAMA. */
+  wajib_100?: boolean;
+  tuntas?: boolean;
+  aturan_versi?: 1 | 2;
+  /** (2 Nov 2026) Terhalang tahapan sebelumnya (blokir tahapan); null / kosong = tidak terkunci. */
+  terkunci?: KunciTes | null;
 };
 
 export type Hub = {

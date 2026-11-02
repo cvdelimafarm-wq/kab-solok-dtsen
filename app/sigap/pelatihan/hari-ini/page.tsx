@@ -5,6 +5,7 @@
 // (2 Nov 2026) Tab "Hari ini" pelatihan (tampilan 5 tab): kartu undangan (terima/tolak setelah membaca ketentuan), unduh surat undangan PDF, dan kartu Vanguard.
 // Kartu kedatangan (hari pertama) dan absen sesi: AbsenPeserta.tsx; tab "Absen peserta" untuk pengelola: absen/page.tsx. Halaman ini hanya bermakna bila saklar tab_baru menyala; bila belum, peserta
 // yang membukanya langsung tetap melihat undangan dan kartunya (tidak ada data yang rusak), sedangkan bilah tab tidak muncul.
+// (2 Nov 2026) Bagi panitia / instruktur: kartu "Permintaan buka kunci (n)" (KartuIzinBuka.tsx), tampil hanya bila ada permintaan menunggu.
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -12,6 +13,7 @@ import { bukaBlob, fetchJson, pesanGalat } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, Kartu, Memuat, Pesan } from "../../admin/ui";
 import KartuVanguardHariIni from "../../KartuVanguardHariIni";
 import AbsenPeserta from "../AbsenPeserta";
+import KartuIzinBuka from "../KartuIzinBuka";
 import { Kerangka } from "../komponen";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { lupakanBenderaTab } from "../TabPelatihan";
@@ -202,6 +204,7 @@ export default function HalamanHariIni() {
           )}
         </Pesan>
       )}
+      {d && <KartuIzinBuka />}
       {d && d.peserta && nada && (
         <>
           <section className={`rounded-[18px] border p-4 ${nada.kotak}`} aria-label="Undangan pelatihan">

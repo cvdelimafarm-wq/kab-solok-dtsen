@@ -16,9 +16,10 @@ import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, tglPanjang } fr
 import { BTN, BTN_O, Chip, Kartu, Memuat, Pesan } from "../../../admin/ui";
 import { Kerangka, formatSisa, jamWib, useJamServer, useSaatLewat } from "../../komponen";
 import { useInfoPelatihan } from "../../infoPelatihan";
+import KartuTerkunci, { type KunciTes } from "../../KartuTerkunci"; // (2 Nov 2026) blokir antar tahapan + minta buka kunci
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 
-type Keadaan = KeadaanTes;
+type Keadaan = KeadaanTes & { terkunci?: KunciTes | null };
 
 const WARNA_HIJAU = "#13794B";
 const WARNA_MERAH = "#B42329";
@@ -290,9 +291,15 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
         </Kartu>
       )}
       {status === "terlewat" && <Pesan jenis="galat">Sesi {label} sudah ditutup pukul {jamWib(k.tes.tutup_at)} WIB dan Anda belum mengerjakannya.</Pesan>}
+      {(status === "terlewat" || status === "belum_buka") && k.terkunci && <KartuTerkunci jenis={jenis} kunci={k.terkunci} onSelesai={() => void muat()} />}
 
       {/* ------------------------------------------------ siap mulai */}
-      {status === "buka" && (
+      {status === "buka" && k.terkunci && (
+        <Kartu judul={`${label} · ${k.jumlah_soal} soal`}>
+          <KartuTerkunci jenis={jenis} kunci={k.terkunci} onSelesai={() => void muat()} />
+        </Kartu>
+      )}
+      {status === "buka" && !k.terkunci && (
         <Kartu judul={`${label} · ${k.jumlah_soal} soal`}>
           <ul className="list-disc space-y-1 pl-5 text-[13px] leading-relaxed">
             <li>Waktu mengerjakan <b>{Math.min(k.tes.durasi_menit, Math.max(0, Math.floor(sisaTutup / 60)))} menit</b> sejak Anda menekan Mulai (maksimal {k.tes.durasi_menit} menit, tidak melewati pukul {jamWib(k.tes.tutup_at)} WIB).</li>

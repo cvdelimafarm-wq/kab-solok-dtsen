@@ -31,11 +31,13 @@ export type LangkahPelatihan = {
   halaman: boolean;
   /** Tujuan tautan: halaman sendiri, atau halaman Langkah dengan ?langkah=<kode> (digulirkan ke kartunya). */
   href: string;
+  /** (2 Nov 2026) Terhalang tahapan sebelumnya (blokir tahapan): tidak "bisaSekarang" sampai tahapan itu tuntas atau kunci dibuka. */
+  terkunci?: boolean;
 };
 
 export type MasukanLangkah = {
   langkah: { undangan_dibuka: boolean; instrumen_diunduh: boolean; foto_total: number; slot: number[] } | null;
-  tes: { jenis: string; status: string }[];
+  tes: { jenis: string; status: string; /** (2 Nov 2026) terisi bila tes ini terkunci oleh blokir tahapan. */ terkunci?: unknown | null }[];
   presensi: { sudah: boolean; hari: RingkasHari; pengaturan: Partial<Pick<PengaturanPresensi, "susulan_sampai">> } | null;
   kuis: { pernah_ikut: boolean; ada_ruang_selesai: boolean; ada_ruang_aktif: boolean } | null;
   /** Kelas luring/hybrid/belum tertaut = true; kelas Daring = false (tanpa foto Transport Lokal). */
@@ -72,7 +74,14 @@ export function hitungLangkahPelatihan(m: MasukanLangkah): LangkahPelatihan[] {
   });
   const langkahTes = (jenis: "pretest" | "posttest", judul: string, singkat: string): LangkahPelatihan => {
     const t = tes(jenis);
-    return { ...dasar(jenis, judul, singkat, true, `${ALAMAT_LANGKAH}/tes/${jenis}`), selesai: t?.status === "selesai", terlewat: t?.status === "terlewat", bisaSekarang: t?.status === "buka" || t?.status === "mengerjakan" };
+    const terkunci = !!t?.terkunci;
+    return {
+      ...dasar(jenis, judul, singkat, true, `${ALAMAT_LANGKAH}/tes/${jenis}`),
+      selesai: t?.status === "selesai",
+      terlewat: t?.status === "terlewat",
+      bisaSekarang: (t?.status === "buka" || t?.status === "mengerjakan") && !terkunci,
+      ...(terkunci ? { terkunci: true } : {}),
+    };
   };
   const hasil: LangkahPelatihan[] = [
     { ...dasar("undangan", "Baca undangan", "Undangan", true, `${ALAMAT_LANGKAH}/undangan`), selesai: !!L?.undangan_dibuka, bisaSekarang: true },

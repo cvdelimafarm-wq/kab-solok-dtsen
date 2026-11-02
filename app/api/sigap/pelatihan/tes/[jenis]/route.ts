@@ -8,10 +8,15 @@
 // POST {aksi:"simpan", jawaban:{"1":"B"}} -> simpan jawaban sementara (autosave)
 // POST {aksi:"kirim", jawaban?}           -> kirim & nilai
 // POST {aksi:"ulang"}                      -> (posttest, bila panitia membuka kesempatan mengulang) arsipkan percobaan lama & mulai percobaan baru;
-//                                             nilai resmi = skor tertinggi dari semua percobaan
+//                                             nilai resmi = skor tertinggi (aturan versi 1) atau percobaan pertama (versi 2)
+// (2 Nov 2026) BLOKIR TAHAPAN: bila kegiatan menyalakan blokir_tahap dan tahapan sebelumnya belum tuntas, GET menyertakan `terkunci` dan
+// POST {aksi:"mulai"} ditolak 409 (sesi yang sudah berjalan tidak pernah diputus). IZIN BUKA KUNCI yang berlaku memberi jendela tes pribadi (lib/sigapTahapan.ts).
 
 import { NextRequest, NextResponse } from "next/server";
 import { TOLERANSI_DETIK, bersihkanJawaban, hitungBatas, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
+import { muatAturan } from "@/lib/sigapAturanDb";
+import { hitungTahapan, kunciUntuk, ringkasIzin, tesDenganIzin, type KodeTahap } from "@/lib/sigapTahapan";
+import { izinBerlakuPerTahap, muatIzin, muatTahapanBatch } from "@/lib/sigapTahapanDb";
 import {
   akunDariRequest,
   dbAdmin,
@@ -47,14 +52,26 @@ async function siapkan(req: NextRequest, ctx: Ctx) {
   if (!tes || !tes.aktif) return { err: galat("Tes belum tersedia.", 404) } as const;
   const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
   if (!peserta) return { err: galat("Akun Anda tidak terdaftar sebagai peserta pelatihan ini.", 403) } as const;
-  return { db, akun, tes } as const;
+  // (2 Nov 2026) izin buka kunci + blokir tahapan. Semua pembacaan tahan SQL belum dijalankan (blokir mati, tanpa izin).
+  const sekarangMs = Date.now();
+  const [aturan, izin] = await Promise.all([muatAturan(db, kegiatanId), muatIzin(db, kegiatanId, [akun.id], sekarangMs)]);
+  const barisIzin = izin.peta.get(akun.id) ?? [];
+  const tesEfektif = tesDenganIzin(tes, izinBerlakuPerTahap(barisIzin, sekarangMs)[jenis], sekarangMs);
+  let terkunci: { oleh: KodeTahap; oleh_label: string; pesan: string } | null = null;
+  if (aturan.blokir_tahap) {
+    const batch = await muatTahapanBatch(db, kegiatanId, [akun.id], sekarangMs, aturan);
+    const masukan = batch.masukan.get(akun.id);
+    if (masukan) terkunci = kunciUntuk(hitungTahapan(masukan, true, barisIzin, sekarangMs), jenis);
+  }
+  const kunci = terkunci ? { ...terkunci, izin: ringkasIzin(barisIzin, jenis, sekarangMs), boleh_minta: aturan.izin_ajukan } : null;
+  return { db, akun, tes: tesEfektif, kunci } as const;
 }
 
 export async function GET(req: NextRequest, ctx: Ctx) {
   try {
     const p = await siapkan(req, ctx);
     if ("err" in p) return p.err;
-    return NextResponse.json(await susunKeadaan(p.db, p.tes, p.akun.id, new Date()));
+    return NextResponse.json({ ...(await susunKeadaan(p.db, p.tes, p.akun.id, new Date())), terkunci: p.kunci });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }
@@ -64,7 +81,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   try {
     const p = await siapkan(req, ctx);
     if ("err" in p) return p.err;
-    const { db, akun, tes } = p;
+    const { db, akun, tes, kunci } = p;
     const body = await req.json().catch(() => null);
     const aksi = String(body?.aksi ?? "");
     const sekarang = new Date();
@@ -73,6 +90,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
     if (aksi === "mulai") {
       if (sesi) return NextResponse.json(await susunKeadaan(db, tes, akun.id, sekarang)); // lanjutkan
+      if (kunci) return NextResponse.json({ error: kunci.pesan, terkunci: kunci }, { status: 409 });
       if (soal.length === 0) return galat("Soal belum tersedia.", 409);
       const t = sekarang.getTime();
       if (t < new Date(tes.buka_at).getTime()) return galat("Tes belum dibuka.", 409);

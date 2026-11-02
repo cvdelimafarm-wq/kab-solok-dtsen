@@ -24,6 +24,7 @@ import { LABEL_JENIS_TES } from "@/lib/sigapTes";
 import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
 import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
 import { Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hub, type TesHub } from "./komponen";
+import KartuTerkunci from "./KartuTerkunci"; // (2 Nov 2026) blokir antar tahapan + minta buka kunci
 import { ModalPengumuman } from "./pengumumanUi";
 import KartuTranslokPelatihan from "./translok";
 import KartuKuisPra from "./kartuKuisPra"; // (31 Okt 2026) kuis pra pelatihan (tampil bila diaktifkan panitia)
@@ -114,6 +115,13 @@ const TOMBOL_O = `${TOMBOL} border border-[#CBD6E6] bg-white text-[#1B2B4B] hove
 
 // (2 Nov 2026) jendelaPelatihan() dipindah ke lib/alurPelatihan.ts (dipakai juga oleh Kerangka halaman Undangan/Instrumen/Tes).
 
+/** (2 Nov 2026) Kalimat tentang mengulang menurut aturan: wajib 100 (tanpa batas), versi 2 (nilai tercatat = percobaan pertama), versi 1 (nilai = tertinggi). */
+function teksUlang(t: TesHub): string {
+  if (t.wajib_100) return `Wajib mencapai nilai 100: ulangi sampai 100 selama sesi dibuka (percobaan ke-${t.percobaan}).`;
+  if (t.aturan_versi === 2) return `Boleh mengulang (percobaan ke-${t.percobaan} dari ${t.ulang_maks}); nilai yang tercatat tetap percobaan pertama.`;
+  return `Boleh mengulang (percobaan ke-${t.percobaan} dari ${t.ulang_maks}); nilai yang dipakai = skor tertinggi.`;
+}
+
 /** Isi langkah Pretest/Posttest (hitung mundur, tombol, skor). Berisi hook pemicu muat-ulang saat jam terlewati. */
 function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => number; segarkan: () => void }) {
   const now = sekarangMs();
@@ -146,6 +154,17 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
         </>
       );
     case "buka":
+      if (t.terkunci)
+        return (
+          <>
+            <p className={ket}>
+              {t.jumlah_soal} soal · {t.durasi_menit} menit sejak Mulai.
+            </p>
+            <div className="mt-2">
+              <KartuTerkunci jenis={t.jenis} kunci={t.terkunci} onSelesai={segarkan} />
+            </div>
+          </>
+        );
       return (
         <>
           <p className={ket}>
@@ -180,9 +199,7 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
           </p>
           {t.bisa_ulang && (
             <>
-              <p className="mt-1.5 text-[12.5px] text-[#5B6B84]">
-                Boleh mengulang (percobaan ke-{t.percobaan} dari {t.ulang_maks}); nilai yang dipakai = skor tertinggi.
-              </p>
+              <p className="mt-1.5 text-[12.5px] text-[#5B6B84]">{teksUlang(t)}</p>
               <Link href={href} className={`${TOMBOL} bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]`}>
                 Ulangi {judul} →
               </Link>
@@ -193,8 +210,11 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
         <>
           <p className={ket}>
             Skor <b className="text-[17px] text-[#0F2A52]">{t.skor ?? "–"}</b> · benar {t.benar ?? 0} dari {t.total ?? t.jumlah_soal} soal.
-            {(t.percobaan ?? 1) > 1 && <span className="text-[12px] text-[#6B7A90]"> (tertinggi dari {t.percobaan} percobaan)</span>}
+            {(t.percobaan ?? 1) > 1 && <span className="text-[12px] text-[#6B7A90]"> ({t.aturan_versi === 2 ? "nilai percobaan pertama" : `tertinggi dari ${t.percobaan} percobaan`})</span>}
           </p>
+          {t.wajib_100 && (
+            <p className={`mt-1 text-[12.5px] font-semibold ${t.tuntas ? "text-[#13794B]" : "text-[#8A6200]"}`}>{t.tuntas ? "Nilai 100 tercapai ✓" : "Nilai Anda belum 100. Ulangi sampai tercapai selama sesi dibuka."}</p>
+          )}
           {t.bisa_ulang && (
             <Link href={href} className={`${TOMBOL} bg-[#1F5FD1] text-white hover:bg-[#1A4FB8]`}>
               Ulangi {judul} →
@@ -206,7 +226,16 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
         </>
       );
     case "terlewat":
-      return <p className={ket}>Sesi sudah ditutup dan Anda belum mengerjakan.</p>;
+      return (
+        <>
+          <p className={ket}>Sesi sudah ditutup dan Anda belum mengerjakan.</p>
+          {t.terkunci && (
+            <div className="mt-2">
+              <KartuTerkunci jenis={t.jenis} kunci={t.terkunci} onSelesai={segarkan} />
+            </div>
+          )}
+        </>
+      );
     default:
       return <p className={ket}>Tes tidak aktif.</p>;
   }

@@ -70,6 +70,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_ident_dokumen: ["id", "ident_id", "jenis", "kunci", "nomor", "tanggal", "ttd_akun", "ttd_nama", "ttd_jabatan", "status", "lanjutan_ver", "catatan", "dibuat_at", "diubah_at", "terbit_at"],
   keu_v_ident_ttd: ["akun_id", "akun_nama", "peran_kode", "ro_kode"],
   keu_v_pegawai_organik: ["akun_id", "nama"],
+  keu_v_mitra_aktif: ["akun_id", "nama", "kecamatan"],
   keu_v_pengecualian: ["id", "ident_id", "tahun", "ro_kode", "nama", "jenis", "objek", "alasan", "lanjutan_ver", "status", "otomatis", "diajukan_oleh", "diajukan_oleh_nama", "diputus_oleh_nama", "catatan_putusan", "diajukan_at", "diputus_at"],
   keu_v_keluaran: ["id", "rab_id", "ident_id", "ver", "ident_ver", "total", "n_rincian", "catatan", "dibuat_at", "dibuat_oleh_nama", "ro_kode", "ident_nama", "tahun", "rab_nomor", "rab_status", "isi"],
   keu_v_keluaran_spek: ["ident_id", "butir", "jenis", "spek", "diubah_at", "diubah_oleh_nama"],
