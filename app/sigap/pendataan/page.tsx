@@ -316,8 +316,17 @@ export default function LembarPendataan() {
   const kotakBatas = useMemo(() => kotakKk(kk.filter((k) => k.lat !== null && k.lng !== null).map((k) => ({ lat: k.lat as number, lng: k.lng as number }))), [kk]);
   const kecamatanTim = useMemo(() => (data ? data.sub.map((s) => idKecamatan(s.idsubsls)) : []), [data]);
   const batas = useBatasSubsls(tab === "peta" && !!proj, kotakBatas, kecamatanTim);
-  // "perbesar ke Sub SLS ini": KK yang menyimpang jauh membuat kanvas sangat luas dan Sub SLS yang dibuka tampak kecil
+  // KK yang menyimpang jauh membuat kanvas sangat luas dan Sub SLS yang dibuka tampak kecil: begitu batasnya siap, pandangan dipas SEKALI per Sub SLS
+  // ke polygon-nya (hanya bila petugas belum menggeser/memperbesar). Tombol "Tampilkan semua" (⤢) tetap menampilkan seluruh KK.
   const fiturAktif = useMemo(() => (subId && batas.tampil ? batas.fitur.find((f) => f.id === subId) ?? null : null), [batas.fitur, batas.tampil, subId]);
+  const sudahPas = useRef("");
+  useEffect(() => {
+    if (!fiturAktif || !proj || !subId || sudahPas.current === subId) return;
+    sudahPas.current = subId;
+    const p = pandangUntukBb(fiturAktif.bb, proj, 0.25, 8);
+    if (p.z > 1.25) setPandang((lama) => (lama.z === PANDANG_AWAL.z && lama.cx === PANDANG_AWAL.cx && lama.cy === PANDANG_AWAL.cy ? p : lama));
+  }, [fiturAktif, proj, subId]);
+  const [legendaBuka, setLegendaBuka] = useState(false);
   // sumber peta berganti (mis. selesai diunduh, atau sinyal kembali): coba lagi dari awal, jangan terjebak status "gagal" yang lama
   const kunciDasar = !dasar.sumber ? "" : dasar.sumber.tipe === "blob" ? `b:${dasar.sumber.nama}:${dasar.sumber.blob.size}` : `o:${dasar.sumber.url}`;
   useEffect(() => {
@@ -453,6 +462,7 @@ export default function LembarPendataan() {
     setSubPilih(id);
     setTerpilihId(null);
     setPandang(PANDANG_AWAL);
+    sudahPas.current = "";
     setFStatus("semua");
     setFPpl(null);
     setCari("");
@@ -897,18 +907,26 @@ export default function LembarPendataan() {
                     <Ik n="semua" />
                   </button>
                 </div>
-                <TombolBatas tampil={batas.tampil} status={batas.status} onUbah={batas.setTampil} posisi="right-2.5 top-[140px]" ukuran="h-[40px] w-[40px]" onFokus={fiturAktif && proj ? () => setPandang(pandangUntukBb(fiturAktif.bb, proj, 0.25, 8)) : undefined} />
+                <TombolBatas tampil={batas.tampil} status={batas.status} onUbah={batas.setTampil} posisi="right-2.5 top-[140px]" ukuran="h-[40px] w-[40px]" />
                 {/* lokasi saya: kanan bawah, di atas tombol "Keluarga baru" yang mengambang (perilaku lama: urut terdekat) */}
                 <button type="button" aria-label="Terdekat dari saya" onClick={cariPosisi} className="absolute bottom-[92px] right-2.5 grid h-[40px] w-[40px] place-items-center rounded-[12px] bg-white text-[#1F5FD1] shadow-[0_4px_12px_rgba(15,42,82,.15)] active:bg-[#F1F5FC]">
                   <Ik n="lokasi" />
                 </button>
-                {/* legenda bentuk kecil, kiri bawah (di atas tombol capaian yang mengambang di kiri bawah layar) */}
-                <div className="absolute bottom-[88px] left-2.5 flex max-w-[170px] flex-col gap-0.5 rounded-[10px] bg-white/[.92] px-2.5 py-[5px] text-[10.5px] font-bold text-[#44546F]">
-                  {HASIL_KK.filter((h) => konfig.hasil[h].aktif || hitung[h] > 0).map((h) => (
-                    <span key={h} className="inline-flex items-center gap-1.5"><Penanda peta={peta} k={h} warna="#44546F" />{konfig.hasil[h].label_pendek}</span>
-                  ))}
-                  <span className="font-semibold text-[#5B6B84]">Warna = PPL</span>
-                  {tanpaKoordinat > 0 && <span className="font-semibold leading-tight text-[#5B6B84]">{tanpaKoordinat} KK tanpa koordinat hanya di Daftar KK</span>}
+                {/* legenda: satu chip kecil kiri bawah (di atas tombol capaian yang mengambang di kiri bawah layar); ketuk untuk membuka */}
+                <div className="absolute bottom-[88px] left-2.5 flex max-w-[170px] flex-col items-start gap-1">
+                  {legendaBuka && (
+                    <div className="flex flex-col gap-0.5 rounded-[10px] bg-white/[.95] px-2.5 py-[5px] text-[10.5px] font-bold text-[#44546F]">
+                      {HASIL_KK.filter((h) => konfig.hasil[h].aktif || hitung[h] > 0).map((h) => (
+                        <span key={h} className="inline-flex items-center gap-1.5"><Penanda peta={peta} k={h} warna="#44546F" />{konfig.hasil[h].label_pendek}</span>
+                      ))}
+                      <span className="font-semibold text-[#5B6B84]">Warna = PPL</span>
+                      {tanpaKoordinat > 0 && <span className="font-semibold leading-tight text-[#5B6B84]">{tanpaKoordinat} KK tanpa koordinat hanya di Daftar KK</span>}
+                    </div>
+                  )}
+                  <button type="button" aria-expanded={legendaBuka} onClick={() => setLegendaBuka((v) => !v)} className="inline-flex min-h-[30px] items-center gap-1.5 rounded-[10px] bg-white/[.95] px-2.5 text-[11px] font-extrabold text-[#44546F] shadow-[0_2px_8px_rgba(15,42,82,.15)] active:bg-[#F1F5FC]">
+                    Legenda
+                    {tanpaKoordinat > 0 && <i aria-label={`${tanpaKoordinat} KK tanpa koordinat`} className="h-2 w-2 rounded-full bg-[#D97706]" />}
+                  </button>
                 </div>
               </>
             ) : (

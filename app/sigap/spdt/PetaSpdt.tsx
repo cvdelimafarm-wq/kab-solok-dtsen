@@ -125,7 +125,7 @@ export default function PetaSpdt({ kk, proj, warnaIndeksKk, pandang, setPandang,
         </>
       )}
 
-      <LapisBatas fitur={batas} proj={proj} aktifId={null} />
+      <LapisBatas fitur={batas} proj={proj} aktifId={null} z={z} />
 
       {proj &&
         urut.map((k) => {

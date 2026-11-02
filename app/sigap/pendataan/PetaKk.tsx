@@ -173,7 +173,7 @@ export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpili
         </>
       )}
 
-      <LapisBatas fitur={batas} proj={proj} aktifId={batasAktif} />
+      <LapisBatas fitur={batas} proj={proj} aktifId={batasAktif} z={z} />
 
       {titik.map((k) => {
         const a = k.ppl_akun_id ? anggota.get(k.ppl_akun_id) : undefined;
