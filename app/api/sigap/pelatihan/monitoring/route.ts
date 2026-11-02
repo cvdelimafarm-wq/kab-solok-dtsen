@@ -4,6 +4,7 @@
 // Siapa melihat siapa: panitia -> semua; instruktur -> kelasnya; peserta (korwil/PML/PPL) -> dirinya + bawahan (lib/hierarkiPelatihan.ts).
 // GET (Bearer sesi; ?kegiatan=ID) -> { kegiatan_id, jenis, ringkas, hierarki_tersedia, aturan_versi, baris:[{akun_id,nama,peran,kedalaman,diri,kelas,undangan,pretest,posttest,hadir,nilai_akhir?,kelulusan?}], ringkasan:{...,kelulusan?} }
 // (2 Nov 2026) Aturan versi 2: skor pretest/posttest = nilai percobaan PERTAMA; nilai_akhir dan kelulusan (lulus bila > ambang) hanya FLAG untuk laporan.
+// (2 Nov 2026) Tahap C: tiap baris membawa `materi` ({belum, manual} -- video / tautan WAJIB yang belum selesai, dan apakah ada yang ditandai manual); null bila kegiatan tidak punya materi wajib. ringkasan.materi_belum.
 // (2 Nov 2026) Blokir tahapan: tiap baris membawa `kunci` ([{tahap, oleh_label, pesan}] -- hanya tes yang jendelanya sudah dibuka dan terhalang) dan `izin` ({pretest?, posttest?}: menunggu | disetujui | ditolak).
 //   Tingkat atas: boleh_buka_kunci (panitia / instruktur), blokir_tahap, ringkasan.terkunci / ringkasan.izin_menunggu. Tombol "Buka kunci" memakai POST /api/sigap/pelatihan/izin-buka.
 
@@ -16,6 +17,7 @@ import { hitungKelulusan, type StatusKelulusan } from "@/lib/sigapAturanTes";
 import { muatNilaiAkhir } from "@/lib/sigapNilai";
 import { muatProgres, muatSimpulHierarki, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { hitungTahapan, kunciUntuk, ringkasIzin, type KodeTahap } from "@/lib/sigapTahapan";
+import { muatStatusMateriBatch, type StatusMateriBatch } from "@/lib/sigapMateriDb";
 import { muatIzin, muatTahapanBatch, type KeadaanTahapanBatch } from "@/lib/sigapTahapanDb";
 
 export const runtime = "nodejs";
@@ -60,6 +62,14 @@ export async function GET(req: NextRequest) {
         tahapBatch = null;
       }
     }
+    // materi wajib (Tahap C): tahan galat; SQL belum dijalankan / tidak ada materi wajib -> kolom materi null
+    let materiBatch: StatusMateriBatch | null = null;
+    try {
+      const m = await muatStatusMateriBatch(db, kegiatanId, idsCakupan);
+      materiBatch = m.tersedia && m.wajib_total > 0 ? m : null;
+    } catch {
+      materiBatch = null;
+    }
     const kunciBaris = (akunId: number): { kunci: { tahap: KodeTahap; oleh: KodeTahap; oleh_label: string; pesan: string }[]; izin: { pretest: string | null; posttest: string | null } } => {
       try {
         return kunciBarisAman(akunId);
@@ -89,7 +99,7 @@ export async function GET(req: NextRequest) {
       const pre = n && p.pretest.status === "selesai" ? { ...p.pretest, skor: n.pretest } : p.pretest;
       const post = n && p.posttest.status === "selesai" ? { ...p.posttest, skor: n.posttest } : p.posttest;
       const tambahan = n ? { nilai_akhir: n.akhir, kelulusan: (n.status_lulus ?? "belum_dinilai") as StatusKelulusan } : {};
-      return { akun_id: b.simpul.akun_id, nama: b.simpul.nama, peran: b.simpul.peran, kedalaman: b.kedalaman, diri: b.diri, kelas: b.simpul.kelas, undangan: p.undangan, pretest: pre, posttest: post, hadir: p.hadir, ...kunciBaris(b.simpul.akun_id), ...tambahan };
+      return { akun_id: b.simpul.akun_id, nama: b.simpul.nama, peran: b.simpul.peran, kedalaman: b.kedalaman, diri: b.diri, kelas: b.simpul.kelas, undangan: p.undangan, pretest: pre, posttest: post, hadir: p.hadir, materi: materiBatch ? { belum: materiBatch.belum.get(b.simpul.akun_id) ?? materiBatch.wajib_total, manual: materiBatch.manual.has(b.simpul.akun_id) } : null, ...kunciBaris(b.simpul.akun_id), ...tambahan };
     });
     const hitung = (f: (r: (typeof baris)[number]) => boolean) => baris.filter(f).length;
     return NextResponse.json({
@@ -108,6 +118,8 @@ export async function GET(req: NextRequest) {
         pretest_selesai: hitung((r) => r.pretest.status === "selesai"),
         posttest_selesai: hitung((r) => r.posttest.status === "selesai"),
         hadir: hitung((r) => r.hadir),
+        materi_wajib: materiBatch ? materiBatch.wajib_total : 0,
+        materi_belum: hitung((r) => !!r.materi && r.materi.belum > 0),
         terkunci: hitung((r) => r.kunci.length > 0),
         izin_menunggu: hitung((r) => r.izin.pretest === "menunggu" || r.izin.posttest === "menunggu"),
         ...(nilai ? { kelulusan: hitungKelulusan(baris.map((r) => ("kelulusan" in r ? (r.kelulusan as StatusKelulusan) : "belum_dinilai"))) } : {}),

@@ -70,7 +70,7 @@ describe("muatTahapanBatch", () => {
     expect(r.masukan.get(11)!.kuis).toEqual({ ada: true, tuntas: true });
     expect(r.masukan.get(12)!.pretest).toEqual({ ada: true, tuntas: false });
     expect(r.masukan.get(12)!.kuis).toEqual({ ada: true, tuntas: false });
-    expect(r.masukan.get(11)!.video).toEqual({ ada: false, tuntas: false }); // belum terhubung
+    expect(r.masukan.get(11)!.video).toEqual({ ada: false, tuntas: false }); // tanpa video wajib: tidak ada, tidak memblokir
   });
 
   it("wajib 100: skor 80 belum tuntas, 100 tuntas", async () => {
@@ -109,6 +109,26 @@ describe("muatTahapanBatch", () => {
   it("tabel kuis belum ada / galat: kuis dianggap tidak ada (tidak menghalangi)", async () => {
     const k = await muatKuisBatch(fakeDb({}, ["sigap_kuis_ruang"]), 7, [11]);
     expect(k).toEqual({ ada: false, ikut: new Set() });
+  });
+
+  it("video wajib terhubung: ada=true, tuntas hanya bagi yang menyelesaikan; menahan pretest lewat hitungTahapan", async () => {
+    const db = fakeDb({
+      sigap_pelatihan_materi: [{ id: 1, kegiatan_id: 7, urutan: 1, jenis: "video", judul: "V", url: "https://youtu.be/dQw4w9WgXcQ", youtube_id: "dQw4w9WgXcQ", durasi_detik: 100, wajib: true, aktif: true }],
+      sigap_pelatihan_materi_progres: [{ materi_id: 1, akun_id: 11, segmen: [], detik_unik: 100, selesai_at: "2026-11-09T03:00:00Z", selesai_manual: false, putar_terakhir_at: null }],
+    });
+    const r = await muatTahapanBatch(db, 7, [11, 12], NOW);
+    expect(r.masukan.get(11)!.video).toEqual({ ada: true, tuntas: true });
+    expect(r.masukan.get(12)!.video).toEqual({ ada: true, tuntas: false });
+    const h = hitungTahapan(r.masukan.get(12)!, true, [], NOW);
+    expect(h.find((x) => x.kode === "pretest")!.kunci_oleh).toBe("video");
+    expect(hitungTahapan(r.masukan.get(11)!, true, [], NOW).find((x) => x.kode === "pretest")!.terkunci).toBe(false);
+  });
+
+  it("video opsional (tidak wajib) atau tabel materi belum ada: tidak memblokir", async () => {
+    const opsional = fakeDb({ sigap_pelatihan_materi: [{ id: 1, kegiatan_id: 7, urutan: 1, jenis: "video", judul: "V", url: "https://youtu.be/dQw4w9WgXcQ", youtube_id: "dQw4w9WgXcQ", durasi_detik: 100, wajib: false, aktif: true }] });
+    expect((await muatTahapanBatch(opsional, 7, [12], NOW)).masukan.get(12)!.video).toEqual({ ada: false, tuntas: false });
+    const tanpaTabel = fakeDb({}, ["sigap_pelatihan_materi"]);
+    expect((await muatTahapanBatch(tanpaTabel, 7, [12], NOW)).masukan.get(12)!.video).toEqual({ ada: false, tuntas: false });
   });
 
   it("dipakai bersama hitungTahapan: posttest terkunci sampai pretest selesai", async () => {

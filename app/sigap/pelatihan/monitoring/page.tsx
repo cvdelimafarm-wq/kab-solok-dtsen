@@ -23,6 +23,8 @@ type Baris = {
   nilai_akhir?: number | null; kelulusan?: StatusKelulusan;
   kunci: Kunci[];
   izin: { pretest: StatusIzin | null; posttest: StatusIzin | null };
+  /** Materi wajib (video / tautan): null = tidak ada materi wajib atau SQL belum dijalankan. `manual` = peserta menekan "Saya sudah menonton" (bukan hasil pelacakan). */
+  materi?: { belum: number; manual: boolean } | null;
 };
 type Data = {
   jenis: "peserta" | "instruktur" | "panitia";
@@ -32,7 +34,7 @@ type Data = {
   blokir_tahap?: boolean;
   boleh_buka_kunci?: boolean;
   baris: Baris[];
-  ringkasan: { total: number; undangan_terima: number; undangan_tolak: number; pretest_selesai: number; posttest_selesai: number; hadir: number; terkunci?: number; izin_menunggu?: number; kelulusan?: Record<StatusKelulusan, number> };
+  ringkasan: { total: number; undangan_terima: number; undangan_tolak: number; pretest_selesai: number; posttest_selesai: number; hadir: number; terkunci?: number; izin_menunggu?: number; materi_wajib?: number; materi_belum?: number; kelulusan?: Record<StatusKelulusan, number> };
 };
 
 const JUDUL: Record<Data["jenis"], string> = { panitia: "Seluruh peserta", instruktur: "Peserta kelas Anda", peserta: "Anda dan tim Anda" };
@@ -182,6 +184,11 @@ export default function HalamanMonitoring() {
               <Angka label="Sudah hadir" nilai={r.hadir} dari={r.total} />
             </div>
             {r.undangan_tolak > 0 && <p className="mt-2 text-[12.5px] text-[#B42329]">{r.undangan_tolak} orang menolak undangan.</p>}
+            {(r.materi_wajib ?? 0) > 0 && (
+              <p className="mt-2 text-[12.5px] text-[#3B4A60]">
+                Materi wajib ({r.materi_wajib} video / tautan): <b className={(r.materi_belum ?? 0) > 0 ? "text-[#8A6200]" : "text-[#13794B]"}>{r.materi_belum ?? 0} orang belum menuntaskan</b>.
+              </p>
+            )}
             {(r.terkunci ?? 0) > 0 && (
               <p className="mt-2 text-[12.5px] font-semibold text-[#8A6200]">
                 {r.terkunci} orang terkunci menunggu tahapan sebelumnya{(r.izin_menunggu ?? 0) > 0 ? ` · ${r.izin_menunggu} permintaan buka kunci menunggu` : ""}.
@@ -216,6 +223,13 @@ export default function HalamanMonitoring() {
                       <ChipTes t={b.posttest} />
                       <span className="ml-1">Hadir</span>
                       <Chip teks={b.hadir ? "Ya" : "Belum"} nada={b.hadir ? "ok" : "mut"} />
+                      {b.materi && (
+                        <>
+                          <span className="ml-1">Materi wajib</span>
+                          <Chip teks={b.materi.belum === 0 ? "Tuntas" : `${b.materi.belum} belum`} nada={b.materi.belum === 0 ? "ok" : "wait"} />
+                          {b.materi.manual && <Chip teks="ditandai manual" nada="mut" />}
+                        </>
+                      )}
                       {b.kunci.map((k) => (
                         <Chip key={k.tahap} teks={`${k.tahap === "pretest" ? "Pretest" : "Posttest"} terkunci · ${k.pesan.replace(/\.$/, "")}`} nada="wait" />
                       ))}

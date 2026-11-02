@@ -17,6 +17,7 @@ const st = {
   masukan: new Map<number, Record<string, { ada: boolean; tuntas: boolean }>>(),
   tes: [] as Record<string, unknown>[],
   izin: new Map<number, Record<string, unknown>[]>(),
+  materi: null as null | { tersedia: boolean; wajib_total: number; belum: Map<number, number>; manual: Set<number> } | "galat",
 };
 const dasar = (pretest: boolean, posttest = false) => ({ video: { ada: false, tuntas: false }, vanguard: { ada: false, tuntas: false }, pretest: { ada: true, tuntas: pretest }, kuis: { ada: false, tuntas: false }, posttest: { ada: true, tuntas: posttest } });
 const tesBuka = (jenis: string, bukaAt: string) => ({ id: jenis === "pretest" ? 1 : 2, jenis, aktif: true, wajib_100: false, buka_at: bukaAt, tutup_at: "2026-11-09T09:00:00Z" });
@@ -35,6 +36,13 @@ vi.mock("@/lib/sigapTahapanDb", () => ({
   muatTahapanBatch: async () => ({ aturan: st.aturan, tes: st.tes, masukan: st.masukan, kuis_ada: false }),
 }));
 
+vi.mock("@/lib/sigapMateriDb", () => ({
+  muatStatusMateriBatch: async () => {
+    if (st.materi === "galat") throw new Error("x");
+    return st.materi ?? { tersedia: false, wajib_total: 0, belum: new Map(), manual: new Set() };
+  },
+}));
+
 import { GET } from "../../app/api/sigap/pelatihan/monitoring/route";
 
 type Baris = { akun_id: number; kunci: { tahap: string; pesan: string }[]; izin: { pretest: string | null; posttest: string | null } };
@@ -48,6 +56,7 @@ beforeEach(() => {
   st.masukan = new Map([[11, dasar(false)], [12, dasar(true)]]);
   st.tes = [tesBuka("pretest", "2026-11-09T01:00:00Z"), tesBuka("posttest", "2026-11-09T02:00:00Z")];
   st.izin = new Map();
+  st.materi = null;
 });
 
 describe("Monitoring: kunci dan izin", () => {
@@ -99,5 +108,33 @@ describe("Monitoring: kunci dan izin", () => {
     const r = await ambil();
     expect(r.status).toBe(200);
     expect(r.body.baris).toHaveLength(2);
+  });
+});
+
+describe("Monitoring: materi wajib (Tahap C)", () => {
+  type BarisMateri = { akun_id: number; materi: { belum: number; manual: boolean } | null };
+  const ambilMateri = async () => (await ambil()).body as unknown as { baris: BarisMateri[]; ringkasan: Record<string, number> };
+  it("tanpa materi wajib / SQL belum dijalankan: kolom materi null, ringkasan 0", async () => {
+    const b = await ambilMateri();
+    expect(b.baris.every((r) => r.materi === null)).toBe(true);
+    expect(b.ringkasan).toMatchObject({ materi_wajib: 0, materi_belum: 0 });
+  });
+  it("materi wajib: belum selesai dan tanda manual per baris; hitungan ringkasan", async () => {
+    st.materi = { tersedia: true, wajib_total: 2, belum: new Map([[11, 2], [12, 0]]), manual: new Set([12]) };
+    const b = await ambilMateri();
+    expect(b.baris.find((r) => r.akun_id === 11)!.materi).toEqual({ belum: 2, manual: false });
+    expect(b.baris.find((r) => r.akun_id === 12)!.materi).toEqual({ belum: 0, manual: true });
+    expect(b.ringkasan).toMatchObject({ materi_wajib: 2, materi_belum: 1 });
+  });
+  it("akun tanpa catatan: semua materi wajib dianggap belum", async () => {
+    st.materi = { tersedia: true, wajib_total: 3, belum: new Map(), manual: new Set() };
+    const b = await ambilMateri();
+    expect(b.baris.every((r) => r.materi?.belum === 3)).toBe(true);
+  });
+  it("galat saat memuat materi: Monitoring tetap jalan tanpa kolom materi", async () => {
+    st.materi = "galat";
+    const r = await ambil();
+    expect(r.status).toBe(200);
+    expect((r.body as unknown as { baris: BarisMateri[] }).baris.every((x) => x.materi === null)).toBe(true);
   });
 });

@@ -9,6 +9,7 @@ import { muatAturan } from "@/lib/sigapAturanDb";
 import type { AturanPelatihan } from "@/lib/sigapAturanTes";
 import { muatTesDaftar } from "@/lib/sigapTesDb";
 import { pesertaKelas } from "@/lib/sigapAbsenDb";
+import { muatStatusMateriBatch } from "@/lib/sigapMateriDb";
 import { tesTuntas, type TesBaris } from "@/lib/sigapTes";
 import { TAHAP_KOSONG, akhirHariWib, izinBerlaku, type BarisIzin, type KodeTahap, type MasukanTahapan } from "@/lib/sigapTahapan";
 
@@ -79,11 +80,12 @@ export type KeadaanTahapanBatch = {
 };
 
 /**
- * Masukan tahapan beberapa akun sekaligus. Video dan Vanguard BELUM terhubung ke blokir (pelacakan video dan aturan Vanguard 3 hari menyusul): keduanya `ada = false`.
+ * Masukan tahapan beberapa akun sekaligus. Video TERHUBUNG (Tahap C): `ada` bila kegiatan punya video yang diatur WAJIB; tuntas bila semua video wajib selesai (terbukti ditonton, atau ditandai manual).
+ * Vanguard BELUM terhubung (aturan Vanguard 3 hari menyusul): `ada = false`. Tabel materi belum ada -> video `ada = false` (tidak memblokir).
  * Pretest / posttest `ada` bila tesnya aktif; tuntas menurut `tesTuntas` (wajib 100 = skor 100). Sesi yang batas waktunya lewat tetapi belum dinilai dianggap selesai.
  */
 export async function muatTahapanBatch(db: Db, kegiatanId: number, akunIds: readonly number[], sekarang: number, aturanDiketahui?: AturanPelatihan): Promise<KeadaanTahapanBatch> {
-  const [aturan, daftar, kuis] = await Promise.all([aturanDiketahui ? Promise.resolve(aturanDiketahui) : muatAturan(db, kegiatanId), muatTesDaftar(db, kegiatanId), muatKuisBatch(db, kegiatanId, akunIds)]);
+  const [aturan, daftar, kuis, materi] = await Promise.all([aturanDiketahui ? Promise.resolve(aturanDiketahui) : muatAturan(db, kegiatanId), muatTesDaftar(db, kegiatanId), muatKuisBatch(db, kegiatanId, akunIds), muatStatusMateriBatch(db, kegiatanId, akunIds)]);
   const tes = daftar.filter((t) => t.aktif && (t.jenis === "pretest" || t.jenis === "posttest"));
   const sesiPerTes = new Map<number, Map<number, { selesai_at: string | null; batas_at: string | null; skor: number | string | null; skor_terbaik: number | string | null }>>();
   if (tes.length > 0 && akunIds.length > 0) {
@@ -109,6 +111,7 @@ export async function muatTahapanBatch(db: Db, kegiatanId: number, akunIds: read
       m[t.jenis as "pretest" | "posttest"] = { ada: true, tuntas };
     }
     m.kuis = { ada: kuis.ada, tuntas: kuis.ikut.has(akun) };
+    m.video = { ada: materi.video_wajib_ada, tuntas: materi.video_tuntas.has(akun) };
     masukan.set(akun, m);
   }
   return { aturan, tes, masukan, kuis_ada: kuis.ada };

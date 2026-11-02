@@ -5,14 +5,14 @@
 // (25 Okt 2026, tahap 29) Kartu isian Identifikasi lanjutan: wilayah tugas, kelas, jumlah per peran, dan daftar petugas.
 // Hanya tampilan; aturan (pemeriksa, status Draf atau Final) ada di lib/keu/lanjutan.ts dan basis data.
 
-import { type Dispatch } from "react";
+import { type Dispatch, type ReactNode } from "react";
 import { kolom, label as kelasLabel, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
 import { JABATAN } from "@/lib/keu/kebijakan";
 import {
   idBaru, ID_LJ, KODE_PERAN, MAKS_INSTRUKTUR, METODE_KELAS, NAMA_PERAN, NAMA_SUMBER, PAKET_KELAS, TEMPAT_KELAS, hariKelas, instrukturKosongLj, instrukturLengkap, jumlahPetugas, pesertaKelas,
   type IsiLanjutan, type KodePeran, type Kelas, type Petugas,
 } from "@/lib/keu/lanjutan";
-import { ASAL_INSTRUKTUR, LEVEL_INSTRUKTUR, daftarPeriode, type Form } from "@/lib/keu/identifikasi";
+import { ASAL_INSTRUKTUR, LEVEL_INSTRUKTUR, NAMA_LEVEL, daftarPeriode, type Form } from "@/lib/keu/identifikasi";
 import { kelasAwal, samakanDenganAwal, tambahDariAwal, tautkanKelas, type TautKelas } from "@/lib/keu/tautAwal";
 import { adaDiDaftar, cariAkunUnik, namaTerpakaiPeran, terpakaiLain, type CalonNama } from "@/lib/keu/pilihNama";
 import { PILIHAN_LAINNYA, terapkanPilihan } from "@/lib/keu/pilihInstruktur";
@@ -22,10 +22,18 @@ import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl } from "../..
 export type Ubah = (fn: (g: IsiLanjutan) => void) => void;
 type Props = { isi: IsiLanjutan; ubah: Ubah; mati: boolean };
 
-const opsiKolom = (v: string, set: (s: string) => void, mati: boolean, nama: string, opsi: readonly string[], kosong = "(belum dipilih)") => (
+const opsiKolom = (v: string, set: (s: string) => void, mati: boolean, nama: string, opsi: readonly string[], kosong = "(belum dipilih)", tampil?: (o: string) => string) => (
   <select aria-label={nama} className={kolom} value={v} disabled={mati} onChange={(e) => set(e.target.value)}>
-    {opsi.map((o) => <option key={o || "kosong"} value={o}>{o === "" ? kosong : o}</option>)}
+    {opsi.map((o) => <option key={o || "kosong"} value={o}>{o === "" ? kosong : tampil ? tampil(o) : o}</option>)}
   </select>
+);
+
+/** Judul kecil di atas satu kolom isian baris (agar tiap kolom jelas artinya dan tingginya sejajar). */
+const Kol = ({ judul, children, className = "" }: { judul: string; children: ReactNode; className?: string }) => (
+  <div className={`flex min-w-0 flex-col gap-1 ${className}`}>
+    <span className="text-[11.5px] font-semibold text-[#44546F]">{judul}</span>
+    {children}
+  </div>
 );
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -155,8 +163,8 @@ function InstrukturKelas({ k, i, ubah, mati, organik, catatan }: { k: Kelas; i: 
       {daftar.length === 0 && <Cat>Belum ada instruktur. Tambahkan bila kelas ini memakai pengajar atau narasumber.</Cat>}
       {daftar.length > 0 && <Cat>Isi jam mengajar tiap instruktur; jumlahnya adalah jam pelatihan kelas ini. Di RAB honor dihitung jumlah kelas x jam x tarif; di POK cukup total jam x tarif.</Cat>}
       {daftar.map((y, j) => (
-        <div key={j} className="grid grid-cols-2 gap-2 rounded-lg border border-[#E1E6EF] bg-white p-2 sm:grid-cols-5">
-          <div className="min-w-0 sm:col-span-2">
+        <div key={j} className="grid grid-cols-2 items-start gap-x-2 gap-y-2 rounded-lg border border-[#E1E6EF] bg-white p-2 sm:grid-cols-5">
+          <Kol judul="Nama instruktur" className="col-span-2">
             <PilihNama
               ariaLabel={`Nama instruktur ${j + 1} kelas ${i + 1}`} nilai={y.nama} akun={y.akun ?? null} mati={mati} placeholder="Ketik atau pilih nama instruktur" calon={calonIns}
               terpakai={terpakaiLain(daftar.map((e) => e.nama), j)}
@@ -165,13 +173,15 @@ function InstrukturKelas({ k, i, ubah, mati, organik, catatan }: { k: Kelas; i: 
                 d[j] = n === "" ? terapkanPilihan(d[j], "", namaOrg) : calonIns && adaDiDaftar(calonIns, n) ? terapkanPilihan(d[j], n, namaOrg, akun) : { ...terapkanPilihan(d[j], PILIHAN_LAINNYA, namaOrg), nama: n };
               })}
             />
-          </div>
-          {opsiKolom(y.level, (v) => ubahDaftar((d) => { d[j].level = v as typeof y.level; }), mati, `Level instruktur ${j + 1} kelas ${i + 1}`, LEVEL_INSTRUKTUR, "Level")}
-          {opsiKolom(y.asal, (v) => ubahDaftar((d) => { d[j].asal = v as typeof y.asal; }), mati, `Asal instruktur ${j + 1} kelas ${i + 1}`, ASAL_INSTRUKTUR, "Asal")}
-          <div className="flex items-center gap-1.5">
-            <Angka nama={`Jam instruktur ${j + 1} kelas ${i + 1}`} nilai={y.jam} maks={500} mati={mati} onUbah={(v) => ubahDaftar((d) => { d[j].jam = v; })} />
-            <span className="text-[12px] text-[#44546F]">jam</span>
-          </div>
+          </Kol>
+          <Kol judul="Level">{opsiKolom(y.level, (v) => ubahDaftar((d) => { d[j].level = v as typeof y.level; }), mati, `Level instruktur ${j + 1} kelas ${i + 1}`, LEVEL_INSTRUKTUR, "(pilih level)", (o) => `${o} (${NAMA_LEVEL[o as keyof typeof NAMA_LEVEL] ?? o})`)}</Kol>
+          <Kol judul="Asal">{opsiKolom(y.asal, (v) => ubahDaftar((d) => { d[j].asal = v as typeof y.asal; }), mati, `Asal instruktur ${j + 1} kelas ${i + 1}`, ASAL_INSTRUKTUR, "(pilih asal)")}</Kol>
+          <Kol judul="Jam mengajar">
+            <div className="flex items-center gap-1.5">
+              <Angka nama={`Jam instruktur ${j + 1} kelas ${i + 1}`} nilai={y.jam} maks={500} mati={mati} onUbah={(v) => ubahDaftar((d) => { d[j].jam = v; })} />
+              <span className="text-[12px] text-[#44546F]">jam</span>
+            </div>
+          </Kol>
           <div className="col-span-2 flex items-center justify-between sm:col-span-5">
             <span className={`text-[12px] ${instrukturLengkap(y) ? "text-[#1B7A3E]" : "text-[#8A5A00]"}`}>{instrukturLengkap(y) ? "Lengkap" : "Belum lengkap: nama, level, asal, dan jam wajib"}</span>
             <button type="button" className={tombolBahaya} disabled={mati} onClick={() => ubahDaftar((d) => { d.splice(j, 1); })}>Hapus instruktur</button>

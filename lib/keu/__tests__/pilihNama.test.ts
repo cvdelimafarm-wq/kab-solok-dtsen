@@ -28,6 +28,14 @@ describe("saring dan cek daftar", () => {
     expect(saringCalon(MIT, "kubung").map((c) => c.nama)).toEqual(["Rudi Sinaga"]);
     expect(saringCalon(ORG, "iqbal").map((c) => c.nama)).toEqual(["M. Iqbal Hadi, SST."]);
     expect(saringCalon(MIT, "zzz")).toEqual([]);
+    // tanda baca tidak menghalangi: gelar ditulis tanpa koma dan titik, kata terbalik, atau nama + kecamatan
+    const GEL = calonOrganik([{ nama: "Riva Hestaria, A.Md.", akun_id: 563 }, { nama: "Dina Marizka, S.Tr.Stat." }]);
+    expect(saringCalon(GEL, "Riva Hestaria A.Md").map((c) => c.nama)).toEqual(["Riva Hestaria, A.Md."]);
+    expect(saringCalon(GEL, "riva hestaria, a.md.").map((c) => c.nama)).toEqual(["Riva Hestaria, A.Md."]);
+    expect(saringCalon(GEL, "hestaria riva").map((c) => c.nama)).toEqual(["Riva Hestaria, A.Md."]);
+    expect(saringCalon(GEL, "marizka s tr stat").map((c) => c.nama)).toEqual(["Dina Marizka, S.Tr.Stat."]);
+    expect(saringCalon(MIT, "sinaga kubung").map((c) => c.nama)).toEqual(["Rudi Sinaga"]);
+    expect(saringCalon(GEL, "...")).toHaveLength(2);
     const awal = calonOrganik([{ nama: "Ria Dina" }, { nama: "Dina Marizka, S.Tr.Stat." }, { nama: "Hardina" }]);
     expect(saringCalon(awal, "din").map((c) => c.nama)).toEqual(["Dina Marizka, S.Tr.Stat.", "Hardina", "Ria Dina"]);
   });

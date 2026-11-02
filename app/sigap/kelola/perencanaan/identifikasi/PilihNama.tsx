@@ -71,15 +71,15 @@ export default function PilihNama({ nilai, akun, onPilih, calon, terpakai, mati,
             : <p className="m-0 mt-0.5 text-[11.5px] text-[#5B6B84]">Nama di luar daftar (tidak tertaut ke akun).</p>
       )}
       {buka && !mati && (
-        <ul role="listbox" className="absolute left-0 right-0 z-30 mt-1 max-h-60 list-none overflow-y-auto rounded-lg border border-[#DCE3EE] bg-white p-1 shadow-lg">
+        <ul role="listbox" className="absolute left-0 right-0 z-30 mt-1 max-h-64 min-w-[260px] list-none overflow-y-auto rounded-lg border border-[#DCE3EE] bg-white p-1 shadow-lg">
           {hasil.map((c, n) => {
             const pakai = !dapatDipilih(c);
             return (
               <li key={`${c.nama}|${c.ket}`} role="option" aria-selected={n === aktif}>
                 <button type="button" disabled={pakai} onMouseDown={(e) => e.preventDefault()} onClick={() => pilih(c.nama, c.akun)}
-                  className={`flex min-h-[40px] w-full items-baseline justify-between gap-2 rounded-md px-2 py-1.5 text-left text-[13.5px] text-[#1B2B4B] hover:bg-[#EEF3FB] disabled:text-[#8A97AD] ${n === aktif ? "bg-[#EEF3FB]" : ""}`}>
-                  <span className="min-w-0 truncate">{c.nama}</span>
-                  <span className="shrink-0 text-[11.5px] text-[#5B6B84]">{pakai ? "sudah dipilih" : c.ket}</span>
+                  className={`flex min-h-[40px] w-full flex-col items-start justify-center rounded-md px-2 py-1 text-left text-[13.5px] text-[#1B2B4B] hover:bg-[#EEF3FB] disabled:text-[#8A97AD] ${n === aktif ? "bg-[#EEF3FB]" : ""}`}>
+                  <span className="min-w-0 max-w-full break-words leading-snug">{c.nama}</span>
+                  {(pakai || c.ket) && <span className="text-[11.5px] leading-tight text-[#5B6B84]">{pakai ? "sudah dipilih" : c.ket}</span>}
                 </button>
               </li>
             );

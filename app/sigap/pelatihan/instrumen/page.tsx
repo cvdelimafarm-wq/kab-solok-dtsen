@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, tglSedang } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Kerangka } from "../komponen";
+import BagianMateri from "./BagianMateri"; // (2 Nov 2026) Tahap C: video + tautan wajib dilacak
 
 type Jenis = "kuesioner" | "pedoman" | "materi";
 type Berkas = { id: number; jenis: Jenis; judul: string; nama_file: string; ukuran: number | null; diunggah_at: string };
@@ -109,9 +110,10 @@ export default function HalamanInstrumen() {
   }
 
   return (
-    <Kerangka aktif="instrumen" judul="Instrumen Pelatihan" sub="Kuesioner, buku pedoman, dan PPT materi — dapat diunduh" langkah="instrumen">
+    <Kerangka aktif="instrumen" judul="Instrumen Pelatihan" sub="Video, tautan, kuesioner, buku pedoman, dan PPT materi" langkah="instrumen">
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
       {info && <Pesan jenis="ok" onTutup={() => setInfo(null)}>{info}</Pesan>}
+      <BagianMateri />
       {!data && !galat && <Memuat />}
       {data &&
         GRUP.map((g) => {

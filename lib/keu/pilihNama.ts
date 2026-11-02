@@ -36,15 +36,22 @@ export function cariAkunUnik(daftar: readonly CalonNama[], nama: string): number
   return cocok.length === 1 && cocok[0].akun !== undefined ? cocok[0].akun : null;
 }
 
-/** Saring menurut kata (tanpa membedakan huruf besar kecil; cocok pada nama atau keterangan). Nama yang diawali kata didahulukan. Maksimal `maks` hasil. */
+/** Bentuk pembanding untuk PENCARIAN saja: huruf kecil, tanda baca (koma, titik, tanda hubung) dianggap spasi. Agar "Riva Hestaria A.Md" cocok dengan "Riva Hestaria, A.Md.". */
+const kunciCari = (s: string): string => s.toLocaleLowerCase("id").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
+/** Saring menurut kata (tanpa membedakan huruf besar kecil dan tanda baca; tiap kata yang diketik harus ada pada nama atau keterangan, urutan bebas). Nama yang diawali kata didahulukan. Maksimal `maks` hasil. */
 export function saringCalon(daftar: readonly CalonNama[], kata: string, maks = 40): CalonNama[] {
-  const k = kunci(kata);
+  const k = kunciCari(kata);
   if (k === "") return daftar.slice(0, maks);
+  const kataKata = k.split(" ");
   const awal: CalonNama[] = []; const sisa: CalonNama[] = [];
   for (const c of daftar) {
-    const n = kunci(c.nama);
+    const n = kunciCari(c.nama);
     if (n.startsWith(k)) awal.push(c);
-    else if (n.includes(k) || kunci(c.ket).includes(k)) sisa.push(c);
+    else {
+      const gabung = `${n} ${kunciCari(c.ket)}`;
+      if (kataKata.every((w) => gabung.includes(w))) sisa.push(c);
+    }
     if (awal.length >= maks) break;
   }
   return [...awal, ...sisa].slice(0, maks);

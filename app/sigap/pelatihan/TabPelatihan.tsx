@@ -73,7 +73,10 @@ export function daftarTab(kameraHref: string | null, peran: TabPeran = TAB_PESER
   return tab;
 }
 
-export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA }: { aktif: TabAktif; kameraHref: string | null; peran?: TabPeran }) {
+/** Angka penanda per tab (mis. instrumen wajib yang belum dibuka). 0 / kosong = tanpa penanda. */
+export type Lencana = Partial<Record<TabAktif, number>>;
+
+export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana = {} }: { aktif: TabAktif; kameraHref: string | null; peran?: TabPeran; lencana?: Lencana }) {
   const tab = daftarTab(kameraHref, peran);
   return (
     <>
@@ -85,7 +88,14 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA }: { aktif
             const warna = sedang ? "text-[#1F5FD1]" : "text-[#6B7A90]";
             const isi = (
               <span className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-semibold ${warna} ${t.href ? "" : "opacity-40"}`}>
-                <span className={`grid h-7 w-12 place-items-center rounded-full ${sedang ? "bg-[#E3EEFF]" : ""}`}>{t.ikon}</span>
+                <span className={`relative grid h-7 w-12 place-items-center rounded-full ${sedang ? "bg-[#E3EEFF]" : ""}`}>
+                  {t.ikon}
+                  {(lencana[t.kode] ?? 0) > 0 && (
+                    <span aria-label={`${lencana[t.kode]} belum selesai`} className="absolute right-1 top-0 grid h-4 min-w-[16px] place-items-center rounded-full bg-[#D92D20] px-1 text-[10px] font-bold leading-none text-white">
+                      {Math.min(lencana[t.kode] ?? 0, 9)}
+                    </span>
+                  )}
+                </span>
                 <span className="leading-none">{t.label}</span>
               </span>
             );
@@ -109,7 +119,7 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA }: { aktif
   );
 }
 
-type Bendera = { tab_baru: boolean; kamera_href: string | null; kegiatan_id: number; tab: TabPeran };
+type Bendera = { tab_baru: boolean; kamera_href: string | null; kegiatan_id: number; tab: TabPeran; instrumen_belum: number };
 // Bendera disimpan selama sesi tab peramban supaya perpindahan antar-halaman tidak memuat ulang dan bilah tidak berkedip.
 let cacheBendera: { nilai: Bendera; sampai: number } | null = null;
 
@@ -120,7 +130,7 @@ export function useBenderaTab(): Bendera | null {
     let batal = false;
     fetchJson<Bendera>("/api/sigap/pelatihan/ketentuan")
       .then((r) => {
-        const nilai: Bendera = { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id, tab: r.tab ?? TAB_PESERTA };
+        const nilai: Bendera = { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id, tab: r.tab ?? TAB_PESERTA, instrumen_belum: Number(r.instrumen_belum ?? 0) || 0 };
         cacheBendera = { nilai, sampai: Date.now() + 60_000 };
         if (!batal) setB(nilai);
       })
@@ -136,7 +146,7 @@ export function useBenderaTab(): Bendera | null {
 export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
   const b = useBenderaTab();
   if (!b || !b.tab_baru) return null;
-  return <TabPelatihan aktif={aktif} kameraHref={b.kamera_href} peran={b.tab} />;
+  return <TabPelatihan aktif={aktif} kameraHref={b.kamera_href} peran={b.tab} lencana={{ instrumen: b.instrumen_belum }} />;
 }
 
 /** Untuk pengujian / pembaruan setelah pengelola mengubah saklar. */
