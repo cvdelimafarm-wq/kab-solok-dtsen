@@ -105,7 +105,7 @@ export default function KelolaPendataan() {
       tab={tabTampil.map(({ kode, label }) => ({ kode, label }))}
       aktifTab={tabIni}
       onTab={pilihTab}
-      atas={<PenunjukAlur posisi={posisi} nama="Alur pendataan" />}
+      atas={<PenunjukAlur posisi={posisi} nama="Alur pendataan" onPilih={(k) => pilihTab(k as KodeTabPendataan)} />}
       bawah={<NavAlur posisi={posisi} onPilih={(k) => pilihTab(k as KodeTabPendataan)} />}
     >
       <PemilihSurvei daftar={daftar} aktif={kegId} onPilih={pilihKegiatan} />

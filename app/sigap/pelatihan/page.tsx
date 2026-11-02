@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBenderaTab } from "./TabPelatihan";
 import { LABEL_SLOT_FOTO, bagiFoto, keadaanHari, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
 import { kunciSudahLihat, type PengumumanPeserta } from "@/lib/sigapPengumuman";
 import { daftarTerlewat } from "@/lib/sigapTerlewat";
@@ -746,6 +747,16 @@ export default function HalamanPelatihan() {
   useEffect(() => {
     if (data && !data.peserta && data.boleh_lihat_kelola) router.replace("/sigap/kelola/pelatihan");
   }, [data, router]);
+  // (2 Nov 2026) Kegiatan yang memakai tampilan 5 tab: halaman puncak pelatihan = tab "Hari ini". Tab "Pelatihan" membuka halaman ini dengan ?tab=pelatihan (tidak dialihkan).
+  const bendera = useBenderaTab();
+  useEffect(() => {
+    if (!bendera?.tab_baru || !data?.peserta) return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("tab") === "pelatihan") return;
+    q.delete("tab");
+    const sisa = q.toString();
+    router.replace(`/sigap/pelatihan/hari-ini${sisa ? `?${sisa}` : ""}`);
+  }, [bendera, data, router]);
   const u = data?.undangan;
   const peserta = data?.peserta ?? null;
 

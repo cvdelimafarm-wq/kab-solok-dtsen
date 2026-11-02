@@ -21,6 +21,7 @@ import { hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangk
 import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 import { useKelasSaya } from "./kartuKelas";
 import { NavPelatihan, PenunjukPelatihan } from "./AlurPelatihan";
+import { TabPelatihanOtomatis, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
 
 export type TesHub = {
   jenis: JenisTes;
@@ -183,7 +184,7 @@ export function Kerangka({
   alurTersembunyi,
   children,
 }: {
-  aktif: "undangan" | "pelatihan" | "instrumen";
+  aktif: "undangan" | "pelatihan" | "instrumen" | "hari-ini" | "monitoring";
   judul: React.ReactNode;
   sub?: React.ReactNode;
   nama?: string;
@@ -200,7 +201,9 @@ export function Kerangka({
   // Undangan & instrumen kini langkah bernomor di halaman Langkah (Layer 2); tombol panah di header naik satu layer.
   // (9 Okt 2026) Pelatihan kini tahap dalam garis waktu Pendataan Pascabencana -> panah kembali naik ke sana.
   const info = useInfoPelatihan();
-  const induk = aktif === "pelatihan" ? tujuanKembali(info) : "/sigap/pelatihan"; // (1 Nov 2026) induk pelatihan ini (bukan selalu Pascabencana)
+  // (2 Nov 2026) halaman tab baru (Hari ini, Monitoring) adalah halaman puncak pelatihan: panah kembali naik ke induk pelatihan, bukan ke /sigap/pelatihan (yang mengalihkan ke Hari ini).
+  const induk = aktif === "pelatihan" || aktif === "hari-ini" || aktif === "monitoring" ? tujuanKembali(info) : "/sigap/pelatihan"; // (1 Nov 2026) induk pelatihan ini (bukan selalu Pascabencana)
+  const tabAktif: TabAktif = aktif === "undangan" ? "hari-ini" : aktif;
   return (
     <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
       <HeaderAdmin
@@ -228,6 +231,7 @@ export function Kerangka({
         {/* (8 Okt 2026) notifikasi wajib di aplikasi terpasang (permintaan user) */}
         <PengaturanAwal />
       </main>
+      <TabPelatihanOtomatis aktif={tabAktif} />
     </div>
   );
 }
