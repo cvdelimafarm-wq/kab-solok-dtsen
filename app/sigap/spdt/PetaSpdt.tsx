@@ -9,6 +9,8 @@
 import { useRef } from "react";
 import { WARNA_BELUM, warnaIndeks, type Proyeksi } from "@/lib/pendataan";
 import { akurasiRendah, inisialNama, type KkSpdt } from "@/lib/spdtNtp";
+import type { FiturBatas } from "@/lib/batasSubsls";
+import { LapisBatas } from "../pendataan/LapisBatas";
 
 export type Pandang = { cx: number; cy: number; z: number };
 export const PANDANG_AWAL: Pandang = { cx: 180, cy: 220, z: 1 };
@@ -28,6 +30,8 @@ type Props = {
   saya: { lat: number; lng: number } | null;
   /** (21 Okt 2026) true = ada peta jalan di bawah: latar dan kisi dibuat bening supaya peta terlihat (sama dengan PetaKk) */
   tanpaLatar?: boolean;
+  /** (2 Nov 2026) garis batas Sub SLS (kosong/undefined = tidak digambar) */
+  batas?: readonly FiturBatas[];
 };
 
 function klem(p: Pandang): Pandang {
@@ -36,7 +40,7 @@ function klem(p: Pandang): Pandang {
   return { z: p.z, cx: Math.max(hw, Math.min(L - hw, p.cx)), cy: Math.max(hh, Math.min(T - hh, p.cy)) };
 }
 
-export default function PetaSpdt({ kk, proj, warnaIndeksKk, pandang, setPandang, terpilih, onPilih, saya, tanpaLatar = false }: Props) {
+export default function PetaSpdt({ kk, proj, warnaIndeksKk, pandang, setPandang, terpilih, onPilih, saya, tanpaLatar = false, batas }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const ptr = useRef(new Map<number, { x: number; y: number }>());
   const gerak = useRef({ geser: false, jarak0: 0, z0: 1 });
@@ -120,6 +124,8 @@ export default function PetaSpdt({ kk, proj, warnaIndeksKk, pandang, setPandang,
           ))}
         </>
       )}
+
+      <LapisBatas fitur={batas} proj={proj} aktifId={null} />
 
       {proj &&
         urut.map((k) => {

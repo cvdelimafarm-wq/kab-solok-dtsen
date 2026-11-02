@@ -18,6 +18,9 @@ import { LABEL_PERAN, daftarPpl, jarakM, judulKata, saringKk, type KkSpdt } from
 import { kunciPetaSpdt } from "@/lib/petaDasar";
 import KontrolPetaDasar from "../pendataan/KontrolPetaDasar";
 import { useDasarTim } from "../pendataan/useDasar";
+import { TombolBatas } from "../pendataan/LapisBatas";
+import { useBatasSubsls } from "../pendataan/useBatas";
+import { kotakKk } from "@/lib/batasSubsls";
 import type { StatusDasar } from "../pendataan/PetaDasar";
 import { useKkSpdt } from "./useSpdt";
 import Ik from "./Ik";
@@ -94,6 +97,9 @@ function Isi() {
   // peta jalan per peran: PPL = KK miliknya, PML = KK tim, Supervisor = seluruh wilayah (berkas dibuat `potong-peta.mjs --spdt`). Tanpa berkas = kanvas titik seperti sebelumnya.
   const dasar = useDasarTim(kunciPetaSpdt(peran, semuaKk), tabAktif === "peta");
   const pakaiDasar = !!proj && dasar.lapisan === "jalan" && !!dasar.sumber && statusDasar !== "gagal";
+  // (2 Nov 2026) batas Sub SLS di atas peta (sama dengan Lembar Pendataan bencana); kecamatan dipilih dari kotak KK yang tampil
+  const kotakBatas = useMemo(() => kotakKk(kkPeta.map((k) => ({ lat: k.lat, lng: k.lng }))), [kkPeta]);
+  const batas = useBatasSubsls(tabAktif === "peta" && !!proj, kotakBatas);
   const kunciDasar = !dasar.sumber ? "" : dasar.sumber.tipe === "blob" ? `b:${dasar.sumber.nama}:${dasar.sumber.blob.size}` : `o:${dasar.sumber.url}`;
   useEffect(() => {
     setStatusDasar(null);
@@ -237,7 +243,7 @@ function Isi() {
               <>
                 {pakaiDasar && dasar.sumber && <PetaDasar proj={proj} pandang={pandang} sumber={dasar.sumber} onStatus={(s, a) => { setStatusDasar(s); setAlasanDasar(a ?? null); }} />}
                 <div className="absolute inset-0">
-                  <PetaSpdt kk={kkPeta} proj={proj} warnaIndeksKk={indeksWarna} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} onPilih={setTerpilihId} saya={saya} tanpaLatar={pakaiDasar && statusDasar === "siap"} />
+                  <PetaSpdt kk={kkPeta} proj={proj} warnaIndeksKk={indeksWarna} pandang={pandang} setPandang={(f) => setPandang(f)} terpilih={terpilihId} onPilih={setTerpilihId} saya={saya} tanpaLatar={pakaiDasar && statusDasar === "siap"} batas={batas.tampil ? batas.fitur : undefined} />
                 </div>
                 <KontrolPetaDasar dasar={dasar} status={statusDasar} alasan={alasanDasar} />
                 <div className="absolute right-2.5 top-2.5 flex flex-col overflow-hidden rounded-[12px] bg-white shadow-[0_4px_12px_rgba(15,42,82,.15)]">
@@ -251,6 +257,7 @@ function Isi() {
                     <Ik n="semua" />
                   </button>
                 </div>
+                <TombolBatas tampil={batas.tampil} status={batas.status} onUbah={batas.setTampil} posisi="right-2.5 top-[204px]" ukuran="h-11 w-11" />
                 <button type="button" aria-label="Tampilkan posisi saya" onClick={cariPosisi} className="absolute right-2.5 top-[150px] grid h-11 w-11 place-items-center rounded-[12px] bg-white text-[#1F5FD1] shadow-[0_4px_12px_rgba(15,42,82,.15)] active:bg-[#F1F5FC]">
                   <Ik n="lokasi" />
                 </button>

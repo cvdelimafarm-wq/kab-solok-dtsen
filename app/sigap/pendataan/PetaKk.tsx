@@ -13,6 +13,8 @@ import { useRef } from "react";
 import { WARNA_BELUM, WARNA_PML, warnaIndeks, type Anggota, type HasilKk, type KkLembar, type Proyeksi } from "@/lib/pendataan";
 import { KONFIG_BAWAAN, bentukPeta, type BentukHasil } from "@/lib/lembarKonfig";
 import { inisial } from "./usePendataan";
+import { LapisBatas } from "./LapisBatas";
+import type { FiturBatas } from "@/lib/batasSubsls";
 
 export type Pandang = { cx: number; cy: number; z: number };
 export const PANDANG_AWAL: Pandang = { cx: 180, cy: 220, z: 1 };
@@ -72,6 +74,9 @@ type Props = {
   tanpaLatar?: boolean;
   /** (27 Okt 2026) bentuk penanda per hasil (pengaturan kegiatan); kosong = bentuk lama */
   peta?: PetaBentuk;
+  /** (2 Nov 2026) garis batas Sub SLS (kosong/undefined = tidak digambar); `batasAktif` = idsubsls yang sedang dibuka (ditebalkan) */
+  batas?: readonly FiturBatas[];
+  batasAktif?: string | null;
 };
 
 function klem(p: Pandang): Pandang {
@@ -80,7 +85,7 @@ function klem(p: Pandang): Pandang {
   return { z: p.z, cx: Math.max(hw, Math.min(L - hw, p.cx)), cy: Math.max(hh, Math.min(T - hh, p.cy)) };
 }
 
-export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpilih, tampil, onPilih, saya, tanpaLatar = false, peta = PETA_BAWAAN }: Props) {
+export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpilih, tampil, onPilih, saya, tanpaLatar = false, peta = PETA_BAWAAN, batas, batasAktif = null }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const ptr = useRef(new Map<number, { x: number; y: number }>());
   const gerak = useRef({ geser: false, jarak0: 0, z0: 1 });
@@ -167,6 +172,8 @@ export default function PetaKk({ kk, proj, anggota, pandang, setPandang, terpili
         ))}
         </>
       )}
+
+      <LapisBatas fitur={batas} proj={proj} aktifId={batasAktif} />
 
       {titik.map((k) => {
         const a = k.ppl_akun_id ? anggota.get(k.ppl_akun_id) : undefined;

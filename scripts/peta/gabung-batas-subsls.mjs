@@ -208,11 +208,14 @@ for (const ft of fitur) {
   const kec = ft.id.slice(0, 7); // 13 03 040
   (perKec.get(kec) ?? perKec.set(kec, []).get(kec)).push(ft);
 }
-const manifest = { dibuat, desimal: DESIMAL, semua: { berkas: "batas-subsls.json", ukuran: fs.statSync(path.join(KELUAR, "batas-subsls.json")).size, n: fitur.length }, kecamatan: {} };
+const versi = dibuat.slice(0, 10).replace(/-/g, "");
+const manifest = { versi, dibuat, desimal: DESIMAL, semua: { berkas: "batas-subsls.json", ukuran: fs.statSync(path.join(KELUAR, "batas-subsls.json")).size, n: fitur.length }, kecamatan: {} };
 for (const [kec, list] of perKec) {
   const nama = `batas-${kec}.json`;
   fs.writeFileSync(path.join(KELUAR, nama), bungkus(list));
-  manifest.kecamatan[kec] = { berkas: nama, ukuran: fs.statSync(path.join(KELUAR, nama)).size, n: list.length };
+  // kotak kecamatan (bb) dipakai aplikasi untuk memilih kecamatan mana yang dimuat di HP
+  const bb = [Math.min(...list.map((f) => f.bb[0])), Math.min(...list.map((f) => f.bb[1])), Math.max(...list.map((f) => f.bb[2])), Math.max(...list.map((f) => f.bb[3]))];
+  manifest.kecamatan[kec] = { berkas: nama, ukuran: fs.statSync(path.join(KELUAR, nama)).size, n: list.length, bb };
 }
 fs.writeFileSync(path.join(KELUAR, "manifest.json"), JSON.stringify(manifest, null, 1));
 
