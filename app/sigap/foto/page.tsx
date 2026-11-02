@@ -15,6 +15,7 @@ import { bacaSesi, pemilikSesi } from "@/app/portal/sesi";
 import { siapkanData, useData } from "@/app/portal/dataBersama";
 import { galatSinyal, jalurFotoSaya } from "@/lib/sigapFotoCache";
 import { bolehFotoLaporan } from "@/lib/sigapFoto";
+import { fotoHanyaHariKerja } from "@/lib/hariKerjaPelatihan";
 
 type Mode = { bawaan: string; nama_saya?: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran?: string; jenis?: string; jumlah_foto: number; mode: string; hari_kerja_hari_ini?: boolean; laporan_hari_ini?: { sumber: string; diunggah_at: string } | null }[] };
 type Tab = "kamera" | "saya" | "periksa";
@@ -87,7 +88,10 @@ function Isi() {
   // (31 Okt 2026) Hari ini bukan hari kerja (tidak ada hari Translok) pada SEMUA penugasan kegiatan ini: Kamera memotret FOTO LAPORAN yang menempati nomor 3
   // dan menimpa foto lamanya; unggah dari galeri hanya diizinkan di kondisi ini. Data lama/simpanan HP tanpa bidang ini dianggap hari kerja biasa (server yang memutuskan).
   const penugasanIni = aktif ? kamera.filter((k) => k.kegiatan_id === aktif.kegiatan_id) : [];
-  const tanpaJadwal = !!aktif && bolehFotoLaporan(aktif.jumlah_foto) && penugasanIni.length > 0 && penugasanIni.every((k) => k.hari_kerja_hari_ini === false);
+  const bukanHariKerja = penugasanIni.length > 0 && penugasanIni.every((k) => k.hari_kerja_hari_ini === false);
+  // (2 Nov 2026) PELATIHAN: kamera dan unggah (termasuk foto laporan nomor 3) hanya pada hari kerja; di luar itu hanya Foto saya dan Periksa.
+  const kameraTutup = !!aktif && fotoHanyaHariKerja(aktif.jenis) && bukanHariKerja;
+  const tanpaJadwal = !!aktif && !fotoHanyaHariKerja(aktif.jenis) && bolehFotoLaporan(aktif.jumlah_foto) && bukanHariKerja;
   const laporanIni = penugasanIni.map((k) => k.laporan_hari_ini).find((x) => !!x) ?? null;
 
   const TabBtn = ({ t, teks }: { t: Tab; teks: string }) => (
@@ -116,7 +120,17 @@ function Isi() {
               </select>
             </label>
           )}
-          {aktif && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} namaSaya={mode?.nama_saya ?? ""} peran={aktif.peran ?? ""} jenis={aktif.jenis ?? null} nomorGanti={tanpaJadwal ? null : nomorGanti} tanpaJadwal={tanpaJadwal} laporanIni={laporanIni} onLaporanBaru={() => void md.muat()} />}
+          {kameraTutup && (
+            <div role="status" className="space-y-3 rounded-2xl bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]">
+              <p className="text-[15px] font-extrabold text-[#0F2A52]">Hari ini bukan hari kerja Anda</p>
+              <p className="text-[13.5px] leading-relaxed text-[#55657D]">Pada pelatihan, foto hanya bisa diambil atau diunggah pada hari kerja. Di luar hari kerja Anda tetap bisa melihat foto Anda dan memeriksanya.</p>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setTab("saya")} className="min-h-[44px] flex-1 rounded-xl bg-[#0F2A52] text-sm font-bold text-white">Buka Foto saya</button>
+                <button type="button" onClick={() => setTab("periksa")} className="min-h-[44px] flex-1 rounded-xl border border-[#C9D3E6] bg-white text-sm font-bold text-[#0F2A52]">Periksa</button>
+              </div>
+            </div>
+          )}
+          {aktif && !kameraTutup && <KameraSigap key={aktif.kegiatan_id} kegiatanId={aktif.kegiatan_id} namaKegiatan={aktif.nama} jumlahNomor={aktif.jumlah_foto} namaSaya={mode?.nama_saya ?? ""} peran={aktif.peran ?? ""} jenis={aktif.jenis ?? null} nomorGanti={tanpaJadwal ? null : nomorGanti} tanpaJadwal={tanpaJadwal} laporanIni={laporanIni} onLaporanBaru={() => void md.muat()} />}
         </>
       )}
       {tab === "saya" && <FotoSaya />}

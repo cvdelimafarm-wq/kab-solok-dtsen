@@ -12,6 +12,7 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { IkonTahap } from "../kelola/IkonTahap";
 import { NavAlur } from "../kelola/AlurKelola";
+import { ringkasRinci, type Rinci, type StatusRinci } from "@/lib/progresPelatihan";
 import { catatanBerikutnya, posisiLangkah, progresLangkah, statusLangkah, teksLangkah, teksStatusLangkah, type LangkahPelatihan, type StatusLangkah } from "@/lib/alurPelatihan";
 
 type Data = { daftar: LangkahPelatihan[]; status: StatusLangkah[] };
@@ -132,3 +133,84 @@ export function NavPelatihan({ daftar, aktif }: { daftar: LangkahPelatihan[]; ak
 
 /** Dipakai komponen yang sudah punya daftar (Kerangka) -- menghitung status sekali. */
 export const statusDari = (daftar: readonly LangkahPelatihan[]): StatusLangkah[] => statusLangkah(daftar);
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+// (2 Nov 2026) DAFTAR PROGRES (tab Pelatihan). Menggantikan kartu "LANGKAH BERIKUTNYA": satu baris per tahap, status tegas dan progres x/y.
+// ---------------------------------------------------------------------------------------------------------------------------------------------
+const GAYA_RINCI: Record<StatusRinci, { bulat: string; chip: string }> = {
+  selesai: { bulat: "bg-[#19A463] text-white", chip: "bg-[#E3F6EC] text-[#13794B]" },
+  berjalan: { bulat: "border-2 border-[#1F5FD1] bg-white text-[#1F5FD1]", chip: "bg-[#E3EEFF] text-[#1F5FD1]" },
+  belum_dibuka: { bulat: "border-2 border-dashed border-[#9AA9BF] bg-white text-[#9AA9BF]", chip: "bg-[#FFF4D6] text-[#8A6200]" },
+  belum_dikerjakan: { bulat: "border-2 border-[#9AA9BF] bg-white text-[#9AA9BF]", chip: "bg-[#EEF2F7] text-[#55657D]" },
+  menyusul: { bulat: "border-2 border-[#E1E9F6] bg-[#F5F8FE] text-[#B6C1D3]", chip: "bg-[#EEF2F7] text-[#6B7A90]" },
+  terlewat: { bulat: "bg-[#B42329] text-white", chip: "bg-[#FDE8E8] text-[#B42329]" },
+  terkunci: { bulat: "border-2 border-[#E1E9F6] bg-[#F5F8FE] text-[#B6C1D3]", chip: "bg-[#EEF2F7] text-[#6B7A90]" },
+};
+
+function BulatRinci({ r, nomor }: { r: Rinci; nomor: number }) {
+  return (
+    <span className={`grid h-[30px] w-[30px] flex-none place-items-center rounded-full text-[13px] font-extrabold ${GAYA_RINCI[r.status].bulat}`} aria-hidden>
+      {r.status === "selesai" ? <Centang /> : r.status === "terlewat" ? "!" : nomor}
+    </span>
+  );
+}
+
+/**
+ * Daftar progres tahap pelatihan. Tiap baris dapat diketuk: halaman sendiri -> membuka halamannya; presensi -> tab Hari ini; foto -> Kamera SIGAP;
+ * tahap yang kartunya ada di halaman ini (Adu Sigap) -> menggulir ke kartunya.
+ */
+export function DaftarProgres({ rinci, hrefHariIni, hrefKamera, onGulir }: { rinci: Rinci[]; hrefHariIni: string; hrefKamera: string | null; onGulir?: (kode: string) => void }) {
+  const r = ringkasRinci(rinci);
+  return (
+    <section aria-label="Progres pelatihan" className="rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.1)]">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="m-0 text-[15.5px] font-extrabold text-[#0F2A52]">Progres pelatihan Anda</h2>
+        <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-extrabold ${r.selesai === r.wajib ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>
+          {r.selesai}/{r.wajib} selesai
+        </span>
+      </div>
+      <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#E1E9F6]" role="progressbar" aria-valuemin={0} aria-valuemax={r.wajib} aria-valuenow={r.selesai} aria-label={`${r.selesai} dari ${r.wajib} tahap selesai`}>
+        <div className="h-full rounded-full bg-[#19A463] transition-all" style={{ width: `${r.persen}%` }} />
+      </div>
+      <ol className="m-0 mt-3 list-none space-y-1.5 p-0">
+        {rinci.map((x, i) => {
+          const g = GAYA_RINCI[x.status];
+          const dalam = (
+            <>
+              <BulatRinci r={x} nomor={i + 1} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-bold leading-snug text-[#0F2A52]">
+                  {x.judul}
+                  {x.tambahan && <span className="ml-1.5 text-[11px] font-semibold text-[#6B7A90]">(tambahan)</span>}
+                </span>
+                {x.progres && (
+                  <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-[#E1E9F6]" aria-hidden>
+                    <span className="block h-full rounded-full bg-[#1F5FD1]" style={{ width: `${Math.round((x.progres.x / x.progres.y) * 100)}%` }} />
+                  </span>
+                )}
+              </span>
+              <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-extrabold ${g.chip}`}>{x.teks}</span>
+            </>
+          );
+          const kelas = "flex w-full items-center gap-3 rounded-xl border border-[#EEF2F7] px-2.5 py-2 text-left hover:bg-[#F8FAFE]";
+          const tujuan = x.halaman ? x.href : x.kode === "hadir" ? hrefHariIni : x.kode === "foto_awal" || x.kode === "foto_akhir" ? hrefKamera : null;
+          return (
+            <li key={x.kode}>
+              {tujuan ? (
+                <Link href={tujuan} className={kelas}>
+                  {dalam}
+                </Link>
+              ) : onGulir ? (
+                <button type="button" className={kelas} onClick={() => onGulir(x.kode)}>
+                  {dalam}
+                </button>
+              ) : (
+                <div className={kelas}>{dalam}</div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}

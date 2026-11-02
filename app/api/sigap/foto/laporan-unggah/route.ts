@@ -13,6 +13,7 @@ import sharp from "sharp";
 import { BUCKET_SIGAP, cekAksesIsian, hariIniWib } from "@/lib/sigap";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { SLOT_FOTO_LAPORAN, bolehFotoLaporan } from "@/lib/sigapFoto";
+import { fotoHanyaHariKerja } from "@/lib/hariKerjaPelatihan";
 import { modeKegiatan } from "@/lib/sigapFotoServer";
 import { angka, galat, masukFoto } from "@/lib/sigapFotoRoute";
 import { galatServer } from "@/lib/sigapGalat";
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
     if (modePeta[kegiatanId] !== "kamera") return galat("Kegiatan ini memakai unggah foto biasa di halaman Transport Lokal.", 403, { mode: "unggah" });
     const pen = daftarPen.find((p) => p.kegiatan.id === kegiatanId);
     if (!pen) return galat("Anda tidak terdaftar pada kegiatan ini.", 403);
+    // (2 Nov 2026) pelatihan: unggah foto juga hanya pada hari kerja (di luar itu hanya Foto saya dan Periksa)
+    if (fotoHanyaHariKerja(pen.kegiatan.jenis)) return galat("Pada pelatihan, foto hanya bisa diambil atau diunggah pada hari kerja Anda.", 403, { kode: "bukan_hari_kerja" });
     if (!bolehFotoLaporan(pen.kegiatan.jumlah_foto)) return galat("Kegiatan ini tidak memakai foto laporan di luar hari kerja.", 403);
 
     // Hanya HARI INI dan hanya bila hari ini BUKAN hari kerja. Pada hari kerja/Translok, foto wajib dari Kamera SIGAP.

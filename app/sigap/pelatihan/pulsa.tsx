@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson, pesanGalat } from "../admin/api";
 import { tampilHp } from "@/lib/sigapPulsa";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 const EVENT_PULSA = "sigap-pulsa-berubah";
 
@@ -24,6 +25,8 @@ export function PulsaPeserta({ tampilan = "pop", judul = "Pelatihan" }: { tampil
   const [nomor, setNomor] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
+  // (2 Nov 2026) Back HP menutup pop-up yang dibuka lewat "Ubah" / "Isi sekarang". Pop-up wajib (nomor belum dikonfirmasi) bukan modal yang bisa ditutup, jadi hook hanya aktif saat `buka`.
+  useTutupDenganBack(buka, () => setBuka(false));
 
   const muat = useCallback(async () => {
     try {

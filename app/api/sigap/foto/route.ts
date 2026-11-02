@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cekAksesIsian, BUCKET_SIGAP } from "@/lib/sigap";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import { tanggalWib } from "@/lib/sigapPresensi";
+import { fotoHanyaHariKerja } from "@/lib/hariKerjaPelatihan";
 import {
   MAKS_AKURASI_DISPENSASI_M, MAKS_TAG, jarakEfektifM, jarakHamming, KECEPATAN_MERAH_KMJAM, kecepatanKmJam, kodeDariByte, nilaiKepercayaan, perluTahanTag, posisiMasukanValid, simpanSampai, waktuHpTerjepit,
   SLOT_FOTO_LAPORAN, bolehFotoLaporan, slotBerlokasi, slotValid, teksKoordinat, teksWaktuWib, TOLERANSI_KIRIM_HARI, urlVerifikasi, waktuResmi, type PeranTag,
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
   // (23 Okt 2026) Foto tanpa sinyal yang waktunya lolos (w.offline) boleh terkirim sampai TOLERANSI_KIRIM_HARI hari sesudah tanggalnya.
   // (31 Okt 2026) Tanggal yang bukan hari kerja petugas tetap boleh untuk foto laporan: selalu menempati nomor 3 (Saat mendata) tanggal itu dan MENIMPA foto lamanya
   // (penempatan sigap_foto_tempatkan menggantikan nomor yang terisi; foto lama kamera jadi cadangan). Tidak masuk perhitungan SPJ karena bukan hari kerja.
-  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal, { ...(w.offline ? { toleransiOfflineHari: TOLERANSI_KIRIM_HARI } : {}), izinTanpaHariKerja: bolehFotoLaporan(pen.kegiatan.jumlah_foto) });
+  const akses = await cekAksesIsian(db, akunId, pen.id, tanggal, { ...(w.offline ? { toleransiOfflineHari: TOLERANSI_KIRIM_HARI } : {}), izinTanpaHariKerja: bolehFotoLaporan(pen.kegiatan.jumlah_foto) && !fotoHanyaHariKerja(pen.kegiatan.jenis) }); // (2 Nov 2026) pelatihan: foto hanya pada hari kerja
   if ("error" in akses) return galat(akses.error, akses.status);
   if (akses.tanpaHariKerja) nomor = SLOT_FOTO_LAPORAN as 3;
 

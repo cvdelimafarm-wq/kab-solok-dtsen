@@ -34,7 +34,8 @@ import KartuKelas, { useKelasSaya } from "./kartuKelas"; // (1 Nov 2026) kelas d
 import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 import PresensiZoom from "./presensiZoom"; // (1 Nov 2026) presensi daring lewat rapat Zoom + token
 import { bacaLangkahDariAlamat, hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah, type LangkahPelatihan } from "@/lib/alurPelatihan"; // (2 Nov 2026) urutan + status langkah: satu sumber untuk semua halaman
-import { StripPelatihan } from "./AlurPelatihan"; // (2 Nov 2026) lajur ikon langkah di kartu "Langkah Anda"
+import { DaftarProgres, StripPelatihan } from "./AlurPelatihan";
+import { rincianProgres } from "@/lib/progresPelatihan"; // (2 Nov 2026) daftar progres menggantikan kartu "Langkah berikutnya" di tab Pelatihan // (2 Nov 2026) lajur ikon langkah di kartu "Langkah Anda"
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -956,6 +957,7 @@ export default function HalamanPelatihan() {
     return { g: "wait", chip: "Menyusul" };
   });
   const statusAlur = statusLangkah(alur);
+  const rincian = data && peserta ? rincianProgres(alur, { langkah: data.langkah, tes: data.tes, presensi: data.presensi, kuis: data.kuis, fotoTranslok, mulaiMs: u ? jendelaPelatihan(u).mulai : 0, now }) : [];
   const wajib = langkah.filter((l) => !l.tambahan);
   const nSelesai = wajib.filter((l) => l.selesai).length;
   const pemandu = data && peserta && u ? susunPemandu(langkah, data, now, jendelaPelatihan(u).mulai, hanyaZoom) : null;
@@ -1055,7 +1057,9 @@ export default function HalamanPelatihan() {
           {antrianPeng !== null && !modalPeng && rayakan && <ModalSelesai r={rayakan} tutup={tutupRayakan} lanjut={lanjutRayakan} />}
           <PeringatanTerlewat daftar={terlewatDaftar} />
           <AktifkanNotifikasi />
-          {pemandu && <KotakPemandu p={pemandu} ke={lanjutRayakan} />}
+          {/* (2 Nov 2026) tampilan 5 tab: kartu "Langkah berikutnya" diganti daftar progres (centang selesai, belum dibuka, x/y) */}
+          {pemandu && modeBaru !== true && <KotakPemandu p={pemandu} ke={lanjutRayakan} />}
+          {modeBaru === true && rincian.length > 0 && <DaftarProgres rinci={rincian} hrefHariIni="/sigap/pelatihan/hari-ini" hrefKamera={data.kegiatan_id ? `/sigap/foto?kegiatan=${data.kegiatan_id}` : null} onGulir={lanjutRayakan} />}
           {modeBaru === null ? (
             <Memuat />
           ) : modeBaru ? (
