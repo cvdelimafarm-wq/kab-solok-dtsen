@@ -84,7 +84,6 @@ describe("susunMenu v2", () => {
     expect(href).toEqual(
       expect.arrayContaining([
         "/sigap/kelola/perencanaan",
-        "/sigap/pelatihan",
         "/sigap/kelola/pelatihan",
         "/sigap/kelola/pendataan",
         "/sigap/translok/tok123",
@@ -104,10 +103,12 @@ describe("susunMenu v2", () => {
     expect(hidup.map((x) => x.id)).toEqual(["beranda", "identifikasi-survei", "anggaran", "pedia", "kirim-masukan"]); // (25 Okt 2026) Identifikasi survei terbuka bagi semua akun organik
   });
 
-  it("izin pelatihan: halaman peserta tampil untuk petugas, Kelola pelatihan hanya untuk pengelola", () => {
+  it("izin pelatihan: halaman peserta hanya untuk petugas non-pengelola; pengelola hanya melihat Kelola pelatihan", () => {
     expect(cari({ ...KOSONG, tokenPetugas: "t" }, "pelatihan")).toBeDefined();
     expect(cari({ ...KOSONG, tokenPetugas: "t" }, "pelatihan-kelola")).toBeUndefined();
-    expect(cari({ ...KOSONG, pelatihanKelola: true }, "pelatihan")).toBeDefined();
+    expect(cari({ ...KOSONG, pelatihanKelola: true }, "pelatihan")).toBeUndefined();
+    expect(cari({ ...KOSONG, tokenPetugas: "t", pelatihanKelola: true }, "pelatihan")).toBeUndefined();
+    expect(cari(SEMUA, "pelatihan")).toBeUndefined();
     expect(cari({ ...KOSONG, pelatihanKelola: true }, "pelatihan-kelola")).toMatchObject({ href: "/sigap/kelola/pelatihan", aktifKode: "pelatihan_kelola" });
     expect(cari(KOSONG, "pelatihan")).toBeUndefined();
   });

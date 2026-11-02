@@ -113,7 +113,8 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
       kode: "pelaksanaan",
       label: "Pelaksanaan",
       item: [
-        ...jika(!!i.tokenPetugas || i.pelatihanKelola, {
+        // (2 Nov 2026) permintaan user: di sidebar backoffice hanya "Kelola pelatihan" untuk pengelola; halaman peserta ("Pelatihan") hanya tampil bagi petugas yang BUKAN pengelola.
+        ...jika(!!i.tokenPetugas && !i.pelatihanKelola, {
           id: "pelatihan",
           ikon: "buku",
           label: "Pelatihan",

@@ -15,7 +15,7 @@ import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, T
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
-import PersiapanKelola from "./tampilan"; // (2 Nov 2026) tab Persiapan: tampilan peserta (otomatis) + ketentuan undangan
+import PersiapanGabung from "./persiapanGabung"; // (2 Nov 2026) tab Persiapan: Pengaturan (tampilan peserta, ketentuan, absen, aturan nilai) + Instrumen (unggah kuesioner, pedoman, PPT)
 import TimPesertaKelola from "./hierarki"; // (2 Nov 2026) tab Tim & Peserta: hierarki + kelas
 import HariKerjaKelola from "./hariKerja"; // (2 Nov 2026) tab Hari Kerja: matriks peserta x tanggal, buatkan / lepas / pindahkan dari kegiatan lain
 import { KomunikasiKelola, KuisRapatKelola } from "./grup"; // (2 Nov 2026) tab gabungan: Kuis & Rapat, Notifikasi (+ Pengumuman)
@@ -55,6 +55,8 @@ const PETA_TAB_LAMA: Record<string, { tab: TabK; sub?: string }> = {
   kuispra: { tab: "kuis", sub: "kuispra" },
   kelas: { tab: "tim", sub: "kelas" },
   tampilan: { tab: "persiapan" },
+  instrumen: { tab: "persiapan", sub: "instrumen" },
+  vanguard: { tab: "persiapan", sub: "vanguard" },
 };
 
 export default function KelolaPelatihan() {
@@ -230,7 +232,7 @@ export default function KelolaPelatihan() {
           </div>
         </div>
       )}
-      {ringkas && tab === "persiapan" && <PersiapanKelola key={kegId ?? 0} />}
+      {ringkas && tab === "persiapan" && <PersiapanGabung key={kegId ?? 0} />}
       {ringkas && tab === "tim" && <TimPesertaKelola key={kegId ?? 0} />}
       {ringkas && tab === "harikerja" && <HariKerjaKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuis" && <KuisRapatKelola key={kegId ?? 0} kegiatanId={kegId} bisaKelola={ringkas.boleh_kelola} />}
