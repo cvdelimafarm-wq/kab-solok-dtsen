@@ -7,9 +7,10 @@
 // Berkas yang pernah diunduh disimpan di HP: lain kali langsung terbuka tanpa unduh ulang (lib/berkasLokal.ts), dan kartunya menunjukkan statusnya.
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, tglSedang } from "../../admin/api";
-import { BTN, BTN_O, Chip, Kartu, Memuat, Pesan } from "../../admin/ui";
+import { useEffect, useState } from "react";
+import { bacaSesi, keMasuk, pesanGalat, SesiBerakhir, tglSedang } from "../../admin/api";
+import { useDataPel } from "../dataPel";
+import { BTN, BTN_G, Chip, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Kerangka } from "../komponen";
 import BagianMateri from "./BagianMateri"; // (2 Nov 2026) Tahap C: video + tautan wajib dilacak
 import { JudulIkon } from "./IkonInstrumen"; // (2 Nov 2026) ikon SVG menggantikan emoji
@@ -23,25 +24,19 @@ const URL_INSTRUMEN = "/api/sigap/pelatihan/instrumen";
 const TAUTAN_KELOLA = "/sigap/kelola/pelatihan?tab=persiapan&sub=instrumen";
 
 export default function HalamanInstrumen() {
-  const [data, setData] = useState<Daftar | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
+  // (3 Nov 2026) Daftar berkas lewat simpanan bersama (dataPel.ts): pindah ke tab ini langsung menampilkan daftar terakhir, lalu diperbarui di belakang.
+  const { data, galat: galatMuat } = useDataPel<Daftar>(URL_INSTRUMEN);
+  const [galatLain, setGalatLain] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState<number | null>(null);
   const [diHp, setDiHp] = useState<Set<number>>(new Set());
+  const galat = galatLain ?? (data ? null : galatMuat); // gagal memperbarui di belakang tidak mengganggu daftar yang sudah tampil
+  const setGalat = setGalatLain;
 
-  const muat = useCallback(async () => {
-    try {
-      setData(await fetchJson<Daftar>(URL_INSTRUMEN));
-      setGalat(null);
-    } catch (e) {
-      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
-    }
-    setDiHp(await idBerkasTersimpan());
-  }, []);
   useEffect(() => {
     if (!bacaSesi()) return keMasuk();
-    void muat();
-  }, [muat]);
+    void idBerkasTersimpan().then(setDiHp);
+  }, []);
 
   async function buka(b: BerkasInstrumen) {
     setSibuk(b.id);
@@ -92,7 +87,7 @@ export default function HalamanInstrumen() {
                   {daftar.map((b) => {
                     const tersimpan = diHp.has(b.id);
                     return (
-                      <li key={b.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-[#DDE6F3] px-3 py-2.5">
+                      <li key={b.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 ${tersimpan ? "border-[#BFE5D0] bg-[#F5FBF8]" : "border-[#DDE6F3]"}`}>
                         <div className="min-w-0 flex-1">
                           <p className="text-[13.5px] font-semibold leading-snug">{b.judul}</p>
                           <p className="text-[11.5px] text-[#6B7A90]">
@@ -103,8 +98,9 @@ export default function HalamanInstrumen() {
                             <Chip w={tersimpan ? "ok" : "mut"}>{tersimpan ? "✓ Sudah diunduh · tersimpan di HP" : "Belum diunduh"}</Chip>
                           </p>
                         </div>
-                        <button type="button" className={tersimpan ? BTN_O : BTN} disabled={sibuk === b.id} onClick={() => void buka(b)}>
-                          {sibuk === b.id ? "Menyiapkan…" : tersimpan ? "Buka" : "⬇ Unduh"}
+                        {/* (3 Nov 2026) dua keadaan dibedakan jelas: biru "Unduh" (belum ada di HP) dan hijau "Buka" (sudah tersimpan, langsung terbuka tanpa unduh) */}
+                        <button type="button" className={`${tersimpan ? BTN_G : BTN} min-h-[44px] min-w-[112px] !px-4 !text-[14px] !font-extrabold`} disabled={sibuk === b.id} onClick={() => void buka(b)}>
+                          {sibuk === b.id ? "Menyiapkan…" : tersimpan ? "↗ Buka" : "⬇ Unduh"}
                         </button>
                       </li>
                     );

@@ -57,10 +57,13 @@ const bintangTeks = (n: number) => "★".repeat(n) + "☆".repeat(Math.max(0, 3 
 
 export default function Vanguard() {
   const q = useSearchParams();
-  const kegiatan = useMemo(() => { const v = q.get("k"); return v && /^\d{1,9}$/.test(v) && Number(v) > 0 ? Number(v) : null; }, [q]);
+  const kegiatanUrl = useMemo(() => { const v = q.get("k"); return v && /^\d{1,9}$/.test(v) && Number(v) > 0 ? Number(v) : null; }, [q]);
   const tujuan = useMemo(() => tujuanAman(q.get("dari")), [q]);
 
   const { konteks, siap } = useKonteksPelatihan(); // null = bukan peserta pelatihan: tampilan lama
+  // (3 Nov 2026) Peserta pelatihan yang masuk TANPA ?k= (kartu promo Beranda, tautan Panduan, bilah SIGAP) tetap dicatat: kegiatan diambil dari konteks pelatihannya.
+  // Server tetap yang memutuskan (menyala? peserta aktif? jadwal terbuka?) -- bila tidak, tampilan kembali ke simulasi bebas seperti biasa.
+  const kegiatan = kegiatanUrl ?? konteks?.kegiatan_id ?? null;
   const [semua, setSemua] = useState(false); // "Tampilkan semua latihan"
   const [layar, setLayar] = useState<Layar>("pembuka");
   const [idx, setIdx] = useState(0);
@@ -113,6 +116,7 @@ export default function Vanguard() {
       return;
     }
     let batal = false;
+    setInfo((i) => (i.memuat && i.mode === "tercatat" ? i : { memuat: true, mode: "tercatat", boleh: false, alasan: null, uji: false })); // kegiatan baru diketahui dari konteks: tunggu status pencatatan
     (async () => {
       try {
         const r = await apiPortal<{ mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null; riwayat: { kasus: string; percobaan: number; benar: boolean; bintang: number }[]; lemah?: Kelemahan[]; uji?: boolean; kemampuan?: PetaKemampuan; pengaturan?: Record<string, unknown> & { status?: string } }>(`/api/sigap/vanguard?kegiatan=${kegiatan}`);

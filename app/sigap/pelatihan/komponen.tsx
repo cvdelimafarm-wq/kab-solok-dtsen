@@ -6,7 +6,7 @@
 // Undangan | Langkah | Instrumen | Transport Lokal), pengambil data hub, jam server & hitung mundur. Mockup disetujui user.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir } from "../admin/api";
+import { bacaSesi, keluar, keMasuk } from "../admin/api";
 import { HeaderAdmin, Memuat, Pesan } from "../admin/ui";
 import TombolKembali from "@/app/components/TombolKembali";
 import { useDetak } from "../useDetak";
@@ -16,12 +16,14 @@ import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
 import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { InfoUndangan, JenisTes, StatusTes } from "@/lib/sigapTes";
 import { useInfoPelatihan } from "./infoPelatihan";
+import { useDataPel } from "./dataPel"; // (3 Nov 2026) data hub lewat simpanan bersama
 import { judulPelatihan, tujuanKembali } from "@/lib/sigapPelatihanNama";
-import { hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah } from "@/lib/alurPelatihan"; // (2 Nov 2026) penunjuk langkah pelatihan di HP
+import { KUIS_BELUM_ADA, hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah } from "@/lib/alurPelatihan"; // (2 Nov 2026) penunjuk langkah pelatihan di HP
 import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 import { useKelasSaya } from "./kartuKelas";
-import { PenunjukPelatihan } from "./AlurPelatihan";
-import { TabPelatihanOtomatis, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
+import { LangkahGeser, PenunjukPelatihan } from "./AlurPelatihan";
+import { ringkasAbsenSaya, useAbsenSaya } from "./absenSaya"; // (3 Nov 2026) langkah Absen sesi
+import { TabPelatihanOtomatis, useBenderaTab, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
 import type { KunciTes } from "./KartuTerkunci";
 
 export type TesHub = {
@@ -97,8 +99,9 @@ export function useJamServer() {
     const t = setInterval(() => setTick((x) => x + 1), 1000);
     return () => clearInterval(t);
   }, []);
-  const setujukan = useCallback((sekarangIso: string) => {
-    offset.current = new Date(sekarangIso).getTime() - Date.now();
+  // `tibaMs`: kapan jawaban itu diterima HP. Data dari simpanan (3 Nov 2026) bisa sudah beberapa menit lalu, jadi selisih dihitung terhadap saat diterima, bukan saat ini.
+  const setujukan = useCallback((sekarangIso: string, tibaMs: number = Date.now()) => {
+    offset.current = new Date(sekarangIso).getTime() - tibaMs;
   }, []);
   const sekarang = () => Date.now() + offset.current;
   return { setujukan, sekarang };
@@ -107,33 +110,27 @@ export function useJamServer() {
 /**
  * Ambil data hub (/api/sigap/pelatihan). `interval` ms utk segar otomatis (0 = tidak).
  * (2 Nov 2026) `aktif=false`: tidak memuat apa pun (dipakai Kerangka saat halaman sudah punya data hub sendiri, supaya tidak memuat dua kali).
+ * (3 Nov 2026) Lewat simpanan bersama (dataPel.ts): data terakhir langsung tampil saat pindah tab, lalu diperbarui di belakang. Jam server dihitung dari
+ * saat data DITERIMA, sehingga hitung mundur tetap benar walau data berasal dari simpanan. `muat()` selalu memaksa ke server.
  */
 export function useHub(interval = 0, aktif = true) {
-  const [data, setData] = useState<Hub | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
   const jam = useJamServer();
   const { setujukan } = jam;
+  const h = useDataPel<Hub>("/api/sigap/pelatihan", { aktif, interval, segarMs: interval > 0 ? Math.max(5_000, interval - 5_000) : undefined });
+  useEffect(() => {
+    if (aktif && !bacaSesi()) keMasuk();
+  }, [aktif]);
+  // diselaraskan saat digambar (bukan di efek) supaya hitung mundur tidak sempat memakai jam HP satu kali gambar
+  const diselaraskan = useRef<Hub | null>(null);
+  if (h.data && diselaraskan.current !== h.data) {
+    diselaraskan.current = h.data;
+    setujukan(h.data.sekarang, h.tiba || Date.now());
+  }
+  const { muat: muatPaksa } = h;
   const muat = useCallback(async () => {
-    try {
-      const d = await fetchJson<Hub>("/api/sigap/pelatihan");
-      setujukan(d.sekarang);
-      setData(d);
-      setGalat(null);
-    } catch (e) {
-      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
-    }
-  }, [setujukan]);
-  useEffect(() => {
-    if (!aktif) return;
-    if (!bacaSesi()) return keMasuk();
-    muat();
-  }, [muat, aktif]);
-  useEffect(() => {
-    if (!interval || !aktif) return;
-    const t = setInterval(muat, interval);
-    return () => clearInterval(t);
-  }, [interval, muat, aktif]);
-  return { data, galat, muat, jam };
+    await muatPaksa();
+  }, [muatPaksa]);
+  return { data: aktif ? h.data : null, galat: aktif ? h.galat : null, muat, jam };
 }
 
 /**
@@ -157,23 +154,48 @@ export function useSaatLewat(targetIso: string | null, sekarangMs: () => number,
  * `selesai`: halaman tahu langkahnya sudah selesai padahal data hub belum diperbarui (mis. undangan baru dibuka, tes baru dikirim).
  * `tersembunyi`: sembunyikan sementara tanpa melepas isi (mis. saat mengerjakan tes), supaya state isi halaman tidak hilang.
  */
-function AlurKerangka({ kode, hub: hubLuar, selesai, tersembunyi, children }: { kode: KodeLangkah; hub?: Hub | null; selesai?: boolean; tersembunyi?: boolean; children: React.ReactNode }) {
+/** (3 Nov 2026) Kuis belum dibuat panitia: tampilan lima tab tetap menampilkan langkah/kartu Adu Sigap dengan status "belum ada ruang". */
+export const KUIS_KOSONG: NonNullable<Hub["kuis"]> = { ada_ruang_aktif: false, status: null, kelas: null, judul: null, sudah_gabung: false, pernah_ikut: false, ada_ruang_selesai: false, jadwal_at: null };
+
+/** Kartu/kode langkah ada di halaman yang sedang dibuka? (untuk ikon langkah: gulir ke kartunya, bukan pindah halaman) */
+const adaKartuLangkah = (kode: string) => typeof document !== "undefined" && !!document.getElementById(`langkah-${kode}`);
+const gulirKeKartu = (kode: string) => document.getElementById(`langkah-${kode}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+function AlurKerangka({ kode, hub: hubLuar, selesai, tersembunyi, children }: { kode: KodeLangkah | null; hub?: Hub | null; selesai?: boolean; tersembunyi?: boolean; children: React.ReactNode }) {
   const sendiri = useHub(0, hubLuar === undefined);
   const hub = hubLuar === undefined ? sendiri.data : hubLuar;
   const kelas = useKelasSaya();
   const fotoTranslok = perluFotoTranslok(kelas?.aturan);
+  // (3 Nov 2026) tampilan lima tab: langkah "Absen sesi" dan "Adu Sigap" SELALU ada di lajur ikon (dulu muncul hanya bila panitia membuka sesi / membuat kuis)
+  const bendera = useBenderaTab();
+  const lima = !!bendera?.tab_baru;
+  const absen = useAbsenSaya(lima);
   const sekarangServer = hub?.sekarang;
   const selisih = useMemo(() => (sekarangServer ? new Date(sekarangServer).getTime() - Date.now() : 0), [sekarangServer]);
+  const adaDataAbsen = !!absen.data;
+  const absenTotal = absen.data?.sesi_hari?.length ?? absen.data?.sesi_terbuka.length ?? 0;
   const daftar = useMemo(() => {
     if (!hub || !hub.peserta) return null;
-    const d = hitungLangkahPelatihan({ langkah: hub.langkah, tes: hub.tes, presensi: hub.presensi, kuis: hub.kuis, fotoTranslok, mulaiMs: jendelaPelatihan(hub.undangan).mulai, now: Date.now() + selisih });
-    return selesai ? d.map((l) => (l.kode === kode ? { ...l, selesai: true, terlewat: false } : l)) : d;
-  }, [hub, fotoTranslok, selisih, selesai, kode]);
+    const nowMs = Date.now() + selisih;
+    const d = hitungLangkahPelatihan({
+      langkah: hub.langkah,
+      tes: hub.tes,
+      presensi: hub.presensi,
+      kuis: lima ? hub.kuis ?? KUIS_BELUM_ADA : hub.kuis,
+      absenSesi: lima && adaDataAbsen ? ringkasAbsenSaya(absen.data, nowMs) : null,
+      fotoTranslok,
+      mulaiMs: jendelaPelatihan(hub.undangan).mulai,
+      now: nowMs,
+    });
+    return selesai && kode ? d.map((l) => (l.kode === kode ? { ...l, selesai: true, terlewat: false } : l)) : d;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hub, fotoTranslok, selisih, selesai, kode, lima, adaDataAbsen, absenTotal, absen.data]);
   const status = useMemo(() => (daftar ? statusLangkah(daftar) : []), [daftar]);
-  const tampil = !tersembunyi && !!daftar && daftar.some((l) => l.kode === kode);
+  const tampil = !tersembunyi && !!daftar && (kode === null || daftar.some((l) => l.kode === kode));
+  const hrefAlih = useMemo<Partial<Record<string, string>>>(() => (lima && hub?.kegiatan_id ? { foto_awal: `/sigap/foto?kegiatan=${hub.kegiatan_id}`, foto_akhir: `/sigap/foto?kegiatan=${hub.kegiatan_id}` } : {}), [lima, hub?.kegiatan_id]);
   return (
     <>
-      {tampil && daftar && <PenunjukPelatihan daftar={daftar} status={status} aktif={kode} />}
+      {tampil && daftar && (kode === null ? <LangkahGeser daftar={daftar} status={status} hrefAlih={hrefAlih} onGulir={gulirKeKartu} cekGulir={adaKartuLangkah} /> : <PenunjukPelatihan daftar={daftar} status={status} aktif={kode} hrefAlih={hrefAlih} />)}
       {children}
     </>
   );
@@ -185,6 +207,7 @@ export function Kerangka({
   sub,
   nama,
   langkah,
+  geser,
   hub,
   langkahSelesai,
   alurTersembunyi,
@@ -196,6 +219,8 @@ export function Kerangka({
   nama?: string;
   /** Kode langkah pelatihan yang ditampilkan halaman ini; bila diisi, penunjuk langkah dipasang. */
   langkah?: KodeLangkah;
+  /** (3 Nov 2026) Pasang kartu "Langkah pelatihan" (lajur ikon geser, tanpa langkah aktif) di atas isi: dipakai tab Hari ini dan tab Pelatihan. */
+  geser?: boolean;
   hub?: Hub | null;
   langkahSelesai?: boolean;
   alurTersembunyi?: boolean;
@@ -228,8 +253,8 @@ export function Kerangka({
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         {/* (2 Nov 2026) pop-up konfirmasi nomor pulsa hanya sampai dikonfirmasi; kartu statusnya redup di bawah tab Hari ini (hari-ini/page.tsx) */}
         <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />
-        {langkah ? (
-          <AlurKerangka kode={langkah} hub={hub} selesai={langkahSelesai} tersembunyi={alurTersembunyi}>
+        {langkah || geser ? (
+          <AlurKerangka kode={langkah ?? null} hub={hub} selesai={langkahSelesai} tersembunyi={alurTersembunyi}>
             {children}
           </AlurKerangka>
         ) : (

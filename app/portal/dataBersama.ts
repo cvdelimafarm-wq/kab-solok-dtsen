@@ -35,10 +35,20 @@ export type Profil = {
 };
 
 const dasar = { umurMaksMs: 14 * HARI, hariBaru: false, skema: 1 };
+const PEL_UMUR_MAKS = 12 * 60 * MENIT;
 /** Cocok awalan terpanjang. Tanpa kecocokan -> bawaan. */
 const PROFIL: [string, Profil][] = [
   // berubah menit ke menit (presensi, jendela tes, kuis live) -> sering diminta ulang; tampil tetap instan
-  ["/api/sigap/pelatihan", { ...dasar, segarMs: 1 * MENIT, interval: 1 * MENIT }],
+  // (3 Nov 2026) Tab pelatihan (Hari ini · Instrumen · Pelatihan · Monitoring) kini lewat simpanan ini: pindah tab = langsung tampil, lalu diperbarui di belakang
+  // (dulu tiap tab memuat dari nol). Data pelatihan bergantung "hari ini" dan jam server, jadi simpanan lebih tua dari 12 jam tidak ditampilkan lagi.
+  // Kuis live, tes (Pretest/Posttest), kuis pra, dan pulsa TIDAK lewat sini -- tetap langsung ke server.
+  ["/api/sigap/pelatihan", { ...dasar, segarMs: 1 * MENIT, interval: 1 * MENIT, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
+  ["/api/sigap/pelatihan/ketentuan", { ...dasar, segarMs: 1 * MENIT, interval: 0, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
+  ["/api/sigap/pelatihan/instrumen", { ...dasar, segarMs: 5 * MENIT, interval: 0, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
+  ["/api/sigap/pelatihan/materi", { ...dasar, segarMs: 5 * MENIT, interval: 0, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
+  ["/api/sigap/pelatihan/monitoring", { ...dasar, segarMs: 45 * 1000, interval: 60 * 1000, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
+  ["/api/sigap/pelatihan/kelas", { ...dasar, segarMs: 5 * MENIT, interval: 0, hariBaru: true, umurMaksMs: PEL_UMUR_MAKS }],
+  ["/api/sigap/pelatihan/info", { ...dasar, segarMs: 10 * MENIT, interval: 0, umurMaksMs: PEL_UMUR_MAKS }],
   // tugas/tahapan terlewat boleh tertunda ±10 menit; status "mendesak" bergantung hari -> ikut basi saat ganti hari
   ["/api/portal/induk", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],
   ["/api/portal/kegiatan", { ...dasar, segarMs: 10 * MENIT, interval: 10 * MENIT, hariBaru: true }],

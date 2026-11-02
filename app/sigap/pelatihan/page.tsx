@@ -25,7 +25,9 @@ import AktifkanNotifikasi from "@/app/portal/AktifkanNotifikasi";
 import { LABEL_JENIS_TES } from "@/lib/sigapTes";
 import { Chip, Kartu, Memuat, Pesan } from "../admin/ui";
 import { fetchJson, pesanGalat, waktuWib } from "../admin/api";
-import { Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hub, type TesHub } from "./komponen";
+import { KUIS_KOSONG, Kerangka, formatSisa, jamWib, peranLabel, useHub, useSaatLewat, type Hub, type TesHub } from "./komponen";
+import { IsiKuis } from "./IsiKuis"; // (3 Nov 2026) dipakai bersama tab Hari ini
+import { ringkasAbsenSaya, useAbsenSaya } from "./absenSaya"; // (3 Nov 2026) langkah Absen sesi di lajur ikon
 import KartuTerkunci from "./KartuTerkunci"; // (2 Nov 2026) blokir antar tahapan + minta buka kunci
 import { ModalPengumuman } from "./pengumumanUi";
 import KartuTranslokPelatihan from "./translok";
@@ -33,9 +35,9 @@ import KartuKuisPra from "./kartuKuisPra"; // (31 Okt 2026) kuis pra pelatihan (
 import KartuKelas, { useKelasSaya } from "./kartuKelas"; // (1 Nov 2026) kelas dari perencanaan: mode daring/luring/hybrid + jadwal (tampil bila tertaut)
 import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 import PresensiZoom from "./presensiZoom"; // (1 Nov 2026) presensi daring lewat rapat Zoom + token
-import { bacaLangkahDariAlamat, hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah, type LangkahPelatihan } from "@/lib/alurPelatihan"; // (2 Nov 2026) urutan + status langkah: satu sumber untuk semua halaman
-import { DaftarProgres, StripPelatihan } from "./AlurPelatihan";
-import { rincianProgres } from "@/lib/progresPelatihan"; // (2 Nov 2026) daftar progres menggantikan kartu "Langkah berikutnya" di tab Pelatihan // (2 Nov 2026) lajur ikon langkah di kartu "Langkah Anda"
+import { KUIS_BELUM_ADA, bacaLangkahDariAlamat, hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah, type LangkahPelatihan } from "@/lib/alurPelatihan"; // (2 Nov 2026) urutan + status langkah: satu sumber untuk semua halaman
+import { LangkahGeser, StripPelatihan } from "./AlurPelatihan";
+// (3 Nov 2026) daftar progres bertingkat di tab Pelatihan diganti lajur ikon langkah yang digeser (LangkahGeser)
 
 type Gaya = "done" | "now" | "wait" | "miss";
 
@@ -251,66 +253,6 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
   );
 }
 
-
-/** (7 Okt 2026) Isi langkah Kuis Live (tambahan). Memantau status ruang tiap ~5 dtk supaya tombol Gabung muncul begitu admin membuka ruang. */
-function IsiKuis({ k, segarkan }: { k: NonNullable<Hub["kuis"]>; segarkan: () => void }) {
-  const [live, setLive] = useState<{ aktif: boolean; status: string | null; ruangId: number | null; judul: string | null } | null>(null);
-  const tandaHub = useRef(`${k.ada_ruang_aktif}`);
-  tandaHub.current = `${k.ada_ruang_aktif}`;
-  const tandaLive = useRef("");
-  useEffect(() => {
-    let batal = false;
-    let timer: ReturnType<typeof setTimeout>;
-    async function putar() {
-      try {
-        if (!document.hidden) {
-          const d = await fetchJson<{ ada: boolean; ruang?: { id: number; status: string; judul: string } }>(`/api/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}`);
-          if (batal) return;
-          const aktif = !!d.ada && !!d.ruang && d.ruang.status !== "selesai";
-          setLive({ aktif, status: d.ruang?.status ?? null, ruangId: d.ruang?.id ?? null, judul: d.ruang?.judul ?? null });
-          // ruang dibuka/ditutup di server -> segarkan hub sekali (sudah_gabung, pernah_ikut, dst.)
-          const tanda = `${aktif}:${d.ruang?.id ?? ""}`;
-          if (tanda !== tandaLive.current) {
-            const pertama = tandaLive.current === "";
-            tandaLive.current = tanda;
-            if (!pertama || `${aktif}` !== tandaHub.current) segarkan();
-          }
-        }
-      } catch {
-        /* abaikan: dicoba lagi */
-      }
-      if (!batal) timer = setTimeout(putar, 5000);
-    }
-    putar();
-    return () => {
-      batal = true;
-      clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  const aktif = live ? live.aktif : k.ada_ruang_aktif;
-  const status = live ? live.status : k.status;
-  const judul = live?.judul ?? k.judul;
-  const ket = "text-[13px] text-[#5B6B84]";
-  if (aktif)
-    return (
-      <>
-        <p className="text-[13px] font-semibold text-[#13794B]">{status === "lobi" ? "Adu Sigap dibuka — ayo bergabung!" : "Adu Sigap sedang berlangsung."}{judul ? ` · ${judul}` : ""}</p>
-        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}&gabung=1`} className={`${TOMBOL} w-full bg-[#0F2A52] text-white hover:bg-[#0A1E3D]`}>
-          {k.sudah_gabung ? "🎮 Masuk kembali ke kuis →" : "🎮 Gabung kuis →"}
-        </Link>
-      </>
-    );
-  if (k.pernah_ikut)
-    return (
-      <>
-        <p className={ket}>Anda sudah ikut kuis. Skor dicatat sebagai nilai tambahan.</p>
-        <Link href={`/sigap/pelatihan/kuis?kelas=${k.kelas ?? 1}`} className="mt-1 inline-block text-[12px] font-semibold text-[#1F5FD1] underline">Lihat hasil</Link>
-      </>
-    );
-  if (k.ada_ruang_selesai) return <p className={ket}>Kuis sudah selesai dan Anda belum tercatat ikut.</p>;
-  return <p className={ket}>Kuis dibuka oleh pemandu saat sesi pelatihan. Tombol Gabung muncul otomatis di sini.</p>;
-}
 
 /**
  * Isi langkah Presensi: baca lokasi HP, tampilkan jarak ke lokasi pelatihan, tombol aktif bila dalam radius & jam sesi.
@@ -790,6 +732,9 @@ export default function HalamanPelatihan() {
     return () => clearTimeout(t);
   }, []);
   const modeBaru: boolean | null = bendera ? bendera.tab_baru : tungguBendera ? null : false;
+  // (3 Nov 2026) tampilan lima tab: langkah "Absen sesi" dan "Adu Sigap" selalu ada (kuis: status "belum ada ruang" sampai panitia membuatnya)
+  const absenSaya = useAbsenSaya(modeBaru === true);
+  const kuisEf = modeBaru === true ? data?.kuis ?? KUIS_KOSONG : data?.kuis ?? null;
   useEffect(() => {
     if (!bendera?.tab_baru || !data?.peserta) return;
     const q = new URLSearchParams(window.location.search);
@@ -812,7 +757,7 @@ export default function HalamanPelatihan() {
     const pre = data.tes.find((t) => t.jenis === "pretest");
     const post = data.tes.find((t) => t.jenis === "posttest");
     const L = data.langkah;
-    alur = hitungLangkahPelatihan({ langkah: data.langkah, tes: data.tes, presensi: data.presensi, kuis: data.kuis, fotoTranslok, mulaiMs: mulai, now });
+    alur = hitungLangkahPelatihan({ langkah: data.langkah, tes: data.tes, presensi: data.presensi, kuis: modeBaru === true ? data.kuis ?? KUIS_BELUM_ADA : data.kuis, absenSesi: modeBaru === true ? ringkasAbsenSaya(absenSaya.data, now) : null, fotoTranslok, mulaiMs: mulai, now });
     const st = (k: string) => alur.find((x) => x.kode === k);
     const tes = (t: TesHub | undefined, judul: string, kode: string): Langkah => ({
       kode,
@@ -928,7 +873,7 @@ export default function HalamanPelatihan() {
           </>
         ),
       },
-      ...(data.kuis
+      ...(kuisEf
         ? [
             {
               kode: "kuis",
@@ -937,7 +882,7 @@ export default function HalamanPelatihan() {
               terlewat: st("kuis")?.terlewat ?? false,
               bisaSekarang: st("kuis")?.bisaSekarang ?? false,
               tambahan: true,
-              badan: <IsiKuis k={data.kuis} segarkan={muat} />,
+              badan: <IsiKuis k={kuisEf} segarkan={muat} />,
             } as Langkah,
           ]
         : []),
@@ -957,7 +902,6 @@ export default function HalamanPelatihan() {
     return { g: "wait", chip: "Menyusul" };
   });
   const statusAlur = statusLangkah(alur);
-  const rincian = data && peserta ? rincianProgres(alur, { langkah: data.langkah, tes: data.tes, presensi: data.presensi, kuis: data.kuis, fotoTranslok, mulaiMs: u ? jendelaPelatihan(u).mulai : 0, now }) : [];
   const wajib = langkah.filter((l) => !l.tambahan);
   const nSelesai = wajib.filter((l) => l.selesai).length;
   const pemandu = data && peserta && u ? susunPemandu(langkah, data, now, jendelaPelatihan(u).mulai, hanyaZoom) : null;
@@ -1059,7 +1003,16 @@ export default function HalamanPelatihan() {
           <AktifkanNotifikasi />
           {/* (2 Nov 2026) tampilan 5 tab: kartu "Langkah berikutnya" diganti daftar progres (centang selesai, belum dibuka, x/y) */}
           {pemandu && modeBaru !== true && <KotakPemandu p={pemandu} ke={lanjutRayakan} />}
-          {modeBaru === true && rincian.length > 0 && <DaftarProgres rinci={rincian} hrefHariIni="/sigap/pelatihan/hari-ini" hrefKamera={data.kegiatan_id ? `/sigap/foto?kegiatan=${data.kegiatan_id}` : null} onGulir={lanjutRayakan} />}
+          {/* (3 Nov 2026) langkah geser (sama dengan tab Instrumen) menggantikan daftar tahap berjejer ke bawah; ikon yang kartunya ada di halaman ini menggulir, selebihnya membuka halamannya */}
+          {modeBaru === true && alur.length > 0 && (
+            <LangkahGeser
+              daftar={alur}
+              status={statusAlur}
+              hrefAlih={data.kegiatan_id ? { foto_awal: `/sigap/foto?kegiatan=${data.kegiatan_id}`, foto_akhir: `/sigap/foto?kegiatan=${data.kegiatan_id}` } : undefined}
+              onGulir={lanjutRayakan}
+              cekGulir={(kode) => typeof document !== "undefined" && !!document.getElementById(`langkah-${kode}`)}
+            />
+          )}
           {modeBaru === null ? (
             <Memuat />
           ) : modeBaru ? (

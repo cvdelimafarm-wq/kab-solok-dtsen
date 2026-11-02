@@ -9,18 +9,14 @@
 // Data: GET /api/sigap/pelatihan/absen?sebagai=peserta (disegarkan berkala); POST kode / lokasi; kedatangan memakai POST /api/sigap/pelatihan/presensi.
 // Bukan peserta atau SQL belum dijalankan -> tidak menggambar apa pun.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchJson, pesanGalat } from "../admin/api";
+import { useAbsenSaya, type SesiHari, type SesiTerbuka } from "./absenSaya"; // (3 Nov 2026) data dibagi dengan lajur ikon langkah
 import { BTN, BTN_O, Pesan } from "../admin/ui";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { KODE_PANJANG, teksSisa, type MetodeAbsen } from "@/lib/sigapAbsen";
 
-type SesiTerbuka = { id: number; no: number; label: string; metode: MetodeAbsen[]; tutup_at: string; sisa_detik: number; radius_m: number; sudah_hadir: boolean; di_luar_radar: boolean };
-type Data = {
-  kedatangan: { berlaku: boolean; sudah: boolean; at: string | null; manual: boolean; terlambat: boolean };
-  sesi_terbuka: SesiTerbuka[];
-  sekarang: number;
-};
+type Sesi = SesiTerbuka;
 
 const jam = (iso: string) => new Date(iso).toLocaleTimeString("id-ID", { timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit" }).replace(".", ":");
 
@@ -35,7 +31,7 @@ function ambilPosisi(): Promise<{ lat: number; lng: number; akurasi: number }> {
   });
 }
 
-function ModalAbsen({ s, selisih, onTutup, onSelesai }: { s: SesiTerbuka; selisih: number; onTutup: () => void; onSelesai: () => void }) {
+function ModalAbsen({ s, selisih, onTutup, onSelesai }: { s: Sesi; selisih: number; onTutup: () => void; onSelesai: () => void }) {
   const [kode, setKode] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
@@ -106,34 +102,16 @@ function ModalAbsen({ s, selisih, onTutup, onSelesai }: { s: SesiTerbuka; selisi
   );
 }
 
+const KEADAAN_TEKS: Record<SesiHari["keadaan"], string> = { dibuka: "Dibuka", habis: "Waktu habis", ditutup: "Ditutup" };
+
 export default function AbsenPeserta() {
-  const [d, setD] = useState<Data | null>(null);
-  const [ada, setAda] = useState(true);
-  const [selisih, setSelisih] = useState(0);
+  const { data: d, ada, selisih, muat } = useAbsenSaya();
   const [modal, setModal] = useState<number | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState<string | null>(null);
   const sudahDibuka = useRef(new Set<number>());
   const [, ketuk] = useState(0);
-
-  const muat = useCallback(async () => {
-    try {
-      const r = await fetchJson<Data>("/api/sigap/pelatihan/absen?sebagai=peserta");
-      setD(r);
-      setSelisih(r.sekarang - Date.now());
-    } catch {
-      setAda(false); // bukan peserta atau fitur belum aktif: diam
-    }
-  }, []);
-  useEffect(() => {
-    void muat();
-  }, [muat]);
-  useEffect(() => {
-    if (!ada) return;
-    const a = setInterval(() => document.visibilityState === "visible" && void muat(), 10000);
-    return () => clearInterval(a);
-  }, [muat, ada]);
   useEffect(() => {
     const a = setInterval(() => ketuk((x) => x + 1), 1000);
     return () => clearInterval(a);
@@ -171,10 +149,14 @@ export default function AbsenPeserta() {
 
   if (!ada || !d) return null;
   const sesiModal = terbuka.find((s) => s.id === modal) ?? null;
+  // (3 Nov 2026) Kartu Presensi sesi SELALU tampil (dulu hanya saat panitia membuka sesi, sehingga peserta mengira fiturnya tidak ada): daftar sesi hari ini dengan statusnya.
+  const sesiHari: SesiHari[] = d.sesi_hari ?? terbuka.map((s) => ({ id: s.id, no: s.no, label: s.label, jam: null, keadaan: "dibuka" as const, tutup_at: s.tutup_at, sudah_hadir: s.sudah_hadir }));
+  const hadirN = sesiHari.filter((s) => s.sudah_hadir).length;
+  const punyaTerbuka = perluIsi.length > 0;
   return (
     <>
       {d.kedatangan.berlaku && (
-        <section className={`rounded-[18px] border p-4 ${d.kedatangan.sudah ? "border-[#BFE5D0] bg-[#F3FBF7]" : "border-[#F4D78A] bg-[#FFFBEF]"}`} aria-label="Kedatangan">
+        <section id="langkah-hadir" className={`rounded-[18px] border p-4 ${d.kedatangan.sudah ? "border-[#BFE5D0] bg-[#F3FBF7]" : "border-[#F4D78A] bg-[#FFFBEF]"}`} aria-label="Kedatangan">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Kedatangan hari pertama</h2>
             <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${d.kedatangan.sudah ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#FFF4D6] text-[#8A6200]"}`}>
@@ -191,15 +173,43 @@ export default function AbsenPeserta() {
           {pesan && <div className="mt-2"><Pesan jenis="ok" onTutup={() => setPesan(null)}>{pesan}</Pesan></div>}
         </section>
       )}
-      {terbuka.map((s) => (
-        <section key={s.id} className={`rounded-[18px] border p-4 ${s.sudah_hadir ? "border-[#BFE5D0] bg-[#F3FBF7]" : "border-[#B9D2FB] bg-[#F3F8FF]"}`} aria-label={`Absensi ${s.label}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Absensi {s.label}</h2>
-            <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${s.sudah_hadir ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#E3EEFF] text-[#1F5FD1]"}`}>{s.sudah_hadir ? "Anda sudah hadir" : `Habis dalam ${teksSisa(Math.max(0, Math.ceil((Date.parse(s.tutup_at) - sekarang) / 1000)))}`}</span>
-          </div>
-          {!s.sudah_hadir && <button type="button" className={`${BTN} mt-3`} onClick={() => setModal(s.id)}>Isi absen sekarang</button>}
-        </section>
-      ))}
+      <section id="langkah-sesi" className={`rounded-[18px] border p-4 ${punyaTerbuka ? "border-[#B9D2FB] bg-[#F3F8FF]" : sesiHari.length > 0 && hadirN === sesiHari.length ? "border-[#BFE5D0] bg-[#F3FBF7]" : "border-[#DDE6F3] bg-white"}`} aria-label="Presensi sesi">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Presensi sesi</h2>
+          <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-bold ${punyaTerbuka ? "bg-[#E3EEFF] text-[#1F5FD1]" : sesiHari.length > 0 && hadirN === sesiHari.length ? "bg-[#E3F6EC] text-[#13794B]" : "bg-[#EEF2F7] text-[#6B7A90]"}`}>
+            {punyaTerbuka ? "Sedang dibuka" : sesiHari.length === 0 ? "Belum ada sesi dibuka" : `${hadirN}/${sesiHari.length} sesi hadir`}
+          </span>
+        </div>
+        {sesiHari.length === 0 ? (
+          <p className="mt-1.5 text-[13px] leading-relaxed text-[#5B6B84]">Panitia atau instruktur membuka presensi di tiap sesi (jendela 30 menit). Saat dibuka, pop-up muncul di sini untuk mengisi kode atau konfirmasi lokasi.</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {sesiHari.map((s) => {
+              const sisa = Math.max(0, Math.ceil((Date.parse(s.tutup_at) - sekarang) / 1000));
+              const buka = s.keadaan === "dibuka" && sisa > 0;
+              const terbukaPeserta = terbuka.find((t) => t.id === s.id);
+              return (
+                <li key={s.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-[#E3EAF4] bg-white px-3 py-2">
+                  <span className="min-w-0 flex-1 text-[13.5px] font-bold text-[#0F2A52]">
+                    {s.label}
+                    {s.jam ? <span className="ml-1.5 text-[12px] font-semibold text-[#6B7A90]">{s.jam}</span> : null}
+                  </span>
+                  {s.sudah_hadir ? (
+                    <span className="rounded-full bg-[#E3F6EC] px-2.5 py-0.5 text-[11.5px] font-bold text-[#13794B]">✓ Hadir</span>
+                  ) : buka ? (
+                    <>
+                      <span className="rounded-full bg-[#E3EEFF] px-2.5 py-0.5 text-[11.5px] font-bold text-[#1F5FD1]">Habis dalam {teksSisa(sisa)}</span>
+                      {terbukaPeserta && <button type="button" className={`${BTN} !mt-0 !min-h-[40px] !px-3 !py-1.5 !text-[13px]`} onClick={() => setModal(s.id)}>Isi absen</button>}
+                    </>
+                  ) : (
+                    <span className="rounded-full bg-[#FDE8E8] px-2.5 py-0.5 text-[11.5px] font-bold text-[#B42329]">{KEADAAN_TEKS[s.keadaan === "dibuka" ? "habis" : s.keadaan]} · belum tercatat</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
       {sesiModal && !sesiModal.sudah_hadir && (
         <ModalAbsen
           s={sesiModal}

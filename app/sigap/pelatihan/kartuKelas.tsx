@@ -4,39 +4,23 @@
 //
 // (1 Nov 2026) Kartu "Kelas Anda" di halaman Langkah peserta: mode (daring/luring/hybrid), jadwal, tempat, dan apa artinya bagi presensi.
 // Data dari perencanaan (identifikasi lanjutan yang tertaut ke kegiatan). Tidak tampil bila belum tertaut. API: /api/sigap/pelatihan/kelas.
-// `useKelasSaya` dipakai bersama halaman Langkah (menyembunyikan langkah Foto Transport Lokal untuk kelas Daring); satu permintaan dibagi, kedaluwarsa 30 detik.
+// `useKelasSaya` dipakai bersama halaman Langkah (menyembunyikan langkah Foto Transport Lokal untuk kelas Daring); lewat simpanan bersama (dataPel.ts): satu permintaan dibagi, tampil seketika, diperbarui di belakang tiap 5 menit.
 
-import { useEffect, useState } from "react";
-import { fetchJson, urlPelatihan } from "../admin/api";
 import { Chip, Kartu } from "../admin/ui";
+import { useDataPel } from "./dataPel";
 import { rentangTanggal, type AturanMode, type CaraKelas, type KelasInfo } from "@/lib/sigapKelasIdent";
 
 export type JawabKelas = { tersedia: boolean; tersambung: boolean; peran?: string; cara?: CaraKelas; kelas?: KelasInfo | null; kandidat?: KelasInfo[]; aturan?: AturanMode | null };
 
 const WARNA = { Daring: "navy", Luring: "ok", Hybrid: "wait" } as const;
-const TTL_MS = 30_000;
-const cache = new Map<string, { t: number; p: Promise<JawabKelas | null> }>();
 
-function ambilKelas(): Promise<JawabKelas | null> {
-  const url = urlPelatihan("/api/sigap/pelatihan/kelas");
-  const ada = cache.get(url);
-  if (ada && Date.now() - ada.t < TTL_MS) return ada.p;
-  const p = fetchJson<JawabKelas>(url).catch(() => null);
-  cache.set(url, { t: Date.now(), p });
-  return p;
-}
-
-/** undefined = sedang memuat; null = gagal memuat; selain itu jawaban API. */
+/**
+ * undefined = sedang memuat; null = gagal memuat; selain itu jawaban API.
+ * (3 Nov 2026) Lewat simpanan bersama (dataPel.ts): langsung tampil saat pindah tab, diperbarui di belakang tiap 5 menit (profil di dataBersama.ts).
+ */
 export function useKelasSaya(): JawabKelas | null | undefined {
-  const [d, setD] = useState<JawabKelas | null | undefined>(undefined);
-  useEffect(() => {
-    let batal = false;
-    void ambilKelas().then((r) => !batal && setD(r));
-    return () => {
-      batal = true;
-    };
-  }, []);
-  return d;
+  const h = useDataPel<JawabKelas>("/api/sigap/pelatihan/kelas");
+  return h.data ?? (h.galat ? null : undefined);
 }
 
 export default function KartuKelas() {

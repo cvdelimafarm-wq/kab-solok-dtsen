@@ -11,7 +11,7 @@
 import { bagiFoto, keadaanHari, type PengaturanPresensi, type RingkasHari } from "./sigapPresensi";
 import { posisiAlur, type PosisiAlur, type TahapAlur } from "./alurKelola";
 
-export type KodeLangkah = "undangan" | "instrumen" | "pretest" | "hadir" | "kuis" | "foto_awal" | "posttest" | "foto_akhir";
+export type KodeLangkah = "undangan" | "instrumen" | "pretest" | "hadir" | "sesi" | "kuis" | "foto_awal" | "posttest" | "foto_akhir";
 
 export type StatusLangkah = "selesai" | "terlewat" | "sekarang" | "menyusul";
 
@@ -40,6 +40,11 @@ export type MasukanLangkah = {
   tes: { jenis: string; status: string; /** (2 Nov 2026) terisi bila tes ini terkunci oleh blokir tahapan. */ terkunci?: unknown | null }[];
   presensi: { sudah: boolean; hari: RingkasHari; pengaturan: Partial<Pick<PengaturanPresensi, "susulan_sampai">> } | null;
   kuis: { pernah_ikut: boolean; ada_ruang_selesai: boolean; ada_ruang_aktif: boolean } | null;
+  /**
+   * (3 Nov 2026) Absen sesi (tab Hari ini): ringkasan sesi hari ini. Diisi HANYA pada tampilan lima tab; null/tidak diisi = langkah "Absen sesi" tidak ada.
+   * `total` = sesi hari ini untuk kelas peserta, `hadir` = yang tercatat hadir, `terbukaBelum` = sesi yang sedang dibuka dan belum diisi.
+   */
+  absenSesi?: { total: number; hadir: number; terbukaBelum: number } | null;
   /** Kelas luring/hybrid/belum tertaut = true; kelas Daring = false (tanpa foto Transport Lokal). */
   fotoTranslok: boolean;
   /** Jam mulai pelatihan (ms epoch); langkah foto "menyala" sejak saat ini. */
@@ -48,6 +53,9 @@ export type MasukanLangkah = {
 };
 
 export const ALAMAT_LANGKAH = "/sigap/pelatihan";
+
+/** (3 Nov 2026) Ringkasan kuis "belum ada ruang": tampilan lima tab tetap memunculkan langkah Adu Sigap (status Menyusul) walau panitia belum membuat kuis. */
+export const KUIS_BELUM_ADA = { pernah_ikut: false, ada_ruang_selesai: false, ada_ruang_aktif: false } as const;
 const alamatDalamLangkah = (kode: KodeLangkah) => `${ALAMAT_LANGKAH}?langkah=${kode}`;
 
 /** Jam mulai & selesai pelatihan (ms epoch) dari tanggal_iso + "pukul" undangan, mis. "08.00–16.00 WIB". Bawaan 08.00-16.00. */
@@ -98,6 +106,17 @@ export function hitungLangkahPelatihan(m: MasukanLangkah): LangkahPelatihan[] {
     terlewat: !!p && !!kh && !kh.lengkap && !kh.aktif && !kh.berikutnya,
     bisaSekarang: !!p && !!kh && (!!kh.aktif || keadaanHari(p.hari, m.now, p.pengaturan.susulan_sampai).susulan.length > 0),
   });
+
+  // (3 Nov 2026) Absen sesi: tambahan (tidak dihitung dalam progres); selalu tampil di tampilan lima tab walau panitia belum membuka sesi apa pun.
+  if (m.absenSesi) {
+    const a = m.absenSesi;
+    hasil.push({
+      ...dasar("sesi", "Absen sesi pelatihan", "Absen sesi", true, `${ALAMAT_LANGKAH}/hari-ini?langkah=sesi`),
+      selesai: a.total > 0 && a.hadir >= a.total && a.terbukaBelum === 0,
+      bisaSekarang: a.terbukaBelum > 0,
+      tambahan: true,
+    });
+  }
 
   if (m.kuis) {
     hasil.push({
@@ -171,7 +190,7 @@ export function catatanBerikutnya(daftar: readonly LangkahPelatihan[], aktif: st
   return `${b.singkat} belum bisa dikerjakan sekarang. Buka saja untuk melihat jadwal atau syaratnya.`;
 }
 
-const KODE_VALID: readonly string[] = ["undangan", "instrumen", "pretest", "hadir", "kuis", "foto_awal", "posttest", "foto_akhir"];
+const KODE_VALID: readonly string[] = ["undangan", "instrumen", "pretest", "hadir", "sesi", "kuis", "foto_awal", "posttest", "foto_akhir"];
 /** Nilai ?langkah= dari alamat -> kode yang dikenal, selain itu null (alamat sembarangan tidak boleh dipakai mencari elemen). */
 export function bacaLangkahDariAlamat(q: string | null | undefined): KodeLangkah | null {
   return q && KODE_VALID.includes(q) ? (q as KodeLangkah) : null;

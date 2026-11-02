@@ -4,7 +4,8 @@
 //
 // GET  (Bearer sesi; ?kegiatan=ID &tanggal=YYYY-MM-DD &kelas=N)
 //   pengelola (panitia / instruktur) -> { sebagai:"pengelola", jenis, tersedia, tanggal, hari, kedatangan_berlaku, atur, kelas_pilihan, kelas, kelas_terkunci, sesi:[...rencana + keadaan], disarankan, peserta:[...], datang:[...], hadir:[...], sekarang }
-//   GET ?sebagai=peserta  -> { sebagai:"peserta", tersedia, kedatangan:{berlaku,sudah,at,manual,terlambat}, sesi_terbuka:[{id,no,label,metode,tutup_at,sisa_detik,sudah_hadir}] }
+//   GET ?sebagai=peserta  -> { sebagai:"peserta", tersedia, kedatangan:{berlaku,sudah,at,manual,terlambat}, sesi_terbuka:[{id,no,label,metode,tutup_at,sisa_detik,sudah_hadir}],
+//                            sesi_hari:[{id,no,label,jam,keadaan:dibuka|habis|ditutup,tutup_at,sudah_hadir}] (3 Nov 2026: semua sesi hari ini untuk kelas peserta) }
 // POST pengelola: {aksi:"mulai",tanggal,no,label?,jam?,kelas?,metode:[...]} | {aksi:"tutup",sesi_id} | {aksi:"centang",sesi_id,akun_id,hadir,alasan?}
 //                 | {aksi:"datang",akun_id,hadir,alasan?,tanggal} | {aksi:"posisi",sesi_id,lat,lng,akurasi} | {aksi:"atur",sesi?,jendela_menit?,radius_m?} (izin kelola)
 // POST peserta:   {aksi:"kode",sesi_id,kode} | {aksi:"lokasi",sesi_id,lat,lng,akurasi}
@@ -18,7 +19,7 @@ import { tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { posisiValid } from "@/lib/sigapPresensi";
 import { kedatanganBerlaku, keadaanSesi, menitWib, periksaMetode, sarankanSesi, sisaDetik, tanggalWib } from "@/lib/sigapAbsen";
 import {
-  ambilSesi, batalDatangManual, catatDatangManual, centangPeserta, hariKegiatan, kirimKode, konfirmasiLokasi, muatAtur, muatDatang, muatHadir, muatSesiHari, mulaiSesi, pesertaKelas, sesiTerbukaUntuk,
+  ambilSesi, batalDatangManual, catatDatangManual, centangPeserta, hariKegiatan, kirimKode, konfirmasiLokasi, muatAtur, muatDatang, muatHadir, muatSesiHari, mulaiSesi, pesertaKelas,
   simpanAtur, simpanPosisiPengelola, tutupSesi, PESAN_SQL,
 } from "@/lib/sigapAbsenDb";
 
@@ -49,8 +50,12 @@ export async function GET(req: NextRequest) {
       const hariIni = tanggalWib(sekarang);
       const berlaku = kedatanganBerlaku(hari, hariIni);
       const datang = berlaku ? (await muatDatang(db, kegiatanId, hariIni, [akun.id])).get(akun.id) ?? null : null;
-      const terbuka = await sesiTerbukaUntuk(db, kegiatanId, peserta.kelas ?? null, sekarang);
-      const hadir = await muatHadir(db, terbuka.map((s) => s.id));
+      // (3 Nov 2026) Seluruh sesi hari ini untuk kelas peserta (bukan hanya yang dibuka): kartu "Presensi sesi" di tab Hari ini selalu tampil dengan statusnya.
+      const { sesi: sesiHariIni } = await muatSesiHari(db, kegiatanId, hariIni);
+      const untukku = sesiHariIni.filter((s) => s.kelas === null || s.kelas === undefined || peserta.kelas === null || peserta.kelas === undefined || Number(s.kelas) === Number(peserta.kelas));
+      const terbuka = untukku.filter((s) => keadaanSesi(s, sekarang) === "dibuka");
+      const hadirHari = await muatHadir(db, untukku.map((s) => s.id));
+      const hadir = hadirHari;
       return NextResponse.json({
         sebagai: "peserta",
         tersedia: true,
@@ -60,6 +65,10 @@ export async function GET(req: NextRequest) {
           id: s.id, no: s.no, label: s.label, metode: s.metode, tutup_at: s.tutup_at, sisa_detik: sisaDetik(s.tutup_at, sekarang), radius_m: s.radius_m,
           sudah_hadir: hadir.some((h) => h.absen_sesi_id === s.id && h.akun_id === akun.id && h.diterima),
           di_luar_radar: hadir.some((h) => h.absen_sesi_id === s.id && h.akun_id === akun.id && !h.diterima && h.metode === "radar"),
+        })),
+        sesi_hari: untukku.map((s) => ({
+          id: s.id, no: s.no, label: s.label, jam: s.jam_rencana, keadaan: keadaanSesi(s, sekarang), tutup_at: s.tutup_at,
+          sudah_hadir: hadirHari.some((h) => h.absen_sesi_id === s.id && h.akun_id === akun.id && h.diterima),
         })),
         sekarang,
       });

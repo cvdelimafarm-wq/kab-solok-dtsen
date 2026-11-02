@@ -160,11 +160,12 @@ export function tugasUtamaPelatihan(hub: HubTugas, nowMs: number): TugasUtama | 
     });
   }
 
+  // (3 Nov 2026) Dari Beranda SIGAP, pelatihan selalu dibuka di tab Hari ini (/sigap/pelatihan mengalihkan ke sana pada tampilan lima tab); undangan dan instrumen dibuka dari kartu / tab di dalamnya.
   if (L && !L.undangan_dibuka) {
-    kandidat.push({ ...dasar, skor: 60, ikon: "surat", label: "MULAI DARI SINI", judul: "Baca undangan pelatihan", uraian: "Kelas, jam, dan pakaian ada di sana. Cukup dibuka sekali.", href: "/sigap/pelatihan/undangan", aksi: "Buka undangan" });
+    kandidat.push({ ...dasar, skor: 60, ikon: "surat", label: "MULAI DARI SINI", judul: "Baca undangan pelatihan", uraian: "Kelas, jam, dan pakaian ada di sana. Cukup dibuka sekali.", href: "/sigap/pelatihan", aksi: "Buka undangan" });
   }
   if (L && !L.instrumen_diunduh) {
-    kandidat.push({ ...dasar, skor: 55, ikon: "pedia", label: "PERSIAPAN", judul: "Pelajari instrumen", uraian: "Unduh kuesioner dan buku pedoman agar siap saat pretest.", href: "/sigap/pelatihan/instrumen", aksi: "Buka instrumen" });
+    kandidat.push({ ...dasar, skor: 55, ikon: "pedia", label: "PERSIAPAN", judul: "Pelajari instrumen", uraian: "Unduh kuesioner dan buku pedoman agar siap saat pretest.", href: "/sigap/pelatihan", aksi: "Buka instrumen" });
   }
 
   if (kandidat.length === 0) {

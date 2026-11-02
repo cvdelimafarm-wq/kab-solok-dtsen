@@ -4,7 +4,7 @@
 // -- permintaan user. Sesi dibaca dari localStorage (sigap_sesi + sigap_sesi_sampai), dikirim sebagai
 // header Authorization: Bearer <sesi>. Sesi tidak ada / kedaluwarsa / API 401 -> ke /sigap/masuk?lanjut=<path>.
 
-import { bacaCache, muatData } from "@/app/portal/dataBersama";
+import { bacaCache, muatData, tandaBasi } from "@/app/portal/dataBersama";
 import { simpananHariIni } from "@/lib/sigapCacheKerja";
 
 export const KUNCI_SESI = "sigap_sesi";
@@ -153,7 +153,11 @@ export function urlPelatihan(url: string): string {
 
 export async function fetchJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(urlPelatihan(url), { ...init, headers: { ...header(), ...((init.headers as Record<string, string>) ?? {}) }, cache: "no-store" });
-  return olah<T>(res);
+  const hasil = await olah<T>(res);
+  // (3 Nov 2026) Penulisan pelatihan yang berhasil (kirim presensi, respons undangan, buka materi, dll.) -> simpanan data pelatihan (dataBersama.ts) ditandai
+  // kedaluwarsa: tab lain tetap langsung tampil dari simpanan, tetapi diperbarui di belakang dan tidak menampilkan keadaan lama terlalu lama.
+  if ((init.method ?? "GET").toUpperCase() !== "GET" && url.startsWith("/api/sigap/pelatihan")) tandaBasi("/api/sigap/pelatihan");
+  return hasil;
 }
 
 /**

@@ -19,6 +19,9 @@ import { Kerangka } from "../komponen";
 import { PulsaPeserta } from "../pulsa";
 import { TeksBaris } from "../TeksBaris";
 import { useInfoPelatihan } from "../infoPelatihan";
+import { useDataPel } from "../dataPel";
+import KartuKuis from "../KartuKuis"; // (3 Nov 2026) kartu kuis selalu tampil
+import { bacaLangkahDariAlamat } from "@/lib/alurPelatihan";
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { lupakanBenderaTab } from "../TabPelatihan";
@@ -168,21 +171,15 @@ function ModalKetentuan({ d, onTutup, onSelesai }: { d: Data; onTutup: () => voi
 }
 
 export default function HalamanHariIni() {
-  const [d, setD] = useState<Data | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
+  // (3 Nov 2026) Lewat simpanan bersama (dataPel.ts): pindah ke tab ini langsung menampilkan data terakhir, lalu diperbarui di belakang (tab lain memakai jawaban yang sama untuk bilah).
+  const { data: d, galat, muat: muatUlang } = useDataPel<Data>("/api/sigap/pelatihan/ketentuan");
   const [buka, setBuka] = useState(false);
   const [unduh, setUnduh] = useState(false);
   const [galatPdf, setGalatPdf] = useState<string | null>(null);
 
   const muat = useCallback(() => {
-    fetchJson<Data>("/api/sigap/pelatihan/ketentuan")
-      .then((r) => {
-        setD(r);
-        setGalat(null);
-      })
-      .catch((e) => setGalat(pesanGalat(e)));
-  }, []);
-  useEffect(muat, [muat]);
+    void muatUlang();
+  }, [muatUlang]);
 
   async function bukaPdf() {
     setUnduh(true);
@@ -196,10 +193,26 @@ export default function HalamanHariIni() {
     }
   }
 
+  // (3 Nov 2026) ?langkah=<kode> (dari ikon langkah di halaman lain): gulirkan ke kartunya setelah data tiba, lalu bersihkan alamat
+  const peserta = !!d?.peserta;
+  useEffect(() => {
+    if (!peserta) return;
+    const k = bacaLangkahDariAlamat(new URLSearchParams(window.location.search).get("langkah"));
+    if (!k) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    const gulir = () => document.getElementById(`langkah-${k}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t1 = setTimeout(gulir, 400);
+    const t2 = setTimeout(gulir, 1400); // kartu absen / kuis memuat sendiri; coba sekali lagi
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [peserta]);
+
   const nada = d ? NADA[d.kartu.nada] : null;
   const info = useInfoPelatihan();
   return (
-    <Kerangka aktif="hari-ini" judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
+    <Kerangka aktif="hari-ini" geser judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!d && !galat && <Memuat />}
       {d && !d.peserta && (
@@ -239,6 +252,7 @@ export default function HalamanHariIni() {
           </section>
           <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />
           <AbsenPeserta />
+          <KartuKuis />
           {/* (2 Nov 2026) nomor pulsa: dikonfirmasi sekali lewat pop-up; di sini hanya kartu redup di bagian bawah (permintaan user) */}
           <PulsaPeserta tampilan="kartu" judul={judulPelatihan(info)} />
           {!d.tab_baru && (

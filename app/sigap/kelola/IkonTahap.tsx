@@ -193,6 +193,7 @@ const PETA: Record<string, NamaIkon> = {
   pretest: "pena",
   posttest: "pena",
   hadir: "lokasi",
+  sesi: "cek", // (3 Nov 2026) absen sesi pelatihan
   foto_awal: "kamera",
   foto_akhir: "kamera",
 };

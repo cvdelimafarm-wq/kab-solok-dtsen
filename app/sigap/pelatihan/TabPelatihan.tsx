@@ -6,9 +6,13 @@
 // Hanya tampil untuk kegiatan yang saklar `tab_baru`-nya menyala (Kelola Pelatihan). Saklar mati / SQL belum dijalankan -> TabPelatihanOtomatis tidak menggambar apa pun,
 // sehingga tampilan Langkah lama tidak berubah. Berkas ini hanya menggambar; data berasal dari GET /api/sigap/pelatihan/ketentuan.
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { fetchJson } from "../admin/api";
+import { urlPelatihan } from "../admin/api";
+import { tandaBasi } from "@/app/portal/dataBersama";
+import { useSiapkan } from "@/app/portal/siapkan"; // (3 Nov 2026) prefetch tab lain
+import { rencanaTab } from "@/lib/cacheTabPelatihan";
+import { useDataPel } from "./dataPel";
 
 export type TabAktif = "hari-ini" | "instrumen" | "pelatihan" | "absen" | "kamera" | "monitoring";
 
@@ -142,36 +146,33 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana =
 }
 
 type Bendera = { tab_baru: boolean; kamera_href: string | null; kegiatan_id: number; tab: TabPeran; instrumen_belum: number };
-// Bendera disimpan selama sesi tab peramban supaya perpindahan antar-halaman tidak memuat ulang dan bilah tidak berkedip.
-let cacheBendera: { nilai: Bendera; sampai: number } | null = null;
+type JawabKetentuan = { tab_baru?: boolean; kamera_href?: string | null; kegiatan_id: number; tab?: TabPeran; instrumen_belum?: number | string | null };
 
+const URL_KETENTUAN = "/api/sigap/pelatihan/ketentuan";
+
+/**
+ * Bendera tab (tampilan 5 tab menyala? tautan Kamera, peran, lencana). (3 Nov 2026) Diambil dari simpanan bersama (dataBersama.ts) -- jawaban yang SAMA dengan
+ * halaman Hari ini -- sehingga bilah langsung tampil dari simpanan saat pindah tab (tidak berkedip) dan diperbarui di belakang (profil: 1 menit).
+ */
 export function useBenderaTab(): Bendera | null {
-  const [b, setB] = useState<Bendera | null>(() => (cacheBendera && cacheBendera.sampai > Date.now() ? cacheBendera.nilai : null));
-  useEffect(() => {
-    if (cacheBendera && cacheBendera.sampai > Date.now()) return;
-    let batal = false;
-    fetchJson<Bendera>("/api/sigap/pelatihan/ketentuan")
-      .then((r) => {
-        const nilai: Bendera = { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id, tab: r.tab ?? TAB_PESERTA, instrumen_belum: Number(r.instrumen_belum ?? 0) || 0 };
-        cacheBendera = { nilai, sampai: Date.now() + 60_000 };
-        if (!batal) setB(nilai);
-      })
-      .catch(() => undefined); // gagal -> tanpa bilah baru; halaman tetap berjalan
-    return () => {
-      batal = true;
-    };
-  }, []);
-  return b;
+  const { data: r } = useDataPel<JawabKetentuan>(URL_KETENTUAN);
+  return useMemo(
+    () => (r ? { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id, tab: r.tab ?? TAB_PESERTA, instrumen_belum: Number(r.instrumen_belum ?? 0) || 0 } : null),
+    [r],
+  );
 }
 
-/** Dipasang di Kerangka: menggambar bilah hanya bila kegiatan memakai tampilan baru. */
+/** Dipasang di Kerangka: menggambar bilah hanya bila kegiatan memakai tampilan baru, dan menyiapkan (prefetch) kode + data tab lain di belakang. */
 export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
   const b = useBenderaTab();
+  const menyala = !!b && b.tab_baru;
+  const rencana = menyala && b ? rencanaTab(aktif, daftarTab(b.kamera_href, b.tab).map((t) => ({ kode: t.kode, href: t.href })), urlPelatihan) : { rute: [], data: [] };
+  useSiapkan(rencana, menyala);
   if (!b || !b.tab_baru) return null;
   return <TabPelatihan aktif={aktif} kameraHref={b.kamera_href} peran={b.tab} lencana={{ instrumen: b.instrumen_belum }} />;
 }
 
-/** Untuk pengujian / pembaruan setelah pengelola mengubah saklar. */
+/** Untuk pembaruan setelah pengelola/peserta mengubah sesuatu (mis. merespons undangan): tandai bendera kedaluwarsa agar diambil ulang di belakang. */
 export function lupakanBenderaTab() {
-  cacheBendera = null;
+  tandaBasi(URL_KETENTUAN);
 }

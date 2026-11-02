@@ -43,7 +43,7 @@ function Centang() {
  * `onGulir`: bila diberikan (halaman Langkah), langkah yang bagian dari halaman itu (presensi, Adu Sigap, foto) tidak berpindah halaman, hanya menggulir.
  * Digeser mendatar di layar sempit; langkah aktif (atau langkah "sekarang" pertama) dibawa ke tengah.
  */
-export function StripPelatihan({ daftar, status, aktif, onGulir }: Data & { aktif: string | null; onGulir?: (kode: string) => void }) {
+export function StripPelatihan({ daftar, status, aktif, onGulir, hrefAlih, cekGulir }: Data & { aktif: string | null; onGulir?: (kode: string) => void; hrefAlih?: Partial<Record<string, string>>; cekGulir?: (kode: string) => boolean }) {
   const wadah = useRef<HTMLOListElement | null>(null);
   const fokus = aktif ?? daftar[Math.max(0, status.findIndex((s) => s === "sekarang"))]?.kode ?? null;
   useEffect(() => {
@@ -81,12 +81,24 @@ export function StripPelatihan({ daftar, status, aktif, onGulir }: Data & { akti
               <div className={kelas} aria-current="step" title={`Anda di langkah ${i + 1}: ${l.judul}`}>
                 {isi}
               </div>
-            ) : onGulir && !l.halaman ? (
+            ) : onGulir && !l.halaman && !cekGulir ? (
               <button type="button" className={`${kelas} hover:bg-[#F4F8FE]`} title={l.judul} aria-label={`Ke langkah ${i + 1}: ${l.judul}`} onClick={() => onGulir(l.kode)}>
                 {isi}
               </button>
             ) : (
-              <Link href={l.href} className={`${kelas} hover:bg-[#F4F8FE]`} title={l.judul} aria-label={`Buka langkah ${i + 1}: ${l.judul}`}>
+              <Link
+                href={hrefAlih?.[l.kode] ?? l.href}
+                className={`${kelas} hover:bg-[#F4F8FE]`}
+                title={l.judul}
+                aria-label={`Buka langkah ${i + 1}: ${l.judul}`}
+                // (3 Nov 2026) bila kartu langkah ini ada di halaman yang sedang dibuka (tab Hari ini / Pelatihan), cukup menggulir ke kartunya
+                onClick={(e) => {
+                  if (onGulir && cekGulir?.(l.kode)) {
+                    e.preventDefault();
+                    onGulir(l.kode);
+                  }
+                }}
+              >
                 {isi}
               </Link>
             )}
@@ -98,7 +110,7 @@ export function StripPelatihan({ daftar, status, aktif, onGulir }: Data & { akti
 }
 
 /** Kartu penunjuk di atas halaman langkah: "Langkah 3 dari 8 · Pretest", status, lajur ikon, dan jumlah langkah wajib yang selesai. */
-export function PenunjukPelatihan({ daftar, status, aktif }: Data & { aktif: string }) {
+export function PenunjukPelatihan({ daftar, status, aktif, hrefAlih }: Data & { aktif: string; hrefAlih?: Partial<Record<string, string>> }) {
   const posisi = posisiLangkah(daftar, aktif);
   if (!posisi) return null;
   const s = status[posisi.indeks];
@@ -115,10 +127,40 @@ export function PenunjukPelatihan({ daftar, status, aktif }: Data & { aktif: str
         <span className={`mt-0.5 flex-none rounded-full px-2 py-0.5 text-[11px] font-extrabold ${WARNA_CHIP[s]}`}>{teksStatusLangkah(s)}</span>
       </div>
       <div className="mt-2.5">
-        <StripPelatihan daftar={daftar} status={status} aktif={aktif} />
+        <StripPelatihan daftar={daftar} status={status} aktif={aktif} hrefAlih={hrefAlih} />
       </div>
       <p className="mb-0 mt-1 text-[12px] text-[#6B7A90]">
         {p.selesai} dari {p.wajib} langkah selesai
+      </p>
+    </section>
+  );
+}
+
+/**
+ * (3 Nov 2026) Kartu "Langkah pelatihan" untuk tab Hari ini dan tab Pelatihan (tanpa langkah "aktif": tab-tab ini memuat beberapa langkah sekaligus).
+ * Isinya lajur ikon yang digeser mendatar, sama dengan tab Instrumen; menggantikan daftar tahap berjejer ke bawah. Ketuk ikon: menggulir ke kartunya bila ada di halaman ini,
+ * kalau tidak membuka halamannya.
+ */
+export function LangkahGeser({ daftar, status, hrefAlih, onGulir, cekGulir }: Data & { hrefAlih?: Partial<Record<string, string>>; onGulir?: (kode: string) => void; cekGulir?: (kode: string) => boolean }) {
+  if (daftar.length === 0) return null;
+  const p = progresLangkah(daftar);
+  const idx = Math.max(0, daftar.findIndex((l, i) => status[i] === "sekarang" && !l.tambahan));
+  const berikut = p.semua ? null : daftar[idx];
+  const s = berikut ? status[idx] : "selesai";
+  return (
+    <section aria-label="Langkah pelatihan" className="rounded-xl border border-[#DDE6F3] bg-white px-3.5 py-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="m-0 text-[11px] font-bold uppercase tracking-[.4px] text-[#6B7A90]">Langkah pelatihan</p>
+          <p className="m-0 text-[14.5px] font-extrabold text-[#0F2A52]">{berikut ? `Berikutnya: ${berikut.singkat} · langkah ${idx + 1} dari ${daftar.length}` : "Semua langkah wajib selesai"}</p>
+        </div>
+        <span className={`mt-0.5 flex-none rounded-full px-2 py-0.5 text-[11px] font-extrabold ${WARNA_CHIP[s]}`}>{teksStatusLangkah(s)}</span>
+      </div>
+      <div className="mt-2.5">
+        <StripPelatihan daftar={daftar} status={status} aktif={null} hrefAlih={hrefAlih} onGulir={onGulir} cekGulir={cekGulir} />
+      </div>
+      <p className="mb-0 mt-1 text-[12px] text-[#6B7A90]">
+        {p.selesai} dari {p.wajib} langkah selesai · geser ikon ke samping untuk melihat semuanya
       </p>
     </section>
   );

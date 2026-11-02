@@ -6,13 +6,19 @@
 // Data: GET/POST /api/sigap/pelatihan/materi. SQL 20261102zm belum dijalankan -> bagian ini tidak tampil bagi peserta (berkas unduhan tetap jalan) dan memberi petunjuk bagi pengelola.
 
 import { JudulIkon } from "./IkonInstrumen";
-import { useCallback, useEffect, useState } from "react";
-import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
+import { useCallback, useState } from "react";
+import { fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
+import { ubahCache } from "@/app/portal/dataBersama";
+import { useDataPel } from "../dataPel";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Pesan } from "../../admin/ui";
 import PemutarVideo, { type ProgresVideo } from "./PemutarVideo";
 import { lupakanBenderaTab } from "../TabPelatihan";
 
 const URL_MATERI = "/api/sigap/pelatihan/materi";
+// (3 Nov 2026) Tombol aksi di tab Instrumen dibedakan WARNA: Putar video = oranye, Buka tautan = hijau-biru, Unduh berkas = biru, Buka berkas tersimpan = hijau (page.tsx).
+const UKURAN_AKSI = "!inline-flex min-h-[44px] min-w-[112px] !px-4 !text-[14px] !font-extrabold text-white";
+const BTN_PUTAR = `${UKURAN_AKSI} rounded-lg bg-[#C2410C] shadow-sm transition hover:bg-[#9A3412] disabled:opacity-50 items-center justify-center gap-1`;
+const BTN_TAUTAN = `${UKURAN_AKSI} rounded-lg bg-[#0E7490] shadow-sm transition hover:bg-[#155E75] disabled:opacity-50 items-center justify-center gap-1`;
 
 type Progres = { detik_unik: number; persen: number; selesai: boolean; manual: boolean };
 type Materi = { id: number; urutan: number; jenis: "video" | "tautan"; judul: string; url: string; youtube_id: string | null; durasi_detik: number | null; wajib: boolean; progres: Progres | null };
@@ -46,23 +52,16 @@ function Status({ m }: { m: Materi }) {
 }
 
 export default function BagianMateri() {
-  const [data, setData] = useState<Data | null>(null);
-  const [galat, setGalat] = useState<string | null>(null);
+  // (3 Nov 2026) Daftar video/tautan lewat simpanan bersama (dataPel.ts): langsung tampil saat pindah tab, diperbarui di belakang.
+  // Progres yang baru direkam langsung ditulis ke simpanan (ubahCache) tanpa menunggu server.
+  const kunci = urlPelatihan(URL_MATERI);
+  const { data, galat: galatMuat, muat } = useDataPel<Data>(URL_MATERI);
+  const [galatLain, setGalat] = useState<string | null>(null);
+  const galat = galatLain ?? (data ? null : galatMuat);
   const [info, setInfo] = useState<string | null>(null);
   const [terbuka, setTerbuka] = useState<number | null>(null);
   const [sibuk, setSibuk] = useState<number | "simpan" | null>(null);
-
-  const muat = useCallback(async () => {
-    try {
-      setData(await fetchJson<Data>(URL_MATERI));
-      setGalat(null);
-    } catch (e) {
-      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
-    }
-  }, []);
-  useEffect(() => {
-    muat();
-  }, [muat]);
+  const setData = useCallback((f: (d: Data | null) => Data | null) => void ubahCache<Data>(kunci, (d) => f(d) ?? d), [kunci]);
 
   const terimaProgres = useCallback(
     (id: number, p: ProgresVideo, selesaiBaru: boolean) => {
@@ -163,7 +162,7 @@ export default function BagianMateri() {
                       <Status m={m} />
                     </div>
                   </div>
-                  <button type="button" className={terbuka === m.id ? BTN_O : BTN} onClick={() => setTerbuka(terbuka === m.id ? null : m.id)}>
+                  <button type="button" className={terbuka === m.id ? `${BTN_O} min-h-[44px] min-w-[112px] !px-4 !text-[14px] !font-extrabold` : BTN_PUTAR} onClick={() => setTerbuka(terbuka === m.id ? null : m.id)}>
                     {terbuka === m.id ? "Tutup" : m.progres?.selesai ? "▶ Putar lagi" : "▶ Putar"}
                   </button>
                   {data.boleh_kelola && (
@@ -194,7 +193,7 @@ export default function BagianMateri() {
                     <Status m={m} />
                   </div>
                 </div>
-                <button type="button" className={BTN} onClick={() => bukaTautan(m)}>
+                <button type="button" className={BTN_TAUTAN} onClick={() => bukaTautan(m)}>
                   ↗ Buka
                 </button>
                 {data.boleh_kelola && (
