@@ -17,6 +17,8 @@ export type DataNilai = {
   skema: SkemaNilai;
   tersimpan: boolean;
   boleh_ubah: boolean;
+  /** (2 Nov 2026) Aturan nilai kegiatan: versi 2 = nilai percobaan pertama, lulus bila > ambang. Tidak ada = versi 1 (server lama). */
+  aturan?: { versi: 1 | 2; blokir_tahap: boolean; izin_ajukan: boolean; eksplisit: boolean };
   kuis: Record<string, KuisNilai>;
   /** Hanya ada bila skema memakai Kedisiplinan / Sikap (31 Okt 2026). */
   disiplin?: Record<string, number | null>;

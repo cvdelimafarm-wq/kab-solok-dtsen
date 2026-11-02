@@ -35,6 +35,8 @@ import { muatNilaiAkhir } from "@/lib/sigapNilai";
 import { LABEL_DASAR_KUIS, ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { nomorAsli, pulsaBanyak } from "@/lib/sigapPulsa";
 import { LABEL_JENIS_TES, UNDANGAN, skorResmi, type SesiBaris } from "@/lib/sigapTes";
+import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
+import { nilaiResmiTes } from "@/lib/sigapAturanTes";
 import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
 
 // Penanda peserta tambahan manual (SUMBER_ADMINISTRASI) & filternya didefinisikan di lib/sigapTesDb.ts
@@ -330,6 +332,7 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
   const akunIds = inti.map((p) => p.akun_id);
   const [info, pres, narasi, daftarTes] = await Promise.all([infoKelas(db, kegiatanId, kelas), presensiPer(db, kegiatanId, akunIds), muatNarasi(db, kegiatanId, kelas), muatTesDaftar(db, kegiatanId)]);
   const sekarang = new Date();
+  const aturan = await muatAturan(db, kegiatanId); // (2 Nov 2026) versi 2 = nilai percobaan pertama
   const skorPer = new Map<number, Map<number, number>>(); // tes_id -> akun_id -> skor
   const tes: RingkasTes[] = [];
   for (const t of daftarTes) {
@@ -338,9 +341,10 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
       ? await db.from("sigap_tes_sesi").select("id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at, percobaan, skor_terbaik").eq("tes_id", t.id).in("akun_id", akunIds).limit(5000)
       : { data: [] as SesiBaris[] };
     const skor = new Map<number, number>();
+    const pertama = aturan.versi === 2 ? await muatSkorPertama(db, ((data ?? []) as SesiBaris[]).map((x) => x.id)) : new Map<number, number>();
     for (const s0 of (data ?? []) as SesiBaris[]) {
       const s = await finalisasiBilaKedaluwarsa(db, s0, soal, sekarang);
-      const resmi = skorResmi(s); // (8 Okt 2026) skor tertinggi dari semua percobaan
+      const resmi = aturan.versi === 2 ? nilaiResmiTes(2, s, pertama.get(s.id) ?? null) : skorResmi(s); // (8 Okt 2026) v1: skor tertinggi dari semua percobaan; (2 Nov 2026) v2: percobaan pertama
       if (resmi !== null) skor.set(s.akun_id, resmi);
     }
     skorPer.set(t.id, skor);

@@ -233,7 +233,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const sisaTutup = (new Date(k.tes.tutup_at).getTime() - sekarang()) / 1000;
   // (31 Okt 2026) Wajib lulus: peserta diberi tahu lulus / belum lulus segera setelah mengirim (skor dan pembahasan tetap menunggu tes ditutup).
   const kartuLulus =
-    k.wajib_lulus && k.lulus ? (
+    k.wajib_lulus && !k.wajib_100 && k.lulus ? (
       <Kartu judul={k.lulus === "lulus" ? "Anda lulus ✓" : "Anda belum mencapai nilai lulus"}>
         <p className={`text-[13px] leading-relaxed ${k.lulus === "lulus" ? "text-[#13794B]" : "text-[#B42329]"}`}>
           {k.lulus === "lulus"
@@ -246,10 +246,29 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
         </p>
       </Kartu>
     ) : null;
+  // (2 Nov 2026) Wajib 100: mengulang tanpa batas sampai nilai 100. Peserta diberi tahu segera apakah 100 sudah tercapai (nilai dan pembahasan tetap menunggu tes ditutup).
+  const nilaiPertamaBerlaku = k.aturan_versi === 2;
+  const kartuPenuh =
+    k.wajib_100 && k.sesi?.selesai_at ? (
+      <Kartu judul={k.tuntas ? "Nilai 100 tercapai ✓" : "Nilai Anda belum 100"}>
+        <p className={`text-[13px] leading-relaxed ${k.tuntas ? "text-[#13794B]" : "text-[#B42329]"}`}>
+          {k.tuntas
+            ? `Langkah ${label} selesai. ${nilaiPertamaBerlaku ? "Nilai yang dicatat tetap nilai percobaan pertama." : ""}`
+            : k.bisa_ulang
+              ? `${label} ini wajib mencapai nilai 100. Ulangi sampai nilai 100 (percobaan ke-${k.percobaan}; boleh berapa kali pun selama sesi terbuka).`
+              : `${label} ini wajib mencapai nilai 100, tetapi sesi sudah ditutup atau hampir ditutup sehingga tidak bisa mengulang lagi. Hubungi panitia pelatihan.`}
+        </p>
+      </Kartu>
+    ) : null;
   const kartuUlang = k.bisa_ulang ? (
-    <Kartu judul={k.wajib_lulus ? `Ulangi ${label} sampai lulus` : `Kesempatan mengulang ${label}`}>
+    <Kartu judul={k.wajib_100 ? `Ulangi ${label} sampai 100` : k.wajib_lulus ? `Ulangi ${label} sampai lulus` : `Kesempatan mengulang ${label}`}>
       <p className="text-[13px] leading-relaxed text-[#5B6B84]">
-        Percobaan ke-{k.percobaan} dari maksimal {k.ulang_maks}. Anda boleh mengulang selama sesi masih terbuka (sampai pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>, {formatSisa(sisaTutup)} lagi). Nilai yang dipakai adalah <b>skor tertinggi</b> dari semua percobaan, jadi mengulang tidak menurunkan nilai Anda.
+        {k.wajib_100 ? <>Percobaan ke-{k.percobaan} (tanpa batas jumlah).</> : <>Percobaan ke-{k.percobaan} dari maksimal {k.ulang_maks}.</>} Anda boleh mengulang selama sesi masih terbuka (sampai pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>, {formatSisa(sisaTutup)} lagi).{" "}
+        {nilaiPertamaBerlaku ? (
+          <>Nilai yang dicatat adalah <b>nilai percobaan pertama</b>; mengulang tidak mengubahnya{k.wajib_100 ? ", tetapi langkah ini baru selesai setelah Anda mencapai 100" : ""}.</>
+        ) : (
+          <>Nilai yang dipakai adalah <b>skor tertinggi</b> dari semua percobaan, jadi mengulang tidak menurunkan nilai Anda.</>
+        )}
       </p>
       <button type="button" className="mt-3 w-full rounded-xl bg-[#1F5FD1] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8] disabled:opacity-60" disabled={sibuk} onClick={() => setKonfirmasiUlang(true)}>
         Ulangi {label} →
@@ -405,10 +424,11 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
             {k.sesi?.terjawab ?? 0} dari {k.jumlah_soal} soal terjawab. Skor dan pembahasan benar/salah tampil setelah sesi ditutup pukul <b>{jamWib(k.tes.tutup_at)} WIB</b>.
           </p>
           <p className="mt-2 text-[22px] font-extrabold tabular-nums text-[#0F2A52]">{formatSisa(sisaTutup)}</p>
-          {k.percobaan > 1 && <p className="mt-1 text-[12.5px] text-[#5B6B84]">Ini percobaan ke-{k.percobaan}; skor tertinggi dari semua percobaan yang dipakai.</p>}
+          {k.percobaan > 1 && <p className="mt-1 text-[12.5px] text-[#5B6B84]">{nilaiPertamaBerlaku ? `Ini percobaan ke-${k.percobaan}; yang dicatat adalah nilai percobaan pertama.` : `Ini percobaan ke-${k.percobaan}; skor tertinggi dari semua percobaan yang dipakai.`}</p>}
         </Kartu>
       )}
       {status === "selesai" && kartuLulus}
+      {status === "selesai" && kartuPenuh}
       {status === "selesai" && kartuUlang}
       {status === "selesai" && k.hasil && (
         <>
@@ -431,7 +451,9 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
             </div>
             {k.percobaan > 1 && (
               <p className="mt-2 text-[12.5px] text-[#5B6B84]">
-                Skor tertinggi dari {k.percobaan} percobaan (pembahasan di bawah dari percobaan ke-{k.hasil.dari_percobaan}).
+                {nilaiPertamaBerlaku
+                  ? `Nilai percobaan pertama yang dicatat (Anda sudah ${k.percobaan - 1} kali mengulang; hasil mengulang tidak mengubah nilai ini).`
+                  : `Skor tertinggi dari ${k.percobaan} percobaan (pembahasan di bawah dari percobaan ke-${k.hasil.dari_percobaan}).`}
               </p>
             )}
           </Kartu>
@@ -468,8 +490,8 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
           <div className="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
             <p className="text-[16px] font-extrabold">Ulangi {label} sekarang?</p>
             <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[12.5px] leading-relaxed text-[#5B6B84]">
-              <li>Waktu dan jawaban dimulai dari awal (percobaan ke-{k.percobaan + 1} dari {k.ulang_maks}).</li>
-              <li>Jawaban percobaan sebelumnya tetap tersimpan; nilai yang dipakai = skor tertinggi dari semua percobaan.</li>
+              <li>Waktu dan jawaban dimulai dari awal (percobaan ke-{k.percobaan + 1}{k.wajib_100 ? "" : ` dari ${k.ulang_maks}`}).</li>
+              <li>Jawaban percobaan sebelumnya tetap tersimpan; {nilaiPertamaBerlaku ? "nilai yang dicatat tetap nilai percobaan pertama." : "nilai yang dipakai = skor tertinggi dari semua percobaan."}</li>
               <li>Waktu mengerjakan paling lama {k.tes.durasi_menit} menit dan tidak melewati pukul {jamWib(k.tes.tutup_at)} WIB.</li>
             </ul>
             <div className="mt-3 flex gap-2">

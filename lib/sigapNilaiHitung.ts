@@ -79,7 +79,11 @@ export type HasilAkhir = {
   lulus?: boolean;
 };
 
-export function hitungAkhir(skema: SkemaNilai, n: NilaiPeserta): HasilAkhir {
+/**
+ * `versi` aturan nilai (2 Nov 2026): 1 = lama (lulus bila nilai akhir >= ambang, hanya bila skema mewajibkan);
+ * 2 = baru (flag lulus selalu dihitung bila nilai LENGKAP, dan hanya bila nilai akhir LEBIH DARI ambang; tepat di ambang = tidak lulus).
+ */
+export function hitungAkhir(skema: SkemaNilai, n: NilaiPeserta, versi: 1 | 2 = 1): HasilAkhir {
   const komponen: Record<KomponenNilai, number | null> = { pretest: n.pretest ?? null, posttest: n.posttest ?? null, kuis: nilaiKuis(n.kuis, skema.dasar_kuis) };
   const tam = tambahanDari(skema);
   const nilaiTam: Record<KomponenTambahan, number | null> = { disiplin: n.disiplin ?? null, sikap: n.sikap ?? null };
@@ -94,7 +98,9 @@ export function hitungAkhir(skema: SkemaNilai, n: NilaiPeserta): HasilAkhir {
   const hasil: HasilAkhir = { akhir, lengkap: butir.every((b) => b.nilai != null), komponen };
   if (tambahan) hasil.tambahan = tambahan;
   const la = lulusAkhirDari(skema);
-  if (la.wajib) hasil.lulus = akhir >= la.nilai;
+  if (versi === 2) {
+    if (hasil.lengkap) hasil.lulus = akhir > la.nilai;
+  } else if (la.wajib) hasil.lulus = akhir >= la.nilai;
   return hasil;
 }
 

@@ -10,6 +10,7 @@
 // POST {aksi:"simpan_soal", jenis, soal:[{nomor,teks,opsi:[{kode,teks}],kunci,bobot}]}
 // POST {aksi:"atur_jadwal", jenis, buka_at, tutup_at, durasi_menit, judul?, aktif?, ulang_maks?, wajib_lulus?, nilai_lulus?}
 //   (31 Okt 2026) wajib_lulus + nilai_lulus (SQL 20261031k): peserta di bawah nilai lulus boleh mengulang sampai lulus (maks 3 percobaan).
+//   (2 Nov 2026) wajib_100 (SQL 20261102zl): mengulang tanpa batas sampai skor 100 selama tes dibuka. Monitoring memakai nilai PERCOBAAN PERTAMA pada aturan versi 2.
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Db } from "@/lib/sigap";
@@ -30,6 +31,8 @@ import {
   type StatusTes,
   type TesBaris,
 } from "@/lib/sigapTes";
+import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
+import { nilaiResmiTes } from "@/lib/sigapAturanTes";
 import { FILTER_BUKAN_ADMINISTRASI, KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTes, muatTesDaftar } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -100,6 +103,8 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
 
   const soalPer = new Map<number, SoalLengkap[]>();
   const sesiPer = new Map<number, SesiBaris[]>();
+  const aturan = await muatAturan(db, kegiatanId);
+  const pertamaPer = new Map<number, number>(); // id sesi -> skor percobaan pertama (aturan versi 2)
   for (const t of daftar) {
     const soal = await muatSoal(db, t.id);
     soalPer.set(t.id, soal);
@@ -107,8 +112,11 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
     const sesi: SesiBaris[] = [];
     for (const s of (data ?? []) as SesiBaris[]) sesi.push(await finalisasiBilaKedaluwarsa(db, s, soal, sekarang)); // nilai yg kedaluwarsa
     sesiPer.set(t.id, sesi);
+    if (aturan.versi === 2) for (const [k, v] of await muatSkorPertama(db, sesi.map((x) => x.id))) pertamaPer.set(k, v);
   }
 
+  // nilai resmi menurut aturan kegiatan: versi 1 = tertinggi dari semua percobaan; versi 2 = percobaan pertama
+  const resmi = (x: SesiBaris | null) => (aturan.versi === 2 ? nilaiResmiTes(2, x, x ? pertamaPer.get(x.id) ?? null : null) : skorResmi(x));
   const peserta = (pen ?? [])
     .map((p) => {
       const a = namaAkun.get(p.akun_id as number);
@@ -125,7 +133,7 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
           batas_at: sesi?.batas_at ?? null,
           terjawab: sesi ? Object.keys(bersihkanJawaban(sesi.jawaban, soal)).length : 0,
           // (8 Okt 2026) skor = nilai resmi (tertinggi dari semua percobaan); skor_terakhir = percobaan berjalan/terakhir
-          skor: skorResmi(sesi),
+          skor: resmi(sesi),
           skor_terakhir: sesi?.selesai_at && sesi.skor != null ? Number(sesi.skor) : null,
           // (31 Okt 2026) kelulusan menurut nilai resmi; null bila tes tidak wajib lulus
           lulus: wajibLulus(t) ? statusLulus(t, skorResmi(sesi)) : null,
@@ -146,7 +154,7 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
     const soal = soalPer.get(t.id) ?? [];
     const sesi = sesiPer.get(t.id) ?? [];
     const selesai = sesi.filter((s) => s.selesai_at);
-    const skor = sesi.map((s) => skorResmi(s)).filter((x): x is number => x !== null); // nilai resmi = skor tertinggi dari semua percobaan
+    const skor = sesi.map((s) => resmi(s)).filter((x): x is number => x !== null); // nilai resmi menurut aturan kegiatan (v1 tertinggi, v2 percobaan pertama)
     const mengulang = sesi.filter((s) => (s.percobaan ?? 1) > 1).length;
     const rata = skor.length ? Math.round((skor.reduce((a, b) => a + b, 0) / skor.length) * 100) / 100 : null;
     const mengerjakan = sesi.length - selesai.length;
@@ -180,7 +188,7 @@ async function monitoring(db: Db, kegiatanId: number, daftar: TesBaris[], sekara
       return { nomor: s.nomor, teks: s.teks, kunci: s.kunci, bobot: s.bobot, menjawab, benar, persen_benar: selesai.length ? Math.round((benar / selesai.length) * 1000) / 10 : null, sebaran };
     });
   }
-  return { sekarang: sekarang.toISOString(), tes: daftar, peserta, statistik, analisis };
+  return { sekarang: sekarang.toISOString(), aturan_versi: aturan.versi, tes: daftar, peserta, statistik, analisis };
 }
 
 export async function POST(req: NextRequest) {
@@ -236,6 +244,11 @@ export async function POST(req: NextRequest) {
         if (body.nilai_lulus === "" || body.nilai_lulus === null || !Number.isFinite(nl) || nl < 0 || nl > 100) return galat("Nilai lulus harus angka 0–100.");
         upd.nilai_lulus = Math.round(nl * 100) / 100;
       }
+      // (2 Nov 2026) wajib 100
+      if (body?.wajib_100 !== undefined) {
+        if (typeof body.wajib_100 !== "boolean") return galat("Setelan wajib 100 tidak sah.");
+        upd.wajib_100 = body.wajib_100;
+      }
       const wajibBerlaku = typeof upd.wajib_lulus === "boolean" ? upd.wajib_lulus : wajibLulus(tes);
       // (8 Okt 2026) kesempatan mengulang: hanya Posttest; 1 = tidak boleh mengulang, 2–5 = jumlah percobaan maksimal per peserta
       // (31 Okt 2026) bila wajib lulus aktif, jumlah percobaan tetap 3 dan berlaku juga untuk Pretest (ulang_maks tidak dipakai)
@@ -248,13 +261,14 @@ export async function POST(req: NextRequest) {
       const { error } = await db.from("sigap_tes").update(upd).eq("id", tes.id);
       if (error) {
         // kolom wajib_lulus/nilai_lulus belum ada (SQL belum dijalankan) -> pesan yang menunjuk langkahnya
+        if (upd.wajib_100 !== undefined && /wajib_100/.test(error.message)) return galat("Setelan wajib 100 belum bisa disimpan: jalankan dulu SQL 20261102zl_aturan_nilai_v2.sql.", 409);
         if ((upd.wajib_lulus !== undefined || upd.nilai_lulus !== undefined) && /wajib_lulus|nilai_lulus/.test(error.message)) return galat("Setelan wajib lulus belum bisa disimpan: jalankan dulu SQL 20261031k_tes_wajib_lulus.sql.", 409);
         return galat(error.message, 500);
       }
       await catatAudit(db, akun.id, "pelatihan_atur_jadwal", {
         tes_id: tes.id,
         jenis,
-        sebelum: { buka_at: tes.buka_at, tutup_at: tes.tutup_at, durasi_menit: tes.durasi_menit, aktif: tes.aktif, ulang_maks: tes.ulang_maks, wajib_lulus: tes.wajib_lulus ?? null, nilai_lulus: tes.nilai_lulus ?? null },
+        sebelum: { buka_at: tes.buka_at, tutup_at: tes.tutup_at, durasi_menit: tes.durasi_menit, aktif: tes.aktif, ulang_maks: tes.ulang_maks, wajib_lulus: tes.wajib_lulus ?? null, nilai_lulus: tes.nilai_lulus ?? null, wajib_100: tes.wajib_100 ?? null },
         sesudah: upd,
       });
       return NextResponse.json({ ok: true });

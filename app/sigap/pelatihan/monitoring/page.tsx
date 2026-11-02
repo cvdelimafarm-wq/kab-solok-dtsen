@@ -4,21 +4,24 @@
 //
 // (2 Nov 2026) Tab "Monitoring" pelatihan: progres menurut hierarki (panitia: semua; instruktur: kelasnya; korwil/PML/PPL: dirinya dan bawahan).
 // Data: GET /api/sigap/pelatihan/monitoring. Tahap ini menampilkan undangan, pretest, posttest, dan kehadiran; progres Vanguard dan instrumen menyusul.
+// (2 Nov 2026) Aturan nilai versi 2: skor = nilai percobaan pertama; ditambah nilai akhir dan flag kelulusan (lulus bila lebih dari ambang; hanya penanda untuk laporan).
 
 import { useEffect, useState } from "react";
 import { fetchJson, pesanGalat } from "../../admin/api";
 import { Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Kerangka } from "../komponen";
 import { LABEL_PERAN_PELATIHAN, type PeranPelatihan } from "@/lib/hierarkiPelatihan";
+import { LABEL_KELULUSAN, type StatusKelulusan } from "@/lib/sigapAturanTes";
 
 type Tes = { status: "belum" | "mengerjakan" | "selesai"; skor: number | null };
-type Baris = { akun_id: number; nama: string; peran: PeranPelatihan; kedalaman: number; diri: boolean; kelas: number | null; undangan: "belum" | "terima" | "tolak"; pretest: Tes; posttest: Tes; hadir: boolean };
+type Baris = { akun_id: number; nama: string; peran: PeranPelatihan; kedalaman: number; diri: boolean; kelas: number | null; undangan: "belum" | "terima" | "tolak"; pretest: Tes; posttest: Tes; hadir: boolean; nilai_akhir?: number | null; kelulusan?: StatusKelulusan };
 type Data = {
   jenis: "peserta" | "instruktur" | "panitia";
   ringkas: string;
   hierarki_tersedia: boolean;
+  aturan_versi?: 1 | 2;
   baris: Baris[];
-  ringkasan: { total: number; undangan_terima: number; undangan_tolak: number; pretest_selesai: number; posttest_selesai: number; hadir: number };
+  ringkasan: { total: number; undangan_terima: number; undangan_tolak: number; pretest_selesai: number; posttest_selesai: number; hadir: number; kelulusan?: Record<StatusKelulusan, number> };
 };
 
 const JUDUL: Record<Data["jenis"], string> = { panitia: "Seluruh peserta", instruktur: "Peserta kelas Anda", peserta: "Anda dan tim Anda" };
@@ -33,6 +36,8 @@ function ChipTes({ t }: { t: Tes }) {
   if (t.status === "mengerjakan") return <Chip teks="Berjalan" nada="wait" />;
   return <Chip teks="Belum" nada="mut" />;
 }
+
+const NADA_LULUS: Record<StatusKelulusan, "ok" | "wait" | "bad" | "mut"> = { lulus: "ok", tidak_lulus: "bad", belum_lengkap: "wait", belum_dinilai: "mut" };
 
 function Angka({ label, nilai, dari }: { label: string; nilai: number; dari: number }) {
   return (
@@ -86,6 +91,11 @@ export default function HalamanMonitoring() {
               <Angka label="Sudah hadir" nilai={r.hadir} dari={r.total} />
             </div>
             {r.undangan_tolak > 0 && <p className="mt-2 text-[12.5px] text-[#B42329]">{r.undangan_tolak} orang menolak undangan.</p>}
+            {r.kelulusan && (
+              <p className="mt-2 text-[12.5px] text-[#3B4A60]">
+                Kelulusan (nilai akhir lebih dari ambang, hanya penanda untuk laporan): <b className="text-[#13794B]">{r.kelulusan.lulus} lulus</b> · <b className="text-[#B42329]">{r.kelulusan.tidak_lulus} tidak lulus</b> · {r.kelulusan.belum_lengkap} belum lengkap · {r.kelulusan.belum_dinilai} belum dinilai.
+              </p>
+            )}
           </Kartu>
           <Kartu judul="Progres per orang">
             {d.baris.length === 0 ? (
@@ -109,6 +119,13 @@ export default function HalamanMonitoring() {
                       <ChipTes t={b.posttest} />
                       <span className="ml-1">Hadir</span>
                       <Chip teks={b.hadir ? "Ya" : "Belum"} nada={b.hadir ? "ok" : "mut"} />
+                      {b.kelulusan && (
+                        <>
+                          <span className="ml-1">Nilai akhir</span>
+                          <Chip teks={b.nilai_akhir != null ? `${Math.round(b.nilai_akhir * 10) / 10}` : "—"} nada={b.nilai_akhir != null ? "ok" : "mut"} />
+                          <Chip teks={LABEL_KELULUSAN[b.kelulusan]} nada={NADA_LULUS[b.kelulusan]} />
+                        </>
+                      )}
                     </div>
                   </li>
                 ))}

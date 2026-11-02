@@ -3,14 +3,15 @@
 // app/sigap/pelatihan/kelola/tampilan.tsx
 //
 // (2 Nov 2026) Tab "Persiapan" di Kelola Pelatihan: (1) tampilan peserta (OTOMATIS bawaan: lima tab selama pelatihan belum selesai; dapat dipaksa baru / lama),
-// (2) ketentuan undangan, (3) pengaturan Absen peserta (sesi, jendela, radius). Setiap setelan diberi penanda Bawaan / Diubah.
-// API: /api/sigap/pelatihan/ketentuan dan /api/sigap/pelatihan/absen (aksi "atur").
+// (2) ketentuan undangan, (3) pengaturan Absen peserta (sesi, jendela, radius), (4) aturan nilai dan kelulusan (versi lama / baru). Setiap setelan diberi penanda Bawaan / Diubah.
+// API: /api/sigap/pelatihan/ketentuan, /api/sigap/pelatihan/absen (aksi "atur") dan /api/sigap/pelatihan/nilai (aksi "simpan_aturan").
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { MAKS_BUTIR, MAKS_PANJANG_BUTIR } from "@/lib/ketentuanPelatihan";
 import { lupakanBenderaTab } from "../TabPelatihan";
+import { LABEL_VERSI, type VersiAturan } from "@/lib/sigapAturanTes";
 import { JENDELA_MENIT_BAWAAN, RADIUS_RADAR_BAWAAN_M, SESI_BAWAAN, type SesiRencana } from "@/lib/sigapAbsen";
 import { ChipSetelan } from "./GrupTab";
 
@@ -135,6 +136,73 @@ function KartuAturAbsen({ bisa }: { bisa: boolean }) {
     </Kartu>
   );
 }
+
+type AturanKeg = { versi: VersiAturan; blokir_tahap: boolean; izin_ajukan: boolean; eksplisit: boolean };
+
+/** Aturan nilai & kelulusan: versi 1 (lama: nilai tertinggi, lulus bila >= ambang) atau 2 (baru: nilai percobaan pertama, lulus bila > ambang; hanya flag). */
+function KartuAturanNilai({ bisa }: { bisa: boolean }) {
+  const [a, setA] = useState<AturanKeg | null>(null);
+  const [sibuk, setSibuk] = useState(false);
+  const [galat, setGalat] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const muat = useCallback(async () => {
+    try {
+      const r = await fetchJson<{ aturan?: AturanKeg }>(urlPelatihan("/api/sigap/pelatihan/nilai"));
+      setA(r.aturan ?? { versi: 1, blokir_tahap: false, izin_ajukan: false, eksplisit: false });
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    }
+  }, []);
+  useEffect(() => {
+    if (!bacaSesi()) return;
+    void muat();
+  }, [muat]);
+
+  async function pilih(versi: VersiAturan) {
+    if (!a || a.versi === versi) return;
+    setSibuk(true);
+    setGalat(null);
+    setOk(null);
+    try {
+      await fetchJson(urlPelatihan("/api/sigap/pelatihan/nilai"), { method: "POST", body: JSON.stringify({ aksi: "simpan_aturan", aturan: { versi, blokir_tahap: a.blokir_tahap, izin_ajukan: a.izin_ajukan } }) });
+      setOk(versi === 2 ? "Aturan baru berlaku: nilai percobaan pertama, lulus bila lebih dari ambang." : "Aturan lama berlaku: nilai tertinggi, lulus bila memenuhi ambang.");
+      await muat();
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    } finally {
+      setSibuk(false);
+    }
+  }
+
+  if (!a && !galat) return <Memuat />;
+  if (!a) return <Pesan jenis="galat">{galat}</Pesan>;
+  return (
+    <Kartu judul="Aturan nilai dan kelulusan" kanan={<ChipSetelan diubah={a.eksplisit} teksBawaan={`Bawaan · ${a.versi === 2 ? "aturan baru" : "aturan lama"}`} teksDiubah={`Diubah · ${a.versi === 2 ? "aturan baru" : "aturan lama"}`} />}>
+      {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      {ok && <Pesan jenis="ok">{ok}</Pesan>}
+      <div role="radiogroup" aria-label="Aturan nilai" className="grid gap-2 sm:grid-cols-2">
+        {([2, 1] as VersiAturan[]).map((v) => {
+          const aktif = a.versi === v;
+          return (
+            <button key={v} type="button" role="radio" aria-checked={aktif} disabled={!bisa || sibuk} onClick={() => void pilih(v)} className={`rounded-xl border p-3 text-left disabled:opacity-60 ${aktif ? "border-[#1F5FD1] bg-[#EAF1FC]" : "border-[#DDE6F3] bg-white hover:bg-[#F8FAFC]"}`}>
+              <b className="block text-[13.5px] text-[#0F2A52]">
+                {aktif ? "● " : "○ "}
+                {v === 2 ? "Aturan baru (disarankan untuk kegiatan baru)" : "Aturan lama"}
+              </b>
+              <span className="mt-0.5 block text-[12px] text-[#6B7A90]">{LABEL_VERSI[v]}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[12.5px] text-[#6B7A90]">
+        Kelulusan hanya penanda untuk laporan ke pimpinan; tidak memblokir pendataan. Mengubah aturan mengubah cara nilai dihitung untuk semua peserta kegiatan ini, termasuk yang sudah mengerjakan. Pelatihan PSP Pascabencana tetap aturan lama bila tidak diubah.
+        Ambang kelulusan nilai akhir diatur di Soal &amp; Jadwal (skema nilai), bawaan 70. Pengulangan sampai 100 diatur per tes di Soal &amp; Jadwal (centang &quot;Wajib 100&quot;).
+      </p>
+    </Kartu>
+  );
+}
+
 
 export default function PersiapanKelola() {
   const [d, setD] = useState<Data | null>(null);
@@ -276,6 +344,7 @@ export default function PersiapanKelola() {
       </Kartu>
 
       <KartuAturAbsen bisa={bisa} />
+      <KartuAturanNilai bisa={bisa} />
     </div>
   );
 }

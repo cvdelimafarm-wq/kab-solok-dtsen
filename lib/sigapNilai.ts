@@ -7,6 +7,8 @@ import type { Db } from "@/lib/sigap";
 import { skorResmi, type SesiBaris } from "@/lib/sigapTes";
 import { finalisasiBilaKedaluwarsa, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
 import { kunciSesi } from "@/lib/sigapPresensi";
+import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
+import { nilaiResmiTes, statusKelulusan, type AturanPelatihan, type StatusKelulusan, type VersiAturan } from "@/lib/sigapAturanTes";
 import { SKEMA_BAWAAN, bulat2, hitungAkhir, lulusAkhirDari, periksaItemSikap, tambahanDari, type HasilAkhir, type ItemSikap, type KuisNilai, type NilaiPeserta, type SkemaNilai } from "@/lib/sigapNilaiHitung";
 
 export const POIN_MAKS_PER_SOAL = 1000;
@@ -167,7 +169,7 @@ export async function muatKuisNilai(db: Db, kegiatanId: number): Promise<Map<num
 // ----------------------------------------------------------------------------------------------
 // Pretest & Posttest: skor sesi selesai (sesi kedaluwarsa difinalkan dulu, sama seperti Monitoring)
 // ----------------------------------------------------------------------------------------------
-export async function muatTesNilai(db: Db, kegiatanId: number, akunIds: number[], sekarang = new Date()): Promise<Map<number, { pretest: number | null; posttest: number | null }>> {
+export async function muatTesNilai(db: Db, kegiatanId: number, akunIds: number[], sekarang = new Date(), versi: VersiAturan = 1): Promise<Map<number, { pretest: number | null; posttest: number | null }>> {
   const hasil = new Map<number, { pretest: number | null; posttest: number | null }>();
   for (const id of akunIds) hasil.set(id, { pretest: null, posttest: null });
   if (akunIds.length === 0) return hasil;
@@ -176,6 +178,8 @@ export async function muatTesNilai(db: Db, kegiatanId: number, akunIds: number[]
     if (t.jenis !== "pretest" && t.jenis !== "posttest") continue;
     const { data } = await db.from("sigap_tes_sesi").select("id, tes_id, akun_id, mulai_at, batas_at, selesai_at, jawaban, skor, benar, total, diubah_at, percobaan, skor_terbaik").eq("tes_id", t.id).in("akun_id", akunIds).limit(5000);
     let soal: Awaited<ReturnType<typeof muatSoal>> | null = null;
+    // (2 Nov 2026) aturan versi 2: nilai resmi = percobaan PERTAMA (skor_awal; sesi lama dilengkapi dari arsip)
+    const pertama = versi === 2 ? await muatSkorPertama(db, ((data ?? []) as SesiBaris[]).map((x) => x.id)) : new Map<number, number>();
     for (const s0 of (data ?? []) as SesiBaris[]) {
       let s = s0;
       if (!s.selesai_at && sekarang.getTime() >= new Date(s.batas_at).getTime()) {
@@ -183,7 +187,7 @@ export async function muatTesNilai(db: Db, kegiatanId: number, akunIds: number[]
         s = await finalisasiBilaKedaluwarsa(db, s, soal, sekarang);
       }
       // (8 Okt 2026) nilai resmi = skor tertinggi dari semua percobaan (percobaan ulang yang belum selesai memakai skor_terbaik sebelumnya)
-      const resmi = skorResmi(s);
+      const resmi = versi === 2 ? nilaiResmiTes(2, s, pertama.get(s.id) ?? null) : skorResmi(s);
       if (resmi !== null) {
         const baris = hasil.get(s.akun_id);
         if (baris) baris[t.jenis] = resmi;
@@ -196,10 +200,14 @@ export async function muatTesNilai(db: Db, kegiatanId: number, akunIds: number[]
 // ----------------------------------------------------------------------------------------------
 // Gabungan: nilai lengkap per akun
 // ----------------------------------------------------------------------------------------------
-export type NilaiLengkap = NilaiPeserta & HasilAkhir;
+export type NilaiLengkap = NilaiPeserta & HasilAkhir & {
+  /** (2 Nov 2026) Hanya pada aturan versi 2: flag kelulusan (nilai akhir > ambang). Hanya penanda untuk laporan, tidak memblokir apa pun. */
+  status_lulus?: StatusKelulusan;
+};
 
-export async function muatNilaiAkhir(db: Db, kegiatanId: number, akunIds: number[]): Promise<{ skema: SkemaNilai; tersimpan: boolean; per: Map<number, NilaiLengkap> }> {
-  const [{ skema, tersimpan }, tes, kuis] = await Promise.all([muatSkema(db, kegiatanId), muatTesNilai(db, kegiatanId, akunIds), muatKuisNilai(db, kegiatanId)]);
+export async function muatNilaiAkhir(db: Db, kegiatanId: number, akunIds: number[], aturanDiketahui?: AturanPelatihan): Promise<{ skema: SkemaNilai; tersimpan: boolean; aturan: AturanPelatihan; per: Map<number, NilaiLengkap> }> {
+  const aturan = aturanDiketahui ?? (await muatAturan(db, kegiatanId));
+  const [{ skema, tersimpan }, tes, kuis] = await Promise.all([muatSkema(db, kegiatanId), muatTesNilai(db, kegiatanId, akunIds, new Date(), aturan.versi), muatKuisNilai(db, kegiatanId)]);
   const tam = tambahanDari(skema);
   const [disiplin, sikap] = await Promise.all([tam.disiplin.pakai ? muatDisiplin(db, kegiatanId, akunIds) : null, tam.sikap.pakai ? muatSikap(db, kegiatanId) : null]);
   const per = new Map<number, NilaiLengkap>();
@@ -207,7 +215,8 @@ export async function muatNilaiAkhir(db: Db, kegiatanId: number, akunIds: number
     const n: NilaiPeserta = { pretest: tes.get(id)?.pretest ?? null, posttest: tes.get(id)?.posttest ?? null, kuis: kuis.get(id) ?? null };
     if (disiplin) n.disiplin = disiplin.get(id) ?? null;
     if (sikap) n.sikap = sikap.peta.get(id) ?? null;
-    per.set(id, { ...n, ...hitungAkhir(skema, n) });
+    const h = hitungAkhir(skema, n);
+    per.set(id, aturan.versi === 2 ? { ...n, ...h, status_lulus: statusKelulusan(2, h, lulusAkhirDari(skema).nilai) } : { ...n, ...h });
   }
-  return { skema, tersimpan, per };
+  return { skema, tersimpan, aturan, per };
 }

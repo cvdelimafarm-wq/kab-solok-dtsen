@@ -7,9 +7,13 @@
 //         (nilai Pretest/Posttest sudah ada di data Monitoring; peramban menghitung nilai akhir dari skema + data ini)
 // POST { aksi: "simpan_skema", skema: { pakai, bobot, dasar_kuis, tambahan?, lulus_akhir? } } -> sama seperti GET
 // POST { aksi: "simpan_sikap", item: [{ akun_id, nilai: 0-100 | null }] } -> sama seperti GET (hanya peserta pelatihan ini)
+// (2 Nov 2026) GET juga memuat `aturan` { versi, blokir_tahap, izin_ajukan, eksplisit }.
+// POST { aksi: "simpan_aturan", aturan: { versi: 1|2, blokir_tahap, izin_ajukan } } -> sama seperti GET
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
+import { muatAturan, simpanAturan } from "@/lib/sigapAturanDb";
+import { periksaAturan } from "@/lib/sigapAturanTes";
 import { muatDisiplin, muatKuisNilai, muatSikap, muatSkema, periksaItemSikap, simpanSikap, simpanSkema } from "@/lib/sigapNilai";
 import { ringkasSkema, tambahanDari, validasiSkema } from "@/lib/sigapNilaiHitung";
 import { FILTER_BUKAN_ADMINISTRASI } from "@/lib/sigapTesDb";
@@ -38,7 +42,8 @@ async function siapkan(req: NextRequest, tulis: boolean) {
 async function muatSemua(k: Exclude<Awaited<ReturnType<typeof siapkan>>, NextResponse>) {
   const [{ skema, tersimpan }, kuis] = await Promise.all([muatSkema(k.db, k.kegiatanId), muatKuisNilai(k.db, k.kegiatanId)]);
   const tam = tambahanDari(skema);
-  const dasar = { skema, tersimpan, boleh_ubah: k.bolehUbah, kuis: Object.fromEntries(kuis) };
+  const aturan = await muatAturan(k.db, k.kegiatanId);
+  const dasar = { skema, tersimpan, aturan, boleh_ubah: k.bolehUbah, kuis: Object.fromEntries(kuis) };
   if (!tam.disiplin.pakai && !tam.sikap.pakai) return dasar;
   const { data: pen } = await k.db.from("sigap_penugasan").select("akun_id").eq("kegiatan_id", k.kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(5000);
   const ids = Array.from(new Set(((pen ?? []) as { akun_id: number }[]).map((r) => Number(r.akun_id))));
@@ -73,6 +78,15 @@ export async function POST(req: NextRequest) {
       if (p.item.some((x) => !sah.has(x.akun_id))) return galat("Ada akun yang bukan peserta pelatihan ini.");
       await simpanSikap(k.db, k.kegiatanId, p.item, k.akun.id);
       await catatAudit(k.db, k.akun.id, "pelatihan_sikap_simpan", { kegiatan_id: k.kegiatanId, jumlah: p.item.length });
+      return NextResponse.json({ ok: true, ...(await muatSemua(k)) });
+    }
+    if (body?.aksi === "simpan_aturan") {
+      const a = periksaAturan(body?.aturan);
+      if (!a.ok) return galat(a.pesan);
+      const sebelum = await muatAturan(k.db, k.kegiatanId);
+      const h = await simpanAturan(k.db, k.kegiatanId, a.aturan, k.akun.nama);
+      if (!h.ok) return galat(h.pesan, 500);
+      await catatAudit(k.db, k.akun.id, "pelatihan_aturan_simpan", { kegiatan_id: k.kegiatanId, sebelum: { versi: sebelum.versi, blokir_tahap: sebelum.blokir_tahap, izin_ajukan: sebelum.izin_ajukan }, sesudah: a.aturan });
       return NextResponse.json({ ok: true, ...(await muatSemua(k)) });
     }
     if (body?.aksi !== "simpan_skema") return galat("Aksi tidak dikenal.");

@@ -40,6 +40,8 @@ export type TesBaris = {
   /** (31 Okt 2026) Nilai lulus 0-100 dan setelan wajib lulus. Kolom belum ada (SQL 20261031k belum dijalankan) = undefined = perilaku lama. */
   nilai_lulus?: number | null;
   wajib_lulus?: boolean;
+  /** (2 Nov 2026) "Wajib 100": peserta boleh mengulang tanpa batas jumlah sampai mencapai 100, selama tes masih dibuka. Kolom belum ada (SQL 20261102zl belum jalan) = undefined = tidak wajib 100. */
+  wajib_100?: boolean;
 };
 
 export type SesiBaris = {
@@ -58,6 +60,8 @@ export type SesiBaris = {
   percobaan: number;
   /** Skor tertinggi dari percobaan SEBELUMNYA (yang sudah diarsipkan); null bila belum pernah mengulang. */
   skor_terbaik: number | null;
+  /** (2 Nov 2026) Skor PERCOBAAN PERTAMA (SQL 20261102zl); diisi saat percobaan pertama dinilai. undefined/null = belum ada / kolom belum dibaca. */
+  skor_awal?: number | null;
 };
 
 /** Status tes bagi seorang peserta. */
@@ -131,6 +135,26 @@ export const PERCOBAAN_WAJIB_LULUS = 3;
 
 export const wajibLulus = (t: Pick<TesBaris, "wajib_lulus">): boolean => t.wajib_lulus === true;
 
+// ---------------------------------------------------------------------------------------------
+// (2 Nov 2026) Wajib 100. Pengaturan per tes (pretest / posttest): peserta mengulang berapa kali pun sampai skornya mencapai 100, selama jadwal tes terbuka.
+// Langkah dianggap SELESAI begitu skor tertinggi mencapai 100. Nilai yang dicatat tetap nilai pertama pada aturan versi 2 (lib/sigapAturanTes.ts).
+// Bila wajib 100 dan wajib lulus sama-sama menyala, wajib 100 yang berlaku.
+// ---------------------------------------------------------------------------------------------
+export const NILAI_PENUH = 100;
+/** Angka "tanpa batas" untuk percobaan wajib 100 (dipakai agar bentuk data tidak berubah). */
+export const PERCOBAAN_TANPA_BATAS = 999;
+export const wajib100 = (t: Pick<TesBaris, "wajib_100">): boolean => t.wajib_100 === true;
+/** Sudah pernah mencapai 100 pada percobaan mana pun (percobaan yang sedang berjalan dihitung bila sudah selesai). */
+export function sudahPenuh(s: Pick<SesiBaris, "selesai_at" | "skor" | "skor_terbaik"> | null | undefined): boolean {
+  const n = skorResmi(s);
+  return n !== null && n >= NILAI_PENUH;
+}
+/** Langkah tes tuntas: wajib 100 = skor tertinggi 100; selain itu = ada percobaan yang selesai. */
+export function tesTuntas(t: Pick<TesBaris, "wajib_100">, s: Pick<SesiBaris, "selesai_at" | "skor" | "skor_terbaik"> | null | undefined): boolean {
+  if (!s) return false;
+  return wajib100(t) ? sudahPenuh(s) : !!s.selesai_at || s.skor_terbaik != null;
+}
+
 /** Nilai lulus 0-100; kosong/rusak jatuh ke bawaan 70. */
 export function nilaiLulus(t: Pick<TesBaris, "nilai_lulus">): number {
   const n = t.nilai_lulus === null || t.nilai_lulus === undefined ? NaN : Number(t.nilai_lulus);
@@ -138,7 +162,8 @@ export function nilaiLulus(t: Pick<TesBaris, "nilai_lulus">): number {
 }
 
 /** Jumlah percobaan maksimal per peserta: wajib lulus = 3; selain itu posttest mengikuti ulang_maks, pretest 1. */
-export function percobaanMaks(t: Pick<TesBaris, "jenis" | "ulang_maks" | "wajib_lulus">): number {
+export function percobaanMaks(t: Pick<TesBaris, "jenis" | "ulang_maks" | "wajib_lulus" | "wajib_100">): number {
+  if (wajib100(t)) return PERCOBAAN_TANPA_BATAS;
   if (wajibLulus(t)) return PERCOBAAN_WAJIB_LULUS;
   if (t.jenis !== "posttest") return 1;
   const n = Number(t.ulang_maks);
@@ -155,7 +180,7 @@ export function statusLulus(t: Pick<TesBaris, "wajib_lulus" | "nilai_lulus">, sk
   return Number(skor) >= nilaiLulus(t) ? "lulus" : "belum_lulus";
 }
 
-type TesUlang = Pick<TesBaris, "jenis" | "aktif" | "buka_at" | "tutup_at" | "ulang_maks" | "nilai_lulus" | "wajib_lulus">;
+type TesUlang = Pick<TesBaris, "jenis" | "aktif" | "buka_at" | "tutup_at" | "ulang_maks" | "nilai_lulus" | "wajib_lulus" | "wajib_100">;
 type SesiUlang = Pick<SesiBaris, "selesai_at" | "percobaan" | "skor" | "skor_terbaik">;
 
 /**
@@ -166,18 +191,21 @@ type SesiUlang = Pick<SesiBaris, "selesai_at" | "percobaan" | "skor" | "skor_ter
 export function bisaUlang(tes: TesUlang, sesi: SesiUlang | null, jumlahSoal: number, sekarang: Date): boolean {
   if (!sesi || !sesi.selesai_at) return false;
   if (!tes.aktif || jumlahSoal <= 0) return false;
-  if (!wajibLulus(tes) && tes.jenis !== "posttest") return false;
+  if (!wajib100(tes) && !wajibLulus(tes) && tes.jenis !== "posttest") return false;
   if (sesi.percobaan >= percobaanMaks(tes)) return false;
-  if (statusLulus(tes, skorResmi(sesi)) === "lulus") return false;
+  if (wajib100(tes)) {
+    if (sudahPenuh(sesi)) return false;
+  } else if (statusLulus(tes, skorResmi(sesi)) === "lulus") return false;
   const t = sekarang.getTime();
   return t >= new Date(tes.buka_at).getTime() && new Date(tes.tutup_at).getTime() - t >= SISA_ULANG_MIN_DETIK * 1000;
 }
 
 /** Pesan bila "ulang" ditolak (urutan pemeriksaan mengikuti bisaUlang). */
 export function alasanTakBisaUlang(tes: TesUlang, sesi: SesiUlang): string {
-  if (!wajibLulus(tes) && (tes.jenis !== "posttest" || percobaanMaks(tes) <= 1)) return "Tes ini tidak membuka kesempatan mengulang.";
+  if (!wajib100(tes) && !wajibLulus(tes) && (tes.jenis !== "posttest" || percobaanMaks(tes) <= 1)) return "Tes ini tidak membuka kesempatan mengulang.";
   if (!sesi.selesai_at) return "Selesaikan percobaan yang sedang berjalan terlebih dahulu.";
-  if (statusLulus(tes, skorResmi(sesi)) === "lulus") return "Anda sudah mencapai nilai lulus, tidak perlu mengulang.";
+  if (wajib100(tes) && sudahPenuh(sesi)) return "Anda sudah mencapai nilai 100, tidak perlu mengulang.";
+  if (!wajib100(tes) && statusLulus(tes, skorResmi(sesi)) === "lulus") return "Anda sudah mencapai nilai lulus, tidak perlu mengulang.";
   if (sesi.percobaan >= percobaanMaks(tes)) return `Kesempatan mengulang sudah habis (maksimal ${percobaanMaks(tes)} percobaan).`;
   return "Waktu tes sudah hampir/ sudah ditutup, tidak bisa mengulang lagi.";
 }

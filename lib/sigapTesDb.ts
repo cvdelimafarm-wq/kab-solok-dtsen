@@ -35,6 +35,9 @@ import {
   type TesBaris,
 } from "@/lib/sigapTes";
 import { pilihPelatihanPeserta } from "@/lib/sigapPelatihanPilih";
+import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
+import { tesTuntas, wajib100 } from "@/lib/sigapTes";
+import type { VersiAturan } from "@/lib/sigapAturanTes";
 
 export function dbAdmin(): Db | null {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -102,6 +105,8 @@ export async function undanganUntuk(db: Db, kegiatanId: number): Promise<InfoUnd
 const KOLOM_TES_LAMA = "id, kegiatan_id, jenis, judul, buka_at, durasi_menit, tutup_at, aktif, ulang_maks";
 // (31 Okt 2026) + nilai lulus / wajib lulus (SQL 20261031k). Bila kolom belum ada, bacaan jatuh ke KOLOM_TES_LAMA (perilaku lama, tanpa wajib lulus).
 const KOLOM_TES = `${KOLOM_TES_LAMA}, nilai_lulus, wajib_lulus`;
+// (2 Nov 2026) + wajib_100 (SQL 20261102zl). Tiga tingkat: terbaru -> tanpa wajib_100 -> klasik.
+const KOLOM_TES_100 = `${KOLOM_TES}, wajib_100`;
 
 /** Nilai numeric dari PostgREST bisa berupa teks ("70.00"): jadikan angka agar perbandingan skor benar. */
 function rapikanTes(t: TesBaris): TesBaris {
@@ -110,6 +115,8 @@ function rapikanTes(t: TesBaris): TesBaris {
 
 export async function muatTesDaftar(db: Db, kegiatanId: number): Promise<TesBaris[]> {
   const q = (kolom: string) => db.from("sigap_tes").select(kolom).eq("kegiatan_id", kegiatanId).order("jenis", { ascending: false }); // pretest dulu
+  const { data: d100, error: e100 } = await q(KOLOM_TES_100);
+  if (!e100) return ((d100 ?? []) as unknown as TesBaris[]).map(rapikanTes);
   const { data, error } = await q(KOLOM_TES);
   if (!error) return ((data ?? []) as unknown as TesBaris[]).map(rapikanTes);
   const { data: lama } = await q(KOLOM_TES_LAMA);
@@ -118,6 +125,8 @@ export async function muatTesDaftar(db: Db, kegiatanId: number): Promise<TesBari
 
 export async function muatTes(db: Db, kegiatanId: number, jenis: JenisTes): Promise<TesBaris | null> {
   const q = (kolom: string) => db.from("sigap_tes").select(kolom).eq("kegiatan_id", kegiatanId).eq("jenis", jenis).maybeSingle();
+  const { data: d100, error: e100 } = await q(KOLOM_TES_100);
+  if (!e100) return d100 ? rapikanTes(d100 as unknown as TesBaris) : null;
   const { data, error } = await q(KOLOM_TES);
   if (!error) return data ? rapikanTes(data as unknown as TesBaris) : null;
   const { data: lama } = await q(KOLOM_TES_LAMA);
@@ -160,13 +169,12 @@ export async function finalisasiSesi(db: Db, sesi: SesiBaris, soal: SoalLengkap[
   if (sesi.selesai_at) return sesi;
   const jawaban = bersihkanJawaban(sesi.jawaban, soal);
   const h = hitungSkor(soal, jawaban);
-  const { data } = await db
-    .from("sigap_tes_sesi")
-    .update({ selesai_at: selesaiAt.toISOString(), jawaban, skor: h.skor, benar: h.benar, total: h.total, diubah_at: new Date().toISOString() })
-    .eq("id", sesi.id)
-    .is("selesai_at", null)
-    .select(KOLOM_SESI)
-    .maybeSingle();
+  const dasar = { selesai_at: selesaiAt.toISOString(), jawaban, skor: h.skor, benar: h.benar, total: h.total, diubah_at: new Date().toISOString() };
+  const tulis = (isi: Record<string, unknown>) => db.from("sigap_tes_sesi").update(isi).eq("id", sesi.id).is("selesai_at", null).select(KOLOM_SESI).maybeSingle();
+  // (2 Nov 2026) percobaan PERTAMA juga disimpan sebagai skor_awal (nilai resmi aturan versi 2). Kolom belum ada (SQL 20261102zl) -> ulangi tanpa kolom itu, penilaian tidak boleh gagal.
+  let { data, error } = (sesi.percobaan ?? 1) <= 1 ? await tulis({ ...dasar, skor_awal: h.skor }) : await tulis(dasar);
+  if (error && (sesi.percobaan ?? 1) <= 1 && /skor_awal|column|schema cache/i.test(error.message)) ({ data, error } = await tulis(dasar));
+  void error;
   if (data) return data as SesiBaris;
   // sudah difinalisasi permintaan lain -> baca ulang
   const { data: ulang } = await db.from("sigap_tes_sesi").select(KOLOM_SESI).eq("id", sesi.id).maybeSingle();
@@ -196,6 +204,11 @@ export type KeadaanTes = {
   wajib_lulus: boolean;
   nilai_lulus: number;
   lulus: "lulus" | "belum_lulus" | null;
+  /** (2 Nov 2026) Wajib 100: mengulang tanpa batas sampai 100. `tuntas` = langkah tes ini selesai (wajib 100: skor tertinggi 100; selain itu ada percobaan selesai). */
+  wajib_100: boolean;
+  tuntas: boolean;
+  /** (2 Nov 2026) Versi aturan nilai kegiatan ini: 2 = nilai resmi adalah percobaan PERTAMA. */
+  aturan_versi: VersiAturan;
   /** Hanya saat status "mengerjakan". */
   soal?: SoalPeserta[];
   jawaban?: Record<string, string>;
@@ -218,6 +231,7 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
   let sesi = await muatSesi(db, tes.id, akunId);
   if (sesi) sesi = await finalisasiBilaKedaluwarsa(db, sesi, soal, sekarang);
   const status = statusTes(tes, soal.length, sesi, sekarang);
+  const aturan = await muatAturan(db, tes.kegiatan_id);
   const k: KeadaanTes = {
     tes: { jenis: tes.jenis, judul: tes.judul, buka_at: tes.buka_at, tutup_at: tes.tutup_at, durasi_menit: tes.durasi_menit },
     sekarang: sekarang.toISOString(),
@@ -230,9 +244,12 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
     wajib_lulus: wajibLulus(tes),
     nilai_lulus: nilaiLulus(tes),
     lulus: null,
+    wajib_100: wajib100(tes),
+    tuntas: tesTuntas(tes, sesi),
+    aturan_versi: aturan.versi,
     hasil_tertunda: false,
   };
-  if (wajibLulus(tes) && sesi?.selesai_at) {
+  if (wajibLulus(tes) && !wajib100(tes) && sesi?.selesai_at) {
     const sl = statusLulus(tes, skorResmi(sesi));
     k.lulus = sl === "lulus" || sl === "belum_lulus" ? sl : null;
   }
@@ -259,6 +276,19 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
           jawabanTerbaik = bersihkanJawaban(arsip.jawaban, soal);
           darinya = Number(arsip.percobaan);
           skorTerbaik = Number(arsip.skor);
+        }
+      }
+      // (2 Nov 2026) aturan versi 2: nilai resmi = percobaan PERTAMA (bukan yang terbaik); pembahasan memakai jawaban percobaan pertama
+      if (aturan.versi === 2 && (sesi.percobaan ?? 1) > 1) {
+        const awal = (await muatSkorPertama(db, [sesi.id])).get(sesi.id);
+        const { data: arsip1 } = await db.from("sigap_tes_sesi_arsip").select("percobaan, jawaban, skor").eq("sesi_id", sesi.id).eq("percobaan", 1).maybeSingle();
+        if (arsip1) {
+          jawabanTerbaik = bersihkanJawaban(arsip1.jawaban, soal);
+          darinya = 1;
+          skorTerbaik = arsip1.skor != null ? Number(arsip1.skor) : awal ?? null;
+        } else if (awal !== undefined) {
+          darinya = 1;
+          skorTerbaik = awal;
         }
       }
       const h = hitungSkor(soal, jawabanTerbaik);

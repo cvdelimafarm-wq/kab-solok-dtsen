@@ -27,7 +27,7 @@ import ModalFotoPanitia from "../ModalFotoPanitia";
 import { HubSurvei, PemilihSurveiPelatihan, SurveiTanpaPelatihan, useDaftarSurvei } from "./survei"; // (31 Okt 2026) halaman awal = satu kartu per survei + dropdown survei
 import { bacaParamKelola, cariSurvei, pilihPelatihanAwal, urlKelola, type Survei } from "@/lib/sigapPelatihanSurvei";
 
-type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; nilai_lulus?: number | null; wajib_lulus?: boolean; jumlah_soal: number; jumlah_sesi: number };
+type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; nilai_lulus?: number | null; wajib_lulus?: boolean; wajib_100?: boolean; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
 
 type StatusPes = "belum_mulai" | "mengerjakan" | "selesai" | "terlewat" | "soal_belum_ada" | "nonaktif" | "belum_buka" | "buka";
@@ -257,6 +257,9 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   const adaSetelanLulus = tes.wajib_lulus !== undefined;
   const [wajib, setWajib] = useState(tes.wajib_lulus === true);
   const [nilaiLulusIsi, setNilaiLulusIsi] = useState(String(tes.nilai_lulus ?? 70));
+  // (2 Nov 2026) wajib 100 (SQL 20261102zl): kolom belum ada = tes.wajib_100 undefined -> setelan disembunyikan.
+  const adaSetelan100 = tes.wajib_100 !== undefined;
+  const [wajib100, setWajib100] = useState(tes.wajib_100 === true);
   const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [pratinjau, setPratinjau] = useState<{ soal: SoalLengkap[]; galat: string[]; nama: string } | null>(null);
@@ -264,7 +267,7 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   const [lihat, setLihat] = useState(false);
   const berkas = useRef<HTMLInputElement>(null);
 
-  const kunciJadwal = `${tes.buka_at}|${tes.tutup_at}|${tes.durasi_menit}|${tes.aktif}|${tes.ulang_maks ?? 1}|${tes.wajib_lulus ?? "-"}|${tes.nilai_lulus ?? "-"}`;
+  const kunciJadwal = `${tes.buka_at}|${tes.tutup_at}|${tes.durasi_menit}|${tes.aktif}|${tes.ulang_maks ?? 1}|${tes.wajib_lulus ?? "-"}|${tes.nilai_lulus ?? "-"}|${tes.wajib_100 ?? "-"}`;
   useEffect(() => {
     setBuka(keInputWib(tes.buka_at));
     setTutup(keInputWib(tes.tutup_at));
@@ -274,6 +277,7 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
     setUlangMaks(String(Math.max(2, tes.ulang_maks ?? 2)));
     setWajib(tes.wajib_lulus === true);
     setNilaiLulusIsi(String(tes.nilai_lulus ?? 70));
+    setWajib100(tes.wajib_100 === true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kunciJadwal]);
 
@@ -289,7 +293,7 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   }
 
   async function simpanJadwal() {
-    if (adaSetelanLulus && wajib && !(nilaiLulusIsi.trim() !== "" && Number(nilaiLulusIsi) >= 0 && Number(nilaiLulusIsi) <= 100)) {
+    if (adaSetelanLulus && wajib && !wajib100 && !(nilaiLulusIsi.trim() !== "" && Number(nilaiLulusIsi) >= 0 && Number(nilaiLulusIsi) <= 100)) {
       setPesan({ jenis: "galat", teks: "Nilai lulus harus angka 0–100." });
       return;
     }
@@ -306,7 +310,8 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
           tutup_at: tutup,
           durasi_menit: Number(durasi),
           aktif,
-          ...(bisaUlang && !wajib ? { ulang_maks: ulang ? Number(ulangMaks) : 1 } : {}),
+          ...(bisaUlang && !wajib && !wajib100 ? { ulang_maks: ulang ? Number(ulangMaks) : 1 } : {}),
+          ...(adaSetelan100 ? { wajib_100: wajib100 } : {}),
           ...(adaSetelanLulus ? { wajib_lulus: wajib, ...(wajib ? { nilai_lulus: Number(nilaiLulusIsi) } : {}) } : {}),
         }),
       });
@@ -392,7 +397,19 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
         <label className="col-span-2 flex items-center gap-2 pt-4 text-[12.5px] sm:col-span-1">
           <input type="checkbox" checked={aktif} disabled={!bisaKelola} onChange={(e) => setAktif(e.target.checked)} /> Tes aktif (tampil bagi peserta)
         </label>
-        {adaSetelanLulus && (
+        {adaSetelan100 && (
+          <div className="col-span-2 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2">
+            <label className="flex items-center gap-2 text-[12.5px]">
+              <input type="checkbox" checked={wajib100} disabled={!bisaKelola} onChange={(e) => setWajib100(e.target.checked)} /> Wajib 100: peserta mengulang {label} sampai nilainya 100
+            </label>
+            <p className="mt-1 text-[11.5px] text-[#7B8794]">
+              {wajib100
+                ? `Peserta boleh mengulang berapa kali pun selama jadwal masih terbuka. Langkah ${label} baru dianggap selesai bila nilai tertinggi mencapai 100; peserta langsung diberi tahu sudah 100 atau belum. Pada aturan nilai baru, nilai yang dicatat tetap nilai percobaan pertama. Menggantikan setelan wajib lulus dan jumlah percobaan di bawah.`
+                : "Nonaktif: pengulangan mengikuti setelan wajib lulus / jumlah percobaan di bawah."}
+            </p>
+          </div>
+        )}
+        {adaSetelanLulus && !wajib100 && (
           <div className="col-span-2 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2">
             <label className="flex items-center gap-2 text-[12.5px]">
               <input type="checkbox" checked={wajib} disabled={!bisaKelola} onChange={(e) => setWajib(e.target.checked)} /> Peserta wajib lulus {label}
@@ -410,7 +427,7 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
             </p>
           </div>
         )}
-        {bisaUlang && !wajib && (
+        {bisaUlang && !wajib && !wajib100 && (
           <div className="col-span-2 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2">
             <label className="flex items-center gap-2 text-[12.5px]">
               <input type="checkbox" checked={ulang} disabled={!bisaKelola} onChange={(e) => setUlang(e.target.checked)} /> Peserta boleh mengulang {label} (mengulang sendiri)
@@ -615,7 +632,7 @@ function nilaiPeserta(p: PesertaMon, d: ReturnType<typeof useSkemaNilai>["data"]
   const skor = (j: JenisTes) => p.tes[j]?.skor ?? null; // server: nilai resmi = skor tertinggi dari semua percobaan (null bila belum ada yang selesai)
   const kuis = d?.kuis[String(p.akun_id)] ?? null;
   const id = String(p.akun_id);
-  return hitungAkhir(d?.skema ?? SKEMA_BAWAAN_KLIEN, { pretest: skor("pretest"), posttest: skor("posttest"), kuis, disiplin: d?.disiplin?.[id] ?? null, sikap: d?.sikap?.[id] ?? null });
+  return hitungAkhir(d?.skema ?? SKEMA_BAWAAN_KLIEN, { pretest: skor("pretest"), posttest: skor("posttest"), kuis, disiplin: d?.disiplin?.[id] ?? null, sikap: d?.sikap?.[id] ?? null }, d?.aturan?.versi ?? 1);
 }
 
 function Monitoring() {
@@ -767,7 +784,9 @@ function Monitoring() {
   const hasilNilai = baris.map((p) => nilaiPeserta(p, nilai.data));
   const tamUI = tambahanDari(nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN);
   const lulusUI = lulusAkhirDari(nilai.data?.skema ?? SKEMA_BAWAAN_KLIEN);
-  const belumLulusAkhir = lulusUI.wajib ? hasilNilai.filter((h) => h.lulus === false).length : 0;
+  const versiNilai = nilai.data?.aturan?.versi ?? 1;
+  const tampilLulusAkhir = lulusUI.wajib || versiNilai === 2; // aturan baru: kelulusan selalu ditandai (hanya flag)
+  const belumLulusAkhir = tampilLulusAkhir ? hasilNilai.filter((h) => h.lulus === false).length : 0;
   const rata2 = (xs: (number | null)[]) => {
     const v = xs.filter((x): x is number => x != null);
     return { n: v.length, rata: v.length ? Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 100) / 100 : null };
@@ -796,7 +815,7 @@ function Monitoring() {
         <KartuAngka label="Rata-rata kuis" nilai={fmt(rataKuis.rata)} ket={`${rataKuis.n} peserta ikut`} warna="#C2570C" />
         <KartuAngka label="Rata-rata nilai akhir" nilai={fmt(rataAkhir.rata)} ket={`${rataAkhir.n} peserta · ${rataAkhir.lengkap} lengkap`} warna="#0F3D7A" />
         {adaWajib && <KartuAngka label="Belum lulus" nilai={belumLulus} ket="nilai di bawah nilai lulus" warna="#B42329" />}
-        {lulusUI.wajib && <KartuAngka label="Belum lulus nilai akhir" nilai={belumLulusAkhir} ket={`di bawah ${fmt(lulusUI.nilai)}`} warna="#B42329" />}
+        {tampilLulusAkhir && <KartuAngka label="Belum lulus nilai akhir" nilai={belumLulusAkhir} ket={versiNilai === 2 ? `tidak lebih dari ${fmt(lulusUI.nilai)}` : `di bawah ${fmt(lulusUI.nilai)}`} warna="#B42329" />}
       </div>
 
       <Kartu
@@ -861,8 +880,8 @@ function Monitoring() {
                       <span className="flex flex-wrap items-center gap-1.5">
                         <b className="tabular-nums text-[#0F3D7A]">{fmt(nl.akhir)}</b>
                         {!nl.lengkap && <Chip w="wait" title="Ada komponen terpilih yang belum punya nilai (dihitung 0)">belum lengkap</Chip>}
-                        {nl.lulus === true && <Chip w="ok" title={`Nilai akhir memenuhi batas ${fmt(lulusUI.nilai)}`}>lulus</Chip>}
-                        {nl.lulus === false && <Chip w="bad" title={`Nilai akhir di bawah batas ${fmt(lulusUI.nilai)}`}>belum lulus</Chip>}
+                        {nl.lulus === true && <Chip w="ok" title={versiNilai === 2 ? `Nilai akhir lebih dari ${fmt(lulusUI.nilai)}` : `Nilai akhir memenuhi batas ${fmt(lulusUI.nilai)}`}>lulus</Chip>}
+                        {nl.lulus === false && <Chip w="bad" title={versiNilai === 2 ? `Nilai akhir tidak lebih dari ${fmt(lulusUI.nilai)} (flag untuk laporan)` : `Nilai akhir di bawah batas ${fmt(lulusUI.nilai)}`}>{versiNilai === 2 ? "tidak lulus" : "belum lulus"}</Chip>}
                       </span>
                     ) : (
                       <span className="text-[#7B8794]">—</span>
