@@ -7,7 +7,8 @@
 import type { Db } from "@/lib/sigap";
 import { boleh, type PetaIzin } from "@/lib/sigapAkses";
 import { FILTER_BUKAN_ADMINISTRASI } from "@/lib/sigapTesDb";
-import { bacaKetentuan, bersihkanButir, KETENTUAN_BAWAAN, type Ketentuan, type ResponsUndangan } from "@/lib/ketentuanPelatihan";
+import { bacaKetentuan, bersihkanButir, hariIniWib, kegiatanSudahSelesai, KETENTUAN_BAWAAN, tampilanBaruAktif, type Ketentuan, type ResponsUndangan } from "@/lib/ketentuanPelatihan";
+import { periksaPerubahan, type MasukanPerubahan } from "@/lib/hierarkiImpor";
 import type { Pengguna, PeranPelatihan, SimpulHierarki } from "@/lib/hierarkiPelatihan";
 
 const PERAN_SAH: PeranPelatihan[] = ["ppl", "pml", "korwil"];
@@ -23,6 +24,28 @@ export async function muatKetentuan(db: Db, kegiatanId: number): Promise<Ketentu
   } catch {
     return { ...KETENTUAN_BAWAAN };
   }
+}
+
+export type Tampilan = {
+  ketentuan: Ketentuan;
+  /** Tampilan lima tab yang berlaku sekarang (pengaturan manual, atau otomatis menurut tanggal kegiatan). */
+  tab_baru: boolean;
+  otomatis: boolean;
+  kegiatan_selesai: boolean;
+};
+
+/** Ketentuan + keputusan tampilan. Bawaan OTOMATIS: baru selama pelatihan belum selesai. Gagal baca tanggal -> dianggap belum selesai. */
+export async function muatTampilan(db: Db, kegiatanId: number): Promise<Tampilan> {
+  const ketentuan = await muatKetentuan(db, kegiatanId);
+  let selesai = false;
+  try {
+    const { data } = await db.from("sigap_kegiatan").select("tanggal_mulai, tanggal_selesai").eq("id", kegiatanId).maybeSingle();
+    const k = data as { tanggal_mulai?: string | null; tanggal_selesai?: string | null } | null;
+    selesai = kegiatanSudahSelesai(k?.tanggal_selesai ?? null, k?.tanggal_mulai ?? null, hariIniWib());
+  } catch {
+    selesai = false;
+  }
+  return { ketentuan, tab_baru: tampilanBaruAktif(ketentuan.tab_pengaturan, selesai), otomatis: ketentuan.tab_pengaturan === null, kegiatan_selesai: selesai };
 }
 
 export async function muatRespons(db: Db, kegiatanId: number, akunId: number): Promise<ResponsUndangan> {
@@ -49,17 +72,20 @@ export async function simpanRespons(db: Db, kegiatanId: number, akunId: number, 
   }
 }
 
-/** Menyimpan ketentuan PJ. Versi naik 1 bila daftar butir berubah. `tab_baru` hanya diubah bila diberikan. */
-export async function simpanKetentuan(db: Db, kegiatanId: number, masuk: { butir?: unknown; tab_baru?: unknown }, oleh: string): Promise<{ ok: true; ketentuan: Ketentuan } | { ok: false; pesan: string }> {
+/**
+ * Menyimpan ketentuan PJ. Versi naik 1 bila daftar butir berubah. `tab_baru`: undefined = tidak diubah, true/false = manual, null = kembali ke OTOMATIS.
+ * Kolom tab_baru harus boleh null (SQL 20261102zj).
+ */
+export async function simpanKetentuan(db: Db, kegiatanId: number, masuk: { butir?: unknown; tab_baru?: boolean | null }, oleh: string): Promise<{ ok: true; ketentuan: Ketentuan } | { ok: false; pesan: string }> {
   try {
     const lama = await muatKetentuan(db, kegiatanId);
     const butir = masuk.butir === undefined ? lama.butir : bersihkanButir(masuk.butir);
     const berubah = JSON.stringify(butir) !== JSON.stringify(lama.butir);
-    const baru: Ketentuan = { tab_baru: typeof masuk.tab_baru === "boolean" ? masuk.tab_baru : lama.tab_baru, butir, versi: berubah ? lama.versi + 1 : lama.versi };
+    const baru: Ketentuan = { tab_pengaturan: masuk.tab_baru === undefined ? lama.tab_pengaturan : masuk.tab_baru, butir, versi: berubah ? lama.versi + 1 : lama.versi, ada: true };
     const { error } = await db
       .from("sigap_pelatihan_ketentuan")
-      .upsert({ kegiatan_id: kegiatanId, tab_baru: baru.tab_baru, butir: baru.butir, versi: baru.versi, diubah_oleh: oleh.slice(0, 120), diubah_at: new Date().toISOString() }, { onConflict: "kegiatan_id" });
-    if (error) return { ok: false, pesan: "Ketentuan belum dapat disimpan. Pastikan SQL 20261102zi_pelatihan_ketentuan_undangan sudah dijalankan." };
+      .upsert({ kegiatan_id: kegiatanId, tab_baru: baru.tab_pengaturan, butir: baru.butir, versi: baru.versi, diubah_oleh: oleh.slice(0, 120), diubah_at: new Date().toISOString() }, { onConflict: "kegiatan_id" });
+    if (error) return { ok: false, pesan: "Ketentuan belum dapat disimpan. Pastikan SQL 20261102zi dan 20261102zj sudah dijalankan." };
     return { ok: true, ketentuan: baru };
   } catch {
     return { ok: false, pesan: "Ketentuan belum dapat disimpan." };
@@ -75,10 +101,10 @@ export type DataHierarki = { tersedia: boolean; simpul: SimpulHierarki[] };
  * `tersedia` = tabel ada dan berisi; bila false layar Monitoring menampilkan catatan "hierarki belum disusun". Yang menolak undangan ditandai `tersembunyi`.
  */
 export async function muatSimpulHierarki(db: Db, kegiatanId: number): Promise<DataHierarki> {
-  let baris: { akun_id: number; peran_pelatihan: string; atasan_akun_id: number | null }[] = [];
+  let baris: { akun_id: number; peran_pelatihan: string; atasan_akun_id: number | null; sumber?: string | null; diubah_oleh?: string | null }[] = [];
   let tersedia = false;
   try {
-    const { data, error } = await db.from("sigap_pelatihan_hierarki").select("akun_id, peran_pelatihan, atasan_akun_id").eq("kegiatan_id", kegiatanId).limit(5000);
+    const { data, error } = await db.from("sigap_pelatihan_hierarki").select("akun_id, peran_pelatihan, atasan_akun_id, sumber, diubah_oleh").eq("kegiatan_id", kegiatanId).limit(5000);
     if (!error) {
       baris = (data ?? []) as typeof baris;
       tersedia = baris.length > 0;
@@ -93,11 +119,14 @@ export async function muatSimpulHierarki(db: Db, kegiatanId: number): Promise<Da
 
   const peranPer = new Map<number, PeranPelatihan>();
   const atasanPer = new Map<number, number | null>();
+  const asalPer = new Map<number, "bawaan" | "salinan" | "manual">();
   for (const b of baris) {
     const peran = jadiPeran(b.peran_pelatihan);
     if (!peran) continue;
     peranPer.set(b.akun_id, peran);
     atasanPer.set(b.akun_id, b.atasan_akun_id ?? null);
+    // baris "salin awal" tanpa atasan tercatat manual oleh fungsi salin, tetapi belum diubah siapa pun -> tetap bawaan
+    asalPer.set(b.akun_id, b.sumber === "salin_psp" || b.sumber === "salin_sampel" ? "salinan" : b.diubah_oleh === "salin awal" ? "bawaan" : "manual");
   }
   for (const p of penugasan) {
     if (peranPer.has(p.akun_id)) continue;
@@ -120,6 +149,7 @@ export async function muatSimpulHierarki(db: Db, kegiatanId: number): Promise<Da
     atasan_akun_id: atasanPer.get(id) ?? null,
     kelas: kelasPer.get(id) ?? null,
     tersembunyi: tolak.has(id),
+    asal: asalPer.get(id) ?? "bawaan",
   }));
   return { tersedia, simpul };
 }
@@ -176,6 +206,25 @@ export async function aturAtasan(db: Db, kegiatanId: number, akunId: number, ata
       );
     if (error) return { ok: false, pesan: "Hierarki belum dapat disimpan. Pastikan SQL 20261102zh_pelatihan_hierarki sudah dijalankan." };
     return { ok: true };
+  } catch {
+    return { ok: false, pesan: "Hierarki belum dapat disimpan." };
+  }
+}
+
+/** Menerapkan daftar perubahan hierarki sekaligus (impor template). Diperiksa ulang di server; semua atau tidak sama sekali. */
+export async function terapkanPerubahan(db: Db, kegiatanId: number, perubahan: readonly MasukanPerubahan[], oleh: string, simpulSekarang: readonly SimpulHierarki[]): Promise<ResultAtur & { diterapkan?: number }> {
+  if (perubahan.length === 0) return { ok: true, diterapkan: 0 };
+  if (perubahan.length > 2000) return { ok: false, pesan: "Terlalu banyak perubahan sekaligus." };
+  const salah = periksaPerubahan(simpulSekarang, perubahan);
+  if (salah) return { ok: false, pesan: salah };
+  const waktu = new Date().toISOString();
+  try {
+    const { error } = await db.from("sigap_pelatihan_hierarki").upsert(
+      perubahan.map((p) => ({ kegiatan_id: kegiatanId, akun_id: p.akun_id, peran_pelatihan: p.peran, atasan_akun_id: p.atasan_akun_id, sumber: "manual", diubah_oleh: oleh.slice(0, 120), diubah_at: waktu })),
+      { onConflict: "kegiatan_id,akun_id" }
+    );
+    if (error) return { ok: false, pesan: "Hierarki belum dapat disimpan. Pastikan SQL 20261102zh_pelatihan_hierarki sudah dijalankan." };
+    return { ok: true, diterapkan: perubahan.length };
   } catch {
     return { ok: false, pesan: "Hierarki belum dapat disimpan." };
   }

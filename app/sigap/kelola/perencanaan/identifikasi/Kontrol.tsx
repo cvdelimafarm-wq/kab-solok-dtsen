@@ -7,6 +7,7 @@
 
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { kartu, kolom, label as kelasLabel } from "@/app/sigap/keu-ui";
+import { tanggalLengkap } from "@/lib/keu/waktu";
 import { HARI_MAKS, gantiJumlahHari, gantiMulai, gantiSelesai, jumlahHariAntara, type Rentang } from "@/lib/keu/tanggalDurasi";
 
 const pil = "min-h-[40px] rounded-md border px-3 text-[13px] font-semibold disabled:opacity-60";
@@ -66,8 +67,20 @@ export function Centang({ aktif, onUbah, mati, children }: { aktif: boolean; onU
   );
 }
 
+/**
+ * (2 Nov 2026) Kolom tanggal memegang ketikan sendiri (draf). Dulu kolom langsung mengikuti nilai dari induk, sehingga saat tahun diketik
+ * ("2" lalu "20" lalu "202" lalu "2026") nilai antara "0002-11-10" ditolak induk dan kolom dipulihkan ke tanggal lama: tanggal 2026 tidak
+ * bisa diketik. Kini hanya tanggal lengkap (tahun 1900..2200) atau kosong yang diteruskan ke induk; draf mengikuti induk bila nilainya berubah.
+ */
 export function Tgl({ nilai, onUbah, mati, nama, min }: { nilai: string; onUbah: (v: string) => void; mati?: boolean; nama: string; min?: string }) {
-  return <input type="date" aria-label={nama} className={kolom} value={nilai} min={min} disabled={mati} onChange={(e) => onUbah(e.target.value)} />;
+  const [draf, setDraf] = useState(nilai);
+  useEffect(() => { setDraf(nilai); }, [nilai]);
+  return (
+    <input
+      type="date" aria-label={nama} className={kolom} value={draf} min={min} disabled={mati}
+      onChange={(e) => { const v = e.target.value; setDraf(v); if (v === "" || tanggalLengkap(v)) onUbah(v); }}
+    />
+  );
 }
 
 /**

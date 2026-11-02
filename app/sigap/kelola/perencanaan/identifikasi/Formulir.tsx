@@ -9,13 +9,13 @@ import { useMemo, useState, type ReactNode } from "react";
 import { kisi, kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import {
   JABATAN_TIM, JENIS_PERIODE, NAMA_BULAN, NAMA_PERIODE, PANJANG_PERIODE, PERAN_DEF, adaPendataan, adaPeriode, adalahAdhoc, daftarPeriode, hitungJadwal,
-  hitungMitra, instrDari, jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalRapat, tanggalSesi, tglIndo,
+  hitungMitra, instrDari, jendelaPeriode, jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalRapat, tanggalSesi, tglIndo,
   type AsalInstruktur, type Form, type Instrumen, type LevelInstruktur, type PeranId, type StatusPetugas, type TempatSesi,
 } from "@/lib/keu/identifikasi";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, TglRentang, YaTidak } from "./Kontrol";
 import { BarisRelatif } from "./Relatif";
 import { WaktuIsian } from "./Waktu";
-import { mingguDariTanggal, mingguKe, namaBulan, namaHari, polaDariTanggal, recPerk } from "@/lib/keu/waktu";
+import { mingguDariTanggal, mingguKe, namaBulan, namaHari, polaDariTanggal, recPerk, tanggalLengkap } from "@/lib/keu/waktu";
 import { keteranganHari } from "@/lib/keu/tanggalDurasi";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
@@ -112,6 +112,18 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
     PRESET.push([LEN === 1 ? "Seluruh bulan periode" : "Seluruh bulan terakhir periode", { mb: LEN - 1, mj: "tgl", mn: 1, sb: LEN - 1, sj: "akhir", sn: 0 }]);
     PRESET.push([LEN === 1 ? "Seluruh bulan berikutnya" : "Seluruh periode berikutnya", { mb: LEN, mj: "tgl", mn: 1, sb: 2 * LEN - 1, sj: "akhir", sn: 0 }]);
   }
+  // (2 Nov 2026) "Tanpa pola": tiap periode yang dicentang diberi jadwal sendiri (lewat mekanisme pengecualian), jadi tanggal bebas diisi tanpa terikat pola bulan ke-n.
+  const ALASAN_TANPA_POLA = "Tanpa pola: jadwal tiap periode diisi sendiri.";
+  const tanpaPola = adaKe && lst.length > 0 && lst.every((P) => !!kecualiAktif(f, P));
+  const adaKecuali = adaKe && lst.some((P) => !!kecualiAktif(f, P));
+  const aturTanpaPola = () => ubah((g) => {
+    if (tanpaPola) { for (const P of lst) delete g.kecuali[P]; return; }
+    for (const P of lst) {
+      if (g.kecuali[P]?.on) continue;
+      const w = jendelaPola(f, P, tahun);
+      g.kecuali[P] = { on: true, mulai: w.mulai, selesai: w.selesai, alasan: ALASAN_TANPA_POLA, perk: false };
+    }
+  });
   const samaPola = (q: Partial<Form["jend"]>) => J.mb === q.mb && J.sb === q.sb && J.mj === q.mj && J.sj === q.sj && J.mn === q.mn && (J.sj === "akhir" || J.sn === q.sn);
 
   const gantiJenis = (jenis: Form["periode"]) => ubah((g) => {
@@ -127,22 +139,38 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   const setRel = (k: "updating" | "pengolahan" | "pasca" | "diseminasi", patch: Partial<Form["rel"]["updating"]>) => ubah((g) => { Object.assign(g.rel[k], patch); });
 
   // Jadwal dasar (pola jendela bila ada periode, atau jadwal tunggal): dipakai Pendataan, atau Pengolahan bila tanpa pendataan.
-  const wPola = jendelaPola(f, pa, tahun);
+  const wPola = jendelaPeriode(f, pa, tahun);
   const barisPola = (sisi: "mulai" | "selesai") => {
     const m = sisi === "mulai";
     const akhir = (m ? J.mj : J.sj) === "akhir";
     const bln = m ? J.mb : J.sb;
     const n = m ? J.mn : J.sn;
     const awal = first ? NAMA_PERIODE[f.periode].indexOf(first) * LEN : -1;
-    const ac = first ? jendelaPola(f, first, tahun) : null;
+    const ac = first ? jendelaPeriode(f, first, tahun) : null;
     const tglAcuan = ac ? (m ? ac.mulai : ac.selesai) : "";
     const mg = mingguDariTanggal(tglAcuan);
     const mode = modeIsi[sisi];
     // Tanggal kalender pada periode acuan diterjemahkan menjadi pola (bulan ke-n periode + hari) yang berlaku untuk semua periode.
+    // (2 Nov 2026) Tanggal di luar jangkauan pola (sebelum awal periode atau lebih dari 25 bulan sesudahnya) TIDAK ditolak: hanya diberi peringatan,
+    // lalu disimpan sebagai jadwal khusus periode acuan (pengecualian dengan tanggal mutlak) karena improvisasi sepanjang tahun lazim terjadi.
+    // Bila periode acuan sudah memakai pengecualian (mis. "Tanpa pola"), tanggal selalu langsung mengisi pengecualian itu.
     const pasang = (d: string) => {
       const p = polaDariTanggal(d, awal, tahun);
-      setSalahTgl((x) => ({ ...x, [sisi]: p ? "" : `Tanggal harus pada atau setelah awal periode ${first} dan paling lama 25 bulan sesudahnya.` }));
-      if (p) setJend(m ? { mb: p.bulanKe, mj: "tgl", mn: p.hari } : { sb: p.bulanKe, sj: "tgl", sn: p.hari });
+      const kc = first ? kecualiAktif(f, first) : null;
+      if (p && !kc) {
+        setSalahTgl((x) => ({ ...x, [sisi]: "" }));
+        setJend(m ? { mb: p.bulanKe, mj: "tgl", mn: p.hari } : { sb: p.bulanKe, sj: "tgl", sn: p.hari });
+        return;
+      }
+      if (!first || !tanggalLengkap(d)) return;
+      setSalahTgl((x) => ({ ...x, [sisi]: kc ? "" : `Peringatan: tanggal ini di luar jangkauan pola (awal periode ${first} sampai 25 bulan sesudahnya), jadi disimpan sebagai jadwal khusus ${first}. Pastikan sudah benar; bisa dikembalikan lewat "Kembali ke pola".` }));
+      ubah((g) => {
+        const w = jendelaPeriode(f, first, tahun);
+        const e = g.kecuali[first]?.on ? g.kecuali[first] : { on: true, mulai: w.mulai, selesai: w.selesai, alasan: "", perk: false };
+        e[m ? "mulai" : "selesai"] = d;
+        if (!String(e.alasan || "").trim()) e.alasan = "Di luar jangkauan pola; jadwal diisi manual.";
+        g.kecuali[first] = e;
+      });
     };
     const pasangMinggu = (b: number, k: number) => { const w = mingguKe(tahun, b, k); pasang(m ? w.mulai : w.selesai); };
     const namaBln = (off: number) => { const t = awal + off; return `${NAMA_BULAN[t % 12]}${t >= 12 ? ` ${tahun + Math.floor(t / 12)}` : ""}`; };
@@ -174,7 +202,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
             </select>
           </div>
         )}
-        {salahTgl[sisi] && <span role="alert" className="text-[12px] font-semibold text-[#B42318]">{salahTgl[sisi]}</span>}
+        {salahTgl[sisi] && <span role="status" className="rounded-md border border-[#F2D58A] bg-[#FFF8E6] px-2 py-1 text-[12px] font-semibold text-[#8A5A00]">{salahTgl[sisi]}</span>}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="rounded-md border border-[#CFE6D8] bg-white px-2 py-1 text-[12.5px] font-bold text-[#14653A]">→ {tglIndo(m ? wPola.mulai : wPola.selesai)}{banyak ? ` (${pa})` : ""}</span>
           <span className="text-[12px] text-[#5B6B84]">
@@ -188,14 +216,16 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   };
   const dasar = adaKe ? (
     <div className="flex flex-col gap-3">
-      {PRESET.length > 0 && (
+      {(PRESET.length > 0 || adaKe) && (
         <div className="flex flex-col gap-1.5">
           <span className="text-[12.5px] font-semibold text-[#44546F]">Pola umum (ketuk untuk mengisi otomatis):</span>
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pola umum">
             {PRESET.map(([l, q]) => (
-              <button key={l} type="button" disabled={mati} aria-pressed={samaPola(q)} onClick={() => setJend(q)}
-                className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${samaPola(q) ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>{l}</button>
+              <button key={l} type="button" disabled={mati} aria-pressed={!tanpaPola && samaPola(q)} onClick={() => { if (tanpaPola) aturTanpaPola(); setJend(q); }}
+                className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${!tanpaPola && samaPola(q) ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>{l}</button>
             ))}
+            <button type="button" disabled={mati} aria-pressed={tanpaPola} onClick={aturTanpaPola}
+              className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${tanpaPola ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>Tanpa pola (isi tanggal tiap periode sendiri)</button>
           </div>
         </div>
       )}
@@ -285,7 +315,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
         </KartuTahap>
       </div>
 
-      {adaKe && banyak && <PengecualianPeriode f={f} ubah={ubah} tahun={tahun} mati={mati} lst={lst} />}
+      {adaKe && (banyak || adaKecuali) && <PengecualianPeriode f={f} ubah={ubah} tahun={tahun} mati={mati} lst={lst} />}
     </Bagian>
   );
 }
@@ -377,11 +407,6 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
                   )}
                   {(daring || hybrid) && <Isian judul="Biaya pulsa peserta (mitra)?"><YaTidak nama={`${nama} pulsa`} nilai={s.pulsa} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pulsa = v; })} /></Isian>}
                   {id === "pelatihan" && (luring || hybrid) && <Isian judul="Perlengkapan pelatihan?"><YaTidak nama={`${nama} perlengkapan`} nilai={s.perl} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].perl = v; })} /></Isian>}
-                  {id === "pelatihan" && (
-                    <Isian judul="Gunakan Vanguard (simulasi pengisian kuesioner) di pelatihan ini?" ket="Bila Ya dan identifikasi ini ditautkan ke kegiatan pelatihan, kartu Vanguard muncul di tab Hari Ini petugas dan hasil latihannya dicatat. Tanpa ini, Vanguard hanya simulasi bebas yang tidak dicatat.">
-                      <YaTidak nama="Vanguard di pelatihan" nilai={f.vanguard.pelatihan} mati={mati} onPilih={(v) => ubah((g) => { g.vanguard.pelatihan = v; })} />
-                    </Isian>
-                  )}
                   <Isian judul="Ada instruktur (pengajar atau narasumber)?"><YaTidak nama={`${nama} pengajar`} nilai={s.pengajar} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pengajar = v; })} /></Isian>
                   {s.pengajar && (() => {
                     const ins = instrDari(s);
@@ -391,7 +416,7 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
                         <strong className="text-[13px] text-[#0F2A52]">Instruktur {nama.toLowerCase()}</strong>
                         <div className={kisi}>
                           <Isian judul="Jumlah instruktur"><Angka nama={`${nama} jumlah instruktur`} nilai={ins.jumlah} min={0} maks={50} mati={mati} onUbah={(v) => setI({ jumlah: v })} /></Isian>
-                          <Isian judul="Perkiraan jam mengajar" ket="Total jam pelatihan per kelas (jumlah jam semua instruktur). Di RAB menjadi jumlah kelas x jam; di POK total jam."><Angka nama={`${nama} jam instruktur`} nilai={ins.jam} min={0} maks={500} mati={mati} onUbah={(v) => setI({ jam: v })} /></Isian>
+                          <Isian judul="Perkiraan jam mengajar" ket="Total jam semua instruktur."><Angka nama={`${nama} jam instruktur`} nilai={ins.jam} min={0} maks={500} mati={mati} onUbah={(v) => setI({ jam: v })} /></Isian>
                         </div>
                         <Isian judul="Level instruktur" ket="Innas = instruktur nasional, Inda = instruktur daerah (menentukan tarif honor pada lembar kebijakan).">
                           <Pilihan<LevelInstruktur> nama={`${nama} level instruktur`} nilai={ins.level} opsi={["Innas", "Inda"]} mati={mati} onPilih={(v) => setI({ level: v })} />
@@ -472,11 +497,6 @@ function KartuInstrumen({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "m
       <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Instrumen pendataan <span className="text-[12px] font-normal text-[#5B6B84]">· GSBPM 4.3</span></h3>
       <Pilihan nama="Instrumen" nilai={f.instrumen} opsi={["Tanpa pendataan", "FASIH", "PAPI"] as readonly Instrumen[]} mati={mati} onPilih={(v) => ubah((g) => { g.instrumen = v; if (v !== "PAPI") g.peran.entri.on = false; })} />
       {f.instrumen === "Tanpa pendataan" && <Cat>Tanpa pendataan: bagian D (organisasi pendataan lapangan) tidak ditanya dan tahap Pendataan tidak aktif.</Cat>}
-      {f.instrumen !== "Tanpa pendataan" && (
-        <Isian judul="Gunakan Vanguard sebagai QC pengisian kuesioner di pendataan?" ket="Bila Ya dan identifikasi ini ditautkan ke kegiatan pendataan, kartu Vanguard muncul di tab Hari Ini petugas dan hasil latihannya dicatat untuk BPS. Tanpa ini, Vanguard hanya simulasi bebas yang tidak dicatat.">
-          <YaTidak nama="Vanguard di pendataan" nilai={f.vanguard.pendataan} mati={mati} onPilih={(v) => ubah((g) => { g.vanguard.pendataan = v; })} />
-        </Isian>
-      )}
       {f.instrumen === "PAPI" && <Isian judul="Dokumen PAPI dicetak di kabupaten?"><YaTidak nama="Cetak PAPI" nilai={f.cetakPapi} mati={mati} onPilih={(v) => ubah((g) => { g.cetakPapi = v; })} /></Isian>}
       {f.instrumen === "FASIH" && (
         <Isian judul="Pulsa untuk petugas lapangan?" ket={kunciPulsa ? "Pulsa sudah dibiayai lewat sesi pelatihan atau briefing, jadi tidak diminta lagi di sini." : undefined}>

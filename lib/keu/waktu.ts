@@ -122,3 +122,15 @@ export function polaDariTanggal(d: string, awalBulan0: number, tahun: number): {
   const bulanKe = (t.getUTCFullYear() - tahun) * 12 + (t.getUTCMonth() - awalBulan0);
   return bulanKe < 0 || bulanKe > 24 ? null : { bulanKe, hari: t.getUTCDate() };
 }
+
+/**
+ * (2 Nov 2026) Apakah isi kolom tanggal sudah lengkap dan layak diteruskan? Kolom tanggal peramban mengirim nilai setiap kali tiga
+ * bagiannya terisi, termasuk saat tahun baru diketik sebagian ("0002", "0020", "0202" sebelum "2026"). Nilai antara itu tidak boleh
+ * dinilai atau mengembalikan isi kolom. Hanya tahun empat digit dalam 1900..2200 yang dianggap lengkap.
+ */
+export function tanggalLengkap(d: string): boolean {
+  const m = /^(\d{4})-\d{2}-\d{2}$/.exec(d);
+  if (!m || !tglOk(d)) return false;
+  const th = Number(m[1]);
+  return th >= 1900 && th <= 2200;
+}

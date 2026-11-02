@@ -15,6 +15,8 @@ export type SimpulHierarki = {
   kelas: number | null;
   /** true bila menolak undangan: tidak tampil di Monitoring dan dilewati sebagai perantara. */
   tersembunyi?: boolean;
+  /** Asal data baris ini untuk penanda di Kelola: bawaan (belum pernah diatur), salinan (disalin dari PSP), manual (diatur / diimpor PJ). */
+  asal?: "bawaan" | "salinan" | "manual";
 };
 
 export type Pengguna = { jenis: "peserta"; akun_id: number } | { jenis: "instruktur"; kelas: number | null } | { jenis: "panitia" };

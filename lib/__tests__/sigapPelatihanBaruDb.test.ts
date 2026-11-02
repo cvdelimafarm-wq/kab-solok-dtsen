@@ -8,7 +8,7 @@ vi.mock("@/lib/sigapTesDb", () => ({ FILTER_BUKAN_ADMINISTRASI: "sumber.is.null"
 vi.mock("@/lib/sigapAkses", () => ({ boleh: (izin: Record<string, unknown>, menu: string) => !!izin[menu] }));
 vi.mock("next/link", () => ({ default: (p: { href: string; children: unknown; [k: string]: unknown }) => e("a", { href: p.href, "aria-current": p["aria-current"] as string | undefined }, p.children as React.ReactNode) }));
 
-import { aturAtasan, muatKetentuan, muatProgres, muatSimpulHierarki, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
+import { aturAtasan, muatKetentuan, muatProgres, muatSimpulHierarki, muatTampilan, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { TabPelatihan, daftarTab } from "@/app/sigap/pelatihan/TabPelatihan";
 import type { SimpulHierarki } from "@/lib/hierarkiPelatihan";
 
@@ -42,31 +42,53 @@ function palsu(tabel: Record<string, Hasil | (() => Hasil)>) {
 const S = (akun_id: number, peran: SimpulHierarki["peran"], atasan: number | null, tersembunyi = false): SimpulHierarki => ({ akun_id, nama: `A${akun_id}`, peran, atasan_akun_id: atasan, kelas: null, tersembunyi });
 
 describe("ketentuan dan respons", () => {
-  it("muatKetentuan: tabel belum ada (error) -> bawaan tab_baru false", async () => {
+  it("muatKetentuan: tabel belum ada (error) -> bawaan OTOMATIS (tab_pengaturan null)", async () => {
     const { db } = palsu({ sigap_pelatihan_ketentuan: { data: null, error: { message: "relation does not exist" } } });
-    expect(await muatKetentuan(db, 1)).toEqual({ tab_baru: false, butir: [], versi: 1 });
+    expect(await muatKetentuan(db, 1)).toEqual({ tab_pengaturan: null, butir: [], versi: 1, ada: false });
   });
-  it("muatKetentuan: membaca baris", async () => {
+  it("muatKetentuan: membaca baris; true/false manual, null otomatis", async () => {
     const { db } = palsu({ sigap_pelatihan_ketentuan: { data: { tab_baru: true, butir: ["Bawa laptop"], versi: 3 }, error: null } });
     const k = await muatKetentuan(db, 1);
-    expect(k.tab_baru).toBe(true);
+    expect(k.tab_pengaturan).toBe(true);
     expect(k.butir).toEqual(["Bawa laptop"]);
     expect(k.versi).toBe(3);
+    expect(k.ada).toBe(true);
+    const n = palsu({ sigap_pelatihan_ketentuan: { data: { tab_baru: null, butir: [], versi: 1 }, error: null } });
+    expect((await muatKetentuan(n.db, 1)).tab_pengaturan).toBeNull();
   });
-  it("simpanKetentuan: versi naik hanya bila butir berubah; saklar saja tidak menaikkan versi", async () => {
+  it("muatTampilan: otomatis baru selama pelatihan belum selesai, lama bila sudah selesai; manual mengalahkan otomatis", async () => {
+    const mk = (tab: boolean | null, selesai: string) => palsu({
+      sigap_pelatihan_ketentuan: { data: { tab_baru: tab, butir: [], versi: 1 }, error: null },
+      sigap_kegiatan: { data: { tanggal_mulai: selesai, tanggal_selesai: selesai }, error: null },
+    }).db;
+    const depan = mk(null, "2999-01-01");
+    const lalu = mk(null, "2000-01-01");
+    const a = await muatTampilan(depan, 1);
+    expect(a).toMatchObject({ tab_baru: true, otomatis: true, kegiatan_selesai: false });
+    const b = await muatTampilan(lalu, 1);
+    expect(b).toMatchObject({ tab_baru: false, otomatis: true, kegiatan_selesai: true });
+    expect(await muatTampilan(mk(true, "2000-01-01"), 1)).toMatchObject({ tab_baru: true, otomatis: false });
+    expect(await muatTampilan(mk(false, "2999-01-01"), 1)).toMatchObject({ tab_baru: false, otomatis: false });
+  });
+  it("simpanKetentuan: versi naik hanya bila butir berubah; saklar saja tidak menaikkan versi; null = kembali otomatis", async () => {
     const { db, catatan } = palsu({ sigap_pelatihan_ketentuan: { data: { tab_baru: false, butir: ["A"], versi: 2 }, error: null } });
     const sama = await simpanKetentuan(db, 1, { tab_baru: true }, "Iqbal");
-    expect(sama.ok && sama.ketentuan).toMatchObject({ tab_baru: true, versi: 2, butir: ["A"] });
+    expect(sama.ok && sama.ketentuan).toMatchObject({ tab_pengaturan: true, versi: 2, butir: ["A"] });
     const beda = await simpanKetentuan(db, 1, { butir: ["A", "B"] }, "Iqbal");
     expect(beda.ok && beda.ketentuan).toMatchObject({ versi: 3, butir: ["A", "B"] });
-    expect(catatan.filter((c) => c.aksi === "upsert")).toHaveLength(2);
+    const oto = await simpanKetentuan(db, 1, { tab_baru: null }, "Iqbal");
+    expect(oto.ok && oto.ketentuan.tab_pengaturan).toBeNull();
+    const ups = catatan.filter((c) => c.aksi === "upsert");
+    expect(ups).toHaveLength(3);
+    expect((ups[2].arg as { tab_baru: unknown }).tab_baru).toBeNull();
   });
-  it("simpanKetentuan: galat tulis -> pesan jelas, tidak melempar", async () => {
+  it("simpanKetentuan: galat tulis -> pesan jelas (zi dan zj), tidak melempar", async () => {
     let n = 0;
     const { db } = palsu({ sigap_pelatihan_ketentuan: () => (n++ === 0 ? { data: null, error: null } : { data: null, error: { message: "x" } }) });
     const h = await simpanKetentuan(db, 1, { tab_baru: true }, "Iqbal");
     expect(h.ok).toBe(false);
     expect(!h.ok && h.pesan).toContain("20261102zi");
+    expect(!h.ok && h.pesan).toContain("20261102zj");
   });
   it("simpanRespons: kirim satu baris dan gagal dengan pesan bila tabel belum ada", async () => {
     const a = palsu({ sigap_pelatihan_undangan_respons: { data: null, error: null } });

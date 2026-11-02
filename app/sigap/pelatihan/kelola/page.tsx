@@ -15,14 +15,10 @@ import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, T
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
-import KuisPraKelola from "./kuisPra"; // (31 Okt 2026) tab Kuis Pra
-import KelasIdentKelola from "./kelasIdent"; // (1 Nov 2026) tab Kelas (perencanaan, hanya baca)
-import TampilanKelola from "./tampilan"; // (2 Nov 2026) tab Tampilan baru: saklar 5 tab, ketentuan undangan, hierarki
-import PengumumanKelola from "./pengumuman";
+import PersiapanKelola from "./tampilan"; // (2 Nov 2026) tab Persiapan: tampilan peserta (otomatis) + ketentuan undangan
+import TimPesertaKelola from "./hierarki"; // (2 Nov 2026) tab Tim & Peserta: hierarki + kelas
+import { KomunikasiKelola, KuisRapatKelola } from "./grup"; // (2 Nov 2026) tab gabungan: Kuis & Rapat, Notifikasi (+ Pengumuman)
 import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard (tampil bila kegiatan memakai Vanguard)
-import RapatKelola from "./rapat"; // (9 Okt 2026) tab Rapat Zoom
-import NotifikasiKelola from "./notifikasi";
-import KuisLive from "./kuis";
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 import { InputSikap, PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
 import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, lulusAkhirDari, ringkasSkema, tambahanDari, type HasilAkhir } from "@/lib/sigapNilaiHitung";
@@ -49,10 +45,19 @@ const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600
 const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
-type TabK = "soal" | "monitoring" | "kuis" | "kuispra" | "kelas" | "administrasi" | "pengumuman" | "notifikasi" | "rapat" | "tampilan";
+// (2 Nov 2026) 10 tab dirapikan menjadi 7. Alamat lama (?tab=pengumuman, rapat, kuispra, kelas, ...) tetap dikenali lewat PETA_TAB_LAMA.
+type TabK = "persiapan" | "tim" | "soal" | "kuis" | "notifikasi" | "monitoring" | "administrasi";
+const TAB_SAH: TabK[] = ["persiapan", "tim", "soal", "kuis", "notifikasi", "monitoring", "administrasi"];
+const PETA_TAB_LAMA: Record<string, { tab: TabK; sub?: string }> = {
+  pengumuman: { tab: "notifikasi", sub: "pengumuman" },
+  rapat: { tab: "kuis", sub: "rapat" },
+  kuispra: { tab: "kuis", sub: "kuispra" },
+  kelas: { tab: "tim", sub: "kelas" },
+  tampilan: { tab: "persiapan" },
+};
 
 export default function KelolaPelatihan() {
-  const [tab, setTab] = useState<TabK>("soal");
+  const [tab, setTab] = useState<TabK>("persiapan");
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   // (31 Okt 2026) "daftar" = satu kartu per survei (halaman awal); "kelola" = tab-tab pelatihan pada survei terpilih, dengan dropdown Survei (+ Pelatihan bila lebih dari satu).
@@ -96,7 +101,7 @@ export default function KelolaPelatihan() {
     window.history.pushState(null, "", urlKelola(window.location.pathname, "", { survei: s.kode, kegiatan: awal?.id ?? null }));
     setSurveiKode(s.kode);
     setKegId(awal?.id ?? null);
-    setTab("soal");
+    setTab("persiapan");
     setMode("kelola");
     window.scrollTo(0, 0);
   }
@@ -118,7 +123,7 @@ export default function KelolaPelatihan() {
     window.history.pushState(null, "", urlKelola(window.location.pathname, window.location.search, { survei: kode, kegiatan: id }));
     setSurveiKode(kode);
     setKegId(id);
-    setTab("soal");
+    setTab("persiapan");
   }
   function keDaftar() {
     window.history.pushState(null, "", window.location.pathname);
@@ -140,7 +145,15 @@ export default function KelolaPelatihan() {
     if (!bacaSesi()) return keMasuk();
     try {
       const t = new URLSearchParams(window.location.search).get("tab");
-      if (t === "monitoring" || t === "kuis" || t === "kuispra" || t === "kelas" || t === "administrasi" || t === "pengumuman" || t === "notifikasi" || t === "rapat" || t === "tampilan") setTab(t);
+      const lama = t ? PETA_TAB_LAMA[t] : undefined;
+      if (lama) {
+        setTab(lama.tab);
+        if (lama.sub && !new URLSearchParams(window.location.search).get("sub")) {
+          const u = new URL(window.location.href);
+          u.searchParams.set("sub", lama.sub);
+          window.history.replaceState(null, "", u.toString());
+        }
+      } else if (t && (TAB_SAH as string[]).includes(t)) setTab(t as TabK);
     } catch {
       /* abaikan */
     }
@@ -183,18 +196,15 @@ export default function KelolaPelatihan() {
       kecil="SIGAP · Kelola Pelatihan"
       jejak={["Pelatihan", "Kelola", surveiAktif?.nama ?? namaPelatihan ?? "Pelatihan"]}
       judul="Kelola Pelatihan"
-      sub={`Soal, jadwal, pengumuman, kuis live & monitoring${namaPelatihan ? ` · ${namaPelatihan}` : ""}`}
+      sub={`Persiapan, tim, soal & jadwal, kuis, notifikasi & monitoring${namaPelatihan ? ` · ${namaPelatihan}` : ""}`}
       kembali={{ label: "Daftar survei", onKlik: keDaftar }}
       tab={[
+        { kode: "persiapan", label: "🧭 Persiapan" },
+        { kode: "tim", label: "👥 Tim & Peserta" },
         { kode: "soal", label: "Soal & Jadwal" },
-        { kode: "kuis", label: "🎮 Adu Sigap" },
-        { kode: "pengumuman", label: "📢 Pengumuman" },
-        { kode: "rapat", label: "🎥 Rapat Zoom" },
+        { kode: "kuis", label: "🎮 Kuis & Rapat" },
         { kode: "notifikasi", label: "🔔 Notifikasi" },
         { kode: "monitoring", label: "Monitoring" },
-        { kode: "kelas", label: "🏫 Kelas" },
-        { kode: "tampilan", label: "🧭 Tampilan baru" },
-        { kode: "kuispra", label: "🧠 Kuis Pra" },
         { kode: "administrasi", label: "🗂 Administrasi" },
       ]}
       aktifTab={tab}
@@ -218,14 +228,11 @@ export default function KelolaPelatihan() {
           </div>
         </div>
       )}
-      {ringkas && tab === "pengumuman" && <PengumumanKelola key={kegId ?? 0} />}
-      {ringkas && tab === "rapat" && <RapatKelola key={kegId ?? 0} kegiatanId={kegId} />}
-      {ringkas && tab === "notifikasi" && <NotifikasiKelola key={kegId ?? 0} />}
-      {ringkas && tab === "kuis" && <KuisLive key={kegId ?? 0} bisaKelolaAwal={ringkas.boleh_kelola} />}
+      {ringkas && tab === "persiapan" && <PersiapanKelola key={kegId ?? 0} />}
+      {ringkas && tab === "tim" && <TimPesertaKelola key={kegId ?? 0} />}
+      {ringkas && tab === "kuis" && <KuisRapatKelola key={kegId ?? 0} kegiatanId={kegId} bisaKelola={ringkas.boleh_kelola} />}
+      {ringkas && tab === "notifikasi" && <KomunikasiKelola key={kegId ?? 0} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian key={kegId ?? 0} />}
-      {ringkas && tab === "kelas" && <KelasIdentKelola key={kegId ?? 0} />}
-      {ringkas && tab === "tampilan" && <TampilanKelola key={kegId ?? 0} />}
-      {ringkas && tab === "kuispra" && <KuisPraKelola key={kegId ?? 0} />}
       {ringkas && tab === "administrasi" && <Administrasi key={kegId ?? 0} />}
       {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}
       <ModalFotoPanitia sembunyi={tab === "administrasi"} />

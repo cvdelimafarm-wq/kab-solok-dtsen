@@ -1,22 +1,50 @@
 import { describe, expect, it } from "vitest";
-import { KETENTUAN_BAWAAN, MAKS_BUTIR, MAKS_PANJANG_BUTIR, bacaKetentuan, bersihkanButir, ketentuanBerubah, periksaRespons, statusUndangan, teksKartuUndangan, type ResponsUndangan } from "@/lib/ketentuanPelatihan";
+import { KETENTUAN_BAWAAN, MAKS_BUTIR, MAKS_PANJANG_BUTIR, bacaKetentuan, bersihkanButir, hariIniWib, kegiatanSudahSelesai, ketentuanBerubah, ketentuanDiubah, periksaRespons, statusUndangan, tampilanBaruAktif, teksKartuUndangan, type ResponsUndangan } from "@/lib/ketentuanPelatihan";
 
 const terima = (versi: number): ResponsUndangan => ({ respons: "terima", alasan: null, versi_ketentuan: versi, dijawab_at: "2026-11-02T00:00:00Z" });
 const tolak: ResponsUndangan = { respons: "tolak", alasan: "sakit", versi_ketentuan: 1, dijawab_at: "2026-11-02T00:00:00Z" };
 
 describe("bacaKetentuan", () => {
-  it("baris kosong atau rusak -> tampilan lama (tab_baru false)", () => {
+  it("baris kosong atau rusak -> bawaan: otomatis, tanpa butir, belum ada baris", () => {
     expect(bacaKetentuan(null)).toEqual(KETENTUAN_BAWAAN);
     expect(bacaKetentuan("x")).toEqual(KETENTUAN_BAWAAN);
-    expect(bacaKetentuan({})).toEqual(KETENTUAN_BAWAAN);
+    expect(KETENTUAN_BAWAAN).toEqual({ tab_pengaturan: null, butir: [], versi: 1, ada: false });
   });
-  it("tab_baru hanya true bila persis true", () => {
-    expect(bacaKetentuan({ tab_baru: true, butir: [], versi: 3 })).toEqual({ tab_baru: true, butir: [], versi: 3 });
-    expect(bacaKetentuan({ tab_baru: "true" }).tab_baru).toBe(false);
+  it("pengaturan tab: true / false hanya bila persis boolean, selain itu otomatis (null)", () => {
+    expect(bacaKetentuan({ tab_baru: true, butir: [], versi: 3 })).toEqual({ tab_pengaturan: true, butir: [], versi: 3, ada: true });
+    expect(bacaKetentuan({ tab_baru: false }).tab_pengaturan).toBe(false);
+    expect(bacaKetentuan({ tab_baru: null }).tab_pengaturan).toBeNull();
+    expect(bacaKetentuan({ tab_baru: "true" }).tab_pengaturan).toBeNull();
+    expect(bacaKetentuan({}).tab_pengaturan).toBeNull();
   });
   it("versi tidak sah -> 1", () => {
     expect(bacaKetentuan({ versi: 0 }).versi).toBe(1);
     expect(bacaKetentuan({ versi: 2.5 }).versi).toBe(1);
+  });
+});
+
+describe("tampilan baru otomatis", () => {
+  it("otomatis: baru bila pelatihan belum selesai, lama bila sudah selesai; manual selalu menang", () => {
+    expect(tampilanBaruAktif(null, false)).toBe(true);
+    expect(tampilanBaruAktif(null, true)).toBe(false);
+    expect(tampilanBaruAktif(true, true)).toBe(true);
+    expect(tampilanBaruAktif(false, false)).toBe(false);
+  });
+  it("kegiatanSudahSelesai: memakai tanggal selesai, lalu mulai; tanpa tanggal = belum selesai; hari terakhir belum selesai", () => {
+    expect(kegiatanSudahSelesai("2026-10-08", "2026-10-08", "2026-11-02")).toBe(true);
+    expect(kegiatanSudahSelesai("2026-11-09", "2026-11-09", "2026-11-02")).toBe(false);
+    expect(kegiatanSudahSelesai("2026-11-02", "2026-11-01", "2026-11-02")).toBe(false);
+    expect(kegiatanSudahSelesai(null, "2026-10-01", "2026-11-02")).toBe(true);
+    expect(kegiatanSudahSelesai(null, null, "2026-11-02")).toBe(false);
+  });
+  it("hariIniWib: lewat tengah malam WIB sudah hari berikutnya", () => {
+    expect(hariIniWib(new Date("2026-11-02T16:59:00Z").getTime())).toBe("2026-11-02");
+    expect(hariIniWib(new Date("2026-11-02T17:00:00Z").getTime())).toBe("2026-11-03");
+  });
+  it("ketentuanDiubah: butir terisi atau versi naik", () => {
+    expect(ketentuanDiubah(KETENTUAN_BAWAAN)).toBe(false);
+    expect(ketentuanDiubah({ ...KETENTUAN_BAWAAN, butir: ["a"] })).toBe(true);
+    expect(ketentuanDiubah({ ...KETENTUAN_BAWAAN, versi: 2 })).toBe(true);
   });
 });
 
@@ -38,7 +66,7 @@ describe("status undangan", () => {
     expect(statusUndangan(tolak)).toBe("ditolak");
   });
   it("ketentuan berubah hanya bila yang diterima versi lebih lama", () => {
-    const k = { tab_baru: true, butir: [], versi: 2 };
+    const k = { ...KETENTUAN_BAWAAN, versi: 2 };
     expect(ketentuanBerubah(terima(1), k)).toBe(true);
     expect(ketentuanBerubah(terima(2), k)).toBe(false);
     expect(ketentuanBerubah(tolak, k)).toBe(false);

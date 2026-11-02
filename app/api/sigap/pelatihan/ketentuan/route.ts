@@ -2,18 +2,18 @@
 //
 // (2 Nov 2026) Pelatihan 5 tab: kartu undangan + ketentuan + jawaban terima/tolak.
 //
-// GET  (Bearer sesi; ?kegiatan=ID opsional) -> { kegiatan_id, tab_baru, ketentuan:{butir,versi}, undangan:{hari_tanggal,pukul,tempat,tanggal_iso,pdf},
+// GET  (Bearer sesi; ?kegiatan=ID opsional) -> { kegiatan_id, tab_baru (berlaku), tab_pengaturan (true|false|null=otomatis), otomatis, kegiatan_selesai, ketentuan:{butir,versi,diubah}, undangan:{hari_tanggal,pukul,tempat,tanggal_iso,pdf},
 //        peserta:{peran,kelas}|null, respons, status, berubah, kartu:{judul,ket,tombol,nada}, kamera_href|null, boleh_kelola }
 // POST {aksi:"respons", respons:"terima"|"tolak", alasan?}       (peserta)  -> { ok, status }
-// POST {aksi:"simpan", butir?:string[], tab_baru?:boolean}       (izin pelatihan.kelola = kelola) -> { ok, ketentuan }
+// POST {aksi:"simpan", butir?:string[], tab_baru?:boolean|null}  (izin pelatihan.kelola = kelola; null = kembali ke otomatis) -> { ok, ketentuan }
 //
-// SQL 20261102zi belum dijalankan -> tab_baru false, butir kosong; GET tetap 200 sehingga layar lama tidak terganggu.
+// Bawaan OTOMATIS: tampilan baru selama pelatihan belum selesai (pelatihan yang sudah selesai, mis. PSP, tetap tampilan lama). SQL belum dijalankan -> butir kosong, tetap 200.
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan, undanganUntuk } from "@/lib/sigapTesDb";
-import { ketentuanBerubah, periksaRespons, statusUndangan, teksKartuUndangan } from "@/lib/ketentuanPelatihan";
-import { muatKetentuan, muatRespons, simpanKetentuan, simpanRespons } from "@/lib/sigapPelatihanBaruDb";
+import { ketentuanBerubah, ketentuanDiubah, periksaRespons, statusUndangan, teksKartuUndangan } from "@/lib/ketentuanPelatihan";
+import { muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons } from "@/lib/sigapPelatihanBaruDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,12 +28,13 @@ export async function GET(req: NextRequest) {
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
     const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
-    const [ketentuan, undangan, peserta, { izin }] = await Promise.all([
-      muatKetentuan(db, kegiatanId),
+    const [tampilan, undangan, peserta, { izin }] = await Promise.all([
+      muatTampilan(db, kegiatanId),
       undanganUntuk(db, kegiatanId),
       pesertaPelatihan(db, akun.id, kegiatanId),
       izinAkun(db, akun.id),
     ]);
+    const ketentuan = tampilan.ketentuan;
     const respons = peserta ? await muatRespons(db, kegiatanId, akun.id) : null;
     const status = statusUndangan(respons);
     const berubah = ketentuanBerubah(respons, ketentuan);
@@ -45,8 +46,11 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({
       kegiatan_id: kegiatanId,
-      tab_baru: ketentuan.tab_baru,
-      ketentuan: { butir: ketentuan.butir, versi: ketentuan.versi },
+      tab_baru: tampilan.tab_baru,
+      tab_pengaturan: ketentuan.tab_pengaturan,
+      otomatis: tampilan.otomatis,
+      kegiatan_selesai: tampilan.kegiatan_selesai,
+      ketentuan: { butir: ketentuan.butir, versi: ketentuan.versi, diubah: ketentuanDiubah(ketentuan) },
       undangan: { hari_tanggal: undangan.hari_tanggal, pukul: undangan.pukul, tempat: undangan.tempat, tanggal_iso: undangan.tanggal_iso, pdf: undangan.pdf },
       peserta,
       respons,
@@ -88,10 +92,10 @@ export async function POST(req: NextRequest) {
       const { izin } = await izinAkun(db, akun.id);
       if (!boleh(izin, "pelatihan.kelola", "kelola", kegiatanId)) return galat("Tidak punya izin mengelola pelatihan.", 403);
       if (body.butir !== undefined && !Array.isArray(body.butir)) return galat("Daftar ketentuan tidak valid.");
-      if (body.tab_baru !== undefined && typeof body.tab_baru !== "boolean") return galat("Pengaturan tab baru tidak valid.");
+      if (body.tab_baru !== undefined && body.tab_baru !== null && typeof body.tab_baru !== "boolean") return galat("Pengaturan tampilan tidak valid.");
       const hasil = await simpanKetentuan(db, kegiatanId, { butir: body.butir, tab_baru: body.tab_baru }, akun.nama);
       if (!hasil.ok) return galat(hasil.pesan, 500);
-      await catatAudit(db, akun.id, "pelatihan_ketentuan_simpan", { kegiatan_id: kegiatanId, tab_baru: hasil.ketentuan.tab_baru, versi: hasil.ketentuan.versi, jumlah_butir: hasil.ketentuan.butir.length });
+      await catatAudit(db, akun.id, "pelatihan_ketentuan_simpan", { kegiatan_id: kegiatanId, tab_pengaturan: hasil.ketentuan.tab_pengaturan, versi: hasil.ketentuan.versi, jumlah_butir: hasil.ketentuan.butir.length });
       return NextResponse.json({ ok: true, ketentuan: hasil.ketentuan });
     }
 

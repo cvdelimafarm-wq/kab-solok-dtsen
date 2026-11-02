@@ -5,12 +5,13 @@
 // GET                                  -> { tersedia, simpul[], masalah:{siklus,atasan_asing,tanpa_atasan}, boleh_kelola }
 // POST {aksi:"salin"}                  -> menyalin atasan awal dari PSP (fungsi SQL sigap_pelatihan_salin_hierarki; hanya mengisi yang belum ada) -> { ok, ditambah }
 // POST {aksi:"atur", akun_id, atasan_akun_id|null, peran?}   -> ubah manual -> { ok }
+// POST {aksi:"impor", perubahan:[{akun_id, atasan_akun_id|null, peran}]}  -> terapkan hasil impor template (semua atau tidak sama sekali) -> { ok, diterapkan }
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { periksaHierarki, type PeranPelatihan } from "@/lib/hierarkiPelatihan";
-import { aturAtasan, muatSimpulHierarki } from "@/lib/sigapPelatihanBaruDb";
+import { aturAtasan, muatSimpulHierarki, terapkanPerubahan } from "@/lib/sigapPelatihanBaruDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,23 @@ export async function POST(req: NextRequest) {
       if (!hasil.ok) return galat(hasil.pesan);
       await catatAudit(p.db, p.akun.id, "pelatihan_hierarki_atur", { kegiatan_id: p.kegiatanId, akun_id: akunId, atasan_akun_id: atasan, peran });
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.aksi === "impor") {
+      if (!Array.isArray(body.perubahan)) return galat("Daftar perubahan tidak valid.");
+      const masuk: { akun_id: number; atasan_akun_id: number | null; peran: PeranPelatihan }[] = [];
+      for (const x of body.perubahan as Record<string, unknown>[]) {
+        const akunId = Number(x?.akun_id);
+        const atasan = x?.atasan_akun_id === null || x?.atasan_akun_id === undefined ? null : Number(x.atasan_akun_id);
+        const peran = String(x?.peran);
+        if (!Number.isInteger(akunId) || akunId <= 0 || (atasan !== null && (!Number.isInteger(atasan) || atasan <= 0)) || !["ppl", "pml", "korwil"].includes(peran)) return galat("Ada baris perubahan yang tidak valid.");
+        masuk.push({ akun_id: akunId, atasan_akun_id: atasan, peran: peran as PeranPelatihan });
+      }
+      const { simpul } = await muatSimpulHierarki(p.db, p.kegiatanId);
+      const hasil = await terapkanPerubahan(p.db, p.kegiatanId, masuk, p.akun.nama, simpul);
+      if (!hasil.ok) return galat(hasil.pesan);
+      await catatAudit(p.db, p.akun.id, "pelatihan_hierarki_impor", { kegiatan_id: p.kegiatanId, diterapkan: hasil.diterapkan ?? 0 });
+      return NextResponse.json({ ok: true, diterapkan: hasil.diterapkan ?? 0 });
     }
 
     return galat("Aksi tidak dikenal.");

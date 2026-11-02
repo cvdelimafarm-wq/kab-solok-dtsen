@@ -9,14 +9,40 @@ export const MIN_ALASAN = 3;
 export const MAKS_ALASAN = 200;
 
 export type Ketentuan = {
-  /** Saklar per kegiatan: true = tampilan lima tab. Kegiatan lama (mis. PSP) tetap tampilan Langkah. */
-  tab_baru: boolean;
+  /**
+   * Pengaturan tampilan lima tab per kegiatan. null = OTOMATIS (bawaan): tampilan baru selama pelatihan belum selesai, pelatihan yang sudah selesai (mis. PSP) tetap
+   * tampilan Langkah lama. true / false = ditetapkan manual oleh PJ.
+   */
+  tab_pengaturan: boolean | null;
   /** Butir ketentuan tambahan dari PJ (waktu dan tempat diambil dari data undangan yang sudah ada). */
   butir: string[];
   versi: number;
+  /** true bila kegiatan ini sudah punya baris ketentuan (pernah disimpan). */
+  ada: boolean;
 };
 
-export const KETENTUAN_BAWAAN: Ketentuan = { tab_baru: false, butir: [], versi: 1 };
+export const KETENTUAN_BAWAAN: Ketentuan = { tab_pengaturan: null, butir: [], versi: 1, ada: false };
+
+/** Hari ini menurut WIB, "YYYY-MM-DD". */
+export function hariIniWib(sekarangMs: number = Date.now()): string {
+  return new Date(sekarangMs + 7 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** Pelatihan sudah selesai bila tanggal selesai (atau mulai) lebih awal daripada hari ini. Tanpa tanggal -> belum selesai. */
+export function kegiatanSudahSelesai(tanggalSelesai: string | null | undefined, tanggalMulai: string | null | undefined, hariIni: string): boolean {
+  const akhir = tanggalSelesai ?? tanggalMulai ?? null;
+  return !!akhir && akhir < hariIni;
+}
+
+/** Tampilan lima tab yang berlaku: pengaturan manual menang; otomatis = baru bila pelatihan belum selesai. */
+export function tampilanBaruAktif(pengaturan: boolean | null, selesai: boolean): boolean {
+  return pengaturan ?? !selesai;
+}
+
+/** Ketentuan sudah diubah dari bawaan (ada butir atau versi pernah naik)? */
+export function ketentuanDiubah(k: Ketentuan): boolean {
+  return k.butir.length > 0 || k.versi > 1;
+}
 
 export type ResponsUndangan = { respons: "terima" | "tolak"; alasan: string | null; versi_ketentuan: number; dijawab_at: string } | null;
 
@@ -35,12 +61,12 @@ export function bersihkanButir(x: unknown): string[] {
   return hasil;
 }
 
-/** Baris tabel ketentuan -> bentuk aman. Baris kosong / rusak -> bawaan (tampilan lama). */
+/** Baris tabel ketentuan -> bentuk aman. Baris kosong / rusak -> bawaan (otomatis, tanpa butir). */
 export function bacaKetentuan(baris: unknown): Ketentuan {
   if (!baris || typeof baris !== "object") return { ...KETENTUAN_BAWAAN };
   const r = baris as Record<string, unknown>;
   const versi = typeof r.versi === "number" && Number.isInteger(r.versi) && r.versi >= 1 ? r.versi : 1;
-  return { tab_baru: r.tab_baru === true, butir: bersihkanButir(r.butir), versi };
+  return { tab_pengaturan: r.tab_baru === true ? true : r.tab_baru === false ? false : null, butir: bersihkanButir(r.butir), versi, ada: true };
 }
 
 export function statusUndangan(r: ResponsUndangan): StatusUndangan {
