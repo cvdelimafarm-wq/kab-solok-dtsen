@@ -30,6 +30,10 @@ const nextConfig = {
   // (7 Okt 2026) SIGAP PEDIA: pustaka email/DKIM dijalankan apa adanya dari node_modules (tidak di-bundle
   // webpack) supaya require dinamis & modul Node bawaan (dns, crypto) aman.
   serverExternalPackages: ["mailauth", "mailparser"],
+  // (2 Nov 2026) Unggah PDF 11,8 MB (Lembar Pengawasan SPDT NTP) gagal "Isian tidak terbaca." Penyebab: sejak Next.js 15.5 badan permintaan yang melewati middleware
+  // (matcher /api/:path* di middleware.ts) disangga hanya sampai 10 MB; sisanya terpotong sehingga req.formData() gagal. Batas aplikasi untuk berkas adalah 15 MB
+  // (lib/dokumenPeriksa.ts dan lib/adm.ts), jadi batas sangga dinaikkan ke 20 MB (15 MB berkas + beban multipart).
+  experimental: { middlewareClientMaxBodySize: "20mb" },
   // (9 Okt 2026) Alamat halaman pengelolaan diseragamkan menjadi /sigap/kelola/<modul> -- permintaan user
   // ("halaman utama kelola jadikan sigap/kelola/pelatihan; yang berubah pelatihan-anggaran-delego-sigap pedia dll").
   // Berkas halaman tidak dipindah: alamat baru dilayani lewat rewrites (isi = halaman lama), alamat lama dialihkan ke
