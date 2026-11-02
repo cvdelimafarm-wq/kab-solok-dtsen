@@ -5,6 +5,7 @@
 // (2 Nov 2026) Tab "Hari ini" pelatihan (tampilan 5 tab): kartu undangan (terima/tolak setelah membaca ketentuan), unduh surat undangan PDF, dan kartu Vanguard.
 // Kartu kedatangan (hari pertama) dan absen sesi: AbsenPeserta.tsx; tab "Absen peserta" untuk pengelola: absen/page.tsx. Halaman ini hanya bermakna bila saklar tab_baru menyala; bila belum, peserta
 // yang membukanya langsung tetap melihat undangan dan kartunya (tidak ada data yang rusak), sedangkan bilah tab tidak muncul.
+// (2 Nov 2026) Kartu nomor pulsa (redup) di bagian bawah.
 // (2 Nov 2026) Bagi panitia / instruktur: kartu "Permintaan buka kunci (n)" (KartuIzinBuka.tsx), tampil hanya bila ada permintaan menunggu.
 
 import { useCallback, useEffect, useState } from "react";
@@ -15,6 +16,9 @@ import KartuVanguardHariIni from "../../KartuVanguardHariIni";
 import AbsenPeserta from "../AbsenPeserta";
 import KartuIzinBuka from "../KartuIzinBuka";
 import { Kerangka } from "../komponen";
+import { PulsaPeserta } from "../pulsa";
+import { useInfoPelatihan } from "../infoPelatihan";
+import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { lupakanBenderaTab } from "../TabPelatihan";
 import { MAKS_ALASAN } from "@/lib/ketentuanPelatihan";
@@ -190,6 +194,7 @@ export default function HalamanHariIni() {
   }
 
   const nada = d ? NADA[d.kartu.nada] : null;
+  const info = useInfoPelatihan();
   return (
     <Kerangka aktif="hari-ini" judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
@@ -231,6 +236,8 @@ export default function HalamanHariIni() {
           </section>
           <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />
           <AbsenPeserta />
+          {/* (2 Nov 2026) nomor pulsa: dikonfirmasi sekali lewat pop-up; di sini hanya kartu redup di bagian bawah (permintaan user) */}
+          <PulsaPeserta tampilan="kartu" judul={judulPelatihan(info)} />
           {!d.tab_baru && (
             <Kartu>
               <p className="text-[12.5px] text-[#6B7A90]">

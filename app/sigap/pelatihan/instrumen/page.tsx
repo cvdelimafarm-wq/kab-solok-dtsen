@@ -10,16 +10,17 @@ import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir, tglSedang } fro
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Kerangka } from "../komponen";
 import BagianMateri from "./BagianMateri"; // (2 Nov 2026) Tahap C: video + tautan wajib dilacak
+import { JudulIkon } from "./IkonInstrumen"; // (2 Nov 2026) ikon SVG menggantikan emoji
 
 type Jenis = "kuesioner" | "pedoman" | "materi";
 type Berkas = { id: number; jenis: Jenis; judul: string; nama_file: string; ukuran: number | null; diunggah_at: string };
 type Daftar = { boleh_kelola: boolean; berkas: Berkas[] };
 
 const URL_INSTRUMEN = "/api/sigap/pelatihan/instrumen";
-const GRUP: { jenis: Jenis; ikon: string; judul: string; ket: string; kosong: string; terima: string }[] = [
-  { jenis: "kuesioner", ikon: "📋", judul: "Kuesioner", ket: "Kuesioner pendataan yang dipakai di lapangan.", kosong: "Kuesioner belum diunggah.", terima: ".pdf,.doc,.docx,.xls,.xlsx" },
-  { jenis: "pedoman", ikon: "📖", judul: "Buku Pedoman", ket: "Pedoman pendataan: konsep, definisi, dan tata cara.", kosong: "Buku pedoman belum diunggah panitia. Akan tersedia di sini.", terima: ".pdf,.doc,.docx" },
-  { jenis: "materi", ikon: "🖥️", judul: "PPT Materi Pelatihan", ket: "Bahan paparan pelatihan.", kosong: "PPT materi belum diunggah panitia. Akan tersedia di sini.", terima: ".ppt,.pptx,.pps,.ppsx,.pdf,.zip" },
+const GRUP: { jenis: Jenis; judul: string; ket: string; kosong: string; terima: string }[] = [
+  { jenis: "kuesioner", judul: "Kuesioner", ket: "Kuesioner pendataan yang dipakai di lapangan.", kosong: "Kuesioner belum diunggah.", terima: ".pdf,.doc,.docx,.xls,.xlsx" },
+  { jenis: "pedoman", judul: "Buku Pedoman", ket: "Pedoman pendataan: konsep, definisi, dan tata cara.", kosong: "Buku pedoman belum diunggah panitia. Akan tersedia di sini.", terima: ".pdf,.doc,.docx" },
+  { jenis: "materi", judul: "PPT Materi Pelatihan", ket: "Bahan paparan pelatihan.", kosong: "PPT materi belum diunggah panitia. Akan tersedia di sini.", terima: ".ppt,.pptx,.pps,.ppsx,.pdf,.zip" },
 ];
 
 function ukuranTeks(b: number | null) {
@@ -119,7 +120,7 @@ export default function HalamanInstrumen() {
         GRUP.map((g) => {
           const daftar = data.berkas.filter((b) => b.jenis === g.jenis);
           return (
-            <Kartu key={g.jenis} judul={`${g.ikon} ${g.judul}`} ket={g.ket}>
+            <Kartu key={g.jenis} judul={<JudulIkon kunci={g.jenis} teks={g.judul} />} ket={g.ket}>
               {daftar.length === 0 ? (
                 <p className="rounded-lg bg-[#F6F8FB] px-3 py-2.5 text-[13px] text-[#6B7A90]">{g.kosong}</p>
               ) : (

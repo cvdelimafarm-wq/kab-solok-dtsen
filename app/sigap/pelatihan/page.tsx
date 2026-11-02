@@ -16,6 +16,8 @@ import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBenderaTab } from "./TabPelatihan";
+import { useInfoPelatihan } from "./infoPelatihan";
+import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 import { LABEL_SLOT_FOTO, bagiFoto, keadaanHari, namaTitik, teksJarak, titikTerdekat } from "@/lib/sigapPresensi";
 import { kunciSudahLihat, type PengumumanPeserta } from "@/lib/sigapPengumuman";
 import { daftarTerlewat } from "@/lib/sigapTerlewat";
@@ -778,6 +780,15 @@ export default function HalamanPelatihan() {
   }, [data, router]);
   // (2 Nov 2026) Kegiatan yang memakai tampilan 5 tab: halaman puncak pelatihan = tab "Hari ini". Tab "Pelatihan" membuka halaman ini dengan ?tab=pelatihan (tidak dialihkan).
   const bendera = useBenderaTab();
+  // (2 Nov 2026) Tampilan lima tab: tab Pelatihan hanya memuat kartu Pretest / Adu Sigap / Posttest (tanpa daftar tahapan bernomor, yang membingungkan; undangan dan presensi ada di Hari ini,
+  // instrumen di Instrumen, foto di Kamera). null = bendera belum tiba (tunggu sebentar supaya daftar lama tidak berkedip); bendera gagal dimuat >2,5 dtk -> tampilan lama.
+  const info = useInfoPelatihan();
+  const [tungguBendera, setTungguBendera] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setTungguBendera(false), 2500);
+    return () => clearTimeout(t);
+  }, []);
+  const modeBaru: boolean | null = bendera ? bendera.tab_baru : tungguBendera ? null : false;
   useEffect(() => {
     if (!bendera?.tab_baru || !data?.peserta) return;
     const q = new URLSearchParams(window.location.search);
@@ -1023,14 +1034,14 @@ export default function HalamanPelatihan() {
     <Kerangka
       aktif="pelatihan"
       nama={data?.nama}
-      judul="Langkah Pelatihan"
-      sub={u ? `${u.hari_tanggal} · ${u.tempat}${peserta ? ` · ${peserta.kelas ? `Kelas ${peserta.kelas}` : "Kelas menyusul"} (${peranLabel(peserta.peran)})` : ""}` : "Pelatihan PSP Pascabencana 2026"}
+      judul={modeBaru ? "Pelatihan" : "Langkah Pelatihan"}
+      sub={u ? `${u.hari_tanggal} · ${u.tempat}${peserta ? ` · ${peserta.kelas ? `Kelas ${peserta.kelas}` : "Kelas menyusul"} (${peranLabel(peserta.peran)})` : ""}` : judulPelatihan(info)}
     >
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!data && !galat && <Memuat />}
       {data && !peserta && (
         <Pesan jenis="info">
-          Akun Anda tidak terdaftar sebagai peserta Pelatihan PSP Pascabencana 2026, jadi langkah pelatihan, pretest, dan posttest tidak tersedia untuk Anda.{" "}
+          Akun Anda tidak terdaftar sebagai peserta {judulPelatihan(info)}, jadi langkah pelatihan, pretest, dan posttest tidak tersedia untuk Anda.{" "}
           {data.boleh_lihat_kelola && (
             <Link href="/sigap/kelola/pelatihan" className="font-bold text-[#1F5FD1] underline">
               Buka Kelola Pelatihan
@@ -1045,51 +1056,72 @@ export default function HalamanPelatihan() {
           <PeringatanTerlewat daftar={terlewatDaftar} />
           <AktifkanNotifikasi />
           {pemandu && <KotakPemandu p={pemandu} ke={lanjutRayakan} />}
-          <Kartu
-            judul={
-              <span className="flex items-center gap-2.5">
-                <span className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#EAF1FC] text-[#1F5FD1]">
-                  <Ikon n="daftar" className="h-5 w-5" />
-                </span>
-                Langkah Anda
-              </span>
-            }
-            kanan={
-              <span className="flex flex-wrap items-center gap-1.5">
-                {/* (8 Okt 2026) nomor tahapan: "Langkah x dari n" (permintaan user, struktur 3 layer) */}
-                {nSelesai < wajib.length && <Chip w="navy">Langkah {pertama >= 0 ? pertama + 1 : langkah.length} dari {langkah.length}</Chip>}
-                <Chip w={nSelesai === wajib.length ? "ok" : "wait"}>{nSelesai} dari {wajib.length} selesai</Chip>
-              </span>
-            }
-          >
-            {/* (2 Nov 2026) lajur ikon langkah (warna = status; ketuk untuk ke kartunya atau membuka halamannya) menggantikan batang segmen */}
-            <p className="sr-only">{nSelesai} dari {wajib.length} langkah selesai</p>
-            <StripPelatihan daftar={alur} status={statusAlur} aktif={null} onGulir={lanjutRayakan} />
-            <p className="mt-2 text-[12px] text-[#6B7A90]">Sekarang: {waktuWib(new Date(now).toISOString())}</p>
-            <ol className="mt-3">
-              {langkah.map((l, i) => {
-                const { g, chip } = gaya[i];
-                return (
-                  <li key={l.kode} id={`langkah-${l.kode}`} className="relative flex gap-3 pb-4 last:pb-0">
-                    {i < langkah.length - 1 && <span className={`absolute left-[14px] top-8 bottom-0 w-0.5 ${g === "done" ? "bg-[#19A463]" : "bg-[#E1E9F6]"}`} aria-hidden />}
-                    <span className={`z-[1] flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[13px] font-extrabold ${warnaBulat[g]}`}>
-                      {i + 1}
-                    </span>
-                    <div className={`min-w-0 flex-1 ${g === "now" ? "-mt-1.5 rounded-[14px] border border-[#D6E4FA] bg-[#F5F8FE] p-3" : ""} ${l.redup || (g === "wait" && !l.tombolAktif) ? "opacity-70" : ""}`}>
-                      <div className="flex flex-wrap items-center gap-1.5 text-[14.5px] font-extrabold text-[#0F2A52]">
-                        {l.judul} <Chip w={chipW[g]}>{chip}</Chip>
+          {modeBaru === null ? (
+            <Memuat />
+          ) : modeBaru ? (
+            <div className="space-y-3">
+              {langkah
+                .filter((l) => l.kode === "pretest" || l.kode === "kuis" || l.kode === "posttest")
+                .map((l) => {
+                  const { g, chip } = gaya[langkah.indexOf(l)];
+                  return (
+                    <section key={l.kode} id={`langkah-${l.kode}`} aria-label={l.judul} className="rounded-[18px] border border-[#DDE6F3] bg-white p-4 shadow-[0_6px_16px_rgba(15,42,82,.05)]">
+                      <div className="flex flex-wrap items-center gap-2 text-[15px] font-extrabold text-[#0F2A52]">
+                        {l.judul}
+                        {(g === "done" || g === "miss" || chip === "Sekarang") && <Chip w={chipW[g]}>{chip}</Chip>}
                       </div>
-                      <div className="mt-0.5">{l.badan}</div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ol>
-          </Kartu>
+                      <div className={`mt-1.5 ${l.redup || (g === "wait" && !l.tombolAktif) ? "opacity-70" : ""}`}>{l.badan}</div>
+                    </section>
+                  );
+                })}
+            </div>
+          ) : (
+            <Kartu
+              judul={
+                <span className="flex items-center gap-2.5">
+                  <span className="grid h-9 w-9 place-items-center rounded-[11px] bg-[#EAF1FC] text-[#1F5FD1]">
+                    <Ikon n="daftar" className="h-5 w-5" />
+                  </span>
+                  Langkah Anda
+                </span>
+              }
+              kanan={
+                <span className="flex flex-wrap items-center gap-1.5">
+                  {/* (8 Okt 2026) nomor tahapan: "Langkah x dari n" (permintaan user, struktur 3 layer) */}
+                  {nSelesai < wajib.length && <Chip w="navy">Langkah {pertama >= 0 ? pertama + 1 : langkah.length} dari {langkah.length}</Chip>}
+                  <Chip w={nSelesai === wajib.length ? "ok" : "wait"}>{nSelesai} dari {wajib.length} selesai</Chip>
+                </span>
+              }
+            >
+              {/* (2 Nov 2026) lajur ikon langkah (warna = status; ketuk untuk ke kartunya atau membuka halamannya) menggantikan batang segmen */}
+              <p className="sr-only">{nSelesai} dari {wajib.length} langkah selesai</p>
+              <StripPelatihan daftar={alur} status={statusAlur} aktif={null} onGulir={lanjutRayakan} />
+              <p className="mt-2 text-[12px] text-[#6B7A90]">Sekarang: {waktuWib(new Date(now).toISOString())}</p>
+              <ol className="mt-3">
+                {langkah.map((l, i) => {
+                  const { g, chip } = gaya[i];
+                  return (
+                    <li key={l.kode} id={`langkah-${l.kode}`} className="relative flex gap-3 pb-4 last:pb-0">
+                      {i < langkah.length - 1 && <span className={`absolute left-[14px] top-8 bottom-0 w-0.5 ${g === "done" ? "bg-[#19A463]" : "bg-[#E1E9F6]"}`} aria-hidden />}
+                      <span className={`z-[1] flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full text-[13px] font-extrabold ${warnaBulat[g]}`}>
+                        {i + 1}
+                      </span>
+                      <div className={`min-w-0 flex-1 ${g === "now" ? "-mt-1.5 rounded-[14px] border border-[#D6E4FA] bg-[#F5F8FE] p-3" : ""} ${l.redup || (g === "wait" && !l.tombolAktif) ? "opacity-70" : ""}`}>
+                        <div className="flex flex-wrap items-center gap-1.5 text-[14.5px] font-extrabold text-[#0F2A52]">
+                          {l.judul} <Chip w={chipW[g]}>{chip}</Chip>
+                        </div>
+                        <div className="mt-0.5">{l.badan}</div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            </Kartu>
+          )}
           {/* (9 Okt 2026) Transport Lokal pelatihan ada di dalam tahap Pelatihan */}
           <KartuKelas />
           <KartuKuisPra />
-          {fotoTranslok && <KartuTranslokPelatihan />}
+          {fotoTranslok && !modeBaru && <KartuTranslokPelatihan />}
           <div className="rounded-[14px] border border-[#DDE6F3] bg-white px-3.5 py-3 text-[12.5px] leading-relaxed text-[#5B6B84]">
             Waktu mengikuti jam server. Skor &amp; pembahasan tampil setelah sesi tes ditutup; sebelum itu hanya tampil &ldquo;jawaban tersimpan&rdquo;.
           </div>

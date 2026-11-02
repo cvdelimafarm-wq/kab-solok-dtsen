@@ -20,7 +20,7 @@ import { judulPelatihan, tujuanKembali } from "@/lib/sigapPelatihanNama";
 import { hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah } from "@/lib/alurPelatihan"; // (2 Nov 2026) penunjuk langkah pelatihan di HP
 import { perluFotoTranslok } from "@/lib/sigapKelasIdent";
 import { useKelasSaya } from "./kartuKelas";
-import { NavPelatihan, PenunjukPelatihan } from "./AlurPelatihan";
+import { PenunjukPelatihan } from "./AlurPelatihan";
 import { TabPelatihanOtomatis, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
 import type { KunciTes } from "./KartuTerkunci";
 
@@ -152,7 +152,7 @@ export function useSaatLewat(targetIso: string | null, sekarangMs: () => number,
 }
 
 /**
- * (2 Nov 2026) Penunjuk langkah di atas isi + Sebelumnya/Berikutnya di bawah isi, untuk halaman yang merupakan satu langkah pelatihan
+ * (2 Nov 2026) Penunjuk langkah di atas isi untuk halaman yang merupakan satu langkah pelatihan (tombol Sebelumnya/Berikutnya di bawah isi DIHAPUS atas permintaan user: tahapan sudah jelas dari lajur ikon)
  * (Undangan, Instrumen, Pretest, Posttest). `hub`: data hub milik halaman (null = masih memuat); undefined = muat sendiri.
  * `selesai`: halaman tahu langkahnya sudah selesai padahal data hub belum diperbarui (mis. undangan baru dibuka, tes baru dikirim).
  * `tersembunyi`: sembunyikan sementara tanpa melepas isi (mis. saat mengerjakan tes), supaya state isi halaman tidak hilang.
@@ -175,7 +175,6 @@ function AlurKerangka({ kode, hub: hubLuar, selesai, tersembunyi, children }: { 
     <>
       {tampil && daftar && <PenunjukPelatihan daftar={daftar} status={status} aktif={kode} />}
       {children}
-      {tampil && daftar && <NavPelatihan daftar={daftar} aktif={kode} />}
     </>
   );
 }
@@ -195,7 +194,7 @@ export function Kerangka({
   judul: React.ReactNode;
   sub?: React.ReactNode;
   nama?: string;
-  /** Kode langkah pelatihan yang ditampilkan halaman ini; bila diisi, penunjuk langkah dan Sebelumnya/Berikutnya dipasang. */
+  /** Kode langkah pelatihan yang ditampilkan halaman ini; bila diisi, penunjuk langkah dipasang. */
   langkah?: KodeLangkah;
   hub?: Hub | null;
   langkahSelesai?: boolean;
@@ -227,7 +226,8 @@ export function Kerangka({
         {sub && <p className="mt-1 text-[12.5px] text-blue-100">{sub}</p>}
       </HeaderAdmin>
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
-        <PulsaPeserta />
+        {/* (2 Nov 2026) pop-up konfirmasi nomor pulsa hanya sampai dikonfirmasi; kartu statusnya redup di bawah tab Hari ini (hari-ini/page.tsx) */}
+        <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />
         {langkah ? (
           <AlurKerangka kode={langkah} hub={hub} selesai={langkahSelesai} tersembunyi={alurTersembunyi}>
             {children}

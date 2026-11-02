@@ -46,7 +46,7 @@ const IKON: Record<TabAktif, React.ReactNode> = {
     </svg>
   ),
   kamera: (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden {...GARIS}>
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden {...GARIS}>
       <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
       <circle cx="12" cy="13" r="3.5" />
     </svg>
@@ -86,6 +86,28 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana =
           {tab.map((t) => {
             const sedang = t.kode === aktif;
             const warna = sedang ? "text-[#1F5FD1]" : "text-[#6B7A90]";
+            // (2 Nov 2026) Kamera SIGAP: tombol bulat TIMBUL di tengah bilah, sama dengan bar bawah Pendataan (BarKegiatan.tsx)
+            if (t.kode === "kamera") {
+              const bulat = (
+                <span className={`flex min-h-[56px] flex-col items-center justify-end gap-0.5 pb-1.5 px-1 text-[11px] font-bold ${t.href ? "text-[#0F3D7A]" : "text-[#8592A8] opacity-60"}`}>
+                  <span className={`-mt-5 grid h-[52px] w-[52px] place-items-center rounded-full text-white ring-4 ring-white ${t.href ? "bg-[#0F3D7A] shadow-[0_6px_16px_rgba(15,42,82,.35)] active:scale-95" : "bg-[#8592A8]"}`}>{t.ikon}</span>
+                  <span className="leading-none">{t.label}</span>
+                </span>
+              );
+              return (
+                <li key={t.kode}>
+                  {t.href ? (
+                    <Link href={t.href} aria-label="Buka Kamera SIGAP" aria-current={sedang ? "page" : undefined} className="block">
+                      {bulat}
+                    </Link>
+                  ) : (
+                    <span aria-disabled className="block">
+                      {bulat}
+                    </span>
+                  )}
+                </li>
+              );
+            }
             const isi = (
               <span className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-semibold ${warna} ${t.href ? "" : "opacity-40"}`}>
                 <span className={`relative grid h-7 w-12 place-items-center rounded-full ${sedang ? "bg-[#E3EEFF]" : ""}`}>

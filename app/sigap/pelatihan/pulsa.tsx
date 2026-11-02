@@ -2,21 +2,22 @@
 
 // app/sigap/pelatihan/pulsa.tsx
 //
-// (8 Okt 2026) Pop-up WAJIB konfirmasi nomor HP untuk pengisian pulsa (peserta pelatihan) + kartu status yang menonjol.
+// (8 Okt 2026) Pop-up WAJIB konfirmasi nomor HP untuk pengisian pulsa (peserta pelatihan) + kartu status.
 // Nomor HP asli ditampilkan; peserta boleh memakai nomor lain KHUSUS pulsa (nomor HP asli di data tidak berubah).
-// Dipasang di Kerangka (komponen.tsx) sehingga muncul di semua halaman peserta pelatihan sampai dikonfirmasi.
+// (2 Nov 2026) Dua tampilan (permintaan user: konfirmasi cukup SEKALI, jangan selalu tampil):
+//   tampilan="pop"   -> dipasang di Kerangka (komponen.tsx): HANYA pop-up konfirmasi, muncul di halaman mana pun sampai nomor dikonfirmasi; sesudahnya tidak menampilkan apa pun.
+//   tampilan="kartu" -> dipasang di bawah tab Hari ini: kartu REDUP berisi nomor terkonfirmasi + tombol Ubah (membuka pop-up yang sama). Belum dikonfirmasi: kartu menonjol "Isi sekarang".
+// Dua tampilan itu saling menyegarkan lewat peristiwa jendela (EVENT_PULSA) setelah nomor disimpan.
 
 import { useCallback, useEffect, useState } from "react";
-import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { fetchJson, pesanGalat } from "../admin/api";
 import { tampilHp } from "@/lib/sigapPulsa";
-import { useInfoPelatihan } from "./infoPelatihan";
-import { judulPelatihan } from "@/lib/sigapPelatihanNama";
+
+const EVENT_PULSA = "sigap-pulsa-berubah";
 
 type Status = { peserta: boolean; asli?: string | null; pulsa?: string | null; diubah?: boolean; dikonfirmasi_at?: string | null };
 
-export function PulsaPeserta() {
-  const info = useInfoPelatihan();
+export function PulsaPeserta({ tampilan = "pop", judul = "Pelatihan" }: { tampilan?: "pop" | "kartu"; judul?: string }) {
   const [st, setSt] = useState<Status | null>(null);
   const [buka, setBuka] = useState(false); // pop-up dibuka manual (Ubah nomor) setelah terkonfirmasi
   const [mode, setMode] = useState<"pilih" | "lain">("pilih");
@@ -33,12 +34,16 @@ export function PulsaPeserta() {
   }, []);
   useEffect(() => {
     muat();
+    const segarkan = () => void muat();
+    window.addEventListener(EVENT_PULSA, segarkan);
+    return () => window.removeEventListener(EVENT_PULSA, segarkan);
   }, [muat]);
 
-  useTutupDenganBack(buka && Boolean(st?.pulsa), () => setBuka(false)); // (31 Okt 2026) pop-up Ubah nomor (bukan yang wajib saat belum mengisi)
   if (!st || !st.peserta) return null;
   const sudah = Boolean(st.pulsa);
-  const tampil = !sudah || buka;
+  // pop-up wajib hanya dari tampilan "pop" (satu pemilik, tidak ganda); tampilan "kartu" membukanya hanya bila peserta menekan Ubah / Isi sekarang
+  const tampil = tampilan === "pop" ? !sudah || buka : buka;
+  if (tampilan === "pop" && sudah && !buka) return null;
   const adaAsli = Boolean(st.asli);
   const modeLain = mode === "lain" || !adaAsli;
 
@@ -49,6 +54,7 @@ export function PulsaPeserta() {
       const d = await fetchJson<Status>("/api/sigap/pelatihan/pulsa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(isi) });
       setSt({ ...d, peserta: true });
       setBuka(false);
+      window.dispatchEvent(new Event(EVENT_PULSA)); // tampilan lain (kartu di Hari ini / pop-up di Kerangka) ikut menyegarkan
       setMode("pilih");
       setNomor("");
     } catch (e) {
@@ -67,34 +73,42 @@ export function PulsaPeserta() {
 
   return (
     <>
-      {/* Kartu status yang menonjol (selalu tampil di atas halaman peserta) */}
-      <section className="rounded-2xl border-2 border-[#F58220] bg-[#FFF4E8] p-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl" aria-hidden>
-            📱
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[12px] font-bold uppercase tracking-wide text-[#B45309]">Pengisian pulsa</p>
-            {sudah ? (
-              <p className="text-[14px] font-bold text-[#1B2B4B]">
-                {tampilHp(st.pulsa)} <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">✓ terkonfirmasi</span>
-                {st.diubah && <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">nomor khusus pulsa</span>}
-              </p>
-            ) : (
-              <p className="text-[13px] font-semibold text-[#9A3412]">Nomor pulsa belum dikonfirmasi</p>
-            )}
+      {tampilan === "kartu" && (
+        <section
+          aria-label="Nomor pengisian pulsa"
+          className={sudah ? "rounded-2xl border border-[#E3E8F0] bg-white/70 p-3 opacity-80" : "rounded-2xl border-2 border-[#F58220] bg-[#FFF4E8] p-3 shadow-sm"}
+        >
+          <div className="flex items-center gap-3">
+            <span className={`text-xl ${sudah ? "grayscale" : ""}`} aria-hidden>
+              📱
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className={`text-[11.5px] font-bold uppercase tracking-wide ${sudah ? "text-[#6B7A90]" : "text-[#B45309]"}`}>Pengisian pulsa</p>
+              {sudah ? (
+                <p className="text-[13.5px] font-semibold text-[#3B4A60]">
+                  {tampilHp(st.pulsa)} <span className="ml-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">✓ terkonfirmasi</span>
+                  {st.diubah && <span className="ml-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">nomor khusus pulsa</span>}
+                </p>
+              ) : (
+                <p className="text-[13px] font-semibold text-[#9A3412]">Nomor pulsa belum dikonfirmasi</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={bukaUbah}
+              className={sudah ? "shrink-0 rounded-full border border-[#CBD6E6] bg-white px-3 py-1.5 text-[12px] font-bold text-[#55657D] hover:bg-[#F5F8FE]" : "shrink-0 rounded-full bg-[#F58220] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#E0731A]"}
+            >
+              {sudah ? "Ubah" : "Isi sekarang"}
+            </button>
           </div>
-          <button type="button" onClick={bukaUbah} className="shrink-0 rounded-full bg-[#F58220] px-3 py-1.5 text-[12px] font-bold text-white hover:bg-[#E0731A]">
-            {sudah ? "Ubah" : "Isi sekarang"}
-          </button>
-        </div>
-      </section>
+        </section>
+      )}
 
       {tampil && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/55 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="judul-pulsa">
           <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl">
             <div className="rounded-t-3xl bg-gradient-to-r from-[#F58220] to-[#FB9B3F] px-5 py-4 text-white">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-white/85">{judulPelatihan(info)}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-white/85">{judul}</p>
               <h2 id="judul-pulsa" className="text-[18px] font-extrabold leading-tight">
                 📱 Nomor HP untuk pengisian pulsa
               </h2>

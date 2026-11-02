@@ -41,12 +41,9 @@ export async function GET(req: NextRequest) {
     const respons = peserta ? await muatRespons(db, kegiatanId, akun.id) : null;
     const status = statusUndangan(respons);
     const berubah = ketentuanBerubah(respons, ketentuan);
-    let kameraHref: string | null = null;
-    if (peserta) {
-      const { data } = await db.from("sigap_akun").select("token").eq("id", akun.id).maybeSingle();
-      const token = (data?.token as string | undefined) ?? null;
-      kameraHref = token ? `/sigap/translok/${token}` : null;
-    }
+    // (2 Nov 2026) Tab "Kamera SIGAP" membuka halaman Kamera SIGAP kegiatan ini (/sigap/foto), sama dengan Pendataan Pascabencana -- bukan panduan Translok.
+    // Kegiatan harus bermode "kamera" (sigap_foto_pengaturan_kegiatan); bila belum, halaman itu menjelaskannya.
+    const kameraHref: string | null = peserta ? `/sigap/foto?kegiatan=${kegiatanId}` : null;
     // Tahap C: jumlah materi wajib (video / tautan) yang belum selesai -> penanda di ikon tab Instrumen. Gagal / SQL belum ada = 0.
     let instrumenBelum = 0;
     if (peserta && tampilan.tab_baru) {

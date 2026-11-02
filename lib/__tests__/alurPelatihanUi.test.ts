@@ -50,7 +50,7 @@ describe("komponen langkah pelatihan", () => {
     expect(h).toContain(`Langkah 3 dari ${daftar.length} · Pretest`);
     expect(h).toContain("Terlewat");
     expect(h).toContain(`2 dari ${daftar.length} langkah selesai`);
-    expect(h).toContain('href="/sigap/pelatihan"');
+    expect(h).not.toContain("Lihat semua langkah"); // daftar langkah bernomor sudah dihapus (membingungkan)
   });
   it("penunjuk: kode tak dikenal -> kosong", () => {
     expect(renderToStaticMarkup(e(PenunjukPelatihan, { daftar, status, aktif: "lain" }))).toBe("");

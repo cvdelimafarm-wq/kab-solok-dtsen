@@ -5,6 +5,7 @@
 // (2 Nov 2026) Tahap C: bagian atas tab Instrumen -- video belajar (dilacak sampai habis) dan tautan instrumen (dilacak sudah dibuka), plus formulir tambah untuk pengelola.
 // Data: GET/POST /api/sigap/pelatihan/materi. SQL 20261102zm belum dijalankan -> bagian ini tidak tampil bagi peserta (berkas unduhan tetap jalan) dan memberi petunjuk bagi pengelola.
 
+import { JudulIkon } from "./IkonInstrumen";
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Pesan } from "../../admin/ui";
@@ -149,7 +150,7 @@ export default function BagianMateri() {
       )}
 
       {video.length > 0 && (
-        <Kartu judul="🎬 Video belajar" ket="Tonton sampai habis dengan kecepatan normal. Hanya bagian yang benar-benar diputar yang dihitung.">
+        <Kartu judul={<JudulIkon kunci="video" teks="Video belajar" />} ket="Tonton sampai habis dengan kecepatan normal. Hanya bagian yang benar-benar diputar yang dihitung.">
           <ul className="space-y-2">
             {video.map((m) => (
               <li key={m.id} className="rounded-xl border border-[#DDE6F3] px-3 py-2.5">
@@ -181,7 +182,7 @@ export default function BagianMateri() {
       )}
 
       {tautan.length > 0 && (
-        <Kartu judul="🔗 Tautan instrumen" ket="Buka tautan wajib sekurang-kurangnya sekali; pembukaan dicatat.">
+        <Kartu judul={<JudulIkon kunci="tautan" teks="Tautan instrumen" />} ket="Buka tautan wajib sekurang-kurangnya sekali; pembukaan dicatat.">
           <ul className="space-y-2">
             {tautan.map((m) => (
               <li key={m.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-[#DDE6F3] px-3 py-2.5">

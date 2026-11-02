@@ -49,11 +49,13 @@ export function StripPelatihan({ daftar, status, aktif, onGulir }: Data & { akti
     const w = wadah.current;
     const ini = w?.querySelector<HTMLElement>('[data-fokus="1"]');
     if (!w || !ini) return;
-    w.scrollLeft = Math.max(0, ini.offsetLeft - (w.clientWidth - ini.offsetWidth) / 2);
+    // (2 Nov 2026) butir fokus dibawa ke tengah tetapi dijepit supaya butir pertama / terakhir tidak terpotong di tepi
+    const maks = Math.max(0, w.scrollWidth - w.clientWidth);
+    w.scrollLeft = Math.min(maks, Math.max(0, ini.offsetLeft - (w.clientWidth - ini.offsetWidth) / 2));
   }, [fokus]);
   const n = daftar.length;
   return (
-    <ol ref={wadah} className="m-0 flex list-none gap-0 overflow-x-auto p-0 pb-1" aria-label="Ikon langkah pelatihan">
+    <ol ref={wadah} className="m-0 flex list-none gap-0 overflow-x-auto px-1 pb-1 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Ikon langkah pelatihan">
       {daftar.map((l, i) => {
         const s = status[i];
         const ini = l.kode === aktif;
@@ -115,7 +117,7 @@ export function PenunjukPelatihan({ daftar, status, aktif }: Data & { aktif: str
         <StripPelatihan daftar={daftar} status={status} aktif={aktif} />
       </div>
       <p className="mb-0 mt-1 text-[12px] text-[#6B7A90]">
-        {p.selesai} dari {p.wajib} langkah selesai · <Link href="/sigap/pelatihan" className="font-bold text-[#1F5FD1] underline">Lihat semua langkah</Link>
+        {p.selesai} dari {p.wajib} langkah selesai
       </p>
     </section>
   );
