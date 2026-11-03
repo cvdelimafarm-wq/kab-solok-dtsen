@@ -29,6 +29,8 @@ import BarisPengawasan from "@/app/sigap/BarisPengawasan";
 import BarisLangkah from "@/app/sigap/BarisLangkah";
 import ModalBlokirTranslok from "@/app/sigap/translok/ModalBlokirTranslok";
 import KartuUnblockMasuk from "@/app/sigap/translok/KartuUnblockMasuk";
+import KartuSusulan from "@/app/sigap/translok/KartuSusulan"; // (3 Nov 2026) Ajukan susulan: petugas mengajukan, 2 atasan terdekat memutuskan
+import LembarSusulan from "@/app/sigap/translok/LembarSusulan";
 import KartuVanguardHariIni from "@/app/sigap/KartuVanguardHariIni"; // (1 Nov 2026) hanya bila Vanguard menyala di kegiatan ini (dicatat)
 import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
@@ -622,6 +624,14 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
               return w ? <BarisPengawasan kode={bar.kode} peran={bar.peran} label={w.label} href={w.href} /> : null;
             })()}
             <KartuUnblockMasuk token={token} kegiatanId={pen.kegiatan.id} />
+            <KartuSusulan
+              token={token}
+              penugasanId={pen.id}
+              kegiatanNama={pen.kegiatan.nama}
+              bolehAjukan={!pen.dikunci_at && pen.status_periode !== "arsip" && pen.kegiatan.jenis !== "pelatihan"}
+              lengkapDiKlien={pen.hari.filter((h) => h.lengkap).map((h) => h.tanggal)}
+              onBerubah={muat}
+            />
             <Ringkasan pen={pen} hariIni={data.hari_ini} />
             <KartuVanguardHariIni kegiatanId={pen.kegiatan.id} />
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
@@ -1327,6 +1337,7 @@ function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; d
 function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { token: string; data: Data; pen: Pen; hari: Hari; onBerubah: () => Promise<void>; hanya?: "laporan" | "foto"; tanpaJudul?: boolean }) {
   const boleh = !pen.dikunci_at && pen.status_periode !== "arsip" && (hari.kunci === "hari_ini" || hari.kunci === "izin");
   const { fokus, waAdmin, namaPetugas } = useContext(FokusCtx);
+  const [susulan, setSusulan] = useState(false); // (3 Nov 2026) lembar "Ajukan susulan" untuk tanggal ini
   const sorotLaporan = fokus?.tgl === hari.tanggal && fokus.bagian === "laporan";
   const sorotFoto = fokus?.tgl === hari.tanggal && fokus.bagian === "foto";
   // (14 Okt 2026) tombol WhatsApp ke admin dengan teks izin susulan terisi (hanya bila nomor admin diatur di server)
@@ -1358,7 +1369,12 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
       {hari.kunci === "terlewat" && !hari.lengkap && (
         <div className="rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-red-900">
           <p className="text-[14px] font-extrabold">🔒 Batas waktu tanggal ini sudah lewat</p>
-          <p className="mt-0.5 text-[12.5px]">Laporan dan dokumentasi tidak dapat diisi lagi, dan hari ini tidak masuk Kwitansi. Bila ada alasan kuat, hubungi admin anggaran untuk izin susulan.</p>
+          <p className="mt-0.5 text-[12.5px]">Laporan dan dokumentasi tidak dapat diisi lagi, dan hari ini tidak masuk Kwitansi. Bila ada alasan kuat, ajukan susulan ke atasan Anda (tanggal dibuka 24 jam bila disetujui){linkIzin ? ", atau hubungi admin anggaran" : ""}.</p>
+          {!pen.dikunci_at && pen.status_periode !== "arsip" && pen.kegiatan.jenis !== "pelatihan" && (
+            <button type="button" onClick={() => setSusulan(true)} className="mr-2 mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#0F3D7A] px-4 text-[13.5px] font-extrabold text-white">
+              Ajukan susulan ke atasan
+            </button>
+          )}
           {linkIzin && (
             <a href={linkIzin} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#1E7A4C] px-4 text-[13.5px] font-extrabold text-white">
               Minta izin susulan ke admin (WhatsApp)
@@ -1384,6 +1400,9 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
           {/* (27 Okt 2026) lembar foto selebar layar HP (tanpa sudut dan garis kiri-kanan) di Hari Ini; di Arsip lebarnya sudah diatur panel pembungkus (tepi=false) */}
           <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} lampau={hari.kunci === "terlewat"} penuh tepi={!tanpaJudul} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
         </div>
+      )}
+      {susulan && (
+        <LembarSusulan token={token} penugasanId={pen.id} kegiatanNama={pen.kegiatan.nama} tanggalAwal={hari.tanggal} onTutup={() => setSusulan(false)} onTerkirim={() => { void onBerubah(); }} />
       )}
     </>
   );

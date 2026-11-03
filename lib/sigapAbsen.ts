@@ -209,3 +209,67 @@ export function tabPerPeran(jenis: JenisPengelola, adalahPeserta: boolean): { pe
   const pengelola = jenis === "panitia" || jenis === "instruktur";
   return { pelatihan: !pengelola || adalahPeserta, absen: pengelola };
 }
+
+// ---------- alat darurat (3 Nov 2026, push 114) ----------
+// Buka sesi susulan (lupa membuka), buat ulang kode (bocor), radius sementara, centang massal. Semua koreksi wajib beralasan dan masuk rekap koreksi.
+
+export const ALASAN_MIN = 3;
+export const ALASAN_MAKS = 200;
+export const RADIUS_MIN_M = 10;
+export const RADIUS_MAKS_M = 500;
+/** Pilihan cepat radius sementara di layar (meter). */
+export const PILIHAN_RADIUS_M: readonly number[] = [25, 50, 100, 200];
+export const CENTANG_MASSAL_MAKS = 500;
+
+export function periksaAlasan(x: unknown): { ok: true; alasan: string } | { ok: false; pesan: string } {
+  const a = typeof x === "string" ? x.replace(/\s+/g, " ").trim() : "";
+  if (a.length < ALASAN_MIN) return { ok: false, pesan: "Alasan wajib diisi (minimal 3 huruf) supaya tercatat di rekap koreksi." };
+  return { ok: true, alasan: a.slice(0, ALASAN_MAKS) };
+}
+
+export function periksaRadius(x: unknown): { ok: true; radius: number } | { ok: false; pesan: string } {
+  const r = typeof x === "string" && x.trim() === "" ? NaN : Number(x);
+  if (!Number.isInteger(r) || r < RADIUS_MIN_M || r > RADIUS_MAKS_M) return { ok: false, pesan: `Radius harus ${RADIUS_MIN_M} sampai ${RADIUS_MAKS_M} meter.` };
+  return { ok: true, radius: r };
+}
+
+/** Jam sebenarnya sesi susulan dimulai ("HH:MM" WIB pada `tanggal`): tidak boleh di masa depan dan tanggal tidak boleh setelah hari ini. */
+export function periksaJamSusulan(jam: unknown, tanggal: unknown, nowMs: number): { ok: true; jam: string; mulaiMs: number } | { ok: false; pesan: string } {
+  if (typeof tanggal !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return { ok: false, pesan: "Tanggal tidak valid." };
+  const m = typeof jam === "string" ? menitDariJam(jam) : null;
+  if (m === null) return { ok: false, pesan: "Jam mulai tidak valid. Tulis seperti 08:15." };
+  const hh = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const mulaiMs = Date.parse(`${tanggal}T${hh}:00+07:00`);
+  if (!Number.isFinite(mulaiMs)) return { ok: false, pesan: "Tanggal tidak valid." };
+  if (mulaiMs > nowMs) return { ok: false, pesan: "Jam mulai belum terjadi. Sesi susulan hanya untuk sesi yang sudah berlangsung." };
+  return { ok: true, jam: hh, mulaiMs };
+}
+
+/** Sesi susulan ditandai di kolom `dibuka_oleh` (tanpa kolom baru): "Nama (susulan: alasan)". */
+export function penandaSusulan(oleh: string, alasan: string): string {
+  const a = alasan.replace(/[()]/g, "").replace(/\s+/g, " ").trim().slice(0, 70);
+  return `${oleh.trim().slice(0, 38)} (susulan: ${a})`;
+}
+/** Alasan susulan dari kolom `dibuka_oleh`, atau null bila sesi bukan susulan. */
+export function bacaSusulan(dibukaOleh: string | null | undefined): string | null {
+  const m = /\(susulan: (.*)\)$/.exec(dibukaOleh ?? "");
+  return m ? m[1] : null;
+}
+
+export type BarisRekap = { jenis: "centang" | "datang" | "susulan"; tanggal: string; sesi: string; nama: string; alasan: string; oleh: string; at: string };
+const JENIS_REKAP: Record<BarisRekap["jenis"], string> = { centang: "Centang manual sesi", datang: "Centang manual kedatangan", susulan: "Sesi susulan" };
+export const labelJenisRekap = (j: BarisRekap["jenis"]): string => JENIS_REKAP[j];
+
+/** CSV rekap koreksi (titik koma tidak dipakai; kutip ganda di-escape; awalan BOM supaya Excel membaca UTF-8). */
+export function csvRekap(baris: readonly BarisRekap[]): string {
+  const sel = (x: string) => `"${String(x ?? "").replace(/"/g, '""').replace(/^([=+\-@])/, "'$1")}"`;
+  const kepala = ["Jenis", "Tanggal", "Sesi", "Nama", "Alasan", "Dicatat oleh", "Waktu catat (WIB)"].map(sel).join(",");
+  const isi = baris.map((b) => [labelJenisRekap(b.jenis), b.tanggal, b.sesi, b.nama, b.alasan, b.oleh, waktuWib(b.at)].map(sel).join(","));
+  return `﻿${[kepala, ...isi].join("\r\n")}\r\n`;
+}
+function waktuWib(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const d = new Date(t + 7 * 3600_000).toISOString();
+  return `${d.slice(0, 10)} ${d.slice(11, 16)}`;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buatKode, hariPertama, kedatanganBerlaku, keadaanSesi, kodeCocok, menitDariJam, menitWib, nilaiRadar, periksaMetode, periksaMetodeTunggal, metodeUtama, JEDA_RADAR_OTOMATIS_MS, rapikanSesi, rentangHari, ringkasRadar, sarankanSesi, sisaDetik, SESI_BAWAAN, tabPerPeran, teksSisa, tungguKode, tutupAtDari } from "@/lib/sigapAbsen";
+import { bacaSusulan, csvRekap, penandaSusulan, periksaAlasan, periksaJamSusulan, periksaRadius, buatKode, hariPertama, kedatanganBerlaku, keadaanSesi, kodeCocok, menitDariJam, menitWib, nilaiRadar, periksaMetode, periksaMetodeTunggal, metodeUtama, JEDA_RADAR_OTOMATIS_MS, rapikanSesi, rentangHari, ringkasRadar, sarankanSesi, sisaDetik, SESI_BAWAAN, tabPerPeran, teksSisa, tungguKode, tutupAtDari } from "@/lib/sigapAbsen";
 
 describe("jam dan sesi disarankan", () => {
   it("menitDariJam", () => {
@@ -150,5 +150,49 @@ describe("satu metode pada satu waktu (3 Nov 2026)", () => {
   it("jeda lapor radar otomatis wajar (cukup jarang untuk baterai, cukup sering untuk jendela 30 menit)", () => {
     expect(JEDA_RADAR_OTOMATIS_MS).toBeGreaterThanOrEqual(5000);
     expect(JEDA_RADAR_OTOMATIS_MS).toBeLessThanOrEqual(15000);
+  });
+});
+
+describe("alat darurat absen (push 114)", () => {
+  const T = Date.parse("2026-11-09T05:00:00Z"); // 12:00 WIB
+  it("periksaAlasan: minimal 3 huruf, spasi dirapikan, maksimal 200", () => {
+    expect(periksaAlasan("  ")).toMatchObject({ ok: false });
+    expect(periksaAlasan("ab")).toMatchObject({ ok: false });
+    expect(periksaAlasan(undefined)).toMatchObject({ ok: false });
+    expect(periksaAlasan("  Lupa   membuka ")).toEqual({ ok: true, alasan: "Lupa membuka" });
+    const panjang = periksaAlasan("x".repeat(500));
+    expect(panjang.ok && panjang.alasan.length).toBe(200);
+  });
+  it("periksaRadius: bilangan bulat 10 sampai 500", () => {
+    expect(periksaRadius(50)).toEqual({ ok: true, radius: 50 });
+    expect(periksaRadius("100")).toEqual({ ok: true, radius: 100 });
+    for (const x of [9, 501, 25.5, "", null, undefined, "abc", NaN]) expect(periksaRadius(x).ok).toBe(false);
+  });
+  it("periksaJamSusulan: jam sah, tidak di masa depan, dirapikan HH:MM", () => {
+    expect(periksaJamSusulan("8:15", "2026-11-09", T)).toEqual({ ok: true, jam: "08:15", mulaiMs: Date.parse("2026-11-09T01:15:00Z") });
+    expect(periksaJamSusulan("12:00", "2026-11-09", T).ok).toBe(true); // tepat sekarang
+    expect(periksaJamSusulan("12:01", "2026-11-09", T).ok).toBe(false); // belum terjadi
+    expect(periksaJamSusulan("08:00", "2026-11-10", T).ok).toBe(false); // besok
+    expect(periksaJamSusulan("08:00", "2026-11-08", T).ok).toBe(true); // kemarin
+    expect(periksaJamSusulan("25:00", "2026-11-09", T).ok).toBe(false);
+    expect(periksaJamSusulan("", "2026-11-09", T).ok).toBe(false);
+    expect(periksaJamSusulan(800, "2026-11-09", T).ok).toBe(false);
+    expect(periksaJamSusulan("08:00", "9 Nov", T).ok).toBe(false);
+  });
+  it("penanda susulan: bolak-balik, aman untuk nama/alasan panjang dan tanda kurung", () => {
+    expect(bacaSusulan(penandaSusulan("Panitia A", "Lupa membuka"))).toBe("Lupa membuka");
+    expect(bacaSusulan("Panitia A")).toBeNull();
+    expect(bacaSusulan(null)).toBeNull();
+    const p = penandaSusulan("N".repeat(300), "(a)".repeat(100));
+    expect(p.length).toBeLessThanOrEqual(120);
+    expect(bacaSusulan(p)).not.toBeNull();
+  });
+  it("csvRekap: kepala, kutip ganda, rumus dinetralkan, BOM", () => {
+    const csv = csvRekap([{ jenis: "centang", tanggal: "2026-11-09", sesi: "Sesi 2", nama: 'Budi "B"', alasan: "=SUM(A1)", oleh: "Panitia A", at: "2026-11-09T03:05:00Z" }]);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    expect(csv).toContain('"Budi ""B"""');
+    expect(csv).toContain("\"'=SUM(A1)\"");
+    expect(csv).toContain("2026-11-09 10:05");
+    expect(csv.split("\r\n")).toHaveLength(3);
   });
 });

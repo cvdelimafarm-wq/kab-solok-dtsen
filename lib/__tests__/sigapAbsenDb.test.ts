@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/sigapTesDb", () => ({ FILTER_BUKAN_ADMINISTRASI: "sumber.is.null" }));
 vi.mock("@/lib/sigapAkses", () => ({ boleh: () => true }));
 
-import { catatDatangManual, centangPeserta, hariKegiatan, kirimKode, konfirmasiLokasi, mulaiSesi, muatAtur, muatDatang, muatHadir, muatSesiHari, pesertaKelas, sesiTerbukaUntuk, simpanAtur, simpanPosisiPengelola, tutupSesi, ambilSesi, gantiMetode } from "@/lib/sigapAbsenDb";
+import { keadaanSesi } from "@/lib/sigapAbsen";
+import { catatDatangManual, centangPeserta, hariKegiatan, kirimKode, konfirmasiLokasi, mulaiSesi, muatAtur, muatDatang, muatHadir, muatSesiHari, pesertaKelas, sesiTerbukaUntuk, simpanAtur, simpanPosisiPengelola, tutupSesi, ambilSesi, gantiMetode, kodeBaru, ubahRadius, catatSusulan, centangMassal, muatRekapKoreksi } from "@/lib/sigapAbsenDb";
 
 type Baris = Record<string, unknown>;
 
@@ -56,9 +57,11 @@ function buatDb(awal: Record<string, Baris[]> = {}, tanpaTabel: string[] = []) {
           return { data: null, error: null };
         }
         const kunci = kunciUnik[nama] ?? ["id"];
-        const baru = { ...(isi as Baris) };
-        const ada = rows.find((r) => kunci.every((k) => r[k] === baru[k]));
-        if (ada) Object.assign(ada, baru); else rows.push(baru);
+        for (const masuk of Array.isArray(isi) ? isi : [isi]) {
+          const baru = { ...masuk };
+          const ada = rows.find((r) => kunci.every((k) => r[k] === baru[k]));
+          if (ada) Object.assign(ada, baru); else rows.push(baru);
+        }
         return { data: null, error: null };
       };
       for (const [m, f] of [["eq", (k: string, v: unknown) => (r: Baris) => r[k] === v], ["in", (k: string, v: unknown[]) => (r: Baris) => v.includes(r[k])]] as const) {
@@ -303,5 +306,129 @@ describe("gantiMetode (3 Nov 2026): ganti metode di tengah jalan, jendela waktu 
     const { db } = buatDb({}, ["sigap_kegiatan_absen_sesi"]);
     const g = await gantiMetode(db, { id: 1, kegiatan_id: kegiatan, kode: null } as never, "kode", acak);
     expect(g.ok).toBe(false);
+  });
+});
+
+describe("alat darurat absen (push 114)", () => {
+  const peserta = [
+    { id: 1, akun_id: 11, peran: "ppl", kelas: 1, aktif: true },
+    { id: 2, akun_id: 12, peran: "ppl", kelas: 1, aktif: true },
+    { id: 3, akun_id: 13, peran: "pml", kelas: 1, aktif: true },
+    { id: 4, akun_id: 21, peran: "ppl", kelas: 2, aktif: true },
+  ].map((p) => ({ ...p, kegiatan_id: kegiatan }));
+  const akun = [{ id: 11, nama: "Ani" }, { id: 12, nama: "Budi" }, { id: 13, nama: "Citra" }, { id: 21, nama: "Dedi" }];
+  const awal = () => ({ sigap_penugasan: peserta, sigap_akun: akun });
+
+  it("kodeBaru: kode berbeda, kode lama mati, percobaan salah dibersihkan", async () => {
+    const { db, tabel } = buatDb(awal());
+    const h = await mulai(db, { metode: ["kode"], kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    const lama = h.sesi.kode!;
+    (tabel.sigap_kegiatan_absen_salah ??= []).push({ absen_sesi_id: h.sesi.id, akun_id: 11, jumlah: 5 });
+    const k = await kodeBaru(db, h.sesi, acak); // acak tetap -> harus tetap berbeda
+    expect(k.ok && k.kode).toMatch(/^\d{6}$/);
+    expect(k.ok && k.kode).not.toBe(lama);
+    const baru = (await ambilSesi(db, kegiatan, h.sesi.id))!;
+    expect(baru.kode).toBe(k.ok ? k.kode : "");
+    expect(tabel.sigap_kegiatan_absen_salah).toHaveLength(0);
+    // kode lama ditolak, kode baru diterima
+    expect((await kirimKode(db, baru, 11, 1, lama, T0 + 1000)).ok).toBe(false);
+    expect((await kirimKode(db, baru, 11, 1, baru.kode, T0 + 2000)).ok).toBe(true);
+  });
+  it("kodeBaru: ditolak bila metode bukan kode", async () => {
+    const { db } = buatDb(awal());
+    const h = await mulai(db, { metode: ["radar"], kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    expect((await kodeBaru(db, h.sesi, acak)).ok).toBe(false);
+  });
+  it("ubahRadius: hanya radius sesi itu yang berubah, bukan pengaturan kegiatan", async () => {
+    const { db, tabel } = buatDb(awal());
+    const h = await mulai(db, { metode: ["radar"], kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    expect((await ubahRadius(db, h.sesi, 100)).ok).toBe(true);
+    expect((await ambilSesi(db, kegiatan, h.sesi.id))?.radius_m).toBe(100);
+    expect(tabel.sigap_kegiatan_absen_atur ?? []).toHaveLength(0);
+    // radar memakai radius baru: peserta 60 m dari pengelola kini masuk
+    const sesi = (await ambilSesi(db, kegiatan, h.sesi.id))!;
+    await simpanPosisiPengelola(db, sesi, 99, { lat: -0.79, lng: 100.65, akurasi: 5 }, T0);
+    const r = await konfirmasiLokasi(db, sesi, 11, 1, { lat: -0.79, lng: 100.65 + 0.00054, akurasi: 5 }, T0 + 1000); // ± 60 m
+    expect(r.ok).toBe(true);
+  });
+  it("catatSusulan: sesi ditutup, jam sebenarnya, ditandai susulan, peserta tak bisa mengisi sendiri", async () => {
+    const { db, tabel } = buatDb(awal());
+    const mulaiMs = Date.parse("2026-11-09T01:15:00Z"); // 08:15 WIB
+    const h = await catatSusulan(db, kegiatan, { tanggal: "2026-11-09", no: 1, label: "Sesi 1", jam: "08:15", mulaiMs, kelas: 1, alasan: "Lupa membuka" }, "Panitia A", T0);
+    expect(h.ok).toBe(true);
+    if (!h.ok) return;
+    expect(h.sesi).toMatchObject({ status: "ditutup", metode: ["centang"], kode: null, kelas: 1, dibuka_at: "2026-11-09T01:15:00.000Z", dibuka_oleh: "Panitia A (susulan: Lupa membuka)" });
+    expect(keadaanSesi(h.sesi, T0)).toBe("ditutup");
+    expect((await kirimKode(db, h.sesi, 11, 1, "123456", T0)).ok).toBe(false);
+    expect(tabel.sigap_kegiatan_absen_buka).toHaveLength(1);
+    // dapat diisi dengan centang
+    expect((await centangPeserta(db, h.sesi, 11, true, "Panitia A", "Sesi susulan: Lupa membuka")).ok).toBe(true);
+    expect((await muatHadir(db, [h.sesi.id])).filter((x) => x.diterima)).toHaveLength(1);
+  });
+  it("catatSusulan: menolak sesi yang sudah pernah dimulai (kelas yang sama), kelas lain boleh", async () => {
+    const { db } = buatDb(awal());
+    expect((await mulai(db, { no: 2, kelas: 1 })).ok).toBe(true);
+    const masuk = { tanggal: "2026-11-09", no: 2, label: "Sesi 2", jam: "10:00", mulaiMs: Date.parse("2026-11-09T03:00:00Z"), alasan: "Lupa" };
+    expect((await catatSusulan(db, kegiatan, { ...masuk, kelas: 1 }, "P", T0)).ok).toBe(false);
+    expect((await catatSusulan(db, kegiatan, { ...masuk, kelas: 2 }, "P", T0)).ok).toBe(true);
+  });
+  it("centangMassal: hanya yang belum hadir; yang sudah hadir tidak ditimpa; di luar radar diganti hadir", async () => {
+    const { db, tabel } = buatDb(awal());
+    const h = await mulai(db, { kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    await kirimKode(db, h.sesi, 11, 1, h.sesi.kode, T0 + 1000); // Ani hadir lewat kode
+    (tabel.sigap_kegiatan_absen_hadir ??= []).push({ absen_sesi_id: h.sesi.id, akun_id: 12, metode: "radar", diterima: false, manual: false, jarak_m: 90, akurasi_m: 5, at: "x" }); // Budi di luar radar
+    const semua = await pesertaKelas(db, kegiatan, 1);
+    expect(semua).toHaveLength(3);
+    const r = await centangMassal(db, h.sesi, semua, "Panitia A", "Hadir di ruangan", T0 + 5000);
+    expect(r).toEqual({ ok: true, jumlah: 2 }); // Budi + Citra
+    const hadir = await muatHadir(db, [h.sesi.id]);
+    expect(hadir.filter((x) => x.diterima)).toHaveLength(3);
+    const ani = hadir.find((x) => x.akun_id === 11)!;
+    expect(ani).toMatchObject({ metode: "kode", manual: false }); // tidak ditimpa
+    expect(hadir.find((x) => x.akun_id === 12)).toMatchObject({ metode: "centang", manual: true, diterima: true, alasan: "Hadir di ruangan", dicatat_oleh: "Panitia A" });
+    // diulang -> tak ada yang baru
+    expect(await centangMassal(db, h.sesi, semua, "Panitia A", "Hadir di ruangan", T0 + 6000)).toEqual({ ok: true, jumlah: 0 });
+  });
+  it("centangMassal: kosong ditolak, dan terlalu banyak ditolak", async () => {
+    const { db } = buatDb(awal());
+    const h = await mulai(db, { kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    expect((await centangMassal(db, h.sesi, [], "P", "alasan", T0)).ok).toBe(false);
+    const banyak = Array.from({ length: 501 }, (_, i) => ({ akun_id: 1000 + i, nama: "x", kelas: 1, penugasan_id: i }));
+    expect((await centangMassal(db, h.sesi, banyak, "P", "alasan", T0)).ok).toBe(false);
+  });
+  it("muatRekapKoreksi: centang manual, kedatangan manual, dan sesi susulan; terbaru di atas; dibatasi kelas", async () => {
+    const { db, tabel } = buatDb(awal());
+    const h = await mulai(db, { kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    await centangPeserta(db, h.sesi, 12, true, "Panitia A", "Tangan tidak sempat");
+    await kirimKode(db, h.sesi, 11, 1, h.sesi.kode, T0 + 1000); // otomatis, tidak masuk rekap
+    await catatSusulan(db, kegiatan, { tanggal: "2026-11-09", no: 1, label: "Sesi 1", jam: "08:15", mulaiMs: Date.parse("2026-11-09T01:15:00Z"), kelas: 1, alasan: "Lupa membuka" }, "Panitia A", T0 + 2000);
+    await catatSusulan(db, kegiatan, { tanggal: "2026-11-09", no: 1, label: "Sesi 1", jam: "08:15", mulaiMs: Date.parse("2026-11-09T01:15:00Z"), kelas: 2, alasan: "Lupa kelas 2" }, "Panitia B", T0 + 3000);
+    (tabel.sigap_pelatihan_presensi ??= []).push(
+      { kegiatan_id: kegiatan, akun_id: 13, tanggal: "2026-11-09", at: "2026-11-09T01:00:00.000Z", manual: true, diterima: true, alasan: "GPS meleset", dicatat_oleh: "Panitia A" },
+      { kegiatan_id: kegiatan, akun_id: 21, tanggal: "2026-11-09", at: "2026-11-09T01:05:00.000Z", manual: true, diterima: true, alasan: "GPS meleset", dicatat_oleh: "Panitia B" },
+      { kegiatan_id: kegiatan, akun_id: 11, tanggal: "2026-11-09", at: "2026-11-09T00:55:00.000Z", manual: false, diterima: true, alasan: null, dicatat_oleh: null },
+    );
+    const kelas1 = await muatRekapKoreksi(db, kegiatan, 1);
+    expect(kelas1.map((r) => r.jenis).sort()).toEqual(["centang", "datang", "susulan"]);
+    expect(kelas1.find((r) => r.jenis === "centang")).toMatchObject({ nama: "Budi", alasan: "Tangan tidak sempat", oleh: "Panitia A", sesi: "Sesi 2 · Kelas 1" });
+    expect(kelas1.find((r) => r.jenis === "susulan")).toMatchObject({ alasan: "Lupa membuka", oleh: "Panitia A", nama: "Kelas 1" });
+    expect(kelas1.find((r) => r.jenis === "datang")).toMatchObject({ nama: "Citra", alasan: "GPS meleset" });
+    expect(kelas1.every((r, i, a) => i === 0 || a[i - 1].at >= r.at)).toBe(true);
+    const semua = await muatRekapKoreksi(db, kegiatan, null);
+    expect(semua).toHaveLength(5); // + susulan kelas 2 + datang Dedi
+  });
+  it("tabel absen belum ada -> fungsi tidak melempar galat", async () => {
+    const { db } = buatDb(awal(), ["sigap_kegiatan_absen_sesi"]);
+    expect(await muatRekapKoreksi(db, kegiatan, null)).toEqual([]);
+    const s = { id: 1, kegiatan_id: kegiatan, kode: "111111", metode: ["kode"] } as never;
+    expect((await kodeBaru(db, s, acak)).ok).toBe(false);
+    expect((await ubahRadius(db, s, 50)).ok).toBe(false);
+    expect((await catatSusulan(db, kegiatan, { tanggal: "2026-11-09", no: 1, label: "x", jam: "08:00", mulaiMs: T0, kelas: null, alasan: "abc" }, "P", T0)).ok).toBe(false);
   });
 });

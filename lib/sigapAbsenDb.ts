@@ -7,8 +7,8 @@ import type { Db } from "@/lib/sigap";
 import { FILTER_BUKAN_ADMINISTRASI } from "@/lib/sigapTesDb";
 import { muatPenolak } from "@/lib/sigapPelatihanBaruDb";
 import {
-  JENDELA_MENIT_BAWAAN, RADIUS_RADAR_BAWAAN_M, SALAH_KODE_MAKS, buatKode, keadaanSesi, kodeCocok, nilaiRadar, PESAN_RADAR, rapikanSesi, rentangHari, tanggalWib, tungguKode, tutupAtDari,
-  type MetodeAbsen, type Posisi, type SesiRencana,
+  CENTANG_MASSAL_MAKS, JENDELA_MENIT_BAWAAN, RADIUS_RADAR_BAWAAN_M, SALAH_KODE_MAKS, bacaSusulan, buatKode, keadaanSesi, penandaSusulan, kodeCocok, nilaiRadar, PESAN_RADAR, rapikanSesi, rentangHari, tanggalWib, tungguKode, tutupAtDari,
+  type BarisRekap, type MetodeAbsen, type Posisi, type SesiRencana,
 } from "@/lib/sigapAbsen";
 
 export const PESAN_SQL = "Absen peserta belum aktif di basis data. Jalankan SQL 20261102zk_kegiatan_absen.";
@@ -336,4 +336,120 @@ export async function batalDatangManual(db: Db, kegiatanId: number, akunId: numb
   } catch {
     return { ok: false, pesan: "Centang belum dapat dibatalkan." };
   }
+}
+
+// ---------- alat darurat (3 Nov 2026, push 114) ----------
+
+/** Kode bocor: buat kode baru (pasti berbeda); kode lama langsung mati dan percobaan salah-ketik dibersihkan supaya peserta tidak terkunci. */
+export async function kodeBaru(db: Db, sesi: SesiAbsen, acak: () => number): Promise<{ ok: true; kode: string } | { ok: false; pesan: string }> {
+  if (!sesi.metode.includes("kode")) return { ok: false, pesan: "Sesi ini sedang tidak memakai kode. Ganti metode ke Kode unik dahulu." };
+  try {
+    let kode = buatKode(acak);
+    if (kode === sesi.kode) kode = `${kode.slice(0, -1)}${(Number(kode.slice(-1)) + 1) % 10}`; // pasti berbeda walau sumber acak menghasilkan angka sama
+    const { error } = await db.from("sigap_kegiatan_absen_sesi").update({ kode }).eq("id", sesi.id).eq("kegiatan_id", sesi.kegiatan_id);
+    if (error) return { ok: false, pesan: "Kode belum dapat dibuat ulang." };
+    await db.from("sigap_kegiatan_absen_salah").delete().eq("absen_sesi_id", sesi.id);
+    return { ok: true, kode };
+  } catch {
+    return { ok: false, pesan: PESAN_SQL };
+  }
+}
+
+/** Radius radar sementara untuk SATU sesi (pengaturan umum kegiatan tidak berubah). */
+export async function ubahRadius(db: Db, sesi: SesiAbsen, radius: number): Promise<{ ok: boolean; pesan?: string }> {
+  try {
+    const { error } = await db.from("sigap_kegiatan_absen_sesi").update({ radius_m: radius }).eq("id", sesi.id).eq("kegiatan_id", sesi.kegiatan_id);
+    return error ? { ok: false, pesan: "Radius belum dapat diubah." } : { ok: true };
+  } catch {
+    return { ok: false, pesan: PESAN_SQL };
+  }
+}
+
+export type MasukanSusulan = { tanggal: string; no: number; label: string; jam: string; mulaiMs: number; kelas: number | null; alasan: string };
+
+/**
+ * Sesi LUPA dibuka: dicatat sesudah kejadian dengan jam sebenarnya dan alasan. Sesinya langsung berstatus ditutup (peserta tidak bisa lagi mengisi sendiri);
+ * kehadiran diisi pengelola dengan centang. Ditandai di `dibuka_oleh` ("Nama (susulan: alasan)"), tanpa kolom baru.
+ */
+export async function catatSusulan(db: Db, kegiatanId: number, masuk: MasukanSusulan, oleh: string, nowMs: number): Promise<{ ok: true; sesi: SesiAbsen } | { ok: false; pesan: string }> {
+  try {
+    const atur = await muatAtur(db, kegiatanId);
+    const { data: ada, error: e0 } = await db.from("sigap_kegiatan_absen_sesi").select(KOLOM_SESI).eq("kegiatan_id", kegiatanId).eq("tanggal", masuk.tanggal).eq("no", masuk.no).limit(50);
+    if (e0) return { ok: false, pesan: PESAN_SQL };
+    if (((ada ?? []) as SesiAbsen[]).some((s) => (s.kelas ?? null) === (masuk.kelas ?? null))) return { ok: false, pesan: "Sesi ini sudah pernah dimulai. Lengkapi daftar hadirnya dengan Centang." };
+    const buka = new Date(masuk.mulaiMs).toISOString();
+    const nilai = {
+      kegiatan_id: kegiatanId, tanggal: masuk.tanggal, no: masuk.no, label: masuk.label.slice(0, 40), jam_rencana: atur.sesi.find((x) => x.no === masuk.no)?.jam || masuk.jam, kelas: masuk.kelas,
+      metode: ["centang"], kode: null, radius_m: atur.radius_m, jendela_menit: atur.jendela_menit, status: "ditutup", dibuka_oleh: penandaSusulan(oleh, masuk.alasan),
+      dibuka_at: buka, tutup_at: new Date(masuk.mulaiMs + atur.jendela_menit * 60_000).toISOString(), ditutup_at: new Date(nowMs).toISOString(),
+    };
+    const { data, error } = await db.from("sigap_kegiatan_absen_sesi").insert(nilai).select(KOLOM_SESI).maybeSingle();
+    if (error || !data) return { ok: false, pesan: error?.code === "23505" ? "Sesi ini baru saja dibuka pengelola lain. Muat ulang." : "Sesi susulan belum dapat dicatat." };
+    const baris = data as SesiAbsen;
+    await db.from("sigap_kegiatan_absen_buka").insert({ absen_sesi_id: baris.id, dibuka_oleh: nilai.dibuka_oleh, dibuka_at: buka, tutup_at: nilai.tutup_at, disarankan_no: null, dipilih_no: masuk.no });
+    return { ok: true, sesi: baris };
+  } catch {
+    return { ok: false, pesan: PESAN_SQL };
+  }
+}
+
+/**
+ * Centang massal ("semua yang ada di ruangan"): hanya peserta kelas sesi yang BELUM tercatat hadir; yang sudah hadir (GPS/kode/centang) tidak ditimpa.
+ * Percobaan radar di luar radius (diterima=false) ikut diganti menjadi hadir. Wajib beralasan; tercatat manual sehingga masuk rekap koreksi.
+ */
+export async function centangMassal(db: Db, sesi: SesiAbsen, peserta: readonly PesertaAbsen[], oleh: string, alasan: string, nowMs: number): Promise<{ ok: true; jumlah: number } | { ok: false; pesan: string }> {
+  if (peserta.length === 0) return { ok: false, pesan: "Pilih minimal satu peserta." };
+  if (peserta.length > CENTANG_MASSAL_MAKS) return { ok: false, pesan: `Maksimal ${CENTANG_MASSAL_MAKS} peserta sekali centang.` };
+  try {
+    const sudah = new Set((await muatHadir(db, [sesi.id])).filter((h) => h.diterima).map((h) => h.akun_id));
+    const baru = peserta.filter((p) => !sudah.has(p.akun_id));
+    if (baru.length === 0) return { ok: true, jumlah: 0 };
+    const at = new Date(nowMs).toISOString();
+    const { error } = await db.from("sigap_kegiatan_absen_hadir").upsert(
+      baru.map((p) => ({ absen_sesi_id: sesi.id, akun_id: p.akun_id, metode: "centang", diterima: true, manual: true, alasan: alasan.slice(0, 200), jarak_m: null, akurasi_m: null, dicatat_oleh: oleh.slice(0, 120), at })),
+      { onConflict: "absen_sesi_id,akun_id" }
+    );
+    return error ? { ok: false, pesan: "Centang massal belum dapat disimpan." } : { ok: true, jumlah: baru.length };
+  } catch {
+    return { ok: false, pesan: PESAN_SQL };
+  }
+}
+
+/**
+ * Rekap koreksi untuk laporan: semua centang manual sesi, centang manual kedatangan, dan sesi susulan. `kelas` null = semua kelas (panitia);
+ * angka = hanya kelas itu (instruktur). Terbaru di atas.
+ */
+export async function muatRekapKoreksi(db: Db, kegiatanId: number, kelas: number | null): Promise<BarisRekap[]> {
+  const hasil: BarisRekap[] = [];
+  try {
+    const [peserta, { data: sesiData }] = await Promise.all([
+      pesertaKelas(db, kegiatanId, kelas),
+      db.from("sigap_kegiatan_absen_sesi").select(KOLOM_SESI).eq("kegiatan_id", kegiatanId).order("tanggal", { ascending: false }).limit(2000),
+    ]);
+    const nama = new Map(peserta.map((p) => [p.akun_id, p.nama]));
+    const sesiSemua = ((sesiData ?? []) as SesiAbsen[]).filter((s) => kelas === null || Number(s.kelas) === kelas);
+    const labelSesi = (s: SesiAbsen) => `${s.label}${s.kelas !== null && s.kelas !== undefined ? ` · Kelas ${s.kelas}` : ""}`;
+    const petaSesi = new Map(sesiSemua.map((s) => [s.id, s]));
+    for (const s of sesiSemua) {
+      const alasan = bacaSusulan(s.dibuka_oleh);
+      if (alasan === null) continue;
+      hasil.push({ jenis: "susulan", tanggal: s.tanggal, sesi: labelSesi(s), nama: s.kelas !== null && s.kelas !== undefined ? `Kelas ${s.kelas}` : "Semua kelas", alasan, oleh: (s.dibuka_oleh ?? "").replace(/\s*\(susulan: .*\)$/, ""), at: s.ditutup_at ?? s.dibuka_at });
+    }
+    if (petaSesi.size > 0) {
+      const { data } = await db.from("sigap_kegiatan_absen_hadir").select(KOLOM_HADIR).eq("manual", true).in("absen_sesi_id", [...petaSesi.keys()]).limit(20000);
+      for (const h of (data ?? []) as HadirAbsen[]) {
+        const s = petaSesi.get(h.absen_sesi_id);
+        if (!s || !h.diterima) continue;
+        hasil.push({ jenis: "centang", tanggal: s.tanggal, sesi: labelSesi(s), nama: nama.get(h.akun_id) ?? `Akun ${h.akun_id}`, alasan: h.alasan ?? "", oleh: h.dicatat_oleh ?? "", at: h.at });
+      }
+    }
+    const { data: dm } = await db.from("sigap_pelatihan_presensi").select("akun_id, tanggal, at, alasan, dicatat_oleh").eq("kegiatan_id", kegiatanId).eq("manual", true).eq("diterima", true).order("at", { ascending: false }).limit(5000);
+    for (const r of (dm ?? []) as { akun_id: number; tanggal: string; at: string; alasan: string | null; dicatat_oleh: string | null }[]) {
+      if (kelas !== null && !nama.has(r.akun_id)) continue;
+      hasil.push({ jenis: "datang", tanggal: r.tanggal, sesi: "Kedatangan", nama: nama.get(r.akun_id) ?? `Akun ${r.akun_id}`, alasan: r.alasan ?? "", oleh: r.dicatat_oleh ?? "", at: r.at });
+    }
+  } catch {
+    /* kosong */
+  }
+  return hasil.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, 3000);
 }

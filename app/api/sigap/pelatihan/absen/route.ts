@@ -8,6 +8,9 @@
 //                            sesi_hari:[{id,no,label,jam,keadaan:dibuka|habis|ditutup,tutup_at,sudah_hadir}] (3 Nov 2026: semua sesi hari ini untuk kelas peserta) }
 // POST pengelola: {aksi:"mulai",tanggal,no,label?,jam?,kelas?,metode:[...]} | {aksi:"tutup",sesi_id} | {aksi:"ganti",sesi_id,metode} (3 Nov 2026) | {aksi:"centang",sesi_id,akun_id,hadir,alasan?}
 //                 | {aksi:"datang",akun_id,hadir,alasan?,tanggal} | {aksi:"posisi",sesi_id,lat,lng,akurasi} | {aksi:"atur",sesi?,jendela_menit?,radius_m?} (izin kelola)
+//                 | (3 Nov 2026, alat darurat) {aksi:"susulan",tanggal,no,label?,jam,kelas?,alasan} | {aksi:"kode_baru",sesi_id} | {aksi:"radius",sesi_id,radius_m}
+//                 | {aksi:"centang_massal",sesi_id,akun_ids[],alasan}
+// GET pengelola ?rekap=1 -> { rekap:[{jenis,tanggal,sesi,nama,alasan,oleh,at}] } rekap koreksi (centang manual, kedatangan manual, sesi susulan); instruktur hanya kelasnya.
 // POST peserta:   {aksi:"kode",sesi_id,kode} | {aksi:"lokasi",sesi_id,lat,lng,akurasi}
 // Waktu dan jendela SELALU dihitung di server. Instruktur hanya mengelola kelasnya; panitia semua kelas.
 
@@ -19,10 +22,10 @@ import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 import { tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { posisiValid } from "@/lib/sigapPresensi";
-import { kedatanganBerlaku, keadaanSesi, menitWib, periksaMetodeTunggal, sarankanSesi, sisaDetik, tanggalWib } from "@/lib/sigapAbsen";
+import { bacaSusulan, kedatanganBerlaku, keadaanSesi, menitWib, periksaAlasan, periksaJamSusulan, periksaMetodeTunggal, periksaRadius, sarankanSesi, sisaDetik, tanggalWib } from "@/lib/sigapAbsen";
 import {
-  ambilSesi, batalDatangManual, catatDatangManual, centangPeserta, gantiMetode, hariKegiatan, kirimKode, konfirmasiLokasi, muatAtur, muatDatang, muatHadir, muatSesiHari, mulaiSesi, pesertaKelas,
-  simpanAtur, simpanPosisiPengelola, tutupSesi, PESAN_SQL,
+  ambilSesi, batalDatangManual, catatDatangManual, catatSusulan, centangMassal, centangPeserta, gantiMetode, hariKegiatan, kirimKode, kodeBaru, konfirmasiLokasi, muatAtur, muatDatang, muatHadir, muatRekapKoreksi,
+  muatSesiHari, mulaiSesi, pesertaKelas, simpanAtur, simpanPosisiPengelola, tutupSesi, ubahRadius, PESAN_SQL,
 } from "@/lib/sigapAbsenDb";
 
 export const runtime = "nodejs";
@@ -86,6 +89,7 @@ export async function GET(req: NextRequest) {
     const kelasPilihan = Array.from(new Set(semua.map((p) => p.kelas).filter((k): k is number => k !== null))).sort((a, b) => a - b);
     const kelasMinta = angka(url.searchParams.get("kelas"));
     const kelas = kelasTerkunci ? (pengguna as { kelas: number }).kelas : kelasMinta !== null && kelasPilihan.includes(kelasMinta) ? kelasMinta : kelasPilihan.length === 1 ? kelasPilihan[0] : null;
+    if (url.searchParams.get("rekap") === "1") return NextResponse.json({ rekap: await muatRekapKoreksi(db, kegiatanId, kelas) });
     const tanggalMinta = url.searchParams.get("tanggal");
     const tanggal = tanggalSah(tanggalMinta) ? tanggalMinta : tanggalWib(sekarang);
     const peserta = kelas === null ? semua : semua.filter((p) => p.kelas === kelas);
@@ -103,7 +107,7 @@ export async function GET(req: NextRequest) {
       const d = sesiKelas.find((s) => s.no === no) ?? null;
       return {
         no, label: d?.label ?? r?.label ?? `Sesi ${no}`, jam: d?.jam_rencana ?? r?.jam ?? "",
-        sesi: d ? { id: d.id, metode: d.metode, kode: d.kode, status: d.status, keadaan: keadaanSesi(d, sekarang), dibuka_at: d.dibuka_at, tutup_at: d.tutup_at, sisa_detik: sisaDetik(d.tutup_at, sekarang), radius_m: d.radius_m } : null,
+        sesi: d ? { id: d.id, metode: d.metode, kode: d.kode, status: d.status, keadaan: keadaanSesi(d, sekarang), dibuka_at: d.dibuka_at, tutup_at: d.tutup_at, sisa_detik: sisaDetik(d.tutup_at, sekarang), radius_m: d.radius_m, susulan: bacaSusulan(d.dibuka_oleh) } : null,
         sudah_dimulai: dimulai.has(no),
       };
     });
@@ -193,6 +197,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, sesi: { id: h.sesi.id, no: h.sesi.no, kode: h.sesi.kode, metode: h.sesi.metode, tutup_at: h.sesi.tutup_at, sisa_detik: sisaDetik(h.sesi.tutup_at, sekarang) } });
     }
 
+    if (aksi === "susulan") {
+      // (3 Nov 2026) sesi yang lupa dibuka: dicatat sesudah kejadian dengan jam sebenarnya dan alasan; kehadiran diisi dengan centang
+      const no = angka(body.no);
+      if (no === null || !Number.isInteger(no) || no < 1 || no > 12) return galat("Nomor sesi tidak valid.");
+      if (!tanggalSah(body.tanggal)) return galat("Tanggal tidak valid.");
+      const hariKeg = await hariKegiatan(db, kegiatanId);
+      if (hariKeg.length > 0 && !hariKeg.includes(body.tanggal)) return galat("Tanggal itu bukan hari pelatihan.");
+      const j = periksaJamSusulan(body.jam, body.tanggal, sekarang);
+      if (!j.ok) return galat(j.pesan);
+      const a = periksaAlasan(body.alasan);
+      if (!a.ok) return galat(a.pesan);
+      const kelasMinta = angka(body.kelas);
+      const kelas = kelasSendiri !== null ? kelasSendiri : kelasMinta;
+      if (!bolehKelas(kelas)) return galat("Anda hanya dapat mengelola kelas Anda sendiri.", 403);
+      const atur = await muatAtur(db, kegiatanId);
+      const label = typeof body.label === "string" && body.label.trim() ? body.label.trim() : atur.sesi.find((x) => x.no === no)?.label ?? `Sesi ${no}`;
+      const h = await catatSusulan(db, kegiatanId, { tanggal: body.tanggal, no, label, jam: j.jam, mulaiMs: j.mulaiMs, kelas, alasan: a.alasan }, akun.nama, sekarang);
+      if (!h.ok) return galat(h.pesan, h.pesan === PESAN_SQL ? 500 : 409);
+      await catatAudit(db, akun.id, "absen_susulan", { kegiatan_id: kegiatanId, sesi_id: h.sesi.id, no, kelas, tanggal: body.tanggal, jam: j.jam, alasan: a.alasan });
+      return NextResponse.json({ ok: true, sesi: { id: h.sesi.id, no: h.sesi.no } });
+    }
+
     if (aksi === "datang") {
       const akunId = angka(body.akun_id);
       const tanggal = tanggalSah(body.tanggal) ? body.tanggal : tanggalWib(sekarang);
@@ -243,6 +269,41 @@ export async function POST(req: NextRequest) {
       const h = await centangPeserta(db, sesi, akunId, body.hadir !== false, akun.nama, typeof body.alasan === "string" ? body.alasan : null);
       if (!h.ok) return galat(h.pesan ?? "Gagal menyimpan.", 500);
       return NextResponse.json({ ok: true });
+    }
+
+    if (aksi === "kode_baru") {
+      // (3 Nov 2026) kode bocor: kode lama langsung mati
+      if (keadaanSesi(sesi, sekarang) !== "dibuka") return galat("Sesi ini sudah tidak dibuka.", 409);
+      const h = await kodeBaru(db, sesi, acakKuat);
+      if (!h.ok) return galat(h.pesan, h.pesan === PESAN_SQL ? 500 : 409);
+      await catatAudit(db, akun.id, "absen_kode_baru", { kegiatan_id: kegiatanId, sesi_id: sesiId });
+      return NextResponse.json({ ok: true, kode: h.kode });
+    }
+
+    if (aksi === "radius") {
+      // (3 Nov 2026) radius sementara untuk sesi ini saja (mis. aula besar atau GPS meleset)
+      if (keadaanSesi(sesi, sekarang) !== "dibuka") return galat("Sesi ini sudah tidak dibuka.", 409);
+      if (!sesi.metode.includes("radar")) return galat("Sesi ini sedang tidak memakai radar GPS.", 409);
+      const r = periksaRadius(body.radius_m);
+      if (!r.ok) return galat(r.pesan);
+      const h = await ubahRadius(db, sesi, r.radius);
+      if (!h.ok) return galat(h.pesan ?? "Gagal mengubah radius.", 500);
+      await catatAudit(db, akun.id, "absen_radius", { kegiatan_id: kegiatanId, sesi_id: sesiId, dari: sesi.radius_m, ke: r.radius });
+      return NextResponse.json({ ok: true, radius_m: r.radius });
+    }
+
+    if (aksi === "centang_massal") {
+      const a = periksaAlasan(body.alasan);
+      if (!a.ok) return galat(a.pesan);
+      const ids = Array.isArray(body.akun_ids) ? Array.from(new Set(body.akun_ids.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0))) : [];
+      if (ids.length === 0) return galat("Pilih minimal satu peserta.");
+      const daftar = await pesertaKelas(db, kegiatanId, sesi.kelas ?? null);
+      const dipilih = daftar.filter((p) => ids.includes(p.akun_id));
+      if (dipilih.length === 0) return galat("Peserta tidak ditemukan di kelas sesi ini.", 404);
+      const h = await centangMassal(db, sesi, dipilih, akun.nama, a.alasan, sekarang);
+      if (!h.ok) return galat(h.pesan, h.pesan === PESAN_SQL ? 500 : 400);
+      await catatAudit(db, akun.id, "absen_centang_massal", { kegiatan_id: kegiatanId, sesi_id: sesiId, jumlah: h.jumlah, dipilih: dipilih.length, alasan: a.alasan });
+      return NextResponse.json({ ok: true, jumlah: h.jumlah });
     }
 
     if (aksi === "posisi") {
