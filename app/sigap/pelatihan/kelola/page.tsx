@@ -17,6 +17,7 @@ import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
 import PersiapanGabung from "./persiapanGabung"; // (2 Nov 2026) tab Persiapan: Pengaturan (tampilan peserta, ketentuan, absen, aturan nilai) + Instrumen (unggah kuesioner, pedoman, PPT)
 import TimPesertaKelola from "./hierarki"; // (2 Nov 2026) tab Tim & Peserta: hierarki + kelas
+import KendalaKelola from "./kendala"; // (3 Nov 2026) tab Kendala: petugas menolak / mundur -> ganti, kosongkan, atau alihkan
 import HariKerjaKelola from "./hariKerja"; // (2 Nov 2026) tab Hari Kerja: matriks peserta x tanggal, buatkan / lepas / pindahkan dari kegiatan lain
 import { KomunikasiKelola, KuisRapatKelola } from "./grup"; // (2 Nov 2026) tab gabungan: Kuis & Rapat, Notifikasi (+ Pengumuman)
 import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard (tampil bila kegiatan memakai Vanguard)
@@ -47,8 +48,8 @@ const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
 // (2 Nov 2026) 10 tab dirapikan menjadi 7. Alamat lama (?tab=pengumuman, rapat, kuispra, kelas, ...) tetap dikenali lewat PETA_TAB_LAMA.
-type TabK = "persiapan" | "tim" | "harikerja" | "soal" | "kuis" | "notifikasi" | "monitoring" | "administrasi";
-const TAB_SAH: TabK[] = ["persiapan", "tim", "harikerja", "soal", "kuis", "notifikasi", "monitoring", "administrasi"];
+type TabK = "persiapan" | "tim" | "kendala" | "harikerja" | "soal" | "kuis" | "notifikasi" | "monitoring" | "administrasi";
+const TAB_SAH: TabK[] = ["persiapan", "tim", "kendala", "harikerja", "soal", "kuis", "notifikasi", "monitoring", "administrasi"];
 const PETA_TAB_LAMA: Record<string, { tab: TabK; sub?: string }> = {
   pengumuman: { tab: "notifikasi", sub: "pengumuman" },
   rapat: { tab: "kuis", sub: "rapat" },
@@ -199,11 +200,12 @@ export default function KelolaPelatihan() {
       kecil="SIGAP · Kelola Pelatihan"
       jejak={["Pelatihan", "Kelola", surveiAktif?.nama ?? namaPelatihan ?? "Pelatihan"]}
       judul="Kelola Pelatihan"
-      sub={`Persiapan, tim, soal & jadwal, kuis, notifikasi & monitoring${namaPelatihan ? ` · ${namaPelatihan}` : ""}`}
+      sub={`Persiapan, tim, kendala, soal & jadwal, kuis, notifikasi & monitoring${namaPelatihan ? ` · ${namaPelatihan}` : ""}`}
       kembali={{ label: "Daftar survei", onKlik: keDaftar }}
       tab={[
         { kode: "persiapan", label: "🧭 Persiapan" },
         { kode: "tim", label: "👥 Tim & Peserta" },
+        { kode: "kendala", label: "🛠 Kendala" },
         { kode: "harikerja", label: "📅 Hari Kerja" },
         { kode: "soal", label: "Soal & Jadwal" },
         { kode: "kuis", label: "🎮 Kuis & Rapat" },
@@ -234,6 +236,7 @@ export default function KelolaPelatihan() {
       )}
       {ringkas && tab === "persiapan" && <PersiapanGabung key={kegId ?? 0} />}
       {ringkas && tab === "tim" && <TimPesertaKelola key={kegId ?? 0} />}
+      {ringkas && tab === "kendala" && <KendalaKelola key={kegId ?? 0} />}
       {ringkas && tab === "harikerja" && <HariKerjaKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuis" && <KuisRapatKelola key={kegId ?? 0} kegiatanId={kegId} bisaKelola={ringkas.boleh_kelola} />}
       {ringkas && tab === "notifikasi" && <KomunikasiKelola key={kegId ?? 0} />}
