@@ -17,6 +17,8 @@ const st = {
   masukan: new Map<number, Record<string, { ada: boolean; tuntas: boolean }>>(),
   tes: [] as Record<string, unknown>[],
   izin: new Map<number, Record<string, unknown>[]>(),
+  gerbang: "boleh" as "boleh" | "belum" | "ditolak",
+  penolak: [] as { akun_id: number; nama: string; alasan: string | null; dijawab_at: string }[],
   materi: null as null | { tersedia: boolean; wajib_total: number; belum: Map<number, number>; manual: Set<number> } | "galat",
 };
 const dasar = (pretest: boolean, posttest = false) => ({ video: { ada: false, tuntas: false }, vanguard: { ada: false, tuntas: false }, pretest: { ada: true, tuntas: pretest }, kuis: { ada: false, tuntas: false }, posttest: { ada: true, tuntas: posttest } });
@@ -29,6 +31,8 @@ vi.mock("@/lib/sigapNilai", () => ({ muatNilaiAkhir: async () => ({ per: new Map
 vi.mock("@/lib/sigapPelatihanBaruDb", () => ({
   tentukanPengguna: async () => st.pengguna,
   muatSimpulHierarki: async () => ({ tersedia: true, simpul: st.simpul }),
+  periksaGerbang: async () => st.gerbang, // (3 Nov 2026) gerbang undangan
+  muatDaftarPenolak: async () => st.penolak,
   muatProgres: async (_d: unknown, _k: number, ids: number[]) => new Map(ids.map((i) => [i, { undangan: "terima", pretest: { status: "belum", skor: null }, posttest: { status: "belum", skor: null }, hadir: false }])),
 }));
 vi.mock("@/lib/sigapTahapanDb", () => ({
@@ -57,6 +61,8 @@ beforeEach(() => {
   st.tes = [tesBuka("pretest", "2026-11-09T01:00:00Z"), tesBuka("posttest", "2026-11-09T02:00:00Z")];
   st.izin = new Map();
   st.materi = null;
+  st.gerbang = "boleh";
+  st.penolak = [];
 });
 
 describe("Monitoring: kunci dan izin", () => {
@@ -98,6 +104,16 @@ describe("Monitoring: kunci dan izin", () => {
     st.pengguna = { jenis: "peserta", akun_id: 11 };
     const r = await ambil();
     expect(r.body.boleh_buka_kunci).toBe(false);
+  });
+  it("gerbang undangan: peserta yang belum menerima undangan ditolak (403); pengelola tidak tertahan dan melihat daftar penolak", async () => {
+    st.gerbang = "belum";
+    st.pengguna = { jenis: "peserta", akun_id: 11 };
+    expect((await ambil()).status).toBe(403);
+    st.pengguna = { jenis: "panitia" };
+    st.penolak = [{ akun_id: 12, nama: "Beni", alasan: "sakit", dijawab_at: "2026-11-09T01:00:00Z" }];
+    const r = await ambil();
+    expect(r.status).toBe(200);
+    expect((r.body as unknown as { penolak: unknown[] }).penolak).toHaveLength(1);
   });
   it("instruktur boleh membuka kunci", async () => {
     st.pengguna = { jenis: "instruktur", kelas: 1 };

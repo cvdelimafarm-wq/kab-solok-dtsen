@@ -3,7 +3,7 @@
 // (2 Nov 2026) Absen peserta (pelatihan, kelak rapat lapangan dan Cekatan): logika MURNI tanpa akses database, dipakai server dan layar.
 // Aturan (rancangan-absen-kedatangan-jendela-30-menit-2nov): kedatangan hanya hari pertama; presensi SESI dibuka pengelola, habis otomatis
 // setelah jendela (30 menit), kartu hanya berpindah saat pengelola menekan Mulai, sistem hanya MENYARANKAN sesi dari jam rencana terdekat.
-// Metode sesi: centang satu per satu, kode tetap selama sesi, radar GPS dari posisi pengelola.
+// Metode sesi (satu per satu, tidak bersamaan): centang satu per satu, kode tetap selama sesi, radar GPS dari posisi pengelola (HP peserta melapor posisi otomatis).
 
 import { jarakMeter, posisiValid } from "@/lib/sigapPresensi";
 
@@ -134,6 +134,25 @@ export function periksaMetode(x: unknown): { ok: true; metode: MetodeAbsen[] } |
   }
   return { ok: true, metode: hasil };
 }
+
+/**
+ * (3 Nov 2026) Satu sesi memakai SATU metode pada satu waktu (radar dan kode tidak berjalan bersamaan). Menerima "radar" atau ["radar"].
+ * Mengganti metode di tengah jalan memakai aksi "ganti"; berhenti memakai "tutup" lalu "mulai" lagi.
+ */
+export function periksaMetodeTunggal(x: unknown): { ok: true; metode: MetodeAbsen } | { ok: false; pesan: string } {
+  const daftar = Array.isArray(x) ? x : x === undefined || x === null ? [] : [x];
+  if (daftar.length === 0) return { ok: false, pesan: "Pilih satu metode absen." };
+  if (daftar.length > 1) return { ok: false, pesan: "Pilih satu metode saja pada satu waktu." };
+  return SEMUA_METODE.includes(daftar[0] as MetodeAbsen) ? { ok: true, metode: daftar[0] as MetodeAbsen } : { ok: false, pesan: "Metode absen tidak dikenal." };
+}
+
+/** Sesi lama bisa menyimpan lebih dari satu metode; pada ganti metode atau tampilan tunggal dipakai yang pertama menurut urutan prioritas radar > kode > centang. */
+export function metodeUtama(metode: readonly MetodeAbsen[]): MetodeAbsen {
+  return (["radar", "kode", "centang"] as const).find((m) => metode.includes(m)) ?? "centang";
+}
+
+/** Radar otomatis di HP peserta: jeda antar laporan posisi ke server selama sesi radar terbuka dan peserta belum tercatat hadir. */
+export const JEDA_RADAR_OTOMATIS_MS = 8_000;
 
 // ---------- kode ----------
 

@@ -13,7 +13,7 @@ import { fetchJson, pesanGalat } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Kerangka } from "../komponen";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
-import { NAMA_METODE, SEMUA_METODE, teksSisa, type MetodeAbsen } from "@/lib/sigapAbsen";
+import { NAMA_METODE, SEMUA_METODE, teksSisa, type MetodeAbsen, metodeUtama } from "@/lib/sigapAbsen";
 
 type Sesi = {
   no: number; label: string; jam: string; sudah_dimulai: boolean;
@@ -37,25 +37,31 @@ function Chip({ teks, nada }: { teks: string; nada: "ok" | "wait" | "bad" | "mut
   return <span className={`inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${w}`}>{teks}</span>;
 }
 
-function bacaMetodeTersimpan(): MetodeAbsen[] {
+function bacaMetodeTersimpan(): MetodeAbsen {
   try {
     const x = JSON.parse(localStorage.getItem(KUNCI_METODE) ?? "null");
     if (Array.isArray(x)) {
       const ok = x.filter((m): m is MetodeAbsen => SEMUA_METODE.includes(m));
-      if (ok.length) return ok;
+      if (ok.length) return metodeUtama(ok);
     }
   } catch {
     /* abaikan */
   }
-  return ["centang", "kode"];
+  return "kode";
 }
 
+/** Penjelasan singkat tiap metode (satu metode pada satu waktu). */
+const KET_METODE = (radius: number): Record<MetodeAbsen, string> => ({
+  centang: "Anda mencentang peserta satu per satu.",
+  kode: "Peserta mengetik kode 6 angka yang tampil di layar Anda.",
+  radar: `GPS HP semua peserta ikut aktif; yang masuk radius ${radius} m dari posisi Anda tercatat hadir otomatis.`,
+});
+
 /** Lembar bawah "Mulai presensi": pilih sesi (disarankan = jam rencana terdekat) dan metode. */
-function LembarMulai({ d, onTutup, onMulai, sibuk }: { d: Data; onTutup: () => void; onMulai: (no: number, metode: MetodeAbsen[]) => void; sibuk: boolean }) {
+function LembarMulai({ d, onTutup, onMulai, sibuk }: { d: Data; onTutup: () => void; onMulai: (no: number, metode: MetodeAbsen) => void; sibuk: boolean }) {
   const [no, setNo] = useState<number>(d.disarankan ?? d.sesi[0]?.no ?? 1);
-  const [metode, setMetode] = useState<MetodeAbsen[]>(() => bacaMetodeTersimpan());
+  const [metode, setMetode] = useState<MetodeAbsen>(() => bacaMetodeTersimpan());
   useTutupDenganBack(true, onTutup);
-  const ganti = (m: MetodeAbsen) => setMetode((x) => (x.includes(m) ? x.filter((y) => y !== m) : [...x, m]));
   const tambah = Math.max(0, ...d.sesi.map((s) => s.no)) + 1;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#0F2A52]/50 sm:items-center" role="dialog" aria-modal="true" aria-label="Mulai presensi" onClick={onTutup}>
@@ -81,19 +87,22 @@ function LembarMulai({ d, onTutup, onMulai, sibuk }: { d: Data; onTutup: () => v
           )}
         </div>
         <fieldset className="mt-4">
-          <legend className="text-[13px] font-bold text-[#0F2A52]">Metode absen (boleh lebih dari satu)</legend>
-          <div className="mt-1.5 space-y-1">
+          <legend className="text-[13px] font-bold text-[#0F2A52]">Metode absen (pilih satu)</legend>
+          <div role="radiogroup" aria-label="Metode absen" className="mt-1.5 space-y-1.5">
             {SEMUA_METODE.map((m) => (
-              <label key={m} className="flex items-center gap-2.5 text-[14px]">
-                <input type="checkbox" checked={metode.includes(m)} onChange={() => ganti(m)} className="h-5 w-5 accent-[#1F5FD1]" />
-                <span>{NAMA_METODE[m]}</span>
+              <label key={m} className={`flex cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 ${metode === m ? "border-[#1F5FD1] bg-[#E3EEFF]" : "border-[#D5DEEC] bg-white"}`}>
+                <input type="radio" name="metode-absen" checked={metode === m} onChange={() => setMetode(m)} className="mt-0.5 h-5 w-5 accent-[#1F5FD1]" />
+                <span className="min-w-0">
+                  <b className="block text-[14px] text-[#0F2A52]">{NAMA_METODE[m]}</b>
+                  <span className="block text-[12.5px] leading-snug text-[#5B6B84]">{KET_METODE(d.atur.radius_m)[m]}</span>
+                </span>
               </label>
             ))}
           </div>
         </fieldset>
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button type="button" className={BTN_O} onClick={onTutup} disabled={sibuk}>Batal</button>
-          <button type="button" className={BTN} disabled={sibuk || metode.length === 0} onClick={() => onMulai(no, metode)}>
+          <button type="button" className={BTN} disabled={sibuk} onClick={() => onMulai(no, metode)}>
             {sibuk ? "Membuka…" : `Mulai: buka ${d.atur.jendela_menit} menit`}
           </button>
         </div>
@@ -306,7 +315,13 @@ export default function HalamanAbsen() {
                           <Chip teks="Dibuka" nada="ok" />
                           <span className="text-[13px] text-[#44546F]">Habis dalam</span>
                           <b className="text-[20px] tabular-nums text-[#0F2A52]" aria-live="off">{teksSisa(sisa)}</b>
-                          <button type="button" className={`${BTN_R} ml-auto`} disabled={sibuk} onClick={() => void kirim({ aksi: "tutup", sesi_id: sesi.id }, "Presensi ditutup.")}>Tutup sekarang</button>
+                          <button type="button" className={`${BTN_R} ml-auto`} disabled={sibuk} onClick={() => void kirim({ aksi: "tutup", sesi_id: sesi.id }, "Absen dihentikan. Tekan Mulai presensi untuk memakai metode lain.")}>Berhenti absen</button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Ganti metode absen">
+                          <span className="text-[12.5px] text-[#5B6B84]">Metode: <b className="text-[#0F2A52]">{NAMA_METODE[metodeUtama(sesi.metode)]}</b> · ganti ke</span>
+                          {SEMUA_METODE.filter((m) => m !== metodeUtama(sesi.metode)).map((m) => (
+                            <button key={m} type="button" className={BTN_O} disabled={sibuk} onClick={() => void kirim({ aksi: "ganti", sesi_id: sesi.id, metode: m }, `Metode diganti ke ${NAMA_METODE[m].toLowerCase()}.`)}>{NAMA_METODE[m]}</button>
+                          ))}
                         </div>
                         {sesi.metode.includes("kode") && sesi.kode && (
                           <div className="rounded-2xl bg-[#0F2A52] px-4 py-3 text-center text-white">
@@ -322,7 +337,7 @@ export default function HalamanAbsen() {
                               {gps !== "aktif" && <button type="button" className={`${BTN} ml-auto`} onClick={() => setGps("aktif")}>Aktifkan radar</button>}
                             </div>
                             {gps === "galat" && <p className="mt-1.5 text-[12.5px] text-[#B42329]">Lokasi tidak terbaca. Izinkan lokasi pada peramban lalu aktifkan lagi.</p>}
-                            <p className="mt-1.5 text-[12px] text-[#6B7A90]">Tetap di tempat selama radar dipakai. Peserta mengetuk “Konfirmasi lokasi” di HP mereka.</p>
+                            <p className="mt-1.5 text-[12px] text-[#6B7A90]">Tetap di tempat selama radar dipakai. Peserta tidak perlu mengetuk apa pun: HP mereka melapor posisi sendiri selama SIGAP terbuka dan kehadiran tercatat otomatis begitu masuk radius.</p>
                           </div>
                         )}
                       </div>
@@ -377,11 +392,11 @@ export default function HalamanAbsen() {
           onTutup={() => setLembar(false)}
           onMulai={async (no, metode) => {
             try {
-              localStorage.setItem(KUNCI_METODE, JSON.stringify(metode));
+              localStorage.setItem(KUNCI_METODE, JSON.stringify([metode]));
             } catch {
               /* abaikan */
             }
-            const ok = await kirim({ aksi: "mulai", tanggal: d.hari_ini, no, kelas: d.kelas, metode }, `Presensi ${d.sesi.find((s) => s.no === no)?.label ?? `Sesi ${no}`} dibuka.`);
+            const ok = await kirim({ aksi: "mulai", tanggal: d.hari_ini, no, kelas: d.kelas, metode: [metode] }, `Presensi ${d.sesi.find((s) => s.no === no)?.label ?? `Sesi ${no}`} dibuka.`);
             if (ok) {
               setLembar(false);
               setChip(no);

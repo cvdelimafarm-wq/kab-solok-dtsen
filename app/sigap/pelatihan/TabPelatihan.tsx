@@ -72,7 +72,7 @@ export function daftarTab(kameraHref: string | null, peran: TabPeran = TAB_PESER
     { kode: "instrumen", label: "Instrumen", href: "/sigap/pelatihan/instrumen", ikon: IKON.instrumen },
   ];
   if (peran.pelatihan) tab.push({ kode: "pelatihan", label: "Pelatihan", href: "/sigap/pelatihan?tab=pelatihan", ikon: IKON.pelatihan });
-  if (peran.absen) tab.push({ kode: "absen", label: "Absen peserta", href: "/sigap/pelatihan/absen", ikon: IKON.absen });
+  if (peran.absen) tab.push({ kode: "absen", label: "Absen", href: "/sigap/pelatihan/absen", ikon: IKON.absen });
   tab.push(
     { kode: "kamera", label: "Kamera", href: kameraHref, ikon: IKON.kamera },
     { kode: "monitoring", label: "Monitoring", href: "/sigap/pelatihan/monitoring", ikon: IKON.monitoring },
@@ -99,7 +99,7 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana =
               const bulat = (
                 <span className={`flex min-h-[56px] flex-col items-center justify-end gap-0.5 pb-1.5 px-1 text-[11px] font-bold ${t.href ? "text-[#0F3D7A]" : "text-[#8592A8] opacity-60"}`}>
                   <span className={`-mt-5 grid h-[52px] w-[52px] place-items-center rounded-full text-white ring-4 ring-white ${t.href ? "bg-[#0F3D7A] shadow-[0_6px_16px_rgba(15,42,82,.35)] active:scale-95" : "bg-[#8592A8]"}`}>{t.ikon}</span>
-                  <span className="leading-none">{t.label}</span>
+                  <span className="whitespace-nowrap leading-none">{t.label}</span>
                 </span>
               );
               return (
@@ -117,7 +117,7 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana =
               );
             }
             const isi = (
-              <span className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-semibold ${warna} ${t.href ? "" : "opacity-40"}`}>
+              <span className={`flex min-h-[56px] flex-col items-center justify-start gap-1 px-0.5 pt-1.5 text-[11px] font-semibold ${warna} ${t.href ? "" : "opacity-40"}`}>
                 <span className={`relative grid h-7 w-12 place-items-center rounded-full ${sedang ? "bg-[#E3EEFF]" : ""}`}>
                   {t.ikon}
                   {(lencana[t.kode] ?? 0) > 0 && (
@@ -126,7 +126,7 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana =
                     </span>
                   )}
                 </span>
-                <span className="leading-none">{t.label}</span>
+                <span className="max-w-full truncate whitespace-nowrap leading-none">{t.label}</span>
               </span>
             );
             return (

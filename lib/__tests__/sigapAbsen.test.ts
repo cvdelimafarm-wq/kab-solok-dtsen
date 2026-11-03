@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buatKode, hariPertama, kedatanganBerlaku, keadaanSesi, kodeCocok, menitDariJam, menitWib, nilaiRadar, periksaMetode, rapikanSesi, rentangHari, ringkasRadar, sarankanSesi, sisaDetik, SESI_BAWAAN, tabPerPeran, teksSisa, tungguKode, tutupAtDari } from "@/lib/sigapAbsen";
+import { buatKode, hariPertama, kedatanganBerlaku, keadaanSesi, kodeCocok, menitDariJam, menitWib, nilaiRadar, periksaMetode, periksaMetodeTunggal, metodeUtama, JEDA_RADAR_OTOMATIS_MS, rapikanSesi, rentangHari, ringkasRadar, sarankanSesi, sisaDetik, SESI_BAWAAN, tabPerPeran, teksSisa, tungguKode, tutupAtDari } from "@/lib/sigapAbsen";
 
 describe("jam dan sesi disarankan", () => {
   it("menitDariJam", () => {
@@ -129,5 +129,26 @@ describe("tab per peran", () => {
     expect(tabPerPeran("peserta", true)).toEqual({ pelatihan: true, absen: false });
     expect(tabPerPeran("panitia", false)).toEqual({ pelatihan: false, absen: true });
     expect(tabPerPeran("instruktur", true)).toEqual({ pelatihan: true, absen: true });
+  });
+});
+
+describe("satu metode pada satu waktu (3 Nov 2026)", () => {
+  it("periksaMetodeTunggal menerima satu metode (teks atau larik satu isi), menolak kosong, ganda, dan tak dikenal", () => {
+    expect(periksaMetodeTunggal("radar")).toEqual({ ok: true, metode: "radar" });
+    expect(periksaMetodeTunggal(["kode"])).toEqual({ ok: true, metode: "kode" });
+    expect(periksaMetodeTunggal([])).toMatchObject({ ok: false });
+    expect(periksaMetodeTunggal(undefined)).toMatchObject({ ok: false });
+    expect(periksaMetodeTunggal(["kode", "radar"])).toEqual({ ok: false, pesan: "Pilih satu metode saja pada satu waktu." });
+    expect(periksaMetodeTunggal(["gps"])).toMatchObject({ ok: false });
+  });
+  it("metodeUtama untuk sesi lama bermetode ganda: radar > kode > centang", () => {
+    expect(metodeUtama(["centang", "kode", "radar"])).toBe("radar");
+    expect(metodeUtama(["centang", "kode"])).toBe("kode");
+    expect(metodeUtama(["centang"])).toBe("centang");
+    expect(metodeUtama([])).toBe("centang");
+  });
+  it("jeda lapor radar otomatis wajar (cukup jarang untuk baterai, cukup sering untuk jendela 30 menit)", () => {
+    expect(JEDA_RADAR_OTOMATIS_MS).toBeGreaterThanOrEqual(5000);
+    expect(JEDA_RADAR_OTOMATIS_MS).toBeLessThanOrEqual(15000);
   });
 });

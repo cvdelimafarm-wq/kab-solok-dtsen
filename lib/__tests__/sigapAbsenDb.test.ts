@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/sigapTesDb", () => ({ FILTER_BUKAN_ADMINISTRASI: "sumber.is.null" }));
 vi.mock("@/lib/sigapAkses", () => ({ boleh: () => true }));
 
-import { catatDatangManual, centangPeserta, hariKegiatan, kirimKode, konfirmasiLokasi, mulaiSesi, muatAtur, muatDatang, muatHadir, muatSesiHari, pesertaKelas, sesiTerbukaUntuk, simpanAtur, simpanPosisiPengelola, tutupSesi, ambilSesi } from "@/lib/sigapAbsenDb";
+import { catatDatangManual, centangPeserta, hariKegiatan, kirimKode, konfirmasiLokasi, mulaiSesi, muatAtur, muatDatang, muatHadir, muatSesiHari, pesertaKelas, sesiTerbukaUntuk, simpanAtur, simpanPosisiPengelola, tutupSesi, ambilSesi, gantiMetode } from "@/lib/sigapAbsenDb";
 
 type Baris = Record<string, unknown>;
 
@@ -271,5 +271,37 @@ describe("centang manual, kedatangan", () => {
     expect((await catatDatangManual(db, kegiatan, p, "2026-11-09", "ulang", "Panitia", T0)).ok).toBe(true);
     expect(tabel.sigap_pelatihan_presensi.filter((r) => r.akun_id === 12 && r.diterima)).toHaveLength(1);
     expect(tabel.sigap_pelatihan_presensi.find((r) => r.manual)).toMatchObject({ alasan: "GPS meleset di dalam gedung", dicatat_oleh: "Panitia", sesi_no: 1 });
+  });
+});
+
+describe("gantiMetode (3 Nov 2026): ganti metode di tengah jalan, jendela waktu tetap", () => {
+  it("kode -> radar: metode menjadi satu-satunya radar, tutup_at tidak berubah, kode lama tetap tersimpan", async () => {
+    const { db } = buatDb();
+    const h = await mulai(db, { metode: ["kode"], kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    const tutupLama = h.sesi.tutup_at;
+    const g = await gantiMetode(db, h.sesi, "radar", acak);
+    expect(g.ok).toBe(true);
+    const baru = await ambilSesi(db, kegiatan, h.sesi.id);
+    expect(baru?.metode).toEqual(["radar"]);
+    expect(baru?.tutup_at).toBe(tutupLama);
+    expect(baru?.kode).toBe(h.sesi.kode);
+  });
+  it("radar -> kode: kode dibuat bila belum ada, dan peserta tidak lagi bisa memakai radar", async () => {
+    const { db, tabel } = buatDb();
+    const h = await mulai(db, { metode: ["radar"], kelas: 1 });
+    if (!h.ok) throw new Error("gagal");
+    expect(h.sesi.kode).toBeNull();
+    const g = await gantiMetode(db, h.sesi, "kode", acak);
+    expect(g.ok && g.kode).toMatch(/^\d{6}$/);
+    const baru = (await ambilSesi(db, kegiatan, h.sesi.id))!;
+    const r = await konfirmasiLokasi(db, baru, 11, 1, { lat: -0.79, lng: 100.65, akurasi: 5 }, T0 + 1000);
+    expect(r.ok).toBe(false);
+    expect(tabel.sigap_kegiatan_absen_hadir ?? []).toHaveLength(0);
+  });
+  it("tabel belum ada -> pesan jelas", async () => {
+    const { db } = buatDb({}, ["sigap_kegiatan_absen_sesi"]);
+    const g = await gantiMetode(db, { id: 1, kegiatan_id: kegiatan, kode: null } as never, "kode", acak);
+    expect(g.ok).toBe(false);
   });
 });

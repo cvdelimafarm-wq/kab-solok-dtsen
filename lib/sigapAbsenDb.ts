@@ -143,6 +143,17 @@ export async function ambilSesi(db: Db, kegiatanId: number, sesiId: number): Pro
   }
 }
 
+/** (3 Nov 2026) Ganti metode pada sesi yang sedang dibuka (jendela waktu tetap). Metode kode memakai kode sesi yang ada atau membuat baru. */
+export async function gantiMetode(db: Db, sesi: SesiAbsen, metode: MetodeAbsen, acak: () => number): Promise<{ ok: true; kode: string | null } | { ok: false; pesan: string }> {
+  try {
+    const kode = metode === "kode" ? sesi.kode ?? buatKode(acak) : sesi.kode ?? null;
+    const { error } = await db.from("sigap_kegiatan_absen_sesi").update({ metode: [metode], kode }).eq("id", sesi.id).eq("kegiatan_id", sesi.kegiatan_id);
+    return error ? { ok: false, pesan: "Metode belum dapat diganti." } : { ok: true, kode };
+  } catch {
+    return { ok: false, pesan: PESAN_SQL };
+  }
+}
+
 export async function tutupSesi(db: Db, kegiatanId: number, sesiId: number, nowMs: number): Promise<{ ok: boolean; pesan?: string }> {
   try {
     const { error } = await db.from("sigap_kegiatan_absen_sesi").update({ status: "ditutup", ditutup_at: new Date(nowMs).toISOString() }).eq("id", sesiId).eq("kegiatan_id", kegiatanId);

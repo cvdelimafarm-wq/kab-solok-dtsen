@@ -4,7 +4,7 @@
 //
 // (2 Nov 2026) Sisi PESERTA dari Absen peserta, dipasang di tab Hari ini:
 //  - Kartu KEDATANGAN (hanya hari pertama pelatihan): satu ketukan, GPS dinilai server terhadap titik pelatihan (mesin presensi yang sudah ada).
-//  - Kartu dan modal ABSEN SESI saat pengelola memulai presensi: ketik kode, atau "Konfirmasi lokasi" (radar), atau menunggu dicentang. Hitung mundur mengikuti
+//  - Kartu dan modal ABSEN SESI saat pengelola memulai presensi (satu metode pada satu waktu): ketik kode, atau RADAR OTOMATIS (GPS HP aktif sendiri dan kehadiran tercatat begitu masuk radius), atau menunggu dicentang. Hitung mundur mengikuti
 //    jendela 30 menit; sesudahnya modal padam dan kode / lokasi ditolak server.
 // Data: GET /api/sigap/pelatihan/absen?sebagai=peserta (disegarkan berkala); POST kode / lokasi; kedatangan memakai POST /api/sigap/pelatihan/presensi.
 // Bukan peserta atau SQL belum dijalankan -> tidak menggambar apa pun.
@@ -14,7 +14,7 @@ import { fetchJson, pesanGalat } from "../admin/api";
 import { useAbsenSaya, type SesiHari, type SesiTerbuka } from "./absenSaya"; // (3 Nov 2026) data dibagi dengan lajur ikon langkah
 import { BTN, BTN_O, Pesan } from "../admin/ui";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
-import { KODE_PANJANG, teksSisa, type MetodeAbsen } from "@/lib/sigapAbsen";
+import { JEDA_RADAR_OTOMATIS_MS, KODE_PANJANG, teksSisa } from "@/lib/sigapAbsen";
 
 type Sesi = SesiTerbuka;
 
@@ -31,7 +31,66 @@ function ambilPosisi(): Promise<{ lat: number; lng: number; akurasi: number }> {
   });
 }
 
-function ModalAbsen({ s, selisih, onTutup, onSelesai }: { s: Sesi; selisih: number; onTutup: () => void; onSelesai: () => void }) {
+export type FaseRadar = "mulai" | "mencari" | "belum" | "masuk";
+export type StatusRadar = { fase: FaseRadar; pesan: string | null; galatGps: boolean };
+const RADAR_AWAL: StatusRadar = { fase: "mulai", pesan: null, galatGps: false };
+
+/**
+ * (3 Nov 2026) Radar OTOMATIS: selama ada sesi bermetode radar yang belum membuat peserta tercatat hadir, GPS HP dipantau dan posisi terbaru dilaporkan ke server tiap
+ * ±8 detik; server menilai terhadap posisi pengelola dan mencatat hadir begitu masuk radius. Hanya bekerja selama SIGAP terbuka di HP (peramban tidak boleh melacak di latar belakang).
+ */
+export function useRadarOtomatis(sesi: Sesi | null, onMasuk: () => void): StatusRadar {
+  const [st, setSt] = useState<StatusRadar>(RADAR_AWAL);
+  const id = sesi?.id ?? null;
+  const aktif = !!sesi && sesi.metode.includes("radar") && !sesi.sudah_hadir;
+  const pos = useRef<{ lat: number; lng: number; akurasi: number } | null>(null);
+  const terbang = useRef(false);
+  const masukRef = useRef(onMasuk);
+  masukRef.current = onMasuk;
+  useEffect(() => {
+    if (!aktif || id === null) {
+      setSt(RADAR_AWAL);
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setSt({ fase: "belum", pesan: "Peramban ini tidak mendukung lokasi.", galatGps: true });
+      return;
+    }
+    pos.current = null;
+    setSt({ fase: "mencari", pesan: null, galatGps: false });
+    const pantau = navigator.geolocation.watchPosition(
+      (p) => {
+        pos.current = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy };
+      },
+      () => setSt({ fase: "belum", pesan: "Lokasi tidak terbaca. Aktifkan GPS dan izinkan lokasi untuk SIGAP.", galatGps: true }),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
+    );
+    const lapor = async () => {
+      const p = pos.current;
+      if (!p || terbang.current) return;
+      terbang.current = true;
+      try {
+        await fetchJson("/api/sigap/pelatihan/absen", { method: "POST", body: JSON.stringify({ aksi: "lokasi", sesi_id: id, ...p }) });
+        setSt({ fase: "masuk", pesan: null, galatGps: false });
+        masukRef.current();
+      } catch (e) {
+        setSt({ fase: "belum", pesan: pesanGalat(e), galatGps: false });
+      } finally {
+        terbang.current = false;
+      }
+    };
+    const berkala = setInterval(() => void lapor(), JEDA_RADAR_OTOMATIS_MS);
+    const awal = setTimeout(() => void lapor(), 2500);
+    return () => {
+      navigator.geolocation.clearWatch(pantau);
+      clearInterval(berkala);
+      clearTimeout(awal);
+    };
+  }, [aktif, id]);
+  return st;
+}
+
+function ModalAbsen({ s, selisih, radar, onTutup, onSelesai }: { s: Sesi; selisih: number; radar: StatusRadar; onTutup: () => void; onSelesai: () => void }) {
   const [kode, setKode] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
@@ -88,10 +147,20 @@ function ModalAbsen({ s, selisih, onTutup, onSelesai }: { s: Sesi; selisih: numb
           </form>
         )}
         {!habis && pakaiRadar && (
-          <div className="mt-4">
-            <button type="button" className={`${pakaiKode ? BTN_O : BTN} w-full`} onClick={lokasi} disabled={sibuk}>{sibuk ? "Membaca lokasi…" : "Konfirmasi lokasi"}</button>
-            <p className="mt-1 text-[12px] text-[#6B7A90]">Berdirilah dalam {s.radius_m} m dari panitia atau instruktur, dengan GPS aktif.</p>
-            {s.di_luar_radar && <p className="mt-1 text-[12.5px] font-semibold text-[#B42329]">Lokasi Anda terakhir tercatat di luar radius. Dekati panitia lalu konfirmasi lagi.</p>}
+          <div className="mt-4 rounded-xl border border-[#D5DEEC] bg-[#F7FAFF] p-3" data-testid="radar-otomatis" aria-live="polite">
+            <b className="text-[14px] text-[#0F2A52]">Radar otomatis aktif</b>
+            <p className="mt-1 text-[13px] leading-snug text-[#44546F]">
+              {radar.fase === "masuk"
+                ? "Lokasi terkonfirmasi. Anda tercatat hadir."
+                : radar.galatGps
+                  ? radar.pesan
+                  : radar.fase === "mencari" || radar.fase === "mulai"
+                    ? "Mencari lokasi Anda… Anda tidak perlu mengetuk apa pun."
+                    : `${radar.pesan ?? "Menunggu Anda masuk radius."}`}
+            </p>
+            <p className="mt-1 text-[12px] text-[#6B7A90]">Kehadiran tercatat sendiri begitu Anda berada dalam {s.radius_m} m dari panitia atau instruktur. Biarkan SIGAP tetap terbuka dan GPS aktif.</p>
+            {s.di_luar_radar && radar.fase !== "masuk" && <p className="mt-1 text-[12.5px] font-semibold text-[#B42329]">Lokasi Anda terakhir tercatat di luar radius. Dekati panitia atau instruktur.</p>}
+            <button type="button" className={`${BTN_O} mt-2 w-full`} onClick={lokasi} disabled={sibuk}>{sibuk ? "Membaca lokasi…" : "Cek lokasi sekarang"}</button>
           </div>
         )}
         {!habis && !pakaiKode && !pakaiRadar && <p className="mt-4 rounded-xl bg-[#F3F6FB] p-3 text-[13.5px] text-[#44546F]">Tunggu panitia atau instruktur mencentang kehadiran Anda.</p>}
@@ -120,6 +189,8 @@ export default function AbsenPeserta() {
   const sekarang = Date.now() + selisih;
   const terbuka = (d?.sesi_terbuka ?? []).filter((s) => Date.parse(s.tutup_at) > sekarang);
   const perluIsi = terbuka.filter((s) => !s.sudah_hadir);
+  // (3 Nov 2026) radar otomatis berjalan selama ada sesi radar terbuka (modal dibuka atau tidak)
+  const radar = useRadarOtomatis(perluIsi.find((s) => s.metode.includes("radar")) ?? null, () => void muat());
 
   // modal muncul sendiri sekali per sesi yang baru dibuka (juga bila aplikasi dibuka sesudahnya selama sesi dibuka)
   useEffect(() => {
@@ -181,7 +252,7 @@ export default function AbsenPeserta() {
           </span>
         </div>
         {sesiHari.length === 0 ? (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-[#5B6B84]">Panitia atau instruktur membuka presensi di tiap sesi (jendela 30 menit). Saat dibuka, pop-up muncul di sini untuk mengisi kode atau konfirmasi lokasi.</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-[#5B6B84]">Panitia atau instruktur membuka presensi di tiap sesi (jendela 30 menit). Saat dibuka, pop-up muncul di sini: ketik kode, atau biarkan radar mencatat kehadiran Anda otomatis lewat GPS.</p>
         ) : (
           <ul className="mt-2 space-y-1.5">
             {sesiHari.map((s) => {
@@ -214,6 +285,7 @@ export default function AbsenPeserta() {
         <ModalAbsen
           s={sesiModal}
           selisih={selisih}
+          radar={radar}
           onTutup={() => setModal(null)}
           onSelesai={() => {
             setModal(null);

@@ -6,7 +6,7 @@
 //   pengelola (panitia / instruktur) -> { sebagai:"pengelola", jenis, tersedia, tanggal, hari, kedatangan_berlaku, atur, kelas_pilihan, kelas, kelas_terkunci, sesi:[...rencana + keadaan], disarankan, peserta:[...], datang:[...], hadir:[...], sekarang }
 //   GET ?sebagai=peserta  -> { sebagai:"peserta", tersedia, kedatangan:{berlaku,sudah,at,manual,terlambat}, sesi_terbuka:[{id,no,label,metode,tutup_at,sisa_detik,sudah_hadir}],
 //                            sesi_hari:[{id,no,label,jam,keadaan:dibuka|habis|ditutup,tutup_at,sudah_hadir}] (3 Nov 2026: semua sesi hari ini untuk kelas peserta) }
-// POST pengelola: {aksi:"mulai",tanggal,no,label?,jam?,kelas?,metode:[...]} | {aksi:"tutup",sesi_id} | {aksi:"centang",sesi_id,akun_id,hadir,alasan?}
+// POST pengelola: {aksi:"mulai",tanggal,no,label?,jam?,kelas?,metode:[...]} | {aksi:"tutup",sesi_id} | {aksi:"ganti",sesi_id,metode} (3 Nov 2026) | {aksi:"centang",sesi_id,akun_id,hadir,alasan?}
 //                 | {aksi:"datang",akun_id,hadir,alasan?,tanggal} | {aksi:"posisi",sesi_id,lat,lng,akurasi} | {aksi:"atur",sesi?,jendela_menit?,radius_m?} (izin kelola)
 // POST peserta:   {aksi:"kode",sesi_id,kode} | {aksi:"lokasi",sesi_id,lat,lng,akurasi}
 // Waktu dan jendela SELALU dihitung di server. Instruktur hanya mengelola kelasnya; panitia semua kelas.
@@ -19,9 +19,9 @@ import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 import { tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { posisiValid } from "@/lib/sigapPresensi";
-import { kedatanganBerlaku, keadaanSesi, menitWib, periksaMetode, sarankanSesi, sisaDetik, tanggalWib } from "@/lib/sigapAbsen";
+import { kedatanganBerlaku, keadaanSesi, menitWib, periksaMetodeTunggal, sarankanSesi, sisaDetik, tanggalWib } from "@/lib/sigapAbsen";
 import {
-  ambilSesi, batalDatangManual, catatDatangManual, centangPeserta, hariKegiatan, kirimKode, konfirmasiLokasi, muatAtur, muatDatang, muatHadir, muatSesiHari, mulaiSesi, pesertaKelas,
+  ambilSesi, batalDatangManual, catatDatangManual, centangPeserta, gantiMetode, hariKegiatan, kirimKode, konfirmasiLokasi, muatAtur, muatDatang, muatHadir, muatSesiHari, mulaiSesi, pesertaKelas,
   simpanAtur, simpanPosisiPengelola, tutupSesi, PESAN_SQL,
 } from "@/lib/sigapAbsenDb";
 
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
       const no = angka(body.no);
       if (no === null || !Number.isInteger(no) || no < 1 || no > 12) return galat("Nomor sesi tidak valid.");
       if (!tanggalSah(body.tanggal)) return galat("Tanggal tidak valid.");
-      const m = periksaMetode(body.metode);
+      const m = periksaMetodeTunggal(body.metode); // (3 Nov 2026) satu metode pada satu waktu
       if (!m.ok) return galat(m.pesan);
       const kelasMinta = angka(body.kelas);
       const kelas = kelasSendiri !== null ? kelasSendiri : kelasMinta;
@@ -187,9 +187,9 @@ export async function POST(req: NextRequest) {
       const rencana = atur.sesi.find((s) => s.no === no);
       const label = typeof body.label === "string" && body.label.trim() ? body.label.trim() : rencana?.label ?? `Sesi ${no}`;
       const disarankan = sarankanSesi(atur.sesi, menitWib(sekarang), new Set());
-      const h = await mulaiSesi(db, kegiatanId, { tanggal: body.tanggal, no, label, jam: rencana?.jam || null, kelas, metode: m.metode, disarankan }, akun.nama, acakKuat, sekarang);
+      const h = await mulaiSesi(db, kegiatanId, { tanggal: body.tanggal, no, label, jam: rencana?.jam || null, kelas, metode: [m.metode], disarankan }, akun.nama, acakKuat, sekarang);
       if (!h.ok) return galat(h.pesan, h.pesan === PESAN_SQL ? 500 : 409);
-      await catatAudit(db, akun.id, "absen_mulai", { kegiatan_id: kegiatanId, sesi_id: h.sesi.id, no, kelas, metode: m.metode, tutup_at: h.sesi.tutup_at });
+      await catatAudit(db, akun.id, "absen_mulai", { kegiatan_id: kegiatanId, sesi_id: h.sesi.id, no, kelas, metode: [m.metode], tutup_at: h.sesi.tutup_at });
       return NextResponse.json({ ok: true, sesi: { id: h.sesi.id, no: h.sesi.no, kode: h.sesi.kode, metode: h.sesi.metode, tutup_at: h.sesi.tutup_at, sisa_detik: sisaDetik(h.sesi.tutup_at, sekarang) } });
     }
 
@@ -222,6 +222,17 @@ export async function POST(req: NextRequest) {
       if (!h.ok) return galat(h.pesan ?? "Gagal menutup sesi.", 500);
       await catatAudit(db, akun.id, "absen_tutup", { kegiatan_id: kegiatanId, sesi_id: sesiId });
       return NextResponse.json({ ok: true });
+    }
+
+    if (aksi === "ganti") {
+      // (3 Nov 2026) ganti metode di tengah jalan pada sesi yang masih dibuka; jendela waktu tidak berubah
+      if (keadaanSesi(sesi, sekarang) !== "dibuka") return galat("Sesi ini sudah tidak dibuka. Mulai presensi lagi untuk memakai metode lain.", 409);
+      const m = periksaMetodeTunggal(body.metode);
+      if (!m.ok) return galat(m.pesan);
+      const h = await gantiMetode(db, sesi, m.metode, acakKuat);
+      if (!h.ok) return galat(h.pesan, 500);
+      await catatAudit(db, akun.id, "absen_ganti_metode", { kegiatan_id: kegiatanId, sesi_id: sesiId, dari: sesi.metode, ke: m.metode });
+      return NextResponse.json({ ok: true, metode: [m.metode], kode: h.kode });
     }
 
     if (aksi === "centang") {
