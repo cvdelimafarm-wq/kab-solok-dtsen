@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { PESAN_ARSIP, statusPeriode, type StatusPeriode } from "@/lib/portal/periode";
 import { BATAS_HARI_SUSUN, jendelaSusunFoto } from "@/lib/sigapFotoSusun";
 import { dalamToleransiKirim } from "@/lib/sigapFoto";
+import { PESAN_DIBLOKIR, memblokir } from "@/lib/translokBlokir";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Db = SupabaseClient<any, any, any>;
@@ -225,6 +226,13 @@ export async function statusKunci(
   return izin ? { boleh: true, alasan: "izin", izinSampai: izin } : { boleh: false, alasan: "terlewat", izinSampai: null };
 }
 
+/** (3 Nov 2026) Sedang diblokir sementara pada kegiatan ini? Toleran bila tabel belum dibuat. */
+export async function translokDiblokir(db: Db, kegiatanId: number, akunId: number): Promise<boolean> {
+  const { data, error } = await db.from("sigap_translok_blokir").select("status").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).maybeSingle();
+  return !error && !!data && memblokir(data.status);
+}
+
+
 /**
  * Cek akses isian laporan/foto: penugasan milik akun, belum dikunci admin,
  * tanggal termasuk hari kerja, dan masih dalam batas waktu (atau izin susulan).
@@ -249,6 +257,8 @@ export async function cekAksesIsian(
   if (pen.dikunci_at) return { error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin.", status: 403 };
   // (7 Okt 2026) arsip baca-saja sesudah tgl selesai + masa tenggang
   if (pen.status_periode === "arsip") return { error: PESAN_ARSIP, status: 403 };
+  // (3 Nov 2026) Blokir sementara translok oleh atasan/admin (tabel sigap_translok_blokir). Tabel belum ada / baris tidak ada = tidak diblokir.
+  if (await translokDiblokir(db, pen.kegiatan.id, akunId)) return { error: PESAN_DIBLOKIR, status: 403 };
   const { data: hk } = await db.from("sigap_hari_kerja").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).or(HK_AKTIF()).maybeSingle();
   if (!hk && !opsi.izinTanpaHariKerja) return { error: "Tanggal ini bukan hari kerja Anda. Pilih dulu di menu Hari Kerja.", status: 400 };
   const tanpaHariKerja = !hk;
@@ -284,6 +294,7 @@ export async function cekAksesSusunFoto(
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.id === penugasanId);
   if (!pen) return { error: "Anda tidak terdaftar pada kegiatan ini.", status: 403 };
   if (pen.dikunci_at) return { error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin.", status: 403 };
+  if (await translokDiblokir(db, pen.kegiatan.id, akunId)) return { error: PESAN_DIBLOKIR, status: 403 };
   const hariIni = hariIniWib();
   const jendela = jendelaSusunFoto(tanggal, hariIni);
   if (jendela === "akan_datang") return { error: "Laporan & foto baru bisa diisi pada hari kerjanya.", status: 403 };

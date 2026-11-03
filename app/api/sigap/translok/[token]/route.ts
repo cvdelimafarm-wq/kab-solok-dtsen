@@ -27,7 +27,9 @@ import {
   penugasanAkun,
   rentangTanggal,
   tanggalValid,
+  translokDiblokir,
 } from "@/lib/sigap";
+import { PESAN_DIBLOKIR } from "@/lib/translokBlokir";
 import { ambilRealisasiOtomatis, ambilWilayahRingkas } from "@/lib/portal/realisasiOtomatis";
 import { normalisasiNomorWa } from "@/lib/sigapKekurangan";
 import { panduanSelesai } from "@/lib/sigapPanduan";
@@ -218,6 +220,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       if (pen.dikunci_at) return NextResponse.json({ error: "SPJ kegiatan ini sudah diverifikasi & dikunci admin." }, { status: 403 });
       // (7 Okt 2026) portal satu login: kegiatan yg sudah lewat tgl selesai + masa tenggang = arsip baca-saja
       if (pen.status_periode === "arsip") return NextResponse.json({ error: PESAN_ARSIP }, { status: 403 });
+      // (3 Nov 2026) blokir sementara translok oleh atasan/admin
+      if (await translokDiblokir(db, pen.kegiatan.id, akun.id)) return NextResponse.json({ error: PESAN_DIBLOKIR }, { status: 403 });
       if (!pen.periode.mulai || !pen.periode.selesai) return NextResponse.json({ error: "Periode kegiatan belum ditetapkan admin anggaran." }, { status: 400 });
       const dimintaMentah = Array.from(new Set(((Array.isArray(body?.tanggal) ? body.tanggal : []) as unknown[]).filter(tanggalValid))).sort();
       // (6 Okt 2026) Tanggal uji coba (diatur admin) diabaikan dari rencana petugas.

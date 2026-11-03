@@ -27,6 +27,8 @@ import { arahSapuan, geserTanggal, kelompokDariTanggal, nilaiHariArsip, tanggalA
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import BarisPengawasan from "@/app/sigap/BarisPengawasan";
 import BarisLangkah from "@/app/sigap/BarisLangkah";
+import ModalBlokirTranslok from "@/app/sigap/translok/ModalBlokirTranslok";
+import KartuUnblockMasuk from "@/app/sigap/translok/KartuUnblockMasuk";
 import KartuVanguardHariIni from "@/app/sigap/KartuVanguardHariIni"; // (1 Nov 2026) hanya bila Vanguard menyala di kegiatan ini (dicatat)
 import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
@@ -563,6 +565,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
   return (
     <FokusCtx.Provider value={ctxFokus}>
     <main className="min-h-screen bg-[#EEF2F8] pb-28 text-[#13213A]">
+      <ModalBlokirTranslok token={token} kegiatanId={pen.kegiatan.id} onBuka={muat} onKeluar={keluar} />
       <Header
         kecil={tab === "hari_ini" ? "SIGAP · Transport Lokal" : tab === "hari_kerja" ? "Hari Kerja" : tab === "foto" ? "Foto Saya" : "Arsip Dokumen"}
         judulBesar={tab === "hari_ini" ? `Halo, ${namaDepan}` : tab === "hari_kerja" ? "Rencana hari kerja" : tab === "foto" ? "Foto yang saya ambil" : "SPJ Transport Lokal"}
@@ -618,6 +621,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
               const w = bar.items.find((i) => i.kunci === "pengawasan");
               return w ? <BarisPengawasan kode={bar.kode} peran={bar.peran} label={w.label} href={w.href} /> : null;
             })()}
+            <KartuUnblockMasuk token={token} kegiatanId={pen.kegiatan.id} />
             <Ringkasan pen={pen} hariIni={data.hari_ini} />
             <KartuVanguardHariIni kegiatanId={pen.kegiatan.id} />
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
