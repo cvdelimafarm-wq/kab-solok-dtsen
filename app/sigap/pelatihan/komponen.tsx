@@ -17,7 +17,7 @@ import type { PengaturanPresensi, RingkasHari } from "@/lib/sigapPresensi";
 import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { InfoUndangan, JenisTes, StatusTes } from "@/lib/sigapTes";
 import { useInfoPelatihan } from "./infoPelatihan";
-import { PemilihPeran } from "./peranMasuk"; // (3 Nov 2026) dropdown "Masuk sebagai" bagi akun berkewenangan ganda
+import { PemilihPeran, usePeranMasuk } from "./peranMasuk"; // (3 Nov 2026) dropdown "Masuk sebagai" bagi akun berkewenangan ganda
 import { PemilihPelatihan } from "./PemilihPelatihan"; // (3 Nov 2026) hanya tampil bila peserta punya >= 2 pelatihan aktif
 import { useDataPel } from "./dataPel"; // (3 Nov 2026) data hub lewat simpanan bersama
 import { judulPelatihan, tujuanKembali } from "@/lib/sigapPelatihanNama";
@@ -259,6 +259,9 @@ export function Kerangka({
   // (3 Nov 2026) gerbang undangan: sebelum undangan diterima, hanya Hari ini yang menampilkan isi; halaman lain diganti kartu penjelasan
   const terkunci = useTerkunciUndangan() === true;
   const tutup = terkunci && tabAktif !== "hari-ini";
+  // (3 Nov 2026) akun berperan ganda yang masuk sebagai instruktur/panitia/PJ tidak melihat perlengkapan peserta (pop-up pulsa, penunjuk alur peserta)
+  const pm = usePeranMasuk();
+  const bukanPeserta = pm.peran !== null && pm.peran !== "peserta";
   return (
     <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
       <HeaderAdmin
@@ -276,12 +279,12 @@ export function Kerangka({
       </HeaderAdmin>
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         {/* (2 Nov 2026) pop-up konfirmasi nomor pulsa hanya sampai dikonfirmasi; kartu statusnya redup di bawah tab Hari ini (hari-ini/page.tsx) */}
-        {!terkunci && <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />}
+        {!terkunci && !bukanPeserta && <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />}
         <PemilihPelatihan />
         <PemilihPeran />
         {tutup ? (
           <KartuTerkunciUndangan />
-        ) : (langkah || geser) && !terkunci ? (
+        ) : (langkah || geser) && !terkunci && !bukanPeserta ? (
           <AlurKerangka kode={langkah ?? null} hub={hub} selesai={langkahSelesai} tersembunyi={alurTersembunyi}>
             {children}
           </AlurKerangka>

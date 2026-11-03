@@ -171,7 +171,7 @@ export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
   const bServer = useBenderaTab();
   const pm = usePeranMasuk();
   // (3 Nov 2026) akun berperan ganda: tab bawah mengikuti peran yang dipilih (Peserta: Pelatihan + Kamera; selain itu: Absen peserta, Kamera nonaktif)
-  const b = bServer && { ...bServer, terkunci: pm.terkunci, ...(pm.peran ? { tab: tabUntukPeran(pm.peran), kamera_href: pm.peran === "peserta" ? bServer.kamera_href : null } : {}) };
+  const b = bServer && { ...bServer, terkunci: pm.terkunci, ...(pm.peran && (pm.peran !== "peserta" || pm.nyata.includes("peserta")) ? { tab: tabUntukPeran(pm.peran), kamera_href: pm.peran === "peserta" ? bServer.kamera_href : null } : {}) };
   const menyala = !!b && b.tab_baru && !b.terkunci; // terkunci (undangan belum diterima): tidak menyiapkan tab lain di belakang
   const rencana = menyala && b ? rencanaTab(aktif, daftarTab(b.kamera_href, b.tab).map((t) => ({ kode: t.kode, href: t.href })), urlPelatihan) : { rute: [], data: [] };
   useSiapkan(rencana, menyala);

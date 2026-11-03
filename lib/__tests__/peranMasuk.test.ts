@@ -1,6 +1,6 @@
 // (3 Nov 2026) "Masuk sebagai": peran yang tersedia, pilihan awal, dan tab menurut peran bagi akun berkewenangan ganda.
 import { describe, expect, it } from "vitest";
-import { LABEL_PERAN, adalahPeran, jenisDariPeran, kunciPeran, peranTersedia, perluPemilih, pilihPeran, tabUntukPeran } from "../peranMasuk";
+import { LABEL_PERAN, adalahPeran, jenisDariPeran, kunciPeran, labelPilihan, peranPilihan, peranTersedia, perluPemilih, pilihPeran, tabUntukPeran } from "../peranMasuk";
 
 const K = (o: Partial<Parameters<typeof peranTersedia>[0]> = {}) => ({ peserta: false, instruktur: false, lihat: false, kelola: false, ...o });
 
@@ -50,5 +50,24 @@ describe("peran -> jenis, tab, label", () => {
     expect(kunciPeran(7)).toBe("sigap_pel_peran_7");
     expect(adalahPeran("pj")).toBe(true);
     expect(adalahPeran("admin")).toBe(false);
+  });
+});
+
+describe("peranPilihan: pengelola bebas berganti peran", () => {
+  it("izin kelola (PJ) boleh memilih semua peran; izin lihat (panitia) semua kecuali PJ", () => {
+    expect(peranPilihan(K({ kelola: true, lihat: true }))).toEqual(["pj", "panitia", "instruktur", "peserta"]);
+    expect(peranPilihan(K({ lihat: true }))).toEqual(["panitia", "instruktur", "peserta"]);
+  });
+  it("tanpa izin pengelola hanya peran yang benar-benar dimiliki", () => {
+    expect(peranPilihan(K({ peserta: true, instruktur: true }))).toEqual(["instruktur", "peserta"]);
+    expect(peranPilihan(K({ peserta: true }))).toEqual(["peserta"]);
+    expect(perluPemilih(peranPilihan(K({ kelola: true, lihat: true })))).toBe(true);
+  });
+  it("peran yang belum terdaftar diberi label pratinjau; Panitia tidak dianggap pratinjau bagi PJ", () => {
+    const nyata = ["pj"] as const;
+    expect(labelPilihan("pj", nyata)).toBe(LABEL_PERAN.pj);
+    expect(labelPilihan("panitia", nyata)).toBe(LABEL_PERAN.panitia);
+    expect(labelPilihan("instruktur", nyata)).toBe("Instruktur (pratinjau)");
+    expect(labelPilihan("peserta", ["pj", "peserta"])).toBe("Peserta");
   });
 });

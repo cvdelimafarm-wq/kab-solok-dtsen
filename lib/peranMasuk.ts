@@ -27,6 +27,21 @@ export function peranTersedia(k: KewenanganAkun): PeranMasuk[] {
   return URUT.filter((p) => ada.includes(p));
 }
 
+/**
+ * Peran yang BOLEH DIPILIH di dropdown. Pengelola (izin Kelola -> PJ, izin Lihat -> Panitia) bebas berganti ke peran di bawahnya, termasuk yang belum terdaftar
+ * (menjadi pratinjau: tampilan saja, sama seperti peran lain hak akses tetap menurut izin). Akun tanpa izin pengelola hanya memilih peran yang benar-benar dimilikinya.
+ */
+export function peranPilihan(k: KewenanganAkun): PeranMasuk[] {
+  if (k.kelola) return ["pj", "panitia", "instruktur", "peserta"];
+  if (k.lihat) return ["panitia", "instruktur", "peserta"];
+  return peranTersedia(k);
+}
+
+/** Teks di dropdown: peran yang belum terdaftar diberi keterangan "pratinjau". */
+export function labelPilihan(p: PeranMasuk, nyata: readonly PeranMasuk[]): string {
+  return nyata.includes(p) || (p === "panitia" && nyata.includes("pj")) ? LABEL_PERAN[p] : `${LABEL_PERAN[p]} (pratinjau)`;
+}
+
 export const adalahPeran = (x: unknown): x is PeranMasuk => x === "peserta" || x === "instruktur" || x === "panitia" || x === "pj";
 
 /**

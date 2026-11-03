@@ -37,7 +37,7 @@ export default function RingkasanPengelola({ bolehKelola, sebagai }: { bolehKelo
   const r = m?.ringkasan;
   const catatan = r ? catatanPerhatian(r) : [];
   return (
-    <Kartu judul={sebagai ? `Anda masuk sebagai ${sebagai.toLowerCase()}` : sapa.judul} ket={m?.ringkas}>
+    <Kartu judul={sebagai ? `Anda masuk sebagai ${sebagai}` : sapa.judul} ket={m?.ringkas}>
       <p className="m-0 text-[13px] leading-relaxed text-[#3B4A60]">
         {sapa.ket} Undangan pribadi hanya untuk peserta, jadi tidak ditampilkan di sini.
       </p>

@@ -13,6 +13,7 @@ import { Toast, useToast } from "../../admin/Toast";
 import { LABEL_PERAN_PELATIHAN, periksaHierarki, type PeranPelatihan, type SimpulHierarki } from "@/lib/hierarkiPelatihan";
 import { PETUNJUK_TEMPLATE, bacaImpor, barisTemplate, type HasilImpor } from "@/lib/hierarkiImpor";
 import KelasIdentKelola from "./kelasIdent";
+import InstrukturKelola from "./instruktur";
 import { ChipSetelan, PilihSub, useSub, type ItemSub } from "./GrupTab";
 
 type Data = { tersedia: boolean; simpul: SimpulHierarki[]; boleh_kelola: boolean };
@@ -26,6 +27,7 @@ const ASAL: Record<NonNullable<SimpulHierarki["asal"]>, { teks: string; w: "mut"
 
 const SUB: ItemSub[] = [
   { kode: "hierarki", label: "Hierarki", ket: "Siapa melapor kepada siapa. Menentukan siapa yang dapat memantau progres siapa di tab Monitoring peserta." },
+  { kode: "instruktur", label: "Instruktur", ket: "Tetapkan instruktur per kelas, tanpa SQL." },
   { kode: "kelas", label: "Kelas", ket: "Kelas menurut perencanaan (hanya baca)." },
 ];
 
@@ -374,6 +376,7 @@ export default function TimPesertaKelola() {
     <div>
       <PilihSub daftar={SUB} aktif={sub} onPilih={pilih} label="Bagian Tim & Peserta" />
       {sub === "hierarki" && <KartuHierarki />}
+      {sub === "instruktur" && <InstrukturKelola />}
       {sub === "kelas" && <KelasIdentKelola />}
     </div>
   );

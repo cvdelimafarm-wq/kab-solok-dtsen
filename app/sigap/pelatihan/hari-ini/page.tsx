@@ -232,7 +232,8 @@ export default function HalamanHariIni() {
   const pm = usePeranMasuk();
   const sebagaiPeserta = !!d?.peserta && (pm.peran === null || pm.peran === "peserta");
   const terkunciUndangan = sebagaiPeserta && pm.terkunci;
-  const sebagaiPengelola = !!d && ((!d.peserta && !d.ditolak && d.pengguna !== "peserta") || (!!d.peserta && pm.peran !== null && pm.peran !== "peserta"));
+  const pratinjauPeserta = !!d && !d.peserta && pm.peran === "peserta"; // pengelola memilih Peserta padahal belum terdaftar sebagai peserta
+  const sebagaiPengelola = !!d && !pratinjauPeserta && ((!d.peserta && !d.ditolak && d.pengguna !== "peserta") || (!!d.peserta && pm.peran !== null && pm.peran !== "peserta") || (!d.peserta && pm.peran !== null));
   const info = useInfoPelatihan();
   const vg = useVanguardSaya(sebagaiPeserta && !terkunciUndangan && d ? d.kegiatan_id : null); // terkunci: Vanguard belum dimuat
   return (
@@ -248,6 +249,7 @@ export default function HalamanHariIni() {
         </Kartu>
       )}
       {d && !d.peserta && !d.ditolak && d.pengguna === "peserta" && <Pesan jenis="info">Akun Anda bukan peserta pelatihan ini.</Pesan>}
+      {d && pratinjauPeserta && <Pesan jenis="info">Anda belum terdaftar sebagai peserta pelatihan ini, jadi tampilan peserta tidak ada isinya. Pilih peran lain di "Masuk sebagai", atau daftarkan diri Anda sebagai peserta di Kelola Pelatihan.</Pesan>}
       {d && sebagaiPengelola && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} sebagai={pm.peran ? LABEL_PERAN[pm.peran] : undefined} />}
       {d && !terkunciUndangan && <KartuIzinBuka />}
       {d && sebagaiPeserta && nada && (

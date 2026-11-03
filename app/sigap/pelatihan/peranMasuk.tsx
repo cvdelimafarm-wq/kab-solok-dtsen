@@ -8,9 +8,9 @@
 
 import { useSyncExternalStore } from "react";
 import { useDataPel } from "./dataPel";
-import { LABEL_PERAN, kunciPeran, perluPemilih, pilihPeran, type PeranMasuk } from "@/lib/peranMasuk";
+import { kunciPeran, labelPilihan, perluPemilih, pilihPeran, type PeranMasuk } from "@/lib/peranMasuk";
 
-type Jawab = { kegiatan_id: number; peran_tersedia?: PeranMasuk[]; peserta?: unknown | null; status?: string; tab_baru?: boolean; terkunci_undangan?: boolean };
+type Jawab = { kegiatan_id: number; peran_tersedia?: PeranMasuk[]; peran_nyata?: PeranMasuk[]; peserta?: unknown | null; status?: string; tab_baru?: boolean; terkunci_undangan?: boolean };
 
 const pendengar = new Set<() => void>();
 
@@ -36,6 +36,8 @@ export type StatusPeran = {
   memuat: boolean;
   kegiatanId: number | null;
   tersedia: PeranMasuk[];
+  /** Peran yang benar-benar dimiliki akun (peran lain di dropdown = pratinjau). */
+  nyata: PeranMasuk[];
   /** Peran yang berlaku; null bila akun tidak punya dua peran atau lebih (tampilan mengikuti server seperti biasa). */
   peran: PeranMasuk | null;
   /** Undangan perlu dituntaskan di peran Peserta (UI saja; server tetap menurut izin). */
@@ -48,6 +50,7 @@ export function usePeranMasuk(): StatusPeran {
   const id = data?.kegiatan_id ?? null;
   const tersimpan = useSyncExternalStore(langganan, () => baca(id), () => null);
   const tersedia = data?.peran_tersedia ?? [];
+  const nyata = data?.peran_nyata ?? tersedia;
   const ganda = perluPemilih(tersedia);
   const belumTerima = !!data?.peserta && !!data?.tab_baru && data?.status !== "diterima";
   const peran = ganda ? pilihPeran(tersedia, tersimpan, belumTerima) : null;
@@ -61,12 +64,12 @@ export function usePeranMasuk(): StatusPeran {
     }
     pendengar.forEach((f) => f());
   };
-  return { memuat: !data, kegiatanId: id, tersedia, peran, terkunci, pilih };
+  return { memuat: !data, kegiatanId: id, tersedia, nyata, peran, terkunci, pilih };
 }
 
 /** Dropdown "Masuk sebagai"; tidak tampil bila akun hanya punya satu peran. */
 export function PemilihPeran() {
-  const { tersedia, peran, pilih } = usePeranMasuk();
+  const { tersedia, nyata, peran, pilih } = usePeranMasuk();
   if (!peran || !perluPemilih(tersedia)) return null;
   return (
     <div className="rounded-xl border border-[#D7DEE8] bg-white px-3 py-2 shadow-sm" data-testid="pemilih-peran">
@@ -81,7 +84,7 @@ export function PemilihPeran() {
       >
         {tersedia.map((p) => (
           <option key={p} value={p}>
-            {LABEL_PERAN[p]}
+            {labelPilihan(p, nyata)}
           </option>
         ))}
       </select>
