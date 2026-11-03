@@ -3,7 +3,7 @@
 // (2 Nov 2026) Pelatihan 5 tab: kartu undangan + ketentuan + jawaban terima/tolak.
 //
 // GET  (Bearer sesi; ?kegiatan=ID opsional) -> { kegiatan_id, instrumen_belum, tab_baru (berlaku), tab_pengaturan (true|false|null=otomatis), otomatis, kegiatan_selesai, ketentuan:{butir,versi,diubah}, undangan:{hari_tanggal,pukul,tempat,tanggal_iso,pdf},
-//        peserta:{peran,kelas}|null, jadwal_pendataan:{sumber,periode:[{periode,mulai,selesai,perkiraan}]}|null, respons, status, berubah, kartu:{judul,ket,tombol,nada}, kamera_href|null, boleh_kelola }
+//        peserta:{peran,kelas}|null, jadwal_pendataan:{sumber,periode:[{periode,mulai,selesai,perkiraan}]}|null, jadwal_pelatihan:{mulai,selesai}|null, respons, status, berubah, kartu:{judul,ket,tombol,nada}, kamera_href|null, boleh_kelola }
 // POST {aksi:"respons", respons:"terima"|"tolak", alasan?}       (peserta)  -> { ok, status }
 // POST {aksi:"simpan", butir?:string[], tab_baru?:boolean|null}  (izin pelatihan.kelola = kelola; null = kembali ke otomatis) -> { ok, ketentuan }
 //
@@ -56,9 +56,22 @@ export async function GET(req: NextRequest) {
     }
     // (3 Nov 2026) Jadwal pendataan dari Identifikasi survei yang tertaut (kartu "Jadwal pendataan" di Hari ini). Hanya untuk peserta; gagal / tanpa tautan = null.
     const jadwalPendataan = peserta ? await muatJadwalPendataanTertaut(db, kegiatanId) : null;
+    // (3 Nov 2026) tanggal kegiatan pelatihan untuk linimasa "Jadwal Anda"; gagal membaca = null (kartu memakai tanggal undangan)
+    let jadwalPelatihan: { mulai: string; selesai: string | null } | null = null;
+    if (peserta) {
+      try {
+        const { data: kg } = await db.from("sigap_kegiatan").select("tanggal_mulai, tanggal_selesai").eq("id", kegiatanId).maybeSingle();
+        const mulai = (kg as { tanggal_mulai?: string | null } | null)?.tanggal_mulai ?? null;
+        const selesai = (kg as { tanggal_selesai?: string | null } | null)?.tanggal_selesai ?? null;
+        if (mulai && /^\d{4}-\d{2}-\d{2}/.test(mulai)) jadwalPelatihan = { mulai: mulai.slice(0, 10), selesai: selesai && /^\d{4}-\d{2}-\d{2}/.test(selesai) ? selesai.slice(0, 10) : null };
+      } catch {
+        jadwalPelatihan = null;
+      }
+    }
     return NextResponse.json({
       kegiatan_id: kegiatanId,
       jadwal_pendataan: jadwalPendataan,
+      jadwal_pelatihan: jadwalPelatihan,
       instrumen_belum: instrumenBelum,
       tab_baru: tampilan.tab_baru,
       tab_pengaturan: ketentuan.tab_pengaturan,

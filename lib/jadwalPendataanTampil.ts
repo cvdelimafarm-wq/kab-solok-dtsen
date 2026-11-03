@@ -19,6 +19,27 @@ const utc = (t: string): number | null => {
 };
 const selisih = (a: string, b: string): number => Math.round(((utc(a) ?? 0) - (utc(b) ?? 0)) / 86_400_000);
 
+/** Selisih hari kalender a - b (tanggal YYYY-MM-DD). */
+export const selisihHari = selisih;
+/** Tambah n hari ke tanggal YYYY-MM-DD (tanggal tidak sah dikembalikan apa adanya). */
+export function tambahHari(t: string, n: number): string {
+  const ms = utc(t);
+  return ms === null ? t : new Date(ms + n * 86_400_000).toISOString().slice(0, 10);
+}
+const BULAN_PENDEK = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+/** "2026-11-09" -> "9 Nov". */
+export function tanggalPendek(t: string): string {
+  const ms = utc(t);
+  if (ms === null) return t;
+  const d = new Date(ms);
+  return `${d.getUTCDate()} ${BULAN_PENDEK[d.getUTCMonth()]}`;
+}
+/** 0=Minggu .. 6=Sabtu; -1 bila tanggal tidak sah. */
+export function hariKe(t: string): number {
+  const ms = utc(t);
+  return ms === null ? -1 : new Date(ms).getUTCDay();
+}
+
 /** "2026-11-10" -> "Senin, 10 November 2026" (selain tanggal sah dikembalikan apa adanya). */
 export function tanggalLengkap(t: string): string {
   const ms = utc(t);

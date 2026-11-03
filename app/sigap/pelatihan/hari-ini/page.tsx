@@ -39,6 +39,8 @@ type Data = {
   peserta: { peran: string; kelas: number | null } | null;
   /** (3 Nov 2026) jadwal pendataan dari Identifikasi survei yang tertaut; null = tidak ada / bukan peserta. */
   jadwal_pendataan?: JadwalPendataanKartu | null;
+  /** (3 Nov 2026) tanggal kegiatan pelatihan (untuk linimasa Jadwal Anda); null = belum diisi */
+  jadwal_pelatihan?: { mulai: string; selesai: string | null } | null;
   respons: { respons: "terima" | "tolak"; alasan: string | null } | null;
   status: StatusUndangan;
   berubah: boolean;
@@ -258,7 +260,7 @@ export default function HalamanHariIni() {
               </div>
             )}
           </section>
-          <KartuJadwalPendataan jadwal={d.jadwal_pendataan} />
+          <KartuJadwalPendataan jadwal={d.jadwal_pendataan} pelatihan={d.jadwal_pelatihan ?? (d.undangan.tanggal_iso ? { mulai: d.undangan.tanggal_iso, selesai: null } : null)} peran={d.peserta?.peran ?? null} />
           {!vg.mendesak && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
           <AbsenPeserta />
           <KartuKuis />
