@@ -1,6 +1,6 @@
 // Menguji lib/konteksVanguard.ts (murni): status, nada, sisa hari, teks Panduan, label WAJIB/OPSIONAL, dan kartu yang disembunyikan.
 import { describe, expect, it } from "vitest";
-import { aturanDihitung, dihitungAturan, kartuTampil, labelKartu, nadaKonteks, panduanKonteks, sisaHari, statusKonteks, teksSisa, type KonteksPelatihan, type KartuVg } from "../konteksVanguard";
+import { TEKS_BANK_SOAL, aturanDihitung, dihitungAturan, kartuTampil, labelKartu, nadaKonteks, panduanKonteks, sisaHari, soalLatihanBerikutnya, statusKonteks, teksSisa, teksSertifikasiWajib, type KonteksPelatihan, type KartuVg } from "../konteksVanguard";
 
 const petak = (selesai: number, hariIni = true) => Array.from({ length: 3 }, (_, i) => (i < selesai ? { status: "selesai" as const, tanggal: null } : i === selesai && hariIni ? { status: "hari_ini" as const, tanggal: "2026-11-02" } : { status: "belum" as const, tanggal: null }));
 const dasar = (o: Partial<KonteksPelatihan> = {}, r: Partial<NonNullable<KonteksPelatihan["runtutan"]>> | null = {}): KonteksPelatihan => ({
@@ -119,7 +119,8 @@ describe("apa yang dihitung", () => {
     expect(t).toContain("Latihan harian");
     expect(t).toContain("Skor tiap sesi minimal 60");
     expect(t).toContain("Sabtu dan Minggu ikut dihitung");
-    expect(t).toContain("Tidak dihitung: Tantangan mingguan");
+    expect(t).toContain("Tidak dihitung: Latihan bank soal");
+    expect(t).toContain("tidak memengaruhi pelatihan");
     expect(aturanDihitung(dasar()).join(" ")).not.toContain("Skor tiap sesi");
   });
 });
@@ -127,9 +128,9 @@ describe("apa yang dihitung", () => {
 describe("label dan kartu", () => {
   const semuaKartu: KartuVg[] = ["cara_main", "ringkasan", "kasus", "saran", "kuesioner", "sertifikasi", "latihan_format", "harian", "tantangan", "usul", "tingkat"];
   it("wajib: sesi yang dihitung WAJIB, sisanya OPSIONAL tidak dihitung", () => {
-    expect(labelKartu("wajib", "harian")).toEqual({ teks: "WAJIB · dihitung", jenis: "wajib" });
+    expect(labelKartu("wajib", "harian")).toEqual({ teks: "WAJIB", jenis: "wajib" });
     expect(labelKartu("wajib", "sertifikasi").jenis).toBe("wajib");
-    expect(labelKartu("wajib", "tantangan")).toEqual({ teks: "OPSIONAL · tidak dihitung", jenis: "opsional" });
+    expect(labelKartu("wajib", "tantangan")).toEqual({ teks: "LATIHAN BEBAS", jenis: "opsional" });
     expect(labelKartu("wajib", "kuesioner").jenis).toBe("opsional");
   });
   it("opsional: dihitung tetapi tidak wajib; tidak_ada: semua OPSIONAL", () => {
@@ -147,5 +148,32 @@ describe("label dan kartu", () => {
   });
   it("bukan peserta pelatihan (konteks null): semua kartu tampil seperti semula", () => {
     expect(semuaKartu.every((x) => kartuTampil(null, x, false))).toBe(true);
+  });
+});
+
+describe("Menu wajib dan Latihan bank soal", () => {
+  it("teks bank soal: boleh dicoba sebanyak-banyaknya, tidak memengaruhi pelatihan, dan tidak menyebut 'dicatat'", () => {
+    expect(TEKS_BANK_SOAL.judul).toBe("Latihan bank soal");
+    expect(TEKS_BANK_SOAL.isi).toContain("berkali-kali");
+    expect(TEKS_BANK_SOAL.isi).toContain("tidak memengaruhi pelatihan");
+    expect(TEKS_BANK_SOAL.isi.toLowerCase()).not.toContain("catat");
+  });
+  it("Sertifikasi wajib: judul mengikuti mode; belum / sudah ikut ujian", () => {
+    expect(teksSertifikasiWajib({ mode: "wajib", sertifikasi: { selesai: false, tingkat: null } })).toMatchObject({ judul: "Sertifikasi wajib", selesai: false, tombol: "Ikut ujian sertifikasi" });
+    expect(teksSertifikasiWajib({ mode: "tidak_ada" }).judul).toBe("Sertifikasi kemampuan");
+    const s = teksSertifikasiWajib({ mode: "wajib", sertifikasi: { selesai: true, tingkat: 3 } });
+    expect(s.selesai).toBe(true);
+    expect(s.ket).toContain("★★★");
+    expect(s.ket).toContain("3 dari 5");
+    expect(s.tombol).toBe("Lihat sertifikat saya");
+  });
+  it("soal berikutnya: yang pertama belum benar, melewati kasus bebas dan level tertutup; semua benar = soal pertama", () => {
+    const daftar = [{ kode: "A00", bebas: true, level: "A" }, { kode: "A01", level: "A" }, { kode: "A02", level: "A" }, { kode: "B01", level: "B" }];
+    const lv = new Set(["A", "B"]);
+    expect(soalLatihanBerikutnya(daftar, {}, lv)).toBe(1);
+    expect(soalLatihanBerikutnya(daftar, { A01: 2 }, lv)).toBe(2);
+    expect(soalLatihanBerikutnya(daftar, { A01: 1, A02: 3, B01: 2 }, lv)).toBe(1);
+    expect(soalLatihanBerikutnya(daftar, {}, new Set(["B"]))).toBe(3);
+    expect(soalLatihanBerikutnya(daftar, {}, new Set())).toBe(-1);
   });
 });

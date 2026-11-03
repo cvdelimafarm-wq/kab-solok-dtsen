@@ -20,6 +20,25 @@ export async function muatPengaturan(db: Db, kegiatan: number): Promise<Pengatur
   }
 }
 
+/**
+ * (3 Nov 2026) Bank soal (84 kasus) untuk PESERTA PELATIHAN dipisah dari kewajiban pelatihan: boleh dicoba sebanyak-banyaknya, dengan petunjuk dan kunci jawaban,
+ * dan tidak memengaruhi apa pun. Untuk kegiatan berjenis "pelatihan", pengaturan tersimpan (mode uji, nilai lulus, batas percobaan, jadwal buka/tutup, level dibuka)
+ * TIDAK berlaku pada bank soal; kewajiban pelatihan ada di aturan runtutan (Menu wajib: Latihan wajib dan Sertifikasi wajib). Kegiatan lain tidak berubah.
+ */
+export async function kegiatanBerjenisPelatihan(db: Db, kegiatan: number): Promise<boolean> {
+  try {
+    const { data, error } = await db.from("sigap_kegiatan").select("jenis").eq("id", kegiatan).maybeSingle();
+    return !error && (data as { jenis?: string } | null)?.jenis === "pelatihan";
+  } catch {
+    return false;
+  }
+}
+
+export async function muatPengaturanPeserta(db: Db, kegiatan: number): Promise<Pengaturan> {
+  if (await kegiatanBerjenisPelatihan(db, kegiatan)) return { ...PENGATURAN_BAWAAN };
+  return muatPengaturan(db, kegiatan);
+}
+
 /** Kegiatan yang sedang bermode uji beserta pengaturannya (jumlahnya kecil). Kosong bila tabel atau kolom mode belum ada. */
 export async function muatKegiatanUji(db: Db): Promise<{ kegiatan: number; pengaturan: Pengaturan }[]> {
   try {

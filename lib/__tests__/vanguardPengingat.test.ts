@@ -4,7 +4,7 @@ import { CATATAN_KOSONG, JEDA_MODAL_MENIT, MAKS_MODAL_PER_HARI, catatModalTampil
 
 const wib = (tgl: string, jam: number, mnt = 0) => new Date(`${tgl}T${String(jam).padStart(2, "0")}:${String(mnt).padStart(2, "0")}:00+07:00`).getTime();
 const dasar: MasukanKejadian = { tuntas: false, hari_ini_sudah: false, terputus: false, berturut: 0, hari_berturut: 3, kelayakan: { mungkin: true, hari_terakhir_mulai: false, batas_mulai: "2026-11-06" } };
-const dengan = (o: Partial<MasukanKejadian> & { kelayakan?: Partial<MasukanKejadian["kelayakan"]> }): MasukanKejadian => ({ ...dasar, ...o, kelayakan: { ...dasar.kelayakan, ...(o.kelayakan ?? {}) } });
+const dengan = (o: Omit<Partial<MasukanKejadian>, "kelayakan"> & { kelayakan?: Partial<MasukanKejadian["kelayakan"]> }): MasukanKejadian => ({ ...dasar, ...o, kelayakan: { ...dasar.kelayakan, ...(o.kelayakan ?? {}) } });
 
 describe("jendela kirim", () => {
   it("pagi 07.00-07.44 dan sore 16.00-16.44 WIB, selain itu tidak ada", () => {

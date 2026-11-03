@@ -7,7 +7,7 @@
 // Layar: beranda (sertifikat, status, riwayat) -> ujian (daftar butir) -> butir (kuesioner IV.1 atau lembar V–VII) -> hasil (bintang + tinjauan).
 // Back (layar dan Back HP) mundur satu tingkat: butir -> daftar -> beranda -> keluar halaman. Berkas ini TIDAK boleh mengimpor kunci atau templat.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import "../vanguard.css";
@@ -28,7 +28,7 @@ import { Lambang } from "../Logo";
 import PapanIsianK, { type Isian } from "../kuesioner/PapanIsianK";
 import PanduanPelatihan, { LabelWajib } from "../PanduanPelatihan"; // (2 Nov 2026) konteks pelatihan peserta
 import { useKonteksPelatihan } from "../useKonteksPelatihan";
-import { kartuTampil } from "@/lib/konteksVanguard";
+import { kartuTampil, teksSertifikasiWajib } from "@/lib/konteksVanguard";
 
 type Layar = "beranda" | "ujian" | "butir" | "hasil" | "usul";
 type JenisUjian = "sertifikasi" | "latihan" | "harian" | "tantangan";
@@ -115,11 +115,16 @@ function KoreksiButir({ daftar, penjelasan, bisaSorot, onLihat }: { daftar: Rinc
   );
 }
 
+/** (3 Nov 2026) Peserta pelatihan: kartu tambahan (Tantangan, Usul kasus, Tingkat, Riwayat) dilipat jadi satu supaya tidak membingungkan. Selain itu tampil apa adanya. */
+function Lipat({ ada, judul, children }: { ada: boolean; judul: string; children: ReactNode }) {
+  return ada ? <details className="pg-lipat"><summary>{judul}</summary><div className="stack">{children}</div></details> : <>{children}</>;
+}
+
 export default function Sertifikasi() {
   const q = useSearchParams();
   const tujuan = useMemo(() => { const d = q.get("dari"); return d ? tujuanAman(d) : "/sigap/vanguard"; }, [q]);
   const { konteks, siap } = useKonteksPelatihan(); // null = bukan peserta pelatihan: tampilan lama
-  const [semua, setSemua] = useState(false); // "Tampilkan semua latihan"
+  const semua = true; // (3 Nov 2026) kartu tambahan kini TERLIPAT (bukan disembunyikan) untuk peserta pelatihan; lihat <Lipat>
   const [layar, setLayar] = useState<Layar>("beranda");
   const [beranda, setBeranda] = useState<Beranda | null>(null);
   const [detail, setDetail] = useState<UjianDetail | null>(null);
@@ -299,7 +304,7 @@ export default function Sertifikasi() {
         {layar === "beranda" && (
           !beranda || !siap ? <div className="sheet">{galat ? <button type="button" className="btn" onClick={() => void muatBeranda()}>Coba lagi</button> : "Memuat…"}</div> : (
             <>
-              {konteks && <PanduanPelatihan konteks={konteks} mulai={kerja} semua={semua} onSemua={setSemua} onLatihan={() => void mulai(beranda.harian.selesaiHariIni ? "latihan" : "harian")} />}
+              {konteks && <PanduanPelatihan konteks={konteks} mulai={kerja} onLatihan={() => void mulai(beranda.harian.selesaiHariIni ? "latihan" : "harian")} />}
               <div className="sr-kartu">
                 {beranda.sertifikat.tertinggi ? (
                   <>
@@ -322,7 +327,7 @@ export default function Sertifikasi() {
               {beranda.berjalan && <div className="catat ya" role="status"><b>Ada ujian yang belum selesai.</b> <button type="button" className="tog" disabled={kerja} onClick={() => void lanjutkan(beranda.berjalan as number)}>Lanjutkan</button> <button type="button" className="tog" disabled={kerja} onClick={() => void batalkan(beranda.berjalan as number)}>Batalkan</button></div>}
               {!beranda.berjalan && (
                 <div className="sheet">
-                  <span className="tag">Ujian Sertifikasi</span><LabelWajib konteks={konteks} kartu="sertifikasi" />
+                  <span className="tag">{konteks ? teksSertifikasiWajib(konteks).judul : "Ujian Sertifikasi"}</span><LabelWajib konteks={konteks} kartu="sertifikasi" />
                   <p style={{ fontSize: 13 }}>{beranda.jumlahButir} butir acak dan berimbang dari berbagai blok kuesioner. Jawaban dinilai server; tiap butir dijawab sekali. Hasilnya tingkat 1–5 bintang.</p>
                   {!beranda.status.sertifikasiBoleh && <div className="catat tidak" role="status" style={{ marginTop: 6 }}>{beranda.status.alasan}{beranda.status.bukaLagi ? ` (terbuka ${wibTeks(beranda.status.bukaLagi)})` : ""}</div>}
                   <div className="btns" style={{ padding: "10px 0 0", border: 0 }}>
@@ -337,6 +342,7 @@ export default function Sertifikasi() {
                 <p style={{ fontSize: 12.5, marginTop: 4 }}>{konteks && konteks.mode !== "tidak_ada" ? "3 butir (±5 menit) dengan angka berbeda tiap hari. Untuk pelatihan, setiap hari kalender dihitung, termasuk Sabtu dan Minggu; angka 🔥 di atas adalah rangkaian harian biasa." : "3 butir (±5 menit) dengan angka berbeda tiap hari. Sabtu dan Minggu tidak memutus rangkaian, dan hari ini yang belum berlatih tidak memutus apa pun."}</p>
                 <div className="btns" style={{ padding: "8px 0 0", border: 0 }}><button type="button" className="btn pri" disabled={kerja || (beranda.harian.selesaiHariIni && !beranda.berjalan)} onClick={() => void mulai("harian")}>{beranda.harian.selesaiHariIni ? "Sudah selesai hari ini ✓" : beranda.harian.mulaiHariIni ? "Lanjutkan latihan harian" : "Mulai latihan harian"}</button></div>
               </div>
+              <Lipat ada={konteks !== null} judul="Latihan tambahan dan riwayat ujian">
               {kartuTampil(konteks, "tantangan", semua) && (
               <div className="sheet">
                 <span className="tag">Tantangan minggu ini</span><LabelWajib konteks={konteks} kartu="tantangan" />
@@ -369,6 +375,7 @@ export default function Sertifikasi() {
                   ))}
                 </div>
               )}
+              </Lipat>
             </>
           )
         )}

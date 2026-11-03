@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { sesiDariHeader } from "@/lib/sigapAkses";
 import { bolehMencatat } from "@/lib/vanguardAkses";
-import { muatKegiatanUji } from "@/lib/vanguardPengaturanDb";
+import { kegiatanBerjenisPelatihan, muatKegiatanUji } from "@/lib/vanguardPengaturanDb";
 import { cariKasus, rahasiaKasus } from "@/lib/vanguard/kasus";
 import { kasusSedangDiuji } from "@/lib/vanguard/pengaturan";
 
@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
     const sekarang = Date.now();
     for (const u of await muatKegiatanUji(db as Db)) {
       if (!kasusSedangDiuji(u.pengaturan, kasus.level, sekarang)) continue;
+      if (await kegiatanBerjenisPelatihan(db as Db, u.kegiatan)) continue; // (3 Nov 2026) bank soal pelatihan selalu terbuka (petunjuk dan kunci tersedia)
       if ((await bolehMencatat(db as Db, akunId, u.kegiatan)).boleh) return galat("Kasus ini sedang diujikan kepada Anda; kunci dan pembahasan tidak ditampilkan selama uji.", 403);
     }
     return NextResponse.json({ kode, rahasia: rahasiaKasus(kasus) });

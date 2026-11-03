@@ -47,6 +47,7 @@ const PENGECUALIAN_MODAL: Record<string, string> = {
   "app/sigap/admin/KepalaKolom.tsx": "latar transparan pelindung dropdown kolom tabel (popover), bukan modal",
   "app/sigap/pelatihan/kelola/kuisHost.tsx": "layar host kuis langsung: tidak boleh tertutup tak sengaja oleh Back saat kuis berjalan",
   "app/portal/PilihSebagai.tsx": "isi dialog; penutupnya dipasang pemanggil (Beranda, BannerLihatSebagai) dengan useTutupDenganBack",
+  "app/sigap/translok/ModalBlokirTranslok.tsx": "penutup halaman translok petugas yang diblokir sementara: baru terbuka setelah atasan menyetujui ajukan unblock, tidak boleh ditutup Back (keluar lewat tombol Keluar)",
 };
 
 /**

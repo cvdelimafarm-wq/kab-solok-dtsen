@@ -23,7 +23,7 @@ import { bolehMencoba, hasilFinal, hitungLulus, statusJadwal, ujiBerlaku } from 
 import { KASUS } from "@/lib/vanguard/kasus";
 import { adalahKasusK } from "@/lib/vanguard/kuesioner/publik";
 import { petaKemampuan } from "@/lib/vanguard/remedial";
-import { muatPengaturan, tambahKalkulator } from "@/lib/vanguardPengaturanDb";
+import { muatPengaturanPeserta, tambahKalkulator } from "@/lib/vanguardPengaturanDb"; // (3 Nov 2026) pelatihan: bank soal bebas, tanpa uji/batas/kelulusan
 import { ringkasRuntutanAkun } from "@/lib/vanguardRuntutanDb"; // (2 Nov 2026) runtutan "N hari berturut-turut" untuk kartu Hari ini
 
 export const runtime = "nodejs";
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     if (modeMasuk(kegiatan) === "bebas") return NextResponse.json({ mode: "bebas", boleh: false, alasan: null, riwayat: [] });
     const izin = await bolehMencatat(db as Db, akunId, kegiatan as number);
     if (!izin.boleh) return NextResponse.json({ mode: "tercatat", boleh: false, alasan: izin.alasan, riwayat: [] });
-    const peng = await muatPengaturan(db as Db, kegiatan as number);
+    const peng = await muatPengaturanPeserta(db as Db, kegiatan as number);
     const { data, error } = await db.from("sigap_vanguard_percobaan").select("kasus, benar, bintang, mode").eq("kegiatan_id", kegiatan).eq("akun_id", akunId).limit(5000);
     if (error) return galat("Gagal memuat riwayat.", 500);
     const { data: ks, error: eKs } = await db.from("sigap_vanguard_kesalahan").select("jenis, kasus").eq("kegiatan_id", kegiatan).eq("akun_id", akunId).limit(5000);
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     let { muatan } = baca;
     const izin = await bolehMencatat(db as Db, akunId, muatan.kegiatan);
     if (!izin.boleh) return galat(izin.alasan ?? "Tidak diizinkan.", 403);
-    const peng = await muatPengaturan(db as Db, muatan.kegiatan);
+    const peng = await muatPengaturanPeserta(db as Db, muatan.kegiatan);
     const uji = ujiBerlaku(peng, Date.now());
     if (uji) {
       if (muatan.lihatJawaban) return galat("Mode uji tidak menyediakan \"Lihat jawaban\".", 400);

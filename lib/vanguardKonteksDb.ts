@@ -15,6 +15,18 @@ const BUKAN_ADMINISTRASI = "sumber.is.null,sumber.neq.administrasi";
 
 type Kandidat = { id: number; nama: string; tanggal_selesai: string | null; tanggal_mulai: string | null };
 
+/** Status ujian sertifikasi akun (per akun; tabel tidak punya kegiatan_id). Gagal baca = null (kartu tidak menampilkan status). */
+async function muatSertifikasiAkun(db: Db, akunId: number): Promise<{ selesai: boolean; tingkat: number | null } | null> {
+  try {
+    const { data, error } = await db.from("sigap_vanguard_ujian").select("tingkat, selesai_at").eq("akun_id", akunId).eq("jenis", "sertifikasi").not("selesai_at", "is", null).limit(200);
+    if (error) return null;
+    const t = ((data ?? []) as { tingkat: number | null }[]).map((x) => x.tingkat).filter((x): x is number => typeof x === "number");
+    return t.length ? { selesai: true, tingkat: Math.max(...t) } : { selesai: false, tingkat: null };
+  } catch {
+    return null;
+  }
+}
+
 export async function muatKonteksPelatihan(db: Db, akunId: number, sekarang: number): Promise<KonteksPelatihan | null> {
   try {
     const hariIni = hariWib(sekarang) as string;
@@ -34,7 +46,8 @@ export async function muatKonteksPelatihan(db: Db, akunId: number, sekarang: num
     const { k } = dipilih[0];
     const kegiatanId = Number(k.id);
     const aturan = await muatAturanVanguard(db, kegiatanId);
-    const dasar = { kegiatan_id: kegiatanId, nama: String(k.nama ?? ""), mode: aturan.mode, hari_berturut: aturan.hari_berturut, sesi_min_per_hari: aturan.sesi_min_per_hari, nilai_minimal: aturan.nilai_minimal, hari_ini: hariIni };
+    const sertifikasi = await muatSertifikasiAkun(db, akunId);
+    const dasar = { kegiatan_id: kegiatanId, nama: String(k.nama ?? ""), mode: aturan.mode, hari_berturut: aturan.hari_berturut, sesi_min_per_hari: aturan.sesi_min_per_hari, nilai_minimal: aturan.nilai_minimal, hari_ini: hariIni, sertifikasi };
     if (aturan.mode === "tidak_ada") return { ...dasar, tenggat: null, tenggat_sumber: null, mulai_paling_lambat: null, runtutan: null };
     const { data: tes } = await db.from("sigap_tes").select("jenis, aktif, buka_at").eq("kegiatan_id", kegiatanId).eq("jenis", "pretest");
     const b = await muatRuntutanBatch(db, kegiatanId, [akunId], sekarang, tanggalBukaPretest((tes ?? []) as { jenis: string; aktif?: boolean; buka_at?: string | null }[]), aturan);

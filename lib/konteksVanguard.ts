@@ -40,6 +40,8 @@ export type KonteksPelatihan = {
   hari_ini: string;
   /** null bila mode tidak_ada. */
   runtutan: RuntutanKonteks | null;
+  /** (3 Nov 2026) Status Sertifikasi wajib: sudah pernah menyelesaikan ujian sertifikasi? Tidak ada = belum diketahui (tidak ditampilkan). */
+  sertifikasi?: { selesai: boolean; tingkat: number | null } | null;
 };
 
 export type StatusKonteks = "bebas" | "belum_mulai" | "berjalan" | "terputus" | "tuntas" | "lewat_batas";
@@ -106,7 +108,7 @@ export function aturanDihitung(k: Pick<KonteksPelatihan, "mode" | "hari_berturut
   const N = k.hari_berturut;
   const baris: string[] = [];
   if (k.mode === "tidak_ada") {
-    baris.push("Belum ada kewajiban latihan untuk pelatihan ini. Berlatihlah kapan saja; sesi yang selesai tetap tercatat.");
+    baris.push("Belum ada kewajiban latihan untuk pelatihan ini. Berlatihlah kapan saja, sesering yang Anda mau.");
     baris.push("Latihan harian (3 butir, ±5 menit) adalah cara tercepat untuk membiasakan diri.");
     return baris;
   }
@@ -114,7 +116,7 @@ export function aturanDihitung(k: Pick<KonteksPelatihan, "mode" | "hari_berturut
   baris.push(`Dihitung: ${sesi} yang SELESAI per hari dari Latihan harian (paling singkat), Latihan format sertifikasi, atau Ujian Sertifikasi.`);
   if (k.nilai_minimal > 0) baris.push(`Skor tiap sesi minimal ${k.nilai_minimal}.`);
   baris.push(`Perlu ${N} hari kalender berturut-turut. Sabtu dan Minggu ikut dihitung; satu hari terlewat memutus runtutan dan Anda mulai lagi dari hari 1.`);
-  baris.push("Tidak dihitung: Tantangan mingguan, kasus latihan satu per satu, Mode Kuesioner Penuh, dan Usul kasus (tetap boleh dilakukan sebagai latihan tambahan).");
+  baris.push("Tidak dihitung: Latihan bank soal, Tantangan mingguan, dan Usul kasus. Semuanya boleh dicoba sebanyak-banyaknya dan tidak memengaruhi pelatihan Anda.");
   return baris;
 }
 
@@ -131,7 +133,7 @@ export function panduanKonteks(k: KonteksPelatihan): Panduan {
 
   switch (status) {
     case "bebas":
-      return { ...dasar, judul: "Latihan Vanguard", progres: null, ket: "Latihan di Vanguard tidak diwajibkan untuk pelatihan ini.", langkah: "Mulai dari Latihan harian: 3 butir, sekitar 5 menit.", tombol: { jenis: "bebas", teks: "Mulai latihan harian" } };
+      return { ...dasar, judul: "Latihan harian: 3 butir, sekitar 5 menit", progres: null, ket: "Tidak diwajibkan untuk pelatihan ini, tetapi sangat dianjurkan.", langkah: "Mulai dari Latihan harian.", tombol: { jenis: "bebas", teks: "Mulai latihan harian" } };
     case "tuntas":
       return { ...dasar, judul: `Latihan ${N} dari ${N} hari berturut-turut`, progres: { x: N, n: N }, ket: wajib ? "Selesai. Pretest tidak lagi terkunci oleh Vanguard." : "Selesai. Terima kasih sudah berlatih.", langkah: "Tidak ada yang perlu dilakukan lagi. Tetap berlatih bila ingin makin mahir.", tombol: { jenis: "selesai", teks: "Selesai ✓" } };
     case "lewat_batas":
@@ -179,8 +181,8 @@ export function dihitungAturan(kartu: KartuVg): boolean {
 }
 
 export function labelKartu(mode: ModeVanguard, kartu: KartuVg): LabelKartu {
-  if (!dihitungAturan(kartu)) return { teks: mode === "tidak_ada" ? "OPSIONAL" : "OPSIONAL · tidak dihitung", jenis: "opsional" };
-  if (mode === "wajib") return { teks: "WAJIB · dihitung", jenis: "wajib" };
+  if (!dihitungAturan(kartu)) return { teks: mode === "tidak_ada" ? "OPSIONAL" : "LATIHAN BEBAS", jenis: "opsional" };
+  if (mode === "wajib") return { teks: "WAJIB", jenis: "wajib" };
   if (mode === "opsional") return { teks: "DIHITUNG", jenis: "dihitung" };
   return { teks: "OPSIONAL", jenis: "opsional" };
 }
@@ -190,4 +192,33 @@ export function kartuTampil(konteks: KonteksPelatihan | null, kartu: KartuVg, se
   if (!konteks || semua) return true;
   // ringkas: hanya sesi yang dihitung aturan (harian, format sertifikasi, ujian sertifikasi) dan kartu Cara main dalam bentuk tautan
   return dihitungAturan(kartu) || kartu === "cara_main";
+}
+
+// ---------- Menu wajib dan Latihan bank soal (3 Nov 2026) ----------
+// Peserta pelatihan melihat dua pintu terpisah:
+//   1. MENU WAJIB: Latihan wajib (runtutan N hari, lihat panduanKonteks) dan Sertifikasi wajib (ujian sertifikasi).
+//   2. LATIHAN BANK SOAL: berlatih sebanyak-banyaknya dengan petunjuk dan kunci jawaban; tidak memengaruhi pelatihan.
+
+export const TEKS_BANK_SOAL = {
+  judul: "Latihan bank soal",
+  isi: "Berlatih sepuasnya di sini. Soal boleh dicoba berkali-kali, tanpa batas, dan hasilnya tidak memengaruhi pelatihan Anda. Petunjuk dan kunci jawaban tersedia.",
+} as const;
+
+export type SertifikasiWajib = { judul: string; ket: string; tombol: string; selesai: boolean };
+
+/** Kartu "Sertifikasi wajib" di Menu wajib. Judul mengikuti mode: wajib = "Sertifikasi wajib", selain itu "Sertifikasi kemampuan". */
+export function teksSertifikasiWajib(k: Pick<KonteksPelatihan, "mode" | "sertifikasi">): SertifikasiWajib {
+  const judul = k.mode === "wajib" ? "Sertifikasi wajib" : "Sertifikasi kemampuan";
+  const s = k.sertifikasi;
+  if (s?.selesai) {
+    return { judul, selesai: true, ket: s.tingkat ? `Sudah ikut ujian sertifikasi. Tingkat Anda: ${"★".repeat(Math.max(1, Math.min(5, s.tingkat)))} (${s.tingkat} dari 5).` : "Sudah ikut ujian sertifikasi.", tombol: "Lihat sertifikat saya" };
+  }
+  return { judul, selesai: false, ket: "Ujian 15 butir (sekitar 15 menit). Hasilnya tingkat 1 sampai 5 bintang.", tombol: "Ikut ujian sertifikasi" };
+}
+
+/** Soal pertama yang belum dijawab benar (urut seperti daftar); bila semua sudah benar, soal pertama. -1 bila tidak ada soal. */
+export function soalLatihanBerikutnya(daftar: readonly { kode: string; bebas?: boolean; level: string }[], benar: Readonly<Record<string, unknown>>, levelAktif: ReadonlySet<string>): number {
+  const layak = daftar.map((c, i) => ({ c, i })).filter((x) => !x.c.bebas && levelAktif.has(x.c.level));
+  if (layak.length === 0) return -1;
+  return (layak.find((x) => benar[x.c.kode] == null) ?? layak[0]).i;
 }

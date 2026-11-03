@@ -33,3 +33,14 @@
 .vg .pg-lipat{background:#fff;border:1.5px solid #000;padding:0 12px}
 .vg .pg-lipat summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-size:12.5px;font-weight:700}
 .vg .pg-lipat .sheet{border:0;padding:0 0 10px}
+
+/* (3 Nov 2026) Menu wajib (dua bagian) dan kartu Latihan bank soal */
+.vg .pg .pg-bagian{margin-top:10px;padding-top:9px;border-top:1.5px dashed #000}
+.vg .pg .pg-bagian h3{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#2a1763}
+.vg .pg .pg-bagian h2{margin-top:3px}
+.vg .pg-bank{border-left-color:#3ddc97}
+.vg .pg-bank .pg-tag.bank{background:#3ddc97}
+.vg .pg-bank details{margin-top:9px}
+.vg .pg-bank details .item{margin-top:6px}
+.vg .pg-bank details .lv{display:inline-block;margin-top:8px}
+.vg .pg-bank .pg-btn{background:#3ddc97}

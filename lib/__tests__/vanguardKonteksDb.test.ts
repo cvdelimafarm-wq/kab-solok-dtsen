@@ -19,7 +19,8 @@ function fakeDb(tabel: Record<string, Baris[]>, tolakKolom: string[] = []) {
       let payload: Baris = {};
       let kolom = "";
       const saring: ((r: Baris) => boolean)[] = [];
-      const q: Record<string, unknown> = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const q: Record<string, any> = {
         select: (k?: string) => { kolom = k ?? ""; return q; },
         insert: (x: Baris) => { op = "insert"; payload = x; return q; },
         update: (x: Baris) => { op = "update"; payload = x; return q; },
