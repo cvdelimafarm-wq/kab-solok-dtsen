@@ -86,8 +86,8 @@ export const maksPercobaan = (p: Pengaturan): number => p.maks_percobaan ?? MAKS
 
 export function bolehMencoba(p: Pengaturan, kasus: Pick<KasusPublik, "level">, percobaanSudah: number, sekarangMs: number): { boleh: true } | { boleh: false; alasan: string } {
   const j = statusJadwal(p, sekarangMs);
-  if (j === "belum_buka") return { boleh: false, alasan: "Latihan Vanguard untuk kegiatan ini belum dibuka." };
-  if (j === "tutup") return { boleh: false, alasan: "Latihan Vanguard untuk kegiatan ini sudah ditutup." };
+  if (j === "belum_buka") return { boleh: false, alasan: "Vanguard untuk kegiatan ini belum dibuka." };
+  if (j === "tutup") return { boleh: false, alasan: "Vanguard untuk kegiatan ini sudah ditutup." };
   if (!levelDibuka(p).includes(kasus.level)) return { boleh: false, alasan: "Kasus ini belum dibuka untuk kegiatan Anda." };
   if (percobaanSudah >= maksPercobaan(p)) return { boleh: false, alasan: "Batas percobaan untuk kasus ini sudah tercapai." };
   return { boleh: true };

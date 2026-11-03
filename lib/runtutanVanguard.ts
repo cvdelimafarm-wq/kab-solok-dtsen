@@ -73,7 +73,10 @@ export const selisihHari = (a: string, b: string): number => Math.round((keMs(a)
 
 // ---------- runtutan ----------
 
-export type SesiVanguard = { selesai_at: string | null; skor?: number | string | null };
+export type SesiVanguard = { selesai_at: string | null; skor?: number | string | null; /** jenis sesi (latihan / harian / sertifikasi); dipakai untuk syarat Sertifikasi wajib */ jenis?: string | null };
+
+/** (3 Nov 2026) Sudah ada ujian sertifikasi yang SELESAI di antara sesi-sesi ini? */
+export const adaSertifikasiSelesai = (sesi: readonly SesiVanguard[]): boolean => sesi.some((s) => s.jenis === "sertifikasi" && !!s.selesai_at);
 export type StatusPetak = "selesai" | "hari_ini" | "belum";
 export type Petak = { status: StatusPetak; tanggal: string | null };
 

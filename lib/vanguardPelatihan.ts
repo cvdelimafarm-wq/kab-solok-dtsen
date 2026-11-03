@@ -71,9 +71,9 @@ export function ringkasRuntutanPeserta(daftar: readonly (HasilRuntutan & { kelay
 }
 
 export const teksModeVanguard: Record<"tidak_ada" | "opsional" | "wajib", string> = {
-  tidak_ada: "Petugas tidak diminta berlatih Vanguard; tidak ada kunci.",
+  tidak_ada: "Tidak ada menu wajib di Vanguard; tidak ada kunci. Latihan bank soal tetap terbuka.",
   opsional: "Kartu runtutan tampil, tetapi Pretest tidak dikunci.",
-  wajib: "Pretest terkunci sampai petugas berlatih Vanguard sejumlah hari berturut-turut (perlu Blokir antar tahapan menyala).",
+  wajib: "Pretest terkunci sampai petugas menyelesaikan Latihan wajib (sejumlah hari berturut-turut) dan Sertifikasi wajib (perlu Blokir antar tahapan menyala).",
 };
 
 // ---------- kartu Hari ini (petugas) ----------
@@ -81,6 +81,8 @@ export const teksModeVanguard: Record<"tidak_ada" | "opsional" | "wajib", string
 export type RuntutanKartu = {
   mode: "tidak_ada" | "opsional" | "wajib";
   tuntas: boolean;
+  /** (3 Nov 2026) Sertifikasi wajib sudah selesai. Tidak ada / true = tidak disyaratkan atau sudah. false = masih mengunci Pretest (mode wajib). */
+  sertifikasi_selesai?: boolean;
   berturut: number;
   hari_berturut: number;
   hari_ini_sudah: boolean;
@@ -99,11 +101,12 @@ export function teksRuntutan(r: RuntutanKartu): { judul: string; ket: string; pe
   const N = r.hari_berturut;
   const wajib = r.mode === "wajib";
   const k = r.kelayakan;
+  if (r.tuntas && wajib && r.sertifikasi_selesai === false) return { judul: `Latihan wajib ${N} dari ${N} hari selesai`, ket: "Tinggal Sertifikasi wajib. Pretest terkunci sampai Sertifikasi wajib selesai.", peringatan: true };
   if (r.tuntas) return { judul: `Latihan ${N} dari ${N} hari berturut-turut`, ket: wajib ? "Selesai. Pretest tidak terkunci oleh Vanguard." : "Selesai. Terima kasih sudah berlatih.", peringatan: false };
   const judul = `Latihan ${Math.min(r.berturut, N)} dari ${N} hari berturut-turut`;
   if (wajib && k.mungkin === false) return { judul, ket: `Batas mulai (${k.batas_mulai ? tglPendek(k.batas_mulai) : "-"}) sudah lewat, runtutan tidak sempat tuntas sebelum Pretest. Hubungi panitia/instruktur.`, peringatan: true };
   if (r.terputus) return { judul, ket: `Runtutan terputus. Mulai lagi dari hari 1${r.hari_ini_sudah ? "" : " hari ini"}.`, peringatan: true };
-  const tujuan = wajib ? " Pretest terkunci sampai selesai." : "";
+  const tujuan = wajib ? " Pretest terkunci sampai Latihan wajib dan Sertifikasi wajib selesai." : "";
   if (r.hari_ini_sudah) return { judul, ket: `Hari ini sudah ada latihan. Lanjutkan besok agar tidak terputus.${tujuan}`, peringatan: false };
   if (wajib && k.hari_terakhir_mulai) return { judul, ket: `Hari ini hari terakhir untuk mulai. Latihan sekarang.${tujuan}`, peringatan: true };
   const batas = wajib && k.batas_mulai && r.berturut === 0 ? ` Batas mulai: ${tglPendek(k.batas_mulai)}.` : "";

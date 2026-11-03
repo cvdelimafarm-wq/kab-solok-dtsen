@@ -121,7 +121,24 @@ describe("sesi dan runtutan", () => {
 describe("sambungan ke tahapan (kunci Pretest)", () => {
   const tabel = () => ({
     sigap_pelatihan_aturan: [aturanWajib],
-    sigap_vanguard_ujian: [ujian(1, "2026-11-02"), ujian(1, "2026-11-03"), ujian(1, "2026-11-04"), ujian(2, "2026-11-04")],
+    // akun 1: 3 hari berturut-turut (hari ke-3 = ujian sertifikasi); akun 2: baru 1 hari; akun 3: 3 hari latihan tetapi belum ikut sertifikasi
+    sigap_vanguard_ujian: [ujian(1, "2026-11-02"), ujian(1, "2026-11-03"), ujian(1, "2026-11-04", { jenis: "sertifikasi" }), ujian(2, "2026-11-04"), ujian(3, "2026-11-02"), ujian(3, "2026-11-03"), ujian(3, "2026-11-04")],
+  });
+  it("(3 Nov 2026) Sertifikasi wajib = syarat Pretest: latihan 3 hari tuntas tetapi belum sertifikasi tetap terkunci", async () => {
+    const m = await muatTahapanBatch(fakeDb(tabel()), 7, [1, 3], NOW, { versi: 2, blokir_tahap: true, izin_ajukan: false, eksplisit: true });
+    expect(m.masukan.get(3)!.vanguard).toEqual({ ada: true, tuntas: false });
+    expect(m.masukan.get(1)!.vanguard).toEqual({ ada: true, tuntas: true });
+    const h3 = hitungTahapan(m.masukan.get(3)!, true, [], NOW).find((x) => x.kode === "pretest");
+    expect(h3).toMatchObject({ terkunci: true, kunci_oleh: "vanguard" });
+    const b = await muatRuntutanBatch(fakeDb(tabel()), 7, [1, 3], NOW, null);
+    expect(b.peta.get(3)).toMatchObject({ tuntas: true, sertifikasi_selesai: false });
+    expect(b.peta.get(1)).toMatchObject({ tuntas: true, sertifikasi_selesai: true });
+  });
+  it("(3 Nov 2026) mode opsional: sertifikasi tidak disyaratkan (sertifikasi_selesai selalu true)", async () => {
+    const t = tabel();
+    t.sigap_pelatihan_aturan = [{ ...aturanWajib, vanguard_mode: "opsional" }];
+    const b = await muatRuntutanBatch(fakeDb(t), 7, [3], NOW, null);
+    expect(b.peta.get(3)).toMatchObject({ tuntas: true, sertifikasi_selesai: true });
   });
   it("mode wajib: yang belum tuntas terkunci di Pretest oleh Vanguard; yang tuntas tidak", async () => {
     const m = await muatTahapanBatch(fakeDb(tabel()), 7, [1, 2], NOW, { versi: 2, blokir_tahap: true, izin_ajukan: false, eksplisit: true });

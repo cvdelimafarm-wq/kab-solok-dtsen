@@ -60,7 +60,7 @@ export default function VanguardKelola() {
       setD(r);
       setAt(r.aturan);
       setTg(r.tenggat_atur ?? "");
-      setOk("Aturan latihan Vanguard disimpan.");
+      setOk("Aturan Vanguard disimpan.");
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
     } finally {

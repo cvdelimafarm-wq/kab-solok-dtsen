@@ -58,6 +58,8 @@ export async function muatKonteksPelatihan(db: Db, akunId: number, sekarang: num
       tenggat: b.tenggat,
       tenggat_sumber: b.tenggat_sumber,
       mulai_paling_lambat: r.kelayakan.batas_mulai ?? (b.tenggat ? tambahHari(b.tenggat, 1 - aturan.hari_berturut) : null),
+      // Mode wajib: status Sertifikasi wajib mengikuti sumber yang sama dengan penguncian Pretest (sesi 60 hari terakhir), supaya kartu dan kunci tidak berbeda.
+      sertifikasi: aturan.mode === "wajib" && dasar.sertifikasi ? { selesai: r.sertifikasi_selesai, tingkat: dasar.sertifikasi.tingkat } : dasar.sertifikasi,
       runtutan: { berturut: r.berturut, tuntas: r.tuntas, hari_ini_sudah: r.hari_ini_sudah, terputus: r.terputus, sesi_hari_ini: r.sesi_hari_ini, petak: r.petak, mungkin: r.kelayakan.mungkin, cadangan_hari: r.kelayakan.cadangan_hari, hari_terakhir_mulai: r.kelayakan.hari_terakhir_mulai },
     };
   } catch {

@@ -65,10 +65,15 @@ export function statusKonteks(k: KonteksPelatihan): StatusKonteks {
 }
 
 /** Netral; kuning bila sisa <= 2 hari (atau terputus); merah bila batas lewat pada mode wajib; hijau bila tuntas. */
+/** (3 Nov 2026) Mode wajib, Latihan wajib sudah tuntas, tetapi Sertifikasi wajib belum selesai: Pretest masih terkunci. */
+export function sertifikasiTertunda(k: Pick<KonteksPelatihan, "mode" | "runtutan" | "sertifikasi">): boolean {
+  return k.mode === "wajib" && !!k.runtutan?.tuntas && k.sertifikasi?.selesai === false;
+}
+
 export function nadaKonteks(k: KonteksPelatihan): Nada {
   const s = statusKonteks(k);
   if (s === "bebas") return "netral";
-  if (s === "tuntas") return "hijau";
+  if (s === "tuntas") return sertifikasiTertunda(k) ? "kuning" : "hijau";
   if (s === "lewat_batas") return k.mode === "wajib" ? "merah" : "kuning";
   const sisa = sisaHari(k);
   if (s === "terputus" || (sisa !== null && sisa <= 2)) return "kuning";
@@ -116,6 +121,8 @@ export function aturanDihitung(k: Pick<KonteksPelatihan, "mode" | "hari_berturut
   baris.push(`Dihitung: ${sesi} yang SELESAI per hari dari Latihan harian (paling singkat), Latihan format sertifikasi, atau Ujian Sertifikasi.`);
   if (k.nilai_minimal > 0) baris.push(`Skor tiap sesi minimal ${k.nilai_minimal}.`);
   baris.push(`Perlu ${N} hari kalender berturut-turut. Sabtu dan Minggu ikut dihitung; satu hari terlewat memutus runtutan dan Anda mulai lagi dari hari 1.`);
+  if (k.mode === "wajib") baris.push("Sertifikasi wajib: ikut ujian sertifikasi sampai selesai satu kali (tidak harus lulus). Pretest baru terbuka setelah Latihan wajib dan Sertifikasi wajib selesai.");
+  baris.push("Nilai dan kesalahan di Menu wajib dicatat dan diperhitungkan.");
   baris.push("Tidak dihitung: Latihan bank soal, Tantangan mingguan, dan Usul kasus. Semuanya boleh dicoba sebanyak-banyaknya dan tidak memengaruhi pelatihan Anda.");
   return baris;
 }
@@ -135,6 +142,7 @@ export function panduanKonteks(k: KonteksPelatihan): Panduan {
     case "bebas":
       return { ...dasar, judul: "Latihan harian: 3 butir, sekitar 5 menit", progres: null, ket: "Tidak diwajibkan untuk pelatihan ini, tetapi sangat dianjurkan.", langkah: "Mulai dari Latihan harian.", tombol: { jenis: "bebas", teks: "Mulai latihan harian" } };
     case "tuntas":
+      if (sertifikasiTertunda(k)) return { ...dasar, judul: `Latihan wajib ${N} dari ${N} hari selesai`, progres: { x: N, n: N }, ket: "Pretest masih terkunci sampai Sertifikasi wajib selesai.", langkah: "Kerjakan Sertifikasi wajib di bawah (sekitar 15 menit).", tombol: { jenis: "selesai", teks: "Latihan wajib selesai ✓" } };
       return { ...dasar, judul: `Latihan ${N} dari ${N} hari berturut-turut`, progres: { x: N, n: N }, ket: wajib ? "Selesai. Pretest tidak lagi terkunci oleh Vanguard." : "Selesai. Terima kasih sudah berlatih.", langkah: "Tidak ada yang perlu dilakukan lagi. Tetap berlatih bila ingin makin mahir.", tombol: { jenis: "selesai", teks: "Selesai ✓" } };
     case "lewat_batas":
       return {
@@ -211,9 +219,11 @@ export function teksSertifikasiWajib(k: Pick<KonteksPelatihan, "mode" | "sertifi
   const judul = k.mode === "wajib" ? "Sertifikasi wajib" : "Sertifikasi kemampuan";
   const s = k.sertifikasi;
   if (s?.selesai) {
-    return { judul, selesai: true, ket: s.tingkat ? `Sudah ikut ujian sertifikasi. Tingkat Anda: ${"★".repeat(Math.max(1, Math.min(5, s.tingkat)))} (${s.tingkat} dari 5).` : "Sudah ikut ujian sertifikasi.", tombol: "Lihat sertifikat saya" };
+    const syarat = k.mode === "wajib" ? " Syarat Pretest terpenuhi." : "";
+    return { judul, selesai: true, ket: (s.tingkat ? `Sudah ikut ujian sertifikasi. Tingkat Anda: ${"★".repeat(Math.max(1, Math.min(5, s.tingkat)))} (${s.tingkat} dari 5).` : "Sudah ikut ujian sertifikasi.") + syarat, tombol: "Lihat sertifikat saya" };
   }
-  return { judul, selesai: false, ket: "Ujian 15 butir (sekitar 15 menit). Hasilnya tingkat 1 sampai 5 bintang.", tombol: "Ikut ujian sertifikasi" };
+  const wajibTeks = k.mode === "wajib" ? " Wajib diselesaikan agar Pretest terbuka. Nilai dan kesalahan Anda dicatat dan diperhitungkan." : "";
+  return { judul, selesai: false, ket: `Ujian 15 butir (sekitar 15 menit). Hasilnya tingkat 1 sampai 5 bintang.${wajibTeks}`, tombol: "Ikut ujian sertifikasi" };
 }
 
 /** Soal pertama yang belum dijawab benar (urut seperti daftar); bila semua sudah benar, soal pertama. -1 bila tidak ada soal. */

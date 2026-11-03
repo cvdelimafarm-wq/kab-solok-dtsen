@@ -20,6 +20,7 @@ import { PulsaPeserta } from "../pulsa";
 import { TeksBaris } from "../TeksBaris";
 import { useInfoPelatihan } from "../infoPelatihan";
 import { useDataPel } from "../dataPel";
+import RingkasanPengelola from "../RingkasanPengelola"; // (3 Nov 2026) isi Hari ini untuk instruktur / panitia (bukan peserta)
 import KartuKuis from "../KartuKuis"; // (3 Nov 2026) kartu kuis selalu tampil
 import KartuJadwalPendataan from "../KartuJadwalPendataan"; // (3 Nov 2026) jadwal pendataan dari Identifikasi survei
 import { useVanguardSaya } from "../../vanguardSaya"; // (3 Nov 2026) Vanguard didahulukan bila perlu perhatian
@@ -223,16 +224,7 @@ export default function HalamanHariIni() {
     <Kerangka aktif="hari-ini" geser judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!d && !galat && <Memuat />}
-      {d && !d.peserta && (
-        <Pesan jenis="info">
-          Akun Anda bukan peserta pelatihan ini, sehingga undangan pribadi tidak tersedia.{" "}
-          {d.boleh_lihat_kelola && (
-            <Link href="/sigap/kelola/pelatihan" className="font-bold text-[#1F5FD1] underline">
-              Buka Kelola Pelatihan
-            </Link>
-          )}
-        </Pesan>
-      )}
+      {d && !d.peserta && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} />}
       {d && <KartuIzinBuka />}
       {d && d.peserta && nada && (
         <>

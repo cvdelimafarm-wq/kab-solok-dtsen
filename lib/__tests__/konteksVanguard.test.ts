@@ -1,6 +1,6 @@
 // Menguji lib/konteksVanguard.ts (murni): status, nada, sisa hari, teks Panduan, label WAJIB/OPSIONAL, dan kartu yang disembunyikan.
 import { describe, expect, it } from "vitest";
-import { TEKS_BANK_SOAL, aturanDihitung, dihitungAturan, kartuTampil, labelKartu, nadaKonteks, panduanKonteks, sisaHari, soalLatihanBerikutnya, statusKonteks, teksSisa, teksSertifikasiWajib, type KonteksPelatihan, type KartuVg } from "../konteksVanguard";
+import { TEKS_BANK_SOAL, aturanDihitung, dihitungAturan, kartuTampil, labelKartu, nadaKonteks, panduanKonteks, sertifikasiTertunda, sisaHari, soalLatihanBerikutnya, statusKonteks, teksSisa, teksSertifikasiWajib, type KonteksPelatihan, type KartuVg } from "../konteksVanguard";
 
 const petak = (selesai: number, hariIni = true) => Array.from({ length: 3 }, (_, i) => (i < selesai ? { status: "selesai" as const, tanggal: null } : i === selesai && hariIni ? { status: "hari_ini" as const, tanggal: "2026-11-02" } : { status: "belum" as const, tanggal: null }));
 const dasar = (o: Partial<KonteksPelatihan> = {}, r: Partial<NonNullable<KonteksPelatihan["runtutan"]>> | null = {}): KonteksPelatihan => ({
@@ -175,5 +175,36 @@ describe("Menu wajib dan Latihan bank soal", () => {
     expect(soalLatihanBerikutnya(daftar, { A01: 1, A02: 3, B01: 2 }, lv)).toBe(1);
     expect(soalLatihanBerikutnya(daftar, {}, new Set(["B"]))).toBe(3);
     expect(soalLatihanBerikutnya(daftar, {}, new Set())).toBe(-1);
+  });
+});
+
+describe("Sertifikasi wajib sebagai syarat Pretest (3 Nov 2026)", () => {
+  const tuntasTanpaSertif = () => dasar({ mode: "wajib", sertifikasi: { selesai: false, tingkat: null } }, { tuntas: true, berturut: 3, hari_ini_sudah: true });
+  it("latihan tuntas + sertifikasi belum: nada kuning, pesan jelas, tombol sertifikasi aktif", () => {
+    const k = tuntasTanpaSertif();
+    expect(sertifikasiTertunda(k)).toBe(true);
+    expect(nadaKonteks(k)).toBe("kuning");
+    const p = panduanKonteks(k);
+    expect(p.ket).toContain("Pretest masih terkunci sampai Sertifikasi wajib selesai");
+    expect(teksSertifikasiWajib(k)).toMatchObject({ judul: "Sertifikasi wajib", selesai: false, tombol: "Ikut ujian sertifikasi" });
+    expect(teksSertifikasiWajib(k).ket).toContain("agar Pretest terbuka");
+  });
+  it("sertifikasi sudah selesai: hijau dan syarat Pretest terpenuhi", () => {
+    const k = dasar({ mode: "wajib", sertifikasi: { selesai: true, tingkat: 3 } }, { tuntas: true, berturut: 3 });
+    expect(sertifikasiTertunda(k)).toBe(false);
+    expect(nadaKonteks(k)).toBe("hijau");
+    expect(panduanKonteks(k).ket).toBe("Selesai. Pretest tidak lagi terkunci oleh Vanguard.");
+    expect(teksSertifikasiWajib(k).ket).toContain("Syarat Pretest terpenuhi");
+  });
+  it("mode opsional tidak mensyaratkan sertifikasi", () => {
+    const k = dasar({ mode: "opsional", sertifikasi: { selesai: false, tingkat: null } }, { tuntas: true, berturut: 3 });
+    expect(sertifikasiTertunda(k)).toBe(false);
+    expect(nadaKonteks(k)).toBe("hijau");
+  });
+  it("aturan mode wajib menyebut Sertifikasi wajib; nilai dan kesalahan Menu wajib diperhitungkan", () => {
+    const baris = aturanDihitung({ mode: "wajib", hari_berturut: 3, sesi_min_per_hari: 1, nilai_minimal: 0 }).join(" ");
+    expect(baris).toContain("Sertifikasi wajib");
+    expect(baris).toContain("dicatat dan diperhitungkan");
+    expect(aturanDihitung({ mode: "opsional", hari_berturut: 3, sesi_min_per_hari: 1, nilai_minimal: 0 }).join(" ")).not.toContain("Sertifikasi wajib:");
   });
 });

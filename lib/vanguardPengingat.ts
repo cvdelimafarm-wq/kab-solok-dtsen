@@ -25,11 +25,15 @@ export function jendelaSekarang(nowMs: number): JendelaVg | null {
   return null;
 }
 
-export type KejadianVg = "mulai" | "lanjut" | "terputus" | "hari_terakhir" | "lewat_batas";
-export type MasukanKejadian = Pick<HasilRuntutan, "tuntas" | "hari_ini_sudah" | "terputus" | "berturut" | "hari_berturut"> & { kelayakan: Pick<KelayakanRuntutan, "mungkin" | "hari_terakhir_mulai" | "batas_mulai"> };
+export type KejadianVg = "mulai" | "lanjut" | "terputus" | "hari_terakhir" | "lewat_batas" | "sertifikasi";
+export type MasukanKejadian = Pick<HasilRuntutan, "tuntas" | "hari_ini_sudah" | "terputus" | "berturut" | "hari_berturut"> & { kelayakan: Pick<KelayakanRuntutan, "mungkin" | "hari_terakhir_mulai" | "batas_mulai">; /** false = Sertifikasi wajib belum selesai (mengunci Pretest); tidak ada = tidak disyaratkan */ sertifikasi_selesai?: boolean };
+
+/** Latihan wajib sudah tuntas, tetapi Sertifikasi wajib belum: Pretest masih terkunci. */
+export const tinggalSertifikasi = (r: Pick<MasukanKejadian, "tuntas" | "sertifikasi_selesai">): boolean => r.tuntas && r.sertifikasi_selesai === false;
 
 /** Kejadian yang patut diingatkan hari ini; null = tidak perlu (tuntas / sudah berlatih hari ini). */
 export function kejadianUntuk(r: MasukanKejadian): KejadianVg | null {
+  if (tinggalSertifikasi(r)) return "sertifikasi";
   if (r.tuntas || r.hari_ini_sudah) return null;
   if (r.kelayakan.mungkin === false) return "lewat_batas";
   if (r.kelayakan.hari_terakhir_mulai) return "hari_terakhir";
@@ -42,6 +46,7 @@ const potong = (s: string, maks: number): string => (s.length <= maks ? s : `${s
 
 export type PesanVg = { judul: string; isi: string; url: string; tag: string };
 export const urlLatihanVg = (kegiatanId: number): string => `/sigap/vanguard?k=${kegiatanId}`;
+export const urlSertifikasiVg = (kegiatanId: number): string => `/sigap/vanguard/sertifikasi?k=${kegiatanId}`;
 
 export function pesanPetugas(kejadian: KejadianVg, r: MasukanKejadian, kegiatanId: number): PesanVg {
   const N = r.hari_berturut;
@@ -50,13 +55,15 @@ export function pesanPetugas(kejadian: KejadianVg, r: MasukanKejadian, kegiatanI
   const tag = `vanguard-${kegiatanId}`;
   switch (kejadian) {
     case "mulai":
-      return { judul: "Mulai Vanguard hari ini", isi: potong(`Pretest terkunci sampai Anda berlatih Vanguard ${N} hari berturut-turut. Batas mulai: ${batas}. Ketuk untuk latihan.`, 240), url, tag };
+      return { judul: "Mulai Vanguard hari ini", isi: potong(`Pretest terkunci sampai Latihan wajib ${N} hari berturut-turut dan Sertifikasi wajib selesai. Batas mulai: ${batas}. Ketuk untuk mulai.`, 240), url, tag };
     case "lanjut":
-      return { judul: potong(`Vanguard: hari ke-${r.berturut + 1} dari ${N}`, 80), isi: "Latihan hari ini agar runtutan tidak terputus. Pretest terkunci sampai selesai.", url, tag };
+      return { judul: potong(`Vanguard: hari ke-${r.berturut + 1} dari ${N}`, 80), isi: "Kerjakan Latihan wajib hari ini agar runtutan tidak terputus. Pretest terkunci sampai selesai.", url, tag };
     case "terputus":
       return { judul: "Runtutan Vanguard terputus", isi: potong(`Mulai lagi dari hari 1 hari ini. Batas mulai: ${batas}.`, 240), url, tag };
     case "hari_terakhir":
       return { judul: "Hari terakhir mulai Vanguard", isi: `Mulai hari ini. Besok sudah tidak sempat berlatih ${N} hari berturut-turut sebelum Pretest.`, url, tag };
+    case "sertifikasi":
+      return { judul: "Tinggal Sertifikasi wajib", isi: "Latihan wajib sudah selesai. Kerjakan Sertifikasi wajib (sekitar 15 menit) agar Pretest terbuka.", url: urlSertifikasiVg(kegiatanId), tag };
     case "lewat_batas":
       return { judul: "Batas mulai Vanguard terlewat", isi: "Runtutan tidak sempat tuntas sebelum Pretest. Hubungi panitia/instruktur untuk membuka kunci.", url, tag };
   }
@@ -101,7 +108,7 @@ export type KeputusanModal = { tampil: "ingatkan" | "ucapan" | null; kejadian: K
 
 export function putuskanModal(mode: string, r: MasukanKejadian, catatan: CatatanModalVg, nowMs: number): KeputusanModal {
   if (mode !== "wajib") return { tampil: null, kejadian: null };
-  if (r.tuntas) return catatan.tuntas_dilihat ? { tampil: null, kejadian: null } : { tampil: "ucapan", kejadian: null };
+  if (r.tuntas && !tinggalSertifikasi(r)) return catatan.tuntas_dilihat ? { tampil: null, kejadian: null } : { tampil: "ucapan", kejadian: null };
   const k = kejadianUntuk(r);
   if (!k) return { tampil: null, kejadian: null };
   if (catatan.n >= MAKS_MODAL_PER_HARI || nowMs - catatan.terakhir < JEDA_MODAL_MENIT * 60_000) return { tampil: null, kejadian: k };

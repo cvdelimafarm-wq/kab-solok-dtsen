@@ -106,3 +106,23 @@ describe("modal", () => {
     expect(segarkanCatatan({ hari: "2026-11-04", n: -5, terakhir: "x" }, t0).n).toBe(0);
   });
 });
+
+describe("Sertifikasi wajib belum selesai (3 Nov 2026)", () => {
+  const tinggal = dengan({ tuntas: true, sertifikasi_selesai: false });
+  it("latihan tuntas tetapi sertifikasi belum = kejadian 'sertifikasi' (bukan null)", () => {
+    expect(kejadianUntuk(tinggal)).toBe("sertifikasi");
+    expect(kejadianUntuk(dengan({ tuntas: true, hari_ini_sudah: true, sertifikasi_selesai: false }))).toBe("sertifikasi");
+    expect(kejadianUntuk(dengan({ tuntas: true, sertifikasi_selesai: true }))).toBeNull();
+    expect(kejadianUntuk(dengan({ tuntas: true }))).toBeNull(); // tidak disyaratkan
+  });
+  it("pesan mengarah ke layar sertifikasi", () => {
+    const p = pesanPetugas("sertifikasi", tinggal, 7);
+    expect(p.judul).toBe("Tinggal Sertifikasi wajib");
+    expect(p.url).toBe("/sigap/vanguard/sertifikasi?k=7");
+  });
+  it("modal: bukan ucapan selamat, melainkan pengingat sertifikasi; ucapan hanya bila sertifikasi beres", () => {
+    const catatan = CATATAN_KOSONG(wib("2026-11-04", 9));
+    expect(putuskanModal("wajib", tinggal, catatan, wib("2026-11-04", 9))).toEqual({ tampil: "ingatkan", kejadian: "sertifikasi" });
+    expect(putuskanModal("wajib", dengan({ tuntas: true, sertifikasi_selesai: true }), catatan, wib("2026-11-04", 9))).toEqual({ tampil: "ucapan", kejadian: null });
+  });
+});

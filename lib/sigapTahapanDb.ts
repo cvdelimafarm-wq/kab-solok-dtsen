@@ -117,7 +117,8 @@ export async function muatTahapanBatch(db: Db, kegiatanId: number, akunIds: read
     }
     m.kuis = { ada: kuis.ada, tuntas: kuis.ikut.has(akun) };
     m.video = { ada: materi.video_wajib_ada, tuntas: materi.video_tuntas.has(akun) };
-    m.vanguard = { ada: vanguard.mengunci, tuntas: vanguard.peta.get(akun)?.tuntas ?? false };
+    const pv = vanguard.peta.get(akun);
+    m.vanguard = { ada: vanguard.mengunci, tuntas: !!pv && pv.tuntas && pv.sertifikasi_selesai }; // (3 Nov 2026) Vanguard tuntas = Latihan wajib N hari berturut-turut DAN Sertifikasi wajib selesai
     masukan.set(akun, m);
   }
   return { aturan, tes, masukan, kuis_ada: kuis.ada, vanguard };

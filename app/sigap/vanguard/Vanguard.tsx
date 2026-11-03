@@ -50,7 +50,7 @@ type Hasil = {
 
 const KUNCI_LOKAL = "vanguard.bebas.v1";
 const OPERATOR = /[+\-−×÷*/()]/;
-const DITOLAK_SERVER = /^(Latihan Vanguard|Kasus ini belum|Batas percobaan)/;
+const DITOLAK_SERVER = /^(Latihan Vanguard|Vanguard untuk kegiatan|Kasus ini belum|Batas percobaan)/;
 const wib = (iso: string | null) => `${isoKeInputWib(iso).replace("T", " ")} WIB`;
 const html = (h: string) => ({ __html: h });
 const bintangTeks = (n: number) => "★".repeat(n) + "☆".repeat(Math.max(0, 3 - n));

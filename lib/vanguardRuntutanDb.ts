@@ -8,7 +8,7 @@ import type { Db } from "@/lib/sigap";
 import { versiBawaan } from "@/lib/sigapAturanTes";
 import { keadaanVanguard } from "@/lib/vanguardAkses";
 import {
-  ATURAN_VANGUARD_BAWAAN, JENIS_SESI_VANGUARD, adalahTanggalSah, hariWib, hitungRuntutanVanguard, periksaKelayakan, rapikanAturanVanguard, tentukanTenggat,
+  ATURAN_VANGUARD_BAWAAN, JENIS_SESI_VANGUARD, adaSertifikasiSelesai, adalahTanggalSah, hariWib, hitungRuntutanVanguard, periksaKelayakan, rapikanAturanVanguard, tentukanTenggat,
   type AturanVanguard, type HasilRuntutan, type KelayakanRuntutan, type SesiVanguard, type TenggatVanguard,
 } from "@/lib/runtutanVanguard";
 
@@ -92,9 +92,9 @@ export async function muatSesiVanguard(db: Db, akunIds: readonly number[], sekar
       .gte("selesai_at", new Date(sekarang - 60 * HARI_MS).toISOString())
       .limit(20000);
     if (error) return peta;
-    for (const r of (data ?? []) as { akun_id: number; selesai_at: string | null; skor: number | string | null }[]) {
+    for (const r of (data ?? []) as { akun_id: number; jenis?: string | null; selesai_at: string | null; skor: number | string | null }[]) {
       const daftar = peta.get(Number(r.akun_id)) ?? [];
-      daftar.push({ selesai_at: r.selesai_at, skor: r.skor });
+      daftar.push({ selesai_at: r.selesai_at, skor: r.skor, jenis: r.jenis ?? null });
       peta.set(Number(r.akun_id), daftar);
     }
   } catch {
@@ -109,7 +109,8 @@ export function tanggalBukaPretest(tes: readonly { jenis: string; aktif?: boolea
   return hari[0] ?? null;
 }
 
-export type RuntutanAkun = HasilRuntutan & { kelayakan: KelayakanRuntutan };
+/** `sertifikasi_selesai`: ujian sertifikasi sudah selesai. Hanya MENGUNCI pada mode wajib; pada mode lain selalu true (tidak disyaratkan). */
+export type RuntutanAkun = HasilRuntutan & { kelayakan: KelayakanRuntutan; sertifikasi_selesai: boolean };
 export type RuntutanBatch = {
   aturan: AturanVanguard;
   /** Vanguard menyala di kegiatan ini (centang / Identifikasi survei). */
@@ -143,7 +144,8 @@ export async function muatRuntutanBatch(db: Db, kegiatanId: number, akunIds: rea
   const peta = new Map<number, RuntutanAkun>();
   for (const id of akunIds) {
     const r = hitungRuntutanVanguard(sesi.get(id) ?? [], hariIni, aturan);
-    peta.set(id, { ...r, kelayakan: periksaKelayakan(r, hariIni, tg.acuan) });
+    const sertifikasiSelesai = aturan.mode !== "wajib" || adaSertifikasiSelesai(sesi.get(id) ?? []); // (3 Nov 2026) Sertifikasi wajib = syarat Pretest pada mode wajib
+    peta.set(id, { ...r, kelayakan: periksaKelayakan(r, hariIni, tg.acuan), sertifikasi_selesai: sertifikasiSelesai });
   }
   return { aturan, menyala: true, berlaku: true, mengunci: aturan.mode === "wajib", tanggal_pretest: tanggalPretest, tenggat: tg.tenggat, tenggat_sumber: tg.sumber, hari_ini: hariIni, peta };
 }

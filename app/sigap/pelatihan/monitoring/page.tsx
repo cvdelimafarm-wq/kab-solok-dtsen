@@ -5,6 +5,8 @@
 // (2 Nov 2026) Tab "Monitoring" pelatihan: progres menurut hierarki (panitia: semua; instruktur: kelasnya; korwil/PML/PPL: dirinya dan bawahan).
 // Data: GET /api/sigap/pelatihan/monitoring. Tahap ini menampilkan undangan, pretest, posttest, dan kehadiran; progres Vanguard dan instrumen menyusul.
 // (2 Nov 2026) Aturan nilai versi 2: skor = nilai percobaan pertama; ditambah nilai akhir dan flag kelulusan (lulus bila lebih dari ambang; hanya penanda untuk laporan).
+// (3 Nov 2026) Dropdown "Pantau menurut": setiap tahapan (undangan, kehadiran, materi wajib, Vanguard, pretest, posttest, kunci, kelulusan) dapat dipantau sendiri dengan saringan status.
+//   Berlaku sama untuk panitia, instruktur, dan atasan (PML / korwil: bawahannya) karena data sudah disaring server menurut hierarki. Logika murni: lib/monitoringVariabel.ts.
 // (2 Nov 2026) Blokir tahapan: chip "Terkunci" (selesaikan X dulu) dan status izin per orang; panitia / instruktur dapat "Buka kunci" (pilih tahapan + alasan; berlaku sampai 23.59 hari itu).
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -16,6 +18,7 @@ import { Kerangka } from "../komponen";
 import { useDataPel } from "../dataPel";
 import { LABEL_PERAN_PELATIHAN, type PeranPelatihan } from "@/lib/hierarkiPelatihan";
 import { LABEL_KELULUSAN, type StatusKelulusan } from "@/lib/sigapAturanTes";
+import { hitungPerStatus, keteranganPantau, saringBaris, statusUntuk, variabelTersedia, type BankBaris, type KodeVariabel, type VgBaris } from "@/lib/monitoringVariabel";
 
 type Tes = { status: "belum" | "mengerjakan" | "selesai"; skor: number | null };
 type Kunci = { tahap: "pretest" | "posttest"; oleh_label: string; pesan: string };
@@ -26,6 +29,9 @@ type Baris = {
   izin: { pretest: StatusIzin | null; posttest: StatusIzin | null };
   /** Materi wajib (video / tautan): null = tidak ada materi wajib atau SQL belum dijalankan. `manual` = peserta menekan "Saya sudah menonton" (bukan hasil pelacakan). */
   materi?: { belum: number; manual: boolean } | null;
+  /** Aturan Vanguard pelatihan (null bila tidak berlaku) dan pemakaian Latihan bank soal. */
+  vanguard?: VgBaris | null;
+  bank?: BankBaris | null;
 };
 type Data = {
   jenis: "peserta" | "instruktur" | "panitia";
@@ -177,6 +183,8 @@ export default function HalamanMonitoring() {
 
   const r = d?.ringkasan;
   // (3 Nov 2026) Tampilan dirapikan: ringkasan berupa petak berbilah progres, daftar orang berupa kartu dengan petak status (bukan baris chip yang panjang), plus pencarian dan penyaring.
+  const [variabel, setVariabel] = useState<KodeVariabel>("semua");
+  const [statusPantau, setStatusPantau] = useState<string | null>(null);
   const [cari, setCari] = useState("");
   const [saring, setSaring] = useState<"semua" | "perhatian" | "belum_hadir">("semua");
   const perhatian = (b: Baris) => b.kunci.length > 0 || b.izin.pretest === "menunggu" || b.izin.posttest === "menunggu" || b.undangan === "tolak" || (b.materi?.belum ?? 0) > 0;
@@ -184,6 +192,13 @@ export default function HalamanMonitoring() {
     const baris = d?.baris ?? [];
     return { semua: baris.length, perhatian: baris.filter(perhatian).length, belum_hadir: baris.filter((b) => !b.hadir).length };
   }, [d]);
+  const pilihan = useMemo(() => variabelTersedia(d?.baris ?? []), [d]);
+  const variabelAktif: KodeVariabel = pilihan.some((p) => p.kode === variabel) ? variabel : "semua";
+  const perStatus = useMemo(() => hitungPerStatus(variabelAktif, d?.baris ?? []), [d, variabelAktif]);
+  const tampilVar = useMemo(() => {
+    const q = cari.trim().toLowerCase();
+    return saringBaris(variabelAktif, statusPantau, (d?.baris ?? []).filter((b) => !q || b.nama.toLowerCase().includes(q)));
+  }, [d, cari, variabelAktif, statusPantau]);
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase();
     return (d?.baris ?? []).filter((b) => (saring === "perhatian" ? perhatian(b) : saring === "belum_hadir" ? !b.hadir : true) && (!q || b.nama.toLowerCase().includes(q)));
@@ -231,11 +246,20 @@ export default function HalamanMonitoring() {
             )}
           </Kartu>
           {ok && <Pesan jenis="info">{ok}</Pesan>}
-          <Kartu judul="Progres per orang" ket={`${tampil.length} dari ${d.baris.length}`}>
+          <Kartu judul="Progres per orang" ket={`${variabelAktif === "semua" ? tampil.length : tampilVar.length} dari ${d.baris.length}`}>
             {d.baris.length === 0 ? (
               <p className="text-[13px] text-[#6B7A90]">Belum ada peserta dalam cakupan Anda.</p>
             ) : (
               <>
+                <label htmlFor="pantau-variabel" className="mb-1 block text-[12px] font-bold text-[#5B6B84]">Pantau menurut</label>
+                <select
+                  id="pantau-variabel"
+                  value={variabelAktif}
+                  onChange={(e) => { setVariabel(e.target.value as KodeVariabel); setStatusPantau(null); }}
+                  className="mb-2 min-h-[44px] w-full rounded-xl border border-[#CBD6E6] bg-white px-3 text-[14px] font-semibold text-[#0F2A52]"
+                >
+                  {pilihan.map((p) => <option key={p.kode} value={p.kode}>{p.label}</option>)}
+                </select>
                 <input
                   type="search"
                   value={cari}
@@ -244,6 +268,46 @@ export default function HalamanMonitoring() {
                   aria-label="Cari nama peserta"
                   className="min-h-[44px] w-full rounded-xl border border-[#CBD6E6] bg-white px-3 text-[14px] outline-none focus:border-[#1F5FD1] focus:ring-2 focus:ring-[#1F5FD1]/15"
                 />
+                {variabelAktif !== "semua" && (
+                  <>
+                    <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Saring menurut status">
+                      <button type="button" aria-pressed={statusPantau === null} onClick={() => setStatusPantau(null)} className={`min-h-[38px] rounded-full border px-3 text-[12.5px] font-bold ${statusPantau === null ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#CBD6E6] bg-white text-[#44546F]"}`}>Semua <span className="opacity-70">{d.baris.length}</span></button>
+                      {perStatus.map(({ status: s, jumlah: n }) => (
+                        <button key={s.kode} type="button" aria-pressed={statusPantau === s.kode} onClick={() => setStatusPantau(statusPantau === s.kode ? null : s.kode)} className={`min-h-[38px] rounded-full border px-3 text-[12.5px] font-bold ${statusPantau === s.kode ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#CBD6E6] bg-white text-[#44546F]"}`}>{s.label} <span className="opacity-70">{n}</span></button>
+                      ))}
+                    </div>
+                    {tampilVar.length === 0 ? (
+                      <p className="mt-3 text-[13px] text-[#6B7A90]">Tidak ada orang pada status ini{cari.trim() ? " untuk pencarian ini" : ""}.</p>
+                    ) : (
+                      <ul className="m-0 mt-3 list-none space-y-2 p-0">
+                        {tampilVar.map((b) => {
+                          const st = statusUntuk(variabelAktif, b);
+                          const ket = keteranganPantau(variabelAktif, b);
+                          const tes = variabelAktif === "pretest" ? b.pretest : variabelAktif === "posttest" ? b.posttest : null;
+                          return (
+                            <li key={b.akun_id} style={{ marginLeft: Math.min(b.kedalaman, 3) * 12 }} className={`rounded-xl border border-[#E3EAF4] bg-white p-3 ${b.kedalaman > 0 ? "border-l-4 border-l-[#BFD0EA]" : ""}`}>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <b className="text-[14px] text-[#0F2A52]">{b.nama}</b>
+                                <span className="rounded bg-[#E3EEFF] px-1.5 py-0.5 text-[10.5px] font-bold text-[#1F5FD1]">{LABEL_PERAN_PELATIHAN[b.peran]}</span>
+                                {b.diri && <span className="text-[11px] font-semibold text-[#6B7A90]">(Anda)</span>}
+                                {b.kelas !== null && <span className="text-[11px] text-[#6B7A90]">Kelas {b.kelas}</span>}
+                                <Chip teks={tes && tes.status === "selesai" && tes.skor !== null ? `${st.label} · ${Math.round(tes.skor * 10) / 10}` : st.label} nada={st.nada} />
+                              </div>
+                              {ket && <p className="m-0 mt-1 text-[12px] text-[#6B7A90]">{ket}</p>}
+                              {d.boleh_buka_kunci && (variabelAktif === "kunci" || variabelAktif === "pretest" || variabelAktif === "posttest") && (b.pretest.status !== "selesai" || b.posttest.status !== "selesai") && (
+                                <button type="button" onClick={() => { setOk(null); setBuka(b); }} className="mt-2 min-h-[40px] rounded-lg border border-[#1F5FD1] bg-white px-3 text-[12.5px] font-bold text-[#1F5FD1] active:bg-[#F5F8FE]">
+                                  {b.kunci.length > 0 || b.izin.pretest === "menunggu" || b.izin.posttest === "menunggu" ? "Buka kunci" : "Buka akses tes"}
+                                </button>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </>
+                )}
+                {variabelAktif === "semua" && (
+                <>
                 <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Penyaring daftar">
                   {([["semua", "Semua"], ["perhatian", "Perlu perhatian"], ["belum_hadir", "Belum hadir"]] as const).map(([k, t]) => (
                     <button
@@ -301,6 +365,8 @@ export default function HalamanMonitoring() {
                       </li>
                     ))}
                   </ul>
+                )}
+                </>
                 )}
               </>
             )}
