@@ -12,6 +12,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
+import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
+import { gerbangTertutup } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 import { PROGRES_KOSONG, periksaLaporan, periksaMateri, persenProgres, ringkasMateri, type Progres } from "@/lib/sigapMateri";
 import { catatBuka, catatManual, laporPutar, muatMateri, muatProgresBatch, nonaktifkanMateri, simpanMateri } from "@/lib/sigapMateriDb";
@@ -34,6 +36,7 @@ export async function GET(req: NextRequest) {
     const [peserta, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), izinAkun(db, akun.id)]);
     const lihat = boleh(izin, "pelatihan.kelola", "lihat", kegiatanId);
     if (!peserta && !lihat) return galat("Materi hanya untuk peserta pelatihan.", 403);
+    if (peserta && (await gerbangTertutup(db, kegiatanId, akun.id, izin))) return NextResponse.json(TUBUH_GERBANG, { status: 403 }); // (3 Nov 2026) terima undangan dahulu
     const { tersedia, materi } = await muatMateri(db, kegiatanId);
     const progres = peserta && materi.length > 0 ? ((await muatProgresBatch(db, materi.map((m) => m.id), [akun.id])).get(akun.id) ?? new Map<number, Progres>()) : new Map<number, Progres>();
     return NextResponse.json({
@@ -66,6 +69,7 @@ export async function POST(req: NextRequest) {
     if (body.aksi === "lapor" || body.aksi === "buka" || body.aksi === "manual") {
       const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
       if (!peserta) return galat("Hanya peserta pelatihan yang dicatat progresnya.", 403);
+      if (await gerbangTertutup(db, kegiatanId, akun.id, (await izinAkun(db, akun.id)).izin)) return NextResponse.json(TUBUH_GERBANG, { status: 403 }); // (3 Nov 2026)
       if (body.aksi === "lapor") {
         const v = periksaLaporan(body);
         if (!v.ok) return galat(v.pesan);

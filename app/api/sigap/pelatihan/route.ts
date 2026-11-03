@@ -17,6 +17,7 @@ import { muatAturan } from "@/lib/sigapAturanDb";
 import { hitungTahapan, kunciUntuk, ringkasIzin, tesDenganIzin } from "@/lib/sigapTahapan";
 import { izinBerlakuPerTahap, muatIzin, muatTahapanBatch, type BarisIzinLengkap } from "@/lib/sigapTahapanDb";
 import { ringkasanKuisHub } from "@/lib/sigapKuisDb";
+import { gerbangTertutup } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, undanganUntuk, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatRekamPresensi, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -35,6 +36,27 @@ export async function GET(req: NextRequest) {
     const undangan = await undanganUntuk(db, kegiatanId);
     const sekarang = new Date();
     const [peserta, daftar, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), muatTesDaftar(db, kegiatanId), izinAkun(db, akun.id)]);
+    // (3 Nov 2026) Gerbang undangan: peserta yang belum menerima undangan tidak mendapat tes, langkah, presensi, kuis, maupun pengumuman. Beranda memakai
+    // `terkunci_undangan` untuk menampilkan satu tugas saja: "Respons undangan".
+    if (peserta && (await gerbangTertutup(db, kegiatanId, akun.id, izin))) {
+      return NextResponse.json({
+        nama: akun.nama,
+        jenis_akun: akun.jenis,
+        peserta,
+        undangan,
+        tes: [],
+        langkah: null,
+        presensi: null,
+        kuis: null,
+        pengumuman: [],
+        token_translok: null,
+        sekarang: sekarang.toISOString(),
+        kegiatan_id: kegiatanId,
+        terkunci_undangan: true,
+        boleh_lihat_kelola: boleh(izin, "pelatihan.kelola", "lihat", kegiatanId),
+        boleh_kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId),
+      });
+    }
     const nSoal = await jumlahSoal(db, daftar.map((t) => t.id));
     // (2 Nov 2026) blokir tahapan + jendela pribadi dari izin buka kunci (hanya peserta). Tahan SQL belum dijalankan: blokir mati, tanpa izin.
     const sekarangMs = sekarang.getTime();

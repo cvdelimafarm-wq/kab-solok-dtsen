@@ -10,6 +10,7 @@ import { keadaanVanguard } from "@/lib/vanguardAkses";
 import { hariWib, tambahHari } from "@/lib/runtutanVanguard";
 import { muatAturanVanguard, muatRuntutanBatch, tanggalBukaPretest } from "@/lib/vanguardRuntutanDb";
 import type { KonteksPelatihan } from "@/lib/konteksVanguard";
+import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 
 const BUKAN_ADMINISTRASI = "sumber.is.null,sumber.neq.administrasi";
 
@@ -38,6 +39,7 @@ export async function muatKonteksPelatihan(db: Db, akunId: number, sekarang: num
     const dipilih: { k: Kandidat; mode: string; urut: string }[] = [];
     for (const k of kandidat) {
       if (!(await keadaanVanguard(db, Number(k.id))).menyala) continue;
+      if ((await periksaGerbang(db, Number(k.id), akunId)) !== "boleh") continue; // (3 Nov 2026) undangan belum diterima: Vanguard pelatihan ini belum terbuka
       const aturan = await muatAturanVanguard(db, Number(k.id));
       dipilih.push({ k, mode: aturan.mode, urut: k.tanggal_selesai ?? "9999-12-31" });
     }

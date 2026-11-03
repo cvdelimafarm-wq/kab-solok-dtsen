@@ -17,7 +17,8 @@ import { cakupanLihat, ringkasCakupan } from "@/lib/hierarkiPelatihan";
 import { muatAturan } from "@/lib/sigapAturanDb";
 import { hitungKelulusan, type StatusKelulusan } from "@/lib/sigapAturanTes";
 import { muatNilaiAkhir } from "@/lib/sigapNilai";
-import { muatProgres, muatSimpulHierarki, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
+import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
+import { muatDaftarPenolak, periksaGerbang, muatProgres, muatSimpulHierarki, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { hitungTahapan, kunciUntuk, ringkasIzin, type KodeTahap } from "@/lib/sigapTahapan";
 import { muatStatusMateriBatch, type StatusMateriBatch } from "@/lib/sigapMateriDb";
 import { muatIzin, muatTahapanBatch, type KeadaanTahapanBatch } from "@/lib/sigapTahapanDb";
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
     const { izin } = await izinAkun(db, akun.id);
     const pengguna = await tentukanPengguna(db, kegiatanId, akun.id, izin);
     if (pengguna.jenis === "peserta" && !(await pesertaPelatihan(db, akun.id, kegiatanId))) return galat("Anda bukan peserta pelatihan ini.", 403);
+    if (pengguna.jenis === "peserta" && (await periksaGerbang(db, kegiatanId, akun.id)) !== "boleh") return NextResponse.json(TUBUH_GERBANG, { status: 403 }); // (3 Nov 2026) terima undangan dahulu
 
     const { tersedia, simpul } = await muatSimpulHierarki(db, kegiatanId);
     const cakupan = cakupanLihat(pengguna, simpul);
@@ -133,6 +135,8 @@ export async function GET(req: NextRequest) {
       return { akun_id: b.simpul.akun_id, nama: b.simpul.nama, peran: b.simpul.peran, kedalaman: b.kedalaman, diri: b.diri, kelas: b.simpul.kelas, undangan: p.undangan, pretest: pre, posttest: post, hadir: p.hadir, materi: materiBatch ? { belum: materiBatch.belum.get(b.simpul.akun_id) ?? materiBatch.wajib_total, manual: materiBatch.manual.has(b.simpul.akun_id) } : null, vanguard: vgBaris(b.simpul.akun_id), bank: bankPeta.get(b.simpul.akun_id) ?? null, ...kunciBaris(b.simpul.akun_id), ...tambahan };
     });
     const hitung = (f: (r: (typeof baris)[number]) => boolean) => baris.filter(f).length;
+    // (3 Nov 2026) yang menolak undangan sudah dikeluarkan dari pelatihan (tidak ada di baris); panitia / instruktur melihat daftarnya untuk mencari pengganti
+    const penolak = pengguna.jenis === "peserta" ? [] : await muatDaftarPenolak(db, kegiatanId);
     return NextResponse.json({
       kegiatan_id: kegiatanId,
       jenis: pengguna.jenis,
@@ -141,11 +145,12 @@ export async function GET(req: NextRequest) {
       aturan_versi: aturan.versi,
       blokir_tahap: aturan.blokir_tahap,
       boleh_buka_kunci: pengguna.jenis !== "peserta",
+      penolak,
       baris,
       ringkasan: {
         total: baris.length,
         undangan_terima: hitung((r) => r.undangan === "terima"),
-        undangan_tolak: hitung((r) => r.undangan === "tolak"),
+        undangan_tolak: Math.max(hitung((r) => r.undangan === "tolak"), penolak.length),
         pretest_selesai: hitung((r) => r.pretest.status === "selesai"),
         posttest_selesai: hitung((r) => r.posttest.status === "selesai"),
         hadir: hitung((r) => r.hadir),

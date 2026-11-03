@@ -8,7 +8,8 @@ import type { Db } from "@/lib/sigap";
 import { penugasanAkunMemo } from "@/lib/portal/penugasanMemo";
 import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
-import type { BukaMode, InfoIdentifikasi, InfoKorwil, InfoPendataan, InfoPerencanaan, InfoWilayah, Induk, TahapDef } from "@/lib/sigapTahap";
+import { idPelatihanTahap, type BukaMode, type InfoIdentifikasi, type InfoKorwil, type InfoPendataan, type InfoPerencanaan, type InfoWilayah, type Induk, type TahapDef } from "@/lib/sigapTahap";
+import { pengelolaPelatihan } from "@/lib/portal/pengelolaPelatihan";
 import type { InfoSpdt } from "@/lib/spdtNtp";
 import type { InfoSampel } from "@/lib/sampelSls";
 import { ringkasModulSampel } from "@/lib/portal/sampel";
@@ -188,6 +189,14 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
   // wilayah tim dan lembar identifikasi (yang dibutuhkan saja) juga BERSAMAAN. Tadinya semuanya berurutan, satu bolak-balik jaringan per query.
   const [{ induk, tahap }, pen] = await Promise.all([bacaDefinisi(db), penugasanAkunMemo(db, akun.id)]);
   if (induk.length === 0) return [];
+  // (3 Nov 2026) kegiatan pelatihan tiap induk (pasangan modul pelatihan + translok:<id>) dan peran pengelola akun pada kegiatan itu
+  const idPelInduk = new Map<string, number>();
+  for (const x of tahap) {
+    if (!x.isi?.includes("pelatihan")) continue;
+    const id = idPelatihanTahap(x.isi);
+    if (id !== null) idPelInduk.set(x.induk_kode, id);
+  }
+  const pengelola = await pengelolaPelatihan(db, akun.id, Array.from(new Set(idPelInduk.values())));
 
   type Terpilih = { i: BarisInduk; t: TahapDef[]; isi: Set<string>; penInduk: typeof pen };
   const terpilih: Terpilih[] = [];
@@ -202,7 +211,9 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     if (t.length === 0) continue;
     // induk SPDT NTP hanya untuk yang bertugas di kegiatannya (jangan ikut muncul bagi seluruh petugas bencana)
     const indukSpdt = t.some((x) => x.isi.includes("spdt_lembar"));
-    const relevan = indukSpdt ? penInduk.length > 0 || supervisorSpdt : !!akun.petugas_bencana_id || penInduk.length > 0;
+    const idPelIni = idPelInduk.get(i.kode);
+    const pengelolaIni = idPelIni !== undefined && pengelola.has(idPelIni); // (3 Nov 2026) panitia / instruktur pelatihan induk ini
+    const relevan = indukSpdt ? penInduk.length > 0 || supervisorSpdt : !!akun.petugas_bencana_id || penInduk.length > 0 || pengelolaIni;
     if (!relevan) continue;
     terpilih.push({ i, t, isi: new Set(t.flatMap((x) => x.isi)), penInduk });
   }
@@ -269,6 +280,11 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       pendataan: isi.has("pendataan") ? pendataan : null,
       spdt: isi.has("spdt_lembar") ? spdt : null,
       korwil: isi.has("monitoring_korwil") ? korwil : null,
+      pengelola: (() => {
+        const id = idPelInduk.get(i.kode);
+        const peran = id !== undefined ? pengelola.get(id) : undefined;
+        return id !== undefined && peran ? { [id]: peran } : {};
+      })(),
       sampel: Object.fromEntries(Array.from(isi).flatMap((m) => { const h = /^sampel:(\d+)$/.exec(m); const s = h ? sampelPerKegiatan.get(Number(h[1])) : undefined; return h && s ? [[Number(h[1]), s] as const] : []; })),
     });
   }

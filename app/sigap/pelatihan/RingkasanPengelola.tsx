@@ -11,7 +11,8 @@ import { Kartu, Memuat } from "../admin/ui";
 import { useDataPel } from "./dataPel";
 import { SAPAAN_PENGELOLA, catatanPerhatian, persen, type JenisPengguna, type RingkasanMon } from "@/lib/ringkasanPengelola";
 
-type Mon = { jenis: JenisPengguna; ringkas: string; ringkasan: RingkasanMon };
+type Penolak = { akun_id: number; nama: string; alasan: string | null };
+type Mon = { jenis: JenisPengguna; ringkas: string; ringkasan: RingkasanMon; penolak?: Penolak[] };
 
 function Angka({ label, nilai, dari }: { label: string; nilai: number; dari: number }) {
   const p = persen(nilai, dari);
@@ -60,6 +61,20 @@ export default function RingkasanPengelola({ bolehKelola }: { bolehKelola: boole
             r.total > 0 && <p className="m-0 mt-3 rounded-lg bg-[#E3F6EC] px-3 py-1.5 text-[12.5px] font-semibold text-[#13794B]">Tidak ada yang perlu ditindaklanjuti sekarang.</p>
           )}
         </>
+      )}
+      {m && (m.penolak?.length ?? 0) > 0 && (
+        <div className="mt-3 rounded-lg bg-[#FDE8E8] px-3 py-2 text-[12.5px] text-[#7A1D22]">
+          <b className="block">Menolak undangan dan sudah dikeluarkan ({m.penolak!.length})</b>
+          <ul className="m-0 mt-1 list-disc space-y-0.5 pl-4">
+            {m.penolak!.slice(0, 20).map((x) => (
+              <li key={x.akun_id}>
+                {x.nama}
+                {x.alasan ? <span className="text-[#9A3A40]"> · {x.alasan}</span> : null}
+              </li>
+            ))}
+          </ul>
+          {m.penolak!.length > 20 && <p className="m-0 mt-1">… dan {m.penolak!.length - 20} lainnya.</p>}
+        </div>
       )}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-bold">
         <Link href="/sigap/pelatihan/monitoring" className="text-[#1F5FD1] underline">Buka Monitoring</Link>

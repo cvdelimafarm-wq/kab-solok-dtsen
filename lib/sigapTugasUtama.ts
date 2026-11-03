@@ -38,6 +38,8 @@ export type HubTugas = {
   presensi: { sudah: boolean; hari: RingkasHari } | null;
   kuis: { ada_ruang_aktif: boolean; sudah_gabung: boolean; kelas: number | null } | null;
   token_translok: string | null;
+  /** (3 Nov 2026) Gerbang undangan: peserta belum menerima undangan -> satu-satunya tugas adalah merespons undangan. */
+  terkunci_undangan?: boolean;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -58,6 +60,18 @@ const namaTes = (jenis: string) => NAMA_TES[jenis] ?? "Tes";
 /** Tugas pelatihan paling mendesak untuk peserta; null bila bukan peserta. */
 export function tugasUtamaPelatihan(hub: HubTugas, nowMs: number): TugasUtama | null {
   if (!hub.peserta) return null;
+  if (hub.terkunci_undangan) {
+    return {
+      skor: 100,
+      ikon: "surat",
+      label: "UNDANGAN PELATIHAN",
+      judul: "Respons undangan pelatihan",
+      uraian: "Baca ketentuan, lalu terima atau tolak undangan. Bagian pelatihan lain terbuka setelah undangan diterima.",
+      lencana: { teks: "Perlu respons", nada: "emas" },
+      href: tautanPelatihan("/sigap/pelatihan/hari-ini", hub.kegiatan_id),
+      aksi: "Buka undangan",
+    };
+  }
   const L = hub.langkah;
   const pre = hub.tes.find((t) => t.jenis === "pretest");
   const post = hub.tes.find((t) => t.jenis === "posttest");

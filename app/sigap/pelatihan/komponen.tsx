@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bacaSesi, keluar, keMasuk } from "../admin/api";
-import { HeaderAdmin, Memuat, Pesan } from "../admin/ui";
+import Link from "next/link";
+import { BTN, HeaderAdmin, Kartu, Memuat, Pesan } from "../admin/ui";
 import TombolKembali from "@/app/components/TombolKembali";
 import { useDetak } from "../useDetak";
 import { PulsaPeserta } from "./pulsa";
@@ -25,7 +26,8 @@ import { useKelasSaya } from "./kartuKelas";
 import { LangkahGeser, PenunjukPelatihan } from "./AlurPelatihan";
 import { ringkasAbsenSaya, useAbsenSaya } from "./absenSaya"; // (3 Nov 2026) langkah Absen sesi
 import { useVanguardSaya } from "../vanguardSaya"; // (3 Nov 2026) langkah Vanguard
-import { TabPelatihanOtomatis, useBenderaTab, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
+import { TabPelatihanOtomatis, useBenderaTab, useTerkunciUndangan, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
+import { TEKS_TERKUNCI } from "@/lib/gerbangUndangan"; // (3 Nov 2026) gerbang undangan
 import type { KunciTes } from "./KartuTerkunci";
 
 export type TesHub = {
@@ -205,6 +207,20 @@ function AlurKerangka({ kode, hub: hubLuar, selesai, tersembunyi, children }: { 
   );
 }
 
+/** (3 Nov 2026) Pengganti isi halaman pelatihan selain Hari ini selama undangan belum diterima. */
+export function KartuTerkunciUndangan() {
+  return (
+    <Kartu judul={TEKS_TERKUNCI.judul}>
+      <p className="m-0 text-[13.5px] leading-relaxed text-[#3B4A60]">{TEKS_TERKUNCI.ket}</p>
+      <div className="mt-3">
+        <Link href="/sigap/pelatihan/hari-ini" className={BTN}>
+          {TEKS_TERKUNCI.tombol}
+        </Link>
+      </div>
+    </Kartu>
+  );
+}
+
 export function Kerangka({
   aktif,
   judul,
@@ -239,6 +255,9 @@ export function Kerangka({
   // (2 Nov 2026) halaman tab baru (Hari ini, Monitoring) adalah halaman puncak pelatihan: panah kembali naik ke induk pelatihan, bukan ke /sigap/pelatihan (yang mengalihkan ke Hari ini).
   const induk = aktif === "pelatihan" || aktif === "hari-ini" || aktif === "monitoring" || aktif === "absen" ? tujuanKembali(info) : "/sigap/pelatihan"; // (1 Nov 2026) induk pelatihan ini (bukan selalu Pascabencana)
   const tabAktif: TabAktif = aktif === "undangan" ? "hari-ini" : aktif;
+  // (3 Nov 2026) gerbang undangan: sebelum undangan diterima, hanya Hari ini yang menampilkan isi; halaman lain diganti kartu penjelasan
+  const terkunci = useTerkunciUndangan() === true;
+  const tutup = terkunci && tabAktif !== "hari-ini";
   return (
     <div className="min-h-screen bg-[#F3F5F8] text-[#14202E]">
       <HeaderAdmin
@@ -256,9 +275,11 @@ export function Kerangka({
       </HeaderAdmin>
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         {/* (2 Nov 2026) pop-up konfirmasi nomor pulsa hanya sampai dikonfirmasi; kartu statusnya redup di bawah tab Hari ini (hari-ini/page.tsx) */}
-        <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />
+        {!terkunci && <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />}
         <PemilihPelatihan />
-        {langkah || geser ? (
+        {tutup ? (
+          <KartuTerkunciUndangan />
+        ) : (langkah || geser) && !terkunci ? (
           <AlurKerangka kode={langkah ?? null} hub={hub} selesai={langkahSelesai} tersembunyi={alurTersembunyi}>
             {children}
           </AlurKerangka>

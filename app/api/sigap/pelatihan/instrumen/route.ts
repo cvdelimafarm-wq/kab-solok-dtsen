@@ -15,6 +15,8 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { BUCKET_SIGAP } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
+import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
+import { gerbangTertutup } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -37,6 +39,7 @@ export async function GET(req: NextRequest) {
     const [peserta, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), izinAkun(db, akun.id)]);
     const lihatKelola = boleh(izin, "pelatihan.kelola", "lihat", kegiatanId);
     if (!peserta && !lihatKelola) return galat("Instrumen hanya untuk peserta pelatihan.", 403);
+    if (peserta && (await gerbangTertutup(db, kegiatanId, akun.id, izin))) return NextResponse.json(TUBUH_GERBANG, { status: 403 }); // (3 Nov 2026) terima undangan dahulu
 
     const unduh = Number(req.nextUrl.searchParams.get("unduh")) || null;
     if (unduh) {

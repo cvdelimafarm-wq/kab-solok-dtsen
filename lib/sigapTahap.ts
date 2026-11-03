@@ -76,7 +76,11 @@ export type Induk = {
   sampel?: Record<number, InfoSampel>;
   /** (19 Okt 2026) kortim/korwil pada kelompok pendataan; null = modul tidak berlaku */
   korwil?: InfoKorwil | null;
+  /** (3 Nov 2026) peran akun ini sebagai PENGELOLA pelatihan (id kegiatan pelatihan -> panitia / instruktur) walau bukan peserta; kartu Pelatihan tetap tampil di Beranda */
+  pengelola?: Record<number, PeranPengelola>;
 };
+
+export type PeranPengelola = "panitia" | "instruktur";
 
 export type ModulTahap = {
   kode: string;
@@ -209,7 +213,13 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
   if (kode === "pelatihan") {
     const idPel = idPelatihanTahap(tahap.isi);
     const hrefPel = denganKegiatan("/sigap/pelatihan", idPel);
-    if (hubMuat === "siap" && (!hub || !hub.peserta)) return [];
+    const peranKelola = idPel !== null ? induk.pengelola?.[idPel] : undefined;
+    if (hubMuat === "siap" && (!hub || !hub.peserta)) {
+      // (3 Nov 2026) panitia / instruktur bukan peserta: kartu tetap ada, mengajak memantau (bukan tugas peserta); bukan pengelola -> tidak berlaku
+      return peranKelola
+        ? [{ kode, judul: "Pantau pelatihan", ket: peranKelola === "panitia" ? "Anda panitia: pantau jalannya pelatihan" : "Anda instruktur: pantau kelas Anda", status: "berjalan", href: hrefPel, aksi: "Buka", pecahan: 0 }]
+        : [];
+    }
     if (hubMuat !== "siap" || !hub) {
       return [{ kode, judul: "Langkah pelatihan", ket: hubMuat === "memuat" ? "Memuat…" : "Buka untuk melihat langkah", status: "menunggu", href: hrefPel, aksi: "Buka", pecahan: 0 }];
     }

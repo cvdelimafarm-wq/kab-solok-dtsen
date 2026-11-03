@@ -12,6 +12,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { jarakMeter, keadaanHari, nilaiPresensi, posisiValid, susulanTerbuka, susunHari } from "@/lib/sigapPresensi";
+import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
+import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, muatPengaturanPresensi, muatRekamPresensi, pesertaPelatihan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -29,6 +31,7 @@ export async function POST(req: NextRequest) {
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
     if (!peserta) return galat("Akun Anda tidak terdaftar sebagai peserta pelatihan.", 403);
+    if ((await periksaGerbang(db, kegiatanId, akun.id)) !== "boleh") return NextResponse.json(TUBUH_GERBANG, { status: 403 }); // (3 Nov 2026) terima undangan dahulu
     const peng = await muatPengaturanPresensi(db, kegiatanId);
     if (!peng) return galat("Presensi belum diatur panitia.", 404);
 

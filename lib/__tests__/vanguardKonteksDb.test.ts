@@ -6,6 +6,9 @@ vi.mock("@/lib/sigapTesDb", () => ({ muatTesDaftar: async () => tesDaftar }));
 vi.mock("@/lib/sigapAbsenDb", () => ({ pesertaKelas: async () => [] }));
 const menyalaMock = vi.fn();
 vi.mock("@/lib/vanguardAkses", () => ({ KODE_FITUR_VANGUARD: "vanguard", keadaanVanguard: (...a: unknown[]) => menyalaMock(...a) }));
+// (3 Nov 2026) gerbang undangan: bawaan boleh; tes khusus di bawah memeriksa yang belum menerima undangan
+const gerbangMock = vi.fn(async (..._a: unknown[]) => "boleh");
+vi.mock("@/lib/sigapPelatihanBaruDb", () => ({ periksaGerbang: (...a: unknown[]) => gerbangMock(...a) }));
 
 import { muatKonteksPelatihan } from "../vanguardKonteksDb";
 import { muatRuntutanBatch, muatTenggatVanguard, simpanAturanVanguard, simpanTenggatVanguard } from "../vanguardRuntutanDb";
@@ -63,6 +66,8 @@ beforeEach(() => {
   tesDaftar.length = 0;
   menyalaMock.mockReset();
   menyalaMock.mockResolvedValue({ menyala: true, sumber: "centang", fungsi: null });
+  gerbangMock.mockReset();
+  gerbangMock.mockResolvedValue("boleh");
 });
 
 describe("tenggat murni", () => {
@@ -172,6 +177,15 @@ describe("muatKonteksPelatihan", () => {
     expect(k?.kegiatan_id).toBe(7);
     t.sigap_pelatihan_aturan[0].vanguard_mode = "tidak_ada";
     expect((await muatKonteksPelatihan(fakeDb(t), 444, NOW))?.kegiatan_id).toBe(5); // sama-sama tanpa aturan: yang paling dekat tanggalnya
+  });
+  it("(3 Nov 2026) undangan belum diterima: pelatihan itu tidak dihitung (Vanguard belum terbuka); pelatihan lain yang sudah diterima tetap", async () => {
+    const t = tabelDasar();
+    t.sigap_penugasan.push({ akun_id: 444, kegiatan_id: 5, aktif: true, sumber: null });
+    t.sigap_kegiatan.push({ id: 5, nama: "UJI Pelatihan", jenis: "pelatihan", aktif: true, tanggal_mulai: "2026-11-05", tanggal_selesai: "2026-11-05" });
+    gerbangMock.mockImplementation(async (_db: unknown, kegiatanId: unknown) => (kegiatanId === 7 ? "belum" : "boleh"));
+    expect((await muatKonteksPelatihan(fakeDb(t), 444, NOW))?.kegiatan_id).toBe(5);
+    gerbangMock.mockResolvedValue("belum");
+    expect(await muatKonteksPelatihan(fakeDb(tabelDasar()), 444, NOW)).toBeNull();
   });
   it("galat tak terduga = null (layar tetap tampil seperti biasa)", async () => {
     const rusak = { from() { throw new Error("putus"); } } as never;

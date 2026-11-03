@@ -12,6 +12,8 @@
 // (2 Nov 2026) BLOKIR TAHAPAN: bila kegiatan menyalakan blokir_tahap dan tahapan sebelumnya belum tuntas, GET menyertakan `terkunci` dan
 // POST {aksi:"mulai"} ditolak 409 (sesi yang sudah berjalan tidak pernah diputus). IZIN BUKA KUNCI yang berlaku memberi jendela tes pribadi (lib/sigapTahapan.ts).
 
+import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
+import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { NextRequest, NextResponse } from "next/server";
 import { TOLERANSI_DETIK, bersihkanJawaban, hitungBatas, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
 import { muatAturan } from "@/lib/sigapAturanDb";
@@ -52,6 +54,7 @@ async function siapkan(req: NextRequest, ctx: Ctx) {
   if (!tes || !tes.aktif) return { err: galat("Tes belum tersedia.", 404) } as const;
   const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
   if (!peserta) return { err: galat("Akun Anda tidak terdaftar sebagai peserta pelatihan ini.", 403) } as const;
+  if ((await periksaGerbang(db, kegiatanId, akun.id)) !== "boleh") return { err: NextResponse.json(TUBUH_GERBANG, { status: 403 }) } as const; // (3 Nov 2026) terima undangan dahulu
   // (2 Nov 2026) izin buka kunci + blokir tahapan. Semua pembacaan tahan SQL belum dijalankan (blokir mati, tanpa izin).
   const sekarangMs = Date.now();
   const [aturan, izin] = await Promise.all([muatAturan(db, kegiatanId), muatIzin(db, kegiatanId, [akun.id], sekarangMs)]);

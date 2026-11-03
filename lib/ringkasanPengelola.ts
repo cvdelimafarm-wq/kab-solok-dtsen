@@ -31,7 +31,7 @@ export function catatanPerhatian(r: RingkasanMon): Catatan[] {
   const c: Catatan[] = [];
   if ((r.izin_menunggu ?? 0) > 0) c.push({ teks: `${r.izin_menunggu} permintaan buka kunci menunggu keputusan.`, nada: "wait" });
   if ((r.terkunci ?? 0) > 0) c.push({ teks: `${r.terkunci} orang terkunci menunggu tahapan sebelumnya.`, nada: "wait" });
-  if (r.undangan_tolak > 0) c.push({ teks: `${r.undangan_tolak} orang menolak undangan.`, nada: "bad" });
+  // (3 Nov 2026) yang menolak undangan sudah dikeluarkan dari pelatihan dan ditampilkan sebagai daftar tersendiri (nama + alasan); tidak diulang di sini
   if ((r.materi_wajib ?? 0) > 0 && (r.materi_belum ?? 0) > 0) c.push({ teks: `${r.materi_belum} orang belum menuntaskan materi wajib.`, nada: "wait" });
   return c;
 }

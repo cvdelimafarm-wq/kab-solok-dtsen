@@ -8,6 +8,8 @@
 // Simulasi bebas (tanpa kegiatan) tidak melewati berkas ini sama sekali.
 
 import type { Db } from "@/lib/sigap";
+import { PESAN_GERBANG } from "@/lib/gerbangUndangan";
+import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { normalisasi, vanguardUntuk } from "@/lib/keu/identifikasi";
 
 export const KODE_FITUR_VANGUARD = "vanguard";
@@ -48,5 +50,7 @@ export async function bolehMencatat(db: Db, akunId: number, kegiatanId: number):
   const keadaan = await keadaanVanguard(db, kegiatanId);
   if (!keadaan.menyala) return { boleh: false, alasan: "Vanguard belum dinyalakan di kegiatan ini.", keadaan };
   if (!(await pesertaAktif(db, akunId, kegiatanId))) return { boleh: false, alasan: "Anda bukan peserta aktif kegiatan ini.", keadaan };
+  // (3 Nov 2026) gerbang undangan pelatihan: Vanguard terbuka setelah undangan diterima
+  if ((await periksaGerbang(db, kegiatanId, akunId)) !== "boleh") return { boleh: false, alasan: PESAN_GERBANG, keadaan };
   return { boleh: true, alasan: null, keadaan };
 }

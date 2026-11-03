@@ -13,7 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan, undanganUntuk } from "@/lib/sigapTesDb";
 import { ketentuanBerubah, ketentuanDiubah, periksaRespons, statusUndangan, teksKartuUndangan } from "@/lib/ketentuanPelatihan";
-import { muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
+import { keluarkanPenolak, muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
+import { gerbangDari } from "@/lib/gerbangUndangan";
 import { tabPerPeran } from "@/lib/sigapAbsen";
 import { muatStatusMateriBatch } from "@/lib/sigapMateriDb";
 import { muatJadwalPendataanTertaut } from "@/lib/portal/jadwalPendataanTertaut";
@@ -39,8 +40,13 @@ export async function GET(req: NextRequest) {
     ]);
     const ketentuan = tampilan.ketentuan;
     const pengguna = await tentukanPengguna(db, kegiatanId, akun.id, izin);
-    const respons = peserta ? await muatRespons(db, kegiatanId, akun.id) : null;
+    // (3 Nov 2026) respons dimuat juga bagi yang bukan peserta: yang menolak sudah dikeluarkan dari pelatihan, halaman Hari ini perlu menyampaikannya
+    const respons = await muatRespons(db, kegiatanId, akun.id);
     const status = statusUndangan(respons);
+    // (3 Nov 2026) gerbang undangan: sebelum diterima, peserta murni hanya melihat kartu undangan (tab lain terkunci). Pengelola tidak tertahan.
+    const pengelola = pengguna.jenis !== "peserta";
+    const terkunciUndangan = !!peserta && !pengelola && gerbangDari(tampilan.tab_baru, respons?.respons ?? null) === "belum";
+    const ditolak = !peserta && respons?.respons === "tolak";
     const berubah = ketentuanBerubah(respons, ketentuan);
     // (2 Nov 2026) Tab "Kamera SIGAP" membuka halaman Kamera SIGAP kegiatan ini (/sigap/foto), sama dengan Pendataan Pascabencana -- bukan panduan Translok.
     // Kegiatan harus bermode "kamera" (sigap_foto_pengaturan_kegiatan); bila belum, halaman itu menjelaskannya.
@@ -80,6 +86,9 @@ export async function GET(req: NextRequest) {
       ketentuan: { butir: ketentuan.butir, versi: ketentuan.versi, diubah: ketentuanDiubah(ketentuan) },
       undangan: { hari_tanggal: undangan.hari_tanggal, pukul: undangan.pukul, tempat: undangan.tempat, tanggal_iso: undangan.tanggal_iso, pdf: undangan.pdf },
       peserta,
+      pengguna: pengguna.jenis,
+      terkunci_undangan: terkunciUndangan,
+      ditolak,
       respons,
       status,
       berubah,
@@ -113,7 +122,15 @@ export async function POST(req: NextRequest) {
       const ketentuan = await muatKetentuan(db, kegiatanId);
       const hasil = await simpanRespons(db, kegiatanId, akun.id, v.respons, v.alasan, ketentuan.versi);
       if (!hasil.ok) return galat(hasil.pesan, 500);
-      return NextResponse.json({ ok: true, status: v.respons === "terima" ? "diterima" : "ditolak" });
+      // (3 Nov 2026) menolak = namanya dikeluarkan dari pelatihan (penugasan dinonaktifkan) dan kartunya hilang dari Beranda; catatan penolakan tetap ada untuk panitia
+      if (v.respons === "tolak") {
+        const keluar = await keluarkanPenolak(db, kegiatanId, akun.id);
+        await catatAudit(db, akun.id, "pelatihan_undangan_tolak", { kegiatan_id: kegiatanId, alasan: v.alasan, dikeluarkan: keluar.ok ? keluar.dikeluarkan : 0, galat: keluar.ok ? null : keluar.pesan });
+        if (!keluar.ok) return galat(keluar.pesan, 500);
+        return NextResponse.json({ ok: true, status: "ditolak", dikeluarkan: true });
+      }
+      await catatAudit(db, akun.id, "pelatihan_undangan_terima", { kegiatan_id: kegiatanId });
+      return NextResponse.json({ ok: true, status: "diterima" });
     }
 
     if (body.aksi === "simpan") {

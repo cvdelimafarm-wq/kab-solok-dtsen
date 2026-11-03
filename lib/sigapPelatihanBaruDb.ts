@@ -7,6 +7,7 @@
 import type { Db } from "@/lib/sigap";
 import { boleh, type PetaIzin } from "@/lib/sigapAkses";
 import { FILTER_BUKAN_ADMINISTRASI } from "@/lib/sigapTesDb";
+import { gerbangDari, type Gerbang, type PenolakBaris } from "@/lib/gerbangUndangan";
 import { bacaKetentuan, bersihkanButir, hariIniWib, kegiatanSudahSelesai, KETENTUAN_BAWAAN, tampilanBaruAktif, type Ketentuan, type ResponsUndangan } from "@/lib/ketentuanPelatihan";
 import { periksaPerubahan, type MasukanPerubahan } from "@/lib/hierarkiImpor";
 import type { Pengguna, PeranPelatihan, SimpulHierarki } from "@/lib/hierarkiPelatihan";
@@ -57,6 +58,59 @@ export async function muatRespons(db: Db, kegiatanId: number, akunId: number): P
     return { respons: r.respons, alasan: r.alasan ?? null, versi_ketentuan: r.versi_ketentuan, dijawab_at: r.dijawab_at };
   } catch {
     return null;
+  }
+}
+
+/**
+ * (3 Nov 2026) Gerbang undangan satu peserta. Sudah menerima -> boleh (satu pembacaan). Selain itu bergantung tampilan: hanya pelatihan bertampilan lima tab yang
+ * menutup gerbang. Kegiatan bukan pelatihan, tabel belum ada, atau gagal baca -> boleh (tidak pernah mengunci karena galat).
+ */
+export async function periksaGerbang(db: Db, kegiatanId: number, akunId: number): Promise<Gerbang> {
+  try {
+    const { data, error } = await db.from("sigap_pelatihan_undangan_respons").select("respons").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).maybeSingle();
+    if (error) return "boleh";
+    const respons = (data as { respons?: string } | null)?.respons;
+    if (respons === "terima") return "boleh";
+    const { data: keg } = await db.from("sigap_kegiatan").select("jenis").eq("id", kegiatanId).maybeSingle();
+    if ((keg as { jenis?: string } | null)?.jenis !== "pelatihan") return "boleh";
+    const t = await muatTampilan(db, kegiatanId);
+    return gerbangDari(t.tab_baru, respons === "tolak" ? "tolak" : null);
+  } catch {
+    return "boleh";
+  }
+}
+
+/** Pengelola (panitia / lihat Kelola) tidak pernah tertahan gerbang; peserta murni tertahan sampai menerima. */
+export async function gerbangTertutup(db: Db, kegiatanId: number, akunId: number, izin: PetaIzin): Promise<boolean> {
+  if (boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return false;
+  return (await periksaGerbang(db, kegiatanId, akunId)) !== "boleh";
+}
+
+/**
+ * Menolak undangan = namanya dikeluarkan dari pelatihan: penugasan peserta (bukan administrasi) dinonaktifkan. Catatan penolakan + alasan tetap di
+ * sigap_pelatihan_undangan_respons. Panitia dapat mengaktifkan kembali penugasannya; peserta lalu harus menerima undangan lagi.
+ */
+export async function keluarkanPenolak(db: Db, kegiatanId: number, akunId: number): Promise<{ ok: true; dikeluarkan: number } | { ok: false; pesan: string }> {
+  try {
+    const { data, error } = await db.from("sigap_penugasan").update({ aktif: false }).eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).select("id");
+    if (error) return { ok: false, pesan: "Nama Anda belum dapat dikeluarkan dari pelatihan." };
+    return { ok: true, dikeluarkan: (data ?? []).length };
+  } catch {
+    return { ok: false, pesan: "Nama Anda belum dapat dikeluarkan dari pelatihan." };
+  }
+}
+
+/** Daftar yang menolak undangan (nama + alasan), terbaru dahulu; untuk panitia mencari pengganti. Gagal baca = kosong. */
+export async function muatDaftarPenolak(db: Db, kegiatanId: number): Promise<PenolakBaris[]> {
+  try {
+    const { data, error } = await db.from("sigap_pelatihan_undangan_respons").select("akun_id, alasan, dijawab_at").eq("kegiatan_id", kegiatanId).eq("respons", "tolak").order("dijawab_at", { ascending: false }).limit(300);
+    if (error || !data || data.length === 0) return [];
+    const baris = data as { akun_id: number; alasan: string | null; dijawab_at: string }[];
+    const { data: akun } = await db.from("sigap_akun").select("id, nama").in("id", baris.map((b) => b.akun_id));
+    const nama = new Map(((akun ?? []) as { id: number; nama: string }[]).map((a) => [a.id, a.nama]));
+    return baris.map((b) => ({ akun_id: b.akun_id, nama: nama.get(b.akun_id) ?? `Akun ${b.akun_id}`, alasan: b.alasan ?? null, dijawab_at: b.dijawab_at }));
+  } catch {
+    return [];
   }
 }
 

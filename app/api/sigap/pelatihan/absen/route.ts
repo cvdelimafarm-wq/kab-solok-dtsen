@@ -14,6 +14,8 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
+import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
+import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 import { tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { posisiValid } from "@/lib/sigapPresensi";
@@ -47,6 +49,7 @@ export async function GET(req: NextRequest) {
     if (url.searchParams.get("sebagai") === "peserta") {
       const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
       if (!peserta) return galat("Anda bukan peserta pelatihan ini.", 403);
+      if ((await periksaGerbang(db, kegiatanId, akun.id)) !== "boleh") return NextResponse.json(TUBUH_GERBANG, { status: 403 }); // (3 Nov 2026) terima undangan dahulu
       const hariIni = tanggalWib(sekarang);
       const berlaku = kedatanganBerlaku(hari, hariIni);
       const datang = berlaku ? (await muatDatang(db, kegiatanId, hariIni, [akun.id])).get(akun.id) ?? null : null;
@@ -146,6 +149,7 @@ export async function POST(req: NextRequest) {
     if (aksi === "kode" || aksi === "lokasi") {
       const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
       if (!peserta) return galat("Anda bukan peserta pelatihan ini.", 403);
+      if ((await periksaGerbang(db, kegiatanId, akun.id)) !== "boleh") return NextResponse.json(TUBUH_GERBANG, { status: 403 }); // (3 Nov 2026) terima undangan dahulu
       const sesiId = angka(body.sesi_id);
       const sesi = sesiId === null ? null : await ambilSesi(db, kegiatanId, sesiId);
       const h = aksi === "kode"

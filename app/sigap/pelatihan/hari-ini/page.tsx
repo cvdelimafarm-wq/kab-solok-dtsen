@@ -23,6 +23,7 @@ import { useDataPel } from "../dataPel";
 import RingkasanPengelola from "../RingkasanPengelola"; // (3 Nov 2026) isi Hari ini untuk instruktur / panitia (bukan peserta)
 import KartuKuis from "../KartuKuis"; // (3 Nov 2026) kartu kuis selalu tampil
 import KartuJadwalPendataan from "../KartuJadwalPendataan"; // (3 Nov 2026) jadwal pendataan dari Identifikasi survei
+import { tandaBasi } from "@/app/portal/dataBersama";
 import { useVanguardSaya } from "../../vanguardSaya"; // (3 Nov 2026) Vanguard didahulukan bila perlu perhatian
 import type { JadwalPendataanKartu } from "@/lib/jadwalPendataanTampil";
 import { bacaLangkahDariAlamat } from "@/lib/alurPelatihan";
@@ -43,6 +44,12 @@ type Data = {
   /** (3 Nov 2026) tanggal kegiatan pelatihan (untuk linimasa Jadwal Anda); null = belum diisi */
   jadwal_pelatihan?: { mulai: string; selesai: string | null } | null;
   respons: { respons: "terima" | "tolak"; alasan: string | null } | null;
+  /** (3 Nov 2026) jenis pengguna di mata hierarki: panitia / instruktur / peserta */
+  pengguna?: "panitia" | "instruktur" | "peserta";
+  /** (3 Nov 2026) gerbang undangan: peserta belum menerima undangan -> hanya kartu undangan yang tampil */
+  terkunci_undangan?: boolean;
+  /** (3 Nov 2026) akun ini sudah menolak undangan dan dikeluarkan dari pelatihan */
+  ditolak?: boolean;
   status: StatusUndangan;
   berubah: boolean;
   kartu: TeksKartuUndangan;
@@ -128,6 +135,7 @@ function ModalKetentuan({ d, onTutup, onSelesai }: { d: Data; onTutup: () => voi
         )}
         {d.peserta && tolak && (
           <div className="mt-4">
+            <Pesan jenis="peringatan">Dengan menolak, nama Anda dikeluarkan dari pelatihan ini dan kartunya hilang dari Beranda. Panitia akan mencari pengganti.</Pesan>
             <label htmlFor="alasan-tolak" className="text-[13px] font-semibold">
               Alasan menolak
             </label>
@@ -219,17 +227,26 @@ export default function HalamanHariIni() {
 
   const nada = d ? NADA[d.kartu.nada] : null;
   const info = useInfoPelatihan();
-  const vg = useVanguardSaya(d?.peserta ? d.kegiatan_id : null);
+  const vg = useVanguardSaya(d?.peserta && !d.terkunci_undangan ? d.kegiatan_id : null); // terkunci: Vanguard belum dimuat
   return (
     <Kerangka aktif="hari-ini" geser judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!d && !galat && <Memuat />}
-      {d && !d.peserta && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} />}
-      {d && <KartuIzinBuka />}
+      {d && !d.peserta && d.ditolak && (
+        <Kartu judul="Anda menolak undangan ini">
+          <p className="m-0 text-[13.5px] leading-relaxed text-[#3B4A60]">
+            Nama Anda sudah dikeluarkan dari pelatihan ini dan kartunya dihapus dari Beranda.
+            {d.respons?.alasan ? ` Alasan Anda: ${d.respons.alasan}.` : ""} Bila keputusan berubah, hubungi panitia.
+          </p>
+        </Kartu>
+      )}
+      {d && !d.peserta && !d.ditolak && d.pengguna === "peserta" && <Pesan jenis="info">Akun Anda bukan peserta pelatihan ini.</Pesan>}
+      {d && !d.peserta && !d.ditolak && d.pengguna !== "peserta" && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} />}
+      {d && !d.terkunci_undangan && <KartuIzinBuka />}
       {d && d.peserta && nada && (
         <>
           {/* (3 Nov 2026) Vanguard yang perlu perhatian sekarang disorot dan didahulukan (di atas undangan); selain itu tetap di bawah undangan */}
-          {vg.mendesak && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
+          {vg.mendesak && !d.terkunci_undangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
           <section className={`rounded-[18px] border p-4 ${nada.kotak}`} aria-label="Undangan pelatihan">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Undangan pelatihan</h2>
@@ -252,12 +269,13 @@ export default function HalamanHariIni() {
               </div>
             )}
           </section>
-          <KartuJadwalPendataan jadwal={d.jadwal_pendataan} pelatihan={d.jadwal_pelatihan ?? (d.undangan.tanggal_iso ? { mulai: d.undangan.tanggal_iso, selesai: null } : null)} peran={d.peserta?.peran ?? null} />
-          {!vg.mendesak && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
-          <AbsenPeserta />
-          <KartuKuis />
+          {d.terkunci_undangan && <Pesan jenis="info">Bagian pelatihan lain terbuka setelah Anda menerima undangan ini.</Pesan>}
+          {!d.terkunci_undangan && <KartuJadwalPendataan jadwal={d.jadwal_pendataan} pelatihan={d.jadwal_pelatihan ?? (d.undangan.tanggal_iso ? { mulai: d.undangan.tanggal_iso, selesai: null } : null)} peran={d.peserta?.peran ?? null} />}
+          {!vg.mendesak && !d.terkunci_undangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
+          {!d.terkunci_undangan && <AbsenPeserta />}
+          {!d.terkunci_undangan && <KartuKuis />}
           {/* (2 Nov 2026) nomor pulsa: dikonfirmasi sekali lewat pop-up; di sini hanya kartu redup di bagian bawah (permintaan user) */}
-          <PulsaPeserta tampilan="kartu" judul={judulPelatihan(info)} />
+          {!d.terkunci_undangan && <PulsaPeserta tampilan="kartu" judul={judulPelatihan(info)} />}
           {!d.tab_baru && (
             <Kartu>
               <p className="text-[12.5px] text-[#6B7A90]">
@@ -277,6 +295,10 @@ export default function HalamanHariIni() {
           onSelesai={() => {
             setBuka(false);
             lupakanBenderaTab();
+            // (3 Nov 2026) gerbang berubah: Beranda (kartu pelatihan) dan seluruh data pelatihan diambil ulang
+            tandaBasi("/api/sigap/pelatihan");
+            tandaBasi("/api/portal/induk");
+            tandaBasi("/api/portal/beranda");
             muat();
           }}
         />

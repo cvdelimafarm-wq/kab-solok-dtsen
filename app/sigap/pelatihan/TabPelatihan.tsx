@@ -12,6 +12,7 @@ import { urlPelatihan } from "../admin/api";
 import { tandaBasi } from "@/app/portal/dataBersama";
 import { useSiapkan } from "@/app/portal/siapkan"; // (3 Nov 2026) prefetch tab lain
 import { rencanaTab } from "@/lib/cacheTabPelatihan";
+import { tabBolehSaatTerkunci } from "@/lib/gerbangUndangan"; // (3 Nov 2026) gerbang undangan: hanya Hari ini yang terbuka sebelum undangan diterima
 import { useDataPel } from "./dataPel";
 
 export type TabAktif = "hari-ini" | "instrumen" | "pelatihan" | "absen" | "kamera" | "monitoring";
@@ -80,8 +81,9 @@ export function daftarTab(kameraHref: string | null, peran: TabPeran = TAB_PESER
 /** Angka penanda per tab (mis. instrumen wajib yang belum dibuka). 0 / kosong = tanpa penanda. */
 export type Lencana = Partial<Record<TabAktif, number>>;
 
-export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana = {} }: { aktif: TabAktif; kameraHref: string | null; peran?: TabPeran; lencana?: Lencana }) {
-  const tab = daftarTab(kameraHref, peran);
+export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana = {}, terkunci = false }: { aktif: TabAktif; kameraHref: string | null; peran?: TabPeran; lencana?: Lencana; terkunci?: boolean }) {
+  // (3 Nov 2026) undangan belum diterima: tab selain Hari ini redup dan tidak dapat diketuk
+  const tab = daftarTab(kameraHref, peran).map((t) => (terkunci && !tabBolehSaatTerkunci(t.kode) ? { ...t, href: null } : t));
   return (
     <>
       <div aria-hidden className="h-[76px]" />
@@ -145,8 +147,8 @@ export function TabPelatihan({ aktif, kameraHref, peran = TAB_PESERTA, lencana =
   );
 }
 
-type Bendera = { tab_baru: boolean; kamera_href: string | null; kegiatan_id: number; tab: TabPeran; instrumen_belum: number };
-type JawabKetentuan = { tab_baru?: boolean; kamera_href?: string | null; kegiatan_id: number; tab?: TabPeran; instrumen_belum?: number | string | null };
+type Bendera = { tab_baru: boolean; kamera_href: string | null; kegiatan_id: number; tab: TabPeran; instrumen_belum: number; terkunci: boolean };
+type JawabKetentuan = { tab_baru?: boolean; kamera_href?: string | null; kegiatan_id: number; tab?: TabPeran; instrumen_belum?: number | string | null; terkunci_undangan?: boolean };
 
 const URL_KETENTUAN = "/api/sigap/pelatihan/ketentuan";
 
@@ -157,7 +159,7 @@ const URL_KETENTUAN = "/api/sigap/pelatihan/ketentuan";
 export function useBenderaTab(): Bendera | null {
   const { data: r } = useDataPel<JawabKetentuan>(URL_KETENTUAN);
   return useMemo(
-    () => (r ? { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id, tab: r.tab ?? TAB_PESERTA, instrumen_belum: Number(r.instrumen_belum ?? 0) || 0 } : null),
+    () => (r ? { tab_baru: !!r.tab_baru, kamera_href: r.kamera_href ?? null, kegiatan_id: r.kegiatan_id, tab: r.tab ?? TAB_PESERTA, instrumen_belum: Number(r.instrumen_belum ?? 0) || 0, terkunci: !!r.terkunci_undangan } : null),
     [r],
   );
 }
@@ -165,11 +167,17 @@ export function useBenderaTab(): Bendera | null {
 /** Dipasang di Kerangka: menggambar bilah hanya bila kegiatan memakai tampilan baru, dan menyiapkan (prefetch) kode + data tab lain di belakang. */
 export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
   const b = useBenderaTab();
-  const menyala = !!b && b.tab_baru;
+  const menyala = !!b && b.tab_baru && !b.terkunci; // terkunci (undangan belum diterima): tidak menyiapkan tab lain di belakang
   const rencana = menyala && b ? rencanaTab(aktif, daftarTab(b.kamera_href, b.tab).map((t) => ({ kode: t.kode, href: t.href })), urlPelatihan) : { rute: [], data: [] };
   useSiapkan(rencana, menyala);
   if (!b || !b.tab_baru) return null;
-  return <TabPelatihan aktif={aktif} kameraHref={b.kamera_href} peran={b.tab} lencana={{ instrumen: b.instrumen_belum }} />;
+  return <TabPelatihan aktif={aktif} kameraHref={b.kamera_href} peran={b.tab} lencana={{ instrumen: b.instrumen_belum }} terkunci={b.terkunci} />;
+}
+
+/** (3 Nov 2026) Undangan pelatihan belum diterima? null = belum diketahui. Dipakai Kerangka untuk menutup semua halaman pelatihan selain Hari ini. */
+export function useTerkunciUndangan(): boolean | null {
+  const b = useBenderaTab();
+  return b ? b.terkunci : null;
 }
 
 /** Untuk pembaruan setelah pengelola/peserta mengubah sesuatu (mis. merespons undangan): tandai bendera kedaluwarsa agar diambil ulang di belakang. */

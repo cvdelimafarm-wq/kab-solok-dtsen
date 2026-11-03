@@ -9,15 +9,14 @@ describe("catatan perhatian", () => {
     expect(catatanPerhatian(dasar)).toEqual([]);
     expect(catatanPerhatian({ ...dasar, materi_wajib: 2, materi_belum: 0, terkunci: 0, izin_menunggu: 0 })).toEqual([]);
   });
-  it("permintaan buka kunci didahulukan, lalu terkunci, tolak undangan, materi", () => {
+  it("permintaan buka kunci didahulukan, lalu terkunci, lalu materi (penolak undangan ditampilkan sebagai daftar sendiri)", () => {
     const c = catatanPerhatian({ ...dasar, izin_menunggu: 2, terkunci: 5, undangan_tolak: 1, materi_wajib: 1, materi_belum: 3 });
     expect(c.map((x) => x.teks)).toEqual([
       "2 permintaan buka kunci menunggu keputusan.",
       "5 orang terkunci menunggu tahapan sebelumnya.",
-      "1 orang menolak undangan.",
       "3 orang belum menuntaskan materi wajib.",
     ]);
-    expect(c[2].nada).toBe("bad");
+    expect(c.every((x) => x.nada === "wait")).toBe(true);
   });
   it("materi belum tuntas tidak dicatat bila pelatihan tidak punya materi wajib", () => {
     expect(catatanPerhatian({ ...dasar, materi_wajib: 0, materi_belum: 4 })).toEqual([]);
