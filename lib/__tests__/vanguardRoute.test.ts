@@ -134,10 +134,10 @@ describe("pengaturan per kegiatan dan cacahan kalkulator", () => {
   it("jadwal: belum buka dan sudah tutup ditolak 403 tanpa rekaman; di dalam jadwal diterima", async () => {
     atur({ buka_at: new Date(Date.now() + 3_600_000).toISOString() });
     let r = await kirim(muatan({ ...kasus.kunci })); expect(r.status).toBe(403);
-    expect((await r.json()).error).toBe("Latihan Vanguard untuk kegiatan ini belum dibuka.");
+    expect((await r.json()).error).toBe("Vanguard untuk kegiatan ini belum dibuka.");
     atur({ tutup_at: new Date(Date.now() - 3_600_000).toISOString() });
     r = await kirim(muatan({ ...kasus.kunci })); expect(r.status).toBe(403);
-    expect((await r.json()).error).toBe("Latihan Vanguard untuk kegiatan ini sudah ditutup.");
+    expect((await r.json()).error).toBe("Vanguard untuk kegiatan ini sudah ditutup.");
     expect(tabel.sigap_vanguard_percobaan).toHaveLength(0);
     atur({ buka_at: new Date(Date.now() - 3_600_000).toISOString(), tutup_at: new Date(Date.now() + 3_600_000).toISOString() });
     expect((await kirim(muatan({ ...kasus.kunci }))).status).toBe(200);

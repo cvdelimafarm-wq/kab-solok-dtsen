@@ -60,8 +60,8 @@ describe("jadwal, level, dan batas percobaan", () => {
   it("bolehMencoba: jadwal, level, batas percobaan; pesan jelas", () => {
     const a = KASUS.find((k) => k.level === "A")!, c = KASUS.find((k) => k.level === "C")!;
     const p = P({ level_dibuka: ["A"], maks_percobaan: 3, buka_at: "2026-11-02T00:00:00.000Z", tutup_at: "2026-11-05T00:00:00.000Z" });
-    expect(bolehMencoba(p, a, 0, T("2026-11-01T00:00:00Z"))).toEqual({ boleh: false, alasan: "Latihan Vanguard untuk kegiatan ini belum dibuka." });
-    expect(bolehMencoba(p, a, 0, T("2026-11-06T00:00:00Z"))).toEqual({ boleh: false, alasan: "Latihan Vanguard untuk kegiatan ini sudah ditutup." });
+    expect(bolehMencoba(p, a, 0, T("2026-11-01T00:00:00Z"))).toEqual({ boleh: false, alasan: "Vanguard untuk kegiatan ini belum dibuka." });
+    expect(bolehMencoba(p, a, 0, T("2026-11-06T00:00:00Z"))).toEqual({ boleh: false, alasan: "Vanguard untuk kegiatan ini sudah ditutup." });
     expect(bolehMencoba(p, c, 0, T("2026-11-03T00:00:00Z"))).toEqual({ boleh: false, alasan: "Kasus ini belum dibuka untuk kegiatan Anda." });
     expect(bolehMencoba(p, a, 3, T("2026-11-03T00:00:00Z"))).toEqual({ boleh: false, alasan: "Batas percobaan untuk kasus ini sudah tercapai." });
     expect(bolehMencoba(p, a, 2, T("2026-11-03T00:00:00Z"))).toEqual({ boleh: true });
