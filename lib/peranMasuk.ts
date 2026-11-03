@@ -67,3 +67,6 @@ export function tabUntukPeran(p: PeranMasuk): { pelatihan: boolean; absen: boole
 }
 
 export const kunciPeran = (kegiatanId: number): string => `sigap_pel_peran_${kegiatanId}`;
+
+/** Label pendek untuk tombol menu di header (tanpa "(pratinjau)"). */
+export const LABEL_PERAN_PENDEK: Record<PeranMasuk, string> = { peserta: "Peserta", instruktur: "Instruktur", panitia: "Panitia", pj: "PJ" };

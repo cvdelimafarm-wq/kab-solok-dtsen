@@ -18,7 +18,7 @@ import type { PengumumanPeserta } from "@/lib/sigapPengumuman";
 import type { InfoUndangan, JenisTes, StatusTes } from "@/lib/sigapTes";
 import { useInfoPelatihan } from "./infoPelatihan";
 import { PemilihPeran, usePeranMasuk } from "./peranMasuk"; // (3 Nov 2026) dropdown "Masuk sebagai" bagi akun berkewenangan ganda
-import { PemilihPelatihan } from "./PemilihPelatihan"; // (3 Nov 2026) hanya tampil bila peserta punya >= 2 pelatihan aktif
+import { LABEL_PERAN_PENDEK, perluPemilih } from "@/lib/peranMasuk"; // (3 Nov 2026) label tombol menu akun di header
 import { useDataPel } from "./dataPel"; // (3 Nov 2026) data hub lewat simpanan bersama
 import { judulPelatihan, tujuanKembali } from "@/lib/sigapPelatihanNama";
 import { KUIS_BELUM_ADA, hitungLangkahPelatihan, jendelaPelatihan, statusLangkah, type KodeLangkah } from "@/lib/alurPelatihan"; // (2 Nov 2026) penunjuk langkah pelatihan di HP
@@ -268,6 +268,8 @@ export function Kerangka({
         kecil={`SIGAP · ${judulPelatihan(info)}`}
         judul={judul}
         onKeluar={keluar}
+        // (3 Nov 2026) "Masuk sebagai" dan Keluar digabung dalam satu tombol di pojok kanan atas. Pindah pelatihan: lewat kartu pelatihan di Beranda SIGAP (satu kartu per pelatihan).
+        menuAkun={pm.peran !== null && perluPemilih(pm.tersedia) ? { label: LABEL_PERAN_PENDEK[pm.peran], isi: (tutup) => <PemilihPeran dalamMenu setelahPilih={tutup} /> } : undefined}
         kembali={<TombolKembali tema="gelap" induk={induk} />}
         kanan={
           <>
@@ -280,8 +282,6 @@ export function Kerangka({
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         {/* (2 Nov 2026) pop-up konfirmasi nomor pulsa hanya sampai dikonfirmasi; kartu statusnya redup di bawah tab Hari ini (hari-ini/page.tsx) */}
         {!terkunci && !bukanPeserta && <PulsaPeserta tampilan="pop" judul={judulPelatihan(info)} />}
-        <PemilihPelatihan />
-        <PemilihPeran />
         {tutup ? (
           <KartuTerkunciUndangan />
         ) : (langkah || geser) && !terkunci && !bukanPeserta ? (

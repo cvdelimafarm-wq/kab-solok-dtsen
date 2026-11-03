@@ -22,6 +22,9 @@ import { chipPeranTim, susunTahap, type Induk } from "@/lib/sigapTahap";
 import { aktivitasDariInduk } from "@/lib/sigapAktivitas"; // (30 Okt 2026) kegiatan aktif per jenis (Pelatihan / Pendataan)
 import { susunDaftarKartu } from "@/lib/sigapBerandaDaftar"; // (31 Okt 2026) satu kartu per survei
 import KartuSurvei from "./KartuSurvei";
+import { IkonKegiatan } from "./CincinKegiatan"; // (3 Nov 2026) tampilan Ikon
+import PilihTampilan from "./PilihTampilan"; // (3 Nov 2026) sakelar Kartu | Ikon
+import { bacaTampilanBeranda, kunciTampilanBeranda, type TampilanBeranda } from "@/lib/tampilanBeranda";
 import KartuSeleksi from "./KartuSeleksi"; // (31 Okt 2026) ajakan seleksi petugas yang sedang dibuka (Mitra)
 import KartuAnomali from "./KartuAnomali"; // (31 Okt 2026) temuan anomali yang menunggu konfirmasi petugas
 import KartuVanguard from "./KartuVanguard"; // (1 Nov 2026) kartu promosi Vanguard untuk semua pengguna (simulasi bebas, tidak dicatat)
@@ -107,6 +110,24 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       setPilihPintasan(null);
     }
   }, [kunciPintasan]);
+  // (3 Nov 2026) tampilan Kegiatan saya: kartu (bawaan) atau ikon; disimpan per akun di perangkat
+  const [tampilan, setTampilan] = useState<TampilanBeranda>("kartu");
+  const kunciTampilan = kunciTampilanBeranda(pemilikSesi());
+  useEffect(() => {
+    try {
+      setTampilan(bacaTampilanBeranda(localStorage.getItem(kunciTampilan)));
+    } catch {
+      setTampilan("kartu");
+    }
+  }, [kunciTampilan]);
+  function gantiTampilan(t: TampilanBeranda) {
+    setTampilan(t);
+    try {
+      localStorage.setItem(kunciTampilan, t);
+    } catch {
+      /* penyimpanan tidak tersedia: berlaku selama halaman terbuka */
+    }
+  }
   function simpanPintasan(kode: string[] | null) {
     setPilihPintasan(kode);
     setAturMenu(false);
@@ -201,7 +222,7 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
   }
 
   const nowMs = Date.now() + offset;
-  const { kartu, daftarKartu, peringatan } = useMemo(() => {
+  const { kartu, daftarKartu, peringatan, ringkasPerId } = useMemo(() => {
     const k: Kartu[] = [...(data?.kartu ?? [])];
     if (dtsen) {
       k.unshift({
@@ -266,8 +287,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
       if (w) peringatan.push(w);
     }
     // (31 Okt 2026) satu kartu per survei; Pelatihan dan Pendataan terpisah, usang di bawah dan redup
-    const daftarKartu = susunDaftarKartu({ kegiatan: semua, induk, keg, tugasPelatihan: tp, tugasPelatihanKegiatanId: hub?.kegiatan_id ?? null, nowMs: sekarang });
-    return { kartu: sisa, daftarKartu, peringatan };
+    const daftarKartu = susunDaftarKartu({ kegiatan: semua, induk, keg, tugasPelatihan: tp, nowMs: sekarang });
+    return { kartu: sisa, daftarKartu, peringatan, ringkasPerId: new Map(semua.map((x) => [x.id, x])) };
     // `tik` memaksa hitung ulang tiap 30 dtk (sisa waktu tes/foto berjalan)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, dtsen, hub, hubMuat, keg, induk, offset, tik]);
@@ -440,9 +461,21 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         ) : (
           (daftarKartu.length > 0 || tampilDelego) && (
             <section aria-label="Kegiatan saya" className="space-y-3">
-              {daftarKartu.map((k) => (
-                <KartuSurvei key={k.id} k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />
-              ))}
+              {daftarKartu.length > 0 && <PilihTampilan nilai={tampilan} onPilih={gantiTampilan} />}
+              {tampilan === "kartu" || daftarKartu.length === 0 ? (
+                daftarKartu.map((k) => <KartuSurvei key={k.id} k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />)
+              ) : (
+                <ul className="grid grid-cols-3 gap-x-1.5 gap-y-4 rounded-[20px] bg-white p-3 shadow-[0_8px_22px_rgba(15,42,82,.08)] sm:grid-cols-4" data-testid="kegiatan-ikon">
+                  {daftarKartu.map((k) => {
+                    const r = ringkasPerId.get(k.id);
+                    return (
+                      <li key={k.id}>
+                        {r ? <IkonKegiatan k={{ ...r, pendek: r.pendek || k.judul }} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} /> : <KartuSurvei k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
               {tampilDelego && (
                 <Link href="/sigap/delego/saya" className="flex min-h-[56px] items-center gap-3 rounded-[20px] bg-white p-3.5 shadow-[0_8px_22px_rgba(15,42,82,.08)] active:bg-[#EAF4F2]" aria-label="Delego: delegasi, laporan harian, dan penilaian saya">
                   <KegiatanDelegoIkon />

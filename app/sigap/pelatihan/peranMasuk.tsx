@@ -67,19 +67,25 @@ export function usePeranMasuk(): StatusPeran {
   return { memuat: !data, kegiatanId: id, tersedia, nyata, peran, terkunci, pilih };
 }
 
-/** Dropdown "Masuk sebagai"; tidak tampil bila akun hanya punya satu peran. */
-export function PemilihPeran() {
+/**
+ * Dropdown "Masuk sebagai"; tidak tampil bila akun hanya punya satu peran. `dalamMenu` = tanpa kotak sendiri (dipakai di menu pojok kanan atas header);
+ * `setelahPilih` dipanggil sesudah memilih (menutup menu).
+ */
+export function PemilihPeran({ dalamMenu = false, setelahPilih }: { dalamMenu?: boolean; setelahPilih?: () => void } = {}) {
   const { tersedia, nyata, peran, pilih } = usePeranMasuk();
   if (!peran || !perluPemilih(tersedia)) return null;
   return (
-    <div className="rounded-xl border border-[#D7DEE8] bg-white px-3 py-2 shadow-sm" data-testid="pemilih-peran">
+    <div className={dalamMenu ? "" : "rounded-xl border border-[#D7DEE8] bg-white px-3 py-2 shadow-sm"} data-testid="pemilih-peran">
       <label htmlFor="masuk-sebagai" className="text-[11px] font-bold uppercase tracking-wide text-[#5B6B7F]">
         Masuk sebagai
       </label>
       <select
         id="masuk-sebagai"
         value={peran}
-        onChange={(e) => pilih(e.target.value as PeranMasuk)}
+        onChange={(e) => {
+          pilih(e.target.value as PeranMasuk);
+          setelahPilih?.();
+        }}
         className="mt-1 w-full rounded-lg border border-[#C9D3E0] bg-[#F3F5F8] px-3 py-2 text-[14px] font-semibold text-[#14202E]"
       >
         {tersedia.map((p) => (

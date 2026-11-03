@@ -119,12 +119,60 @@ export function KartuAngka({ label, nilai, ket, warna }: { label: string; nilai:
   );
 }
 
+/**
+ * (3 Nov 2026) Satu tombol di pojok kanan atas header yang membuka menu kecil: isi tambahan (mis. "Masuk sebagai") lalu Keluar.
+ * Pengganti tombol Keluar tunggal bila halaman punya pilihan akun/peran. Menutup dengan ketuk di luar, Esc, atau setelah memilih. Bukan modal penuh.
+ */
+function TombolMenuAkun({ label, isi, onKeluar }: { label: string; isi: (tutup: () => void) => React.ReactNode; onKeluar: () => void }) {
+  const [buka, setBuka] = useState(false);
+  const akar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!buka) return;
+    const luar = (e: Event) => {
+      if (akar.current && !akar.current.contains(e.target as Node)) setBuka(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBuka(false);
+    };
+    document.addEventListener("pointerdown", luar);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", luar);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [buka]);
+  return (
+    <div ref={akar} className="relative shrink-0">
+      <button
+        type="button"
+        aria-haspopup="true"
+        aria-expanded={buka}
+        onClick={() => setBuka((b) => !b)}
+        className="flex min-h-[32px] items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20"
+        data-testid="menu-akun"
+      >
+        {label}
+        <span aria-hidden className="text-[9px]">▾</span>
+      </button>
+      {buka && (
+        <div className="absolute right-0 top-full z-30 mt-1.5 w-[min(18rem,calc(100vw-2rem))] rounded-xl bg-white p-3 text-[#14202E] shadow-[0_12px_32px_rgba(4,16,40,.35)]" data-testid="menu-akun-isi">
+          {isi(() => setBuka(false))}
+          <button type="button" onClick={onKeluar} className="mt-2 min-h-[44px] w-full rounded-lg border border-[#E3C2C4] bg-[#FDF3F3] text-[13.5px] font-bold text-[#B42329] active:bg-[#FBE3E3]">
+            Keluar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Header gradien navy halaman admin. */
 export function HeaderAdmin({
   kecil,
   judul,
   kanan,
   onKeluar,
+  menuAkun,
   kembali,
   children,
 }: {
@@ -132,6 +180,8 @@ export function HeaderAdmin({
   judul: React.ReactNode;
   kanan?: React.ReactNode;
   onKeluar: () => void;
+  /** (3 Nov 2026) Bila diisi, tombol Keluar diganti satu tombol menu (label + isi tambahan + Keluar). */
+  menuAkun?: { label: string; isi: (tutup: () => void) => React.ReactNode };
   /** (23 Okt 2026) tombol Kembali seragam (app/components/TombolKembali.tsx), tampil di bawah baris logo, kiri atas. */
   kembali?: React.ReactNode;
   children?: React.ReactNode;
@@ -154,9 +204,13 @@ export function HeaderAdmin({
           </a>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
             {kanan}
-            <button type="button" onClick={onKeluar} className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20">
-              Keluar
-            </button>
+            {menuAkun ? (
+              <TombolMenuAkun label={menuAkun.label} isi={menuAkun.isi} onKeluar={onKeluar} />
+            ) : (
+              <button type="button" onClick={onKeluar} className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[11.5px] font-semibold hover:bg-white/20">
+                Keluar
+              </button>
+            )}
           </div>
         </div>
         {kembali && <div className="mt-3">{kembali}</div>}

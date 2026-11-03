@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Toast, useToast } from "../../admin/Toast";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 type Petugas = { akun_id: number; nama: string; peran: string; kelas: number | null; atasan_akun_id: number | null; bawahan: number; kecamatan: string | null; respons: "terima" | "tolak" | null };
 type Perlu = { akun_id: number; nama: string; peran: string; kelas: number | null; bawahan: number; kecamatan: string | null; status: "menolak" | "kosong"; alasan: string | null; sejak: string | null };
@@ -194,6 +195,8 @@ function ModalTangani({ sasaran, petugas, tutup, selesai, galat }: { sasaran: Sa
   const [catatan, setCatatan] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const nomor = useRef(0);
+
+  useTutupDenganBack(true, tutup); // Back HP / tombol Back menutup jendela ini (penjaga Back)
 
   // Esc menutup
   useEffect(() => {
