@@ -24,6 +24,8 @@ import RingkasanPengelola from "../RingkasanPengelola"; // (3 Nov 2026) isi Hari
 import KartuKuis from "../KartuKuis"; // (3 Nov 2026) kartu kuis selalu tampil
 import KartuJadwalPendataan from "../KartuJadwalPendataan"; // (3 Nov 2026) jadwal pendataan dari Identifikasi survei
 import { tandaBasi } from "@/app/portal/dataBersama";
+import { usePeranMasuk } from "../peranMasuk"; // (3 Nov 2026) "Masuk sebagai"
+import { LABEL_PERAN } from "@/lib/peranMasuk";
 import { useVanguardSaya } from "../../vanguardSaya"; // (3 Nov 2026) Vanguard didahulukan bila perlu perhatian
 import type { JadwalPendataanKartu } from "@/lib/jadwalPendataanTampil";
 import { bacaLangkahDariAlamat } from "@/lib/alurPelatihan";
@@ -226,8 +228,13 @@ export default function HalamanHariIni() {
   }, [peserta]);
 
   const nada = d ? NADA[d.kartu.nada] : null;
+  // (3 Nov 2026) akun berperan ganda: isi Hari ini mengikuti peran yang dipilih di dropdown "Masuk sebagai" (tanpa peran ganda: seperti biasa)
+  const pm = usePeranMasuk();
+  const sebagaiPeserta = !!d?.peserta && (pm.peran === null || pm.peran === "peserta");
+  const terkunciUndangan = sebagaiPeserta && pm.terkunci;
+  const sebagaiPengelola = !!d && ((!d.peserta && !d.ditolak && d.pengguna !== "peserta") || (!!d.peserta && pm.peran !== null && pm.peran !== "peserta"));
   const info = useInfoPelatihan();
-  const vg = useVanguardSaya(d?.peserta && !d.terkunci_undangan ? d.kegiatan_id : null); // terkunci: Vanguard belum dimuat
+  const vg = useVanguardSaya(sebagaiPeserta && !terkunciUndangan && d ? d.kegiatan_id : null); // terkunci: Vanguard belum dimuat
   return (
     <Kerangka aktif="hari-ini" geser judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
@@ -241,12 +248,12 @@ export default function HalamanHariIni() {
         </Kartu>
       )}
       {d && !d.peserta && !d.ditolak && d.pengguna === "peserta" && <Pesan jenis="info">Akun Anda bukan peserta pelatihan ini.</Pesan>}
-      {d && !d.peserta && !d.ditolak && d.pengguna !== "peserta" && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} />}
-      {d && !d.terkunci_undangan && <KartuIzinBuka />}
-      {d && d.peserta && nada && (
+      {d && sebagaiPengelola && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} sebagai={pm.peran ? LABEL_PERAN[pm.peran] : undefined} />}
+      {d && !terkunciUndangan && <KartuIzinBuka />}
+      {d && sebagaiPeserta && nada && (
         <>
           {/* (3 Nov 2026) Vanguard yang perlu perhatian sekarang disorot dan didahulukan (di atas undangan); selain itu tetap di bawah undangan */}
-          {vg.mendesak && !d.terkunci_undangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
+          {vg.mendesak && !terkunciUndangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
           <section className={`rounded-[18px] border p-4 ${nada.kotak}`} aria-label="Undangan pelatihan">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Undangan pelatihan</h2>
@@ -269,13 +276,13 @@ export default function HalamanHariIni() {
               </div>
             )}
           </section>
-          {d.terkunci_undangan && <Pesan jenis="info">Bagian pelatihan lain terbuka setelah Anda menerima undangan ini.</Pesan>}
-          {!d.terkunci_undangan && <KartuJadwalPendataan jadwal={d.jadwal_pendataan} pelatihan={d.jadwal_pelatihan ?? (d.undangan.tanggal_iso ? { mulai: d.undangan.tanggal_iso, selesai: null } : null)} peran={d.peserta?.peran ?? null} />}
-          {!vg.mendesak && !d.terkunci_undangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
-          {!d.terkunci_undangan && <AbsenPeserta />}
-          {!d.terkunci_undangan && <KartuKuis />}
+          {terkunciUndangan && <Pesan jenis="info">Bagian pelatihan lain terbuka setelah Anda menerima undangan ini.</Pesan>}
+          {!terkunciUndangan && <KartuJadwalPendataan jadwal={d.jadwal_pendataan} pelatihan={d.jadwal_pelatihan ?? (d.undangan.tanggal_iso ? { mulai: d.undangan.tanggal_iso, selesai: null } : null)} peran={d.peserta?.peran ?? null} />}
+          {!vg.mendesak && !terkunciUndangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
+          {!terkunciUndangan && <AbsenPeserta />}
+          {!terkunciUndangan && <KartuKuis />}
           {/* (2 Nov 2026) nomor pulsa: dikonfirmasi sekali lewat pop-up; di sini hanya kartu redup di bagian bawah (permintaan user) */}
-          {!d.terkunci_undangan && <PulsaPeserta tampilan="kartu" judul={judulPelatihan(info)} />}
+          {!terkunciUndangan && <PulsaPeserta tampilan="kartu" judul={judulPelatihan(info)} />}
           {!d.tab_baru && (
             <Kartu>
               <p className="text-[12.5px] text-[#6B7A90]">

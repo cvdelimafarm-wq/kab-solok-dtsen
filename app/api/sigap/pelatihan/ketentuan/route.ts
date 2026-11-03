@@ -13,8 +13,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan, undanganUntuk } from "@/lib/sigapTesDb";
 import { ketentuanBerubah, ketentuanDiubah, periksaRespons, statusUndangan, teksKartuUndangan } from "@/lib/ketentuanPelatihan";
-import { keluarkanPenolak, muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
+import { adalahInstruktur, keluarkanPenolak, muatKetentuan, muatRespons, muatTampilan, simpanKetentuan, simpanRespons, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { gerbangDari } from "@/lib/gerbangUndangan";
+import { peranTersedia } from "@/lib/peranMasuk";
 import { tabPerPeran } from "@/lib/sigapAbsen";
 import { muatStatusMateriBatch } from "@/lib/sigapMateriDb";
 import { muatJadwalPendataanTertaut } from "@/lib/portal/jadwalPendataanTertaut";
@@ -47,6 +48,9 @@ export async function GET(req: NextRequest) {
     const pengelola = pengguna.jenis !== "peserta";
     const terkunciUndangan = !!peserta && !pengelola && gerbangDari(tampilan.tab_baru, respons?.respons ?? null) === "belum";
     const ditolak = !peserta && respons?.respons === "tolak";
+    // (3 Nov 2026) "Masuk sebagai": peran yang tersedia bagi akun ini pada kegiatan ini (dropdown di HP bila >= 2)
+    const lihatKelola = boleh(izin, "pelatihan.kelola", "lihat", kegiatanId);
+    const peran = peranTersedia({ peserta: !!peserta, instruktur: await adalahInstruktur(db, kegiatanId, akun.id), lihat: lihatKelola, kelola: boleh(izin, "pelatihan.kelola", "kelola", kegiatanId) });
     const berubah = ketentuanBerubah(respons, ketentuan);
     // (2 Nov 2026) Tab "Kamera SIGAP" membuka halaman Kamera SIGAP kegiatan ini (/sigap/foto), sama dengan Pendataan Pascabencana -- bukan panduan Translok.
     // Kegiatan harus bermode "kamera" (sigap_foto_pengaturan_kegiatan); bila belum, halaman itu menjelaskannya.
@@ -88,6 +92,7 @@ export async function GET(req: NextRequest) {
       peserta,
       pengguna: pengguna.jenis,
       terkunci_undangan: terkunciUndangan,
+      peran_tersedia: peran,
       ditolak,
       respons,
       status,

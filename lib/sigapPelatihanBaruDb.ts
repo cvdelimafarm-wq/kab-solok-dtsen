@@ -80,6 +80,16 @@ export async function periksaGerbang(db: Db, kegiatanId: number, akunId: number)
   }
 }
 
+/** (3 Nov 2026) Instruktur kelas pada kegiatan ini? Gagal baca = false. */
+export async function adalahInstruktur(db: Db, kegiatanId: number, akunId: number): Promise<boolean> {
+  try {
+    const { data } = await db.from("sigap_kuis_instruktur_kelas").select("kelas").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).limit(1);
+    return ((data ?? []) as unknown[]).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Pengelola (panitia / lihat Kelola) tidak pernah tertahan gerbang; peserta murni tertahan sampai menerima. */
 export async function gerbangTertutup(db: Db, kegiatanId: number, akunId: number, izin: PetaIzin): Promise<boolean> {
   if (boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return false;

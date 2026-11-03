@@ -31,13 +31,13 @@ function Angka({ label, nilai, dari }: { label: string; nilai: number; dari: num
   );
 }
 
-export default function RingkasanPengelola({ bolehKelola }: { bolehKelola: boolean }) {
+export default function RingkasanPengelola({ bolehKelola, sebagai }: { bolehKelola: boolean; sebagai?: string }) {
   const { data: m, galat } = useDataPel<Mon>("/api/sigap/pelatihan/monitoring");
   const sapa = SAPAAN_PENGELOLA[m?.jenis ?? "instruktur"];
   const r = m?.ringkasan;
   const catatan = r ? catatanPerhatian(r) : [];
   return (
-    <Kartu judul={sapa.judul} ket={m?.ringkas}>
+    <Kartu judul={sebagai ? `Anda masuk sebagai ${sebagai.toLowerCase()}` : sapa.judul} ket={m?.ringkas}>
       <p className="m-0 text-[13px] leading-relaxed text-[#3B4A60]">
         {sapa.ket} Undangan pribadi hanya untuk peserta, jadi tidak ditampilkan di sini.
       </p>

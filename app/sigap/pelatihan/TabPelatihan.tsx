@@ -14,6 +14,8 @@ import { useSiapkan } from "@/app/portal/siapkan"; // (3 Nov 2026) prefetch tab 
 import { rencanaTab } from "@/lib/cacheTabPelatihan";
 import { tabBolehSaatTerkunci } from "@/lib/gerbangUndangan"; // (3 Nov 2026) gerbang undangan: hanya Hari ini yang terbuka sebelum undangan diterima
 import { useDataPel } from "./dataPel";
+import { usePeranMasuk } from "./peranMasuk"; // (3 Nov 2026) "Masuk sebagai"
+import { tabUntukPeran } from "@/lib/peranMasuk";
 
 export type TabAktif = "hari-ini" | "instrumen" | "pelatihan" | "absen" | "kamera" | "monitoring";
 
@@ -166,7 +168,10 @@ export function useBenderaTab(): Bendera | null {
 
 /** Dipasang di Kerangka: menggambar bilah hanya bila kegiatan memakai tampilan baru, dan menyiapkan (prefetch) kode + data tab lain di belakang. */
 export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
-  const b = useBenderaTab();
+  const bServer = useBenderaTab();
+  const pm = usePeranMasuk();
+  // (3 Nov 2026) akun berperan ganda: tab bawah mengikuti peran yang dipilih (Peserta: Pelatihan + Kamera; selain itu: Absen peserta, Kamera nonaktif)
+  const b = bServer && { ...bServer, terkunci: pm.terkunci, ...(pm.peran ? { tab: tabUntukPeran(pm.peran), kamera_href: pm.peran === "peserta" ? bServer.kamera_href : null } : {}) };
   const menyala = !!b && b.tab_baru && !b.terkunci; // terkunci (undangan belum diterima): tidak menyiapkan tab lain di belakang
   const rencana = menyala && b ? rencanaTab(aktif, daftarTab(b.kamera_href, b.tab).map((t) => ({ kode: t.kode, href: t.href })), urlPelatihan) : { rute: [], data: [] };
   useSiapkan(rencana, menyala);
@@ -176,8 +181,8 @@ export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
 
 /** (3 Nov 2026) Undangan pelatihan belum diterima? null = belum diketahui. Dipakai Kerangka untuk menutup semua halaman pelatihan selain Hari ini. */
 export function useTerkunciUndangan(): boolean | null {
-  const b = useBenderaTab();
-  return b ? b.terkunci : null;
+  const pm = usePeranMasuk();
+  return pm.memuat ? null : pm.terkunci;
 }
 
 /** Untuk pembaruan setelah pengelola/peserta mengubah sesuatu (mis. merespons undangan): tandai bendera kedaluwarsa agar diambil ulang di belakang. */
