@@ -68,7 +68,7 @@ function Isi() {
   // satu-satunya perubahan di halaman ini: jabatan satu petugas (urutan jabatan dijaga sama dengan daftar JABATAN)
   const setJabatan = (pid: string, kode: KodeJabatan, pegang: boolean) => ubah((g) => {
     const x = g.petugas.find((e) => e.id === pid);
-    if (!x || slotKosong(x)) return;
+    if (!x || (pegang && slotKosong(x))) return; // baris tanpa nama tidak boleh diberi jabatan, tetapi jabatannya boleh dilepas
     const s = new Set<KodeJabatan>(x.jabatan);
     if (pegang) s.add(kode); else s.delete(kode);
     x.jabatan = KODE_JABATAN.filter((k) => s.has(k));

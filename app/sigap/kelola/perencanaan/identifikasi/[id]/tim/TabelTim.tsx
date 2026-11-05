@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { Catatan, Chip } from "@/app/sigap/keu-ui";
 import { NAMA_PERAN, namaPetugas, peringatanLanjutan, type IsiLanjutan, type Petugas } from "@/lib/keu/lanjutan";
-import { JABATAN, strataUntuk, type IsiKebijakan, type KodeJabatan } from "@/lib/keu/kebijakan";
+import { JABATAN, namaJabatan, strataUntuk, type IsiKebijakan, type KodeJabatan } from "@/lib/keu/kebijakan";
 import { slotKosong, teksJabatan } from "@/lib/keu/selisihLanjutan";
 import { Bagian, Cat } from "../../Kontrol";
 import { TabelSaring, type Kol } from "../../TabelSaring";
@@ -32,15 +32,18 @@ export function SusunanTim({ isi, lembar, lembarSiap, versi, verHilir, mati, set
     min: lembar && strata ? (lembar.minimal[strata.k]?.[j.k] ?? 0) : null,
     pemegang: isi.petugas.map((p, i) => ({ p, i })).filter(({ p }) => p.jabatan.includes(j.k)),
   })) : []), [isi, lembar, strata]);
-  const dataRangkap = useMemo<BarisRangkap[]>(() => bernama.map(({ p, i }) => ({ p, i, nama: namaPetugas(p, i + 1) })), [bernama]);
+  // baris tanpa nama yang masih memegang jabatan (data lama atau sisa) ikut tampil agar dapat dilepas
+  const tanpaNamaBerjabatan = useMemo(() => isi.petugas.map((p, i) => ({ p, i })).filter(({ p }) => slotKosong(p) && p.jabatan.length > 0), [isi]);
+  const dataRangkap = useMemo<BarisRangkap[]>(() => [...bernama, ...tanpaNamaBerjabatan].map(({ p, i }) => ({ p, i, nama: namaPetugas(p, i + 1) })), [bernama, tanpaNamaBerjabatan]);
   const boleh = useMemo(() => new Set<string>(strata && lembar ? (lembar.rangkap[strata.k] ?? []) : []), [strata, lembar]);
   const ketRangkap = (p: Petugas): string => {
     if (!strata) return "—";
     if (p.jabatan.length === 0) return "Tanpa jabatan";
+    if (slotKosong(p)) return "Baris belum bernama";
     const lebih = p.jabatan.length > strata.maks_jabatan;
     const lain = p.jabatan.length > 1 ? p.jabatan.filter((j) => !boleh.has(j)) : [];
     if (!lebih && lain.length === 0) return p.jabatan.length > 1 ? "Rangkap sesuai kebijakan" : "Satu jabatan";
-    return [lebih ? `Melebihi batas ${strata.maks_jabatan} jabatan` : "", lain.length > 0 ? "Ada jabatan yang tidak boleh dirangkap" : ""].filter(Boolean).join("; ");
+    return [lebih ? `Melebihi batas ${strata.maks_jabatan} jabatan` : "", lain.length > 0 ? `Tidak boleh dirangkap: ${lain.map(namaJabatan).join(", ")}` : ""].filter(Boolean).join("; ");
   };
   const peringatan = useMemo(
     () => (isi ? peringatanLanjutan(isi, { lembar, dasarUsang: false, form: null }).filter((t) => /minimal|memegang|merangkap/i.test(t)) : []),
@@ -100,7 +103,7 @@ export function SusunanTim({ isi, lembar, lembarSiap, versi, verHilir, mati, set
       id: "ket", judul: "Rangkap", jenis: "pilih", nilai: (r) => ketRangkap(r.p),
       sel: (r) => {
         const t = ketRangkap(r.p);
-        const buruk = t.startsWith("Melebihi") || t.startsWith("Ada jabatan");
+        const buruk = t.startsWith("Melebihi") || t.startsWith("Tidak boleh") || t.startsWith("Baris belum");
         return <span className={buruk ? "font-semibold text-[#B42329]" : "text-[#44546F]"}>{t}</span>;
       },
       kelasTd: "min-w-[190px]",
@@ -117,6 +120,11 @@ export function SusunanTim({ isi, lembar, lembarSiap, versi, verHilir, mati, set
         </div>
         {!lembar && lembarSiap && <Catatan>Belum ada lembar kebijakan yang berlaku; minimal per jabatan dan batas rangkap belum dapat diperiksa.</Catatan>}
         <Cat>Pilih pemegang dari petugas yang sudah bernama pada identifikasi lanjutan. Satu jabatan boleh dipegang lebih dari satu orang bila minimalnya lebih dari satu; rangkap dihitung otomatis pada tabel B. Menghapus nama petugas di langkah 2 melepas jabatannya.</Cat>
+        {tanpaNamaBerjabatan.length > 0 && (
+          <Catatan>
+            {tanpaNamaBerjabatan.length} baris belum bernama masih memegang jabatan ({tanpaNamaBerjabatan.map(({ p }) => teksJabatan(p.jabatan)).join("; ")}). Lepaskan lewat Revisi (tanda ×) atau isi namanya di identifikasi lanjutan.
+          </Catatan>
+        )}
         {bernama.length === 0 && <Catatan>Belum ada petugas bernama. Isi nama petugas pada identifikasi lanjutan agar dapat dipilih sebagai pemegang jabatan.</Catatan>}
         <TabelSaring label="Jabatan dan pemegang" kols={kolJabatan} data={dataJabatan} kunci={(r) => r.k} idBaris={(r) => `jabatan-${r.k}`} />
       </Bagian>

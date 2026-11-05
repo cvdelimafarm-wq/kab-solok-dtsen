@@ -158,6 +158,8 @@ export function TabelSesi({ f, ubah, tahun, mati, pa }: PropsTabel) {
   const jd = (id: IdSesi) => (f.sesi[id].on ? tanggalSesi(f, id, pa, tahun) : null);
   const perk = (id: IdSesi) => recPerk(f.sesi[id].tgl[turunan ? first : pa]);
   const ins = (id: IdSesi) => instrDari(f.sesi[id]);
+  // satu kolom jadwal (tanggal tunggal bila mulai = selesai) agar tabel tidak meluap
+  const rentang = (id: IdSesi): string => { const j = jd(id); if (!j) return "—"; const a = tgl(j.mulai); const b = tgl(j.selesai); return a === b ? a : `${a} – ${b}`; };
 
   const kols: Kol<IdSesi>[] = [
     { id: "kegiatan", judul: "Kegiatan", jenis: "teks", nilai: nama, sel: (id) => <strong className="text-[#0F2A52]">{nama(id)}</strong> },
@@ -171,10 +173,12 @@ export function TabelSesi({ f, ubah, tahun, mati, pa }: PropsTabel) {
       sel: (id) => f.sesi[id].on && (f.sesi[id].bentuk === "Luring" || f.sesi[id].bentuk === "Hybrid")
         ? <PilKecil nilai={f.sesi[id].tempat as string} opsi={TEMPAT_PILIH as readonly string[]} mati={mati} nama={`Tempat ${nama(id)}`} onPilih={(v) => set(id, (s) => { s.tempat = v as TempatSesi; })} />
         : <Strip />,
-      kelasTd: "min-w-[108px]",
+      kelasTd: "min-w-[128px]",
     },
-    { id: "mulai", judul: "Mulai", jenis: "teks", nilai: (id) => tgl(jd(id)?.mulai), sel: (id) => (jd(id) ? <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{tgl(jd(id)?.mulai)}</span> : <Strip />) },
-    { id: "selesai", judul: "Selesai", jenis: "teks", nilai: (id) => tgl(jd(id)?.selesai), sel: (id) => (jd(id) ? <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{tgl(jd(id)?.selesai)}</span> : <Strip />) },
+    {
+      id: "jadwal", judul: "Jadwal", jenis: "teks", nilai: (id) => rentang(id),
+      sel: (id) => (jd(id) ? <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{rentang(id)}</span> : <Strip />),
+    },
     { id: "perk", judul: "Kematangan", jenis: "pilih", nilai: (id) => (f.sesi[id].on ? (perk(id) ? "Perkiraan" : "Fix") : "—"), sel: (id) => (f.sesi[id].on ? <LencanaPerk perk={perk(id)} /> : <Strip />) },
     {
       id: "pulsa", judul: "Pulsa mitra", jenis: "pilih",
