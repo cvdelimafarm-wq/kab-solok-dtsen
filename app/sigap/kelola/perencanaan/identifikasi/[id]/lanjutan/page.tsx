@@ -132,9 +132,11 @@ function Isi() {
     return ok;
   }, [row, kirim]);
 
+  // Tombol berlabel "Simpan…" (titik tiga) hanya bila dialog akan muncul; tanpa dialog, klik langsung menyimpan dan labelnya "Simpan".
+  const adaDialog = !!tersimpan && (dampak.length > 0 || pinAda || wajibAlasan);
   const klikSimpan = () => {
     if (!tersimpan) { void simpan(true, ""); return; }
-    if (dampak.length > 0 || pinAda || wajibAlasan) { kirim.hapusGalat(); setModal("simpan"); } else void simpan(true, "");
+    if (adaDialog) { kirim.hapusGalat(); setModal("simpan"); } else void simpan(true, "");
   };
   const batalRevisi = () => { setDirty(false); setAlasan(""); dimuat.current = null; setRevisi(false); kirim.hapusGalat(); };
   const jalankanModal = (pil: PilihanSimpan, al: string) => { if (modal === "simpan") void simpan(pil === "terapkan", al); else void terapkanHilir(al); };
@@ -257,7 +259,7 @@ function Isi() {
                   <button
                     type="button" className={tombolUtama} disabled={!bolehSusun || kirim.mengirim || (!!tersimpan && !dirty) || galatIsi.length > 0}
                     title={galatIsi.length > 0 ? "Isian belum sah; lihat kartu Status" : undefined} onClick={klikSimpan}
-                  >{kirim.mengirim ? "Menyimpan…" : tersimpan ? "Simpan…" : "Simpan versi pertama"}</button>
+                  >{kirim.mengirim ? "Menyimpan…" : tersimpan ? (adaDialog ? "Simpan…" : "Simpan") : "Simpan versi pertama"}</button>
                 )}
               </span>
             </div>

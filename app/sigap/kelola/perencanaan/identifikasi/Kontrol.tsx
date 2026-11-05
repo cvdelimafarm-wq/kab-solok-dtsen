@@ -174,11 +174,22 @@ export function loncat(id: string): boolean {
   if (typeof document === "undefined") return false;
   const el = document.getElementById(id);
   if (!el) return false;
+  // (5 Nov 2026) Baris tabel Identifikasi awal ikut terbuka (isian lengkapnya tampil di bawah baris) lewat peristiwa "bukabaris".
+  el.dispatchEvent(new Event("bukabaris"));
   el.scrollIntoView({ behavior: "smooth", block: "start" });
-  el.classList.add("ring-2", "ring-[#1F5FD1]", "ring-offset-2", "transition-shadow");
-  window.setTimeout(() => el.classList.remove("ring-2", "ring-[#1F5FD1]", "ring-offset-2"), 1800);
-  const f = el.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
-  if (f) window.setTimeout(() => f.focus({ preventScroll: true }), 350);
+  if (el.tagName === "TR") {
+    // baris tabel (border-collapse) tidak menampilkan ring/box-shadow: pakai garis luar
+    el.style.outline = "2px solid #1F5FD1";
+    el.style.outlineOffset = "-2px";
+    window.setTimeout(() => { el.style.outline = ""; el.style.outlineOffset = ""; }, 1800);
+  } else {
+    el.classList.add("ring-2", "ring-[#1F5FD1]", "ring-offset-2", "transition-shadow");
+    window.setTimeout(() => el.classList.remove("ring-2", "ring-[#1F5FD1]", "ring-offset-2"), 1800);
+  }
+  window.setTimeout(() => {
+    const f = el.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+    if (f) f.focus({ preventScroll: true });
+  }, 350);
   return true;
 }
 

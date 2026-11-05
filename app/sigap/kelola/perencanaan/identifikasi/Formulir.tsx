@@ -5,17 +5,31 @@
 // (25 Okt 2026) Formulir Identifikasi survei, bagian A-E (dari mockup Version 7; 28 Okt 2026 Instrumen pendataan digabung ke A). Murni tampilan terkendali: seluruh perhitungan memakai
 // lib/keu/identifikasi.ts. `mati` = formulir terkunci (menunggu persetujuan, sudah sah, atau akun tanpa hak menyusun).
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { kisi, kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import {
-  JABATAN_TIM, JENIS_PERIODE, NAMA_BULAN, NAMA_PERIODE, PANJANG_PERIODE, PERAN_DEF, adaPendataan, adaPeriode, adalahAdhoc, daftarPeriode, hitungJadwal,
-  hitungMitra, instrDari, jendelaPeriode, jendelaPola, kecualiAktif, periodeTurunan, ringkasPetugas, selisihHari, tanggalRapat, tanggalSesi, tglIndo,
-  type AsalInstruktur, type Form, type Instrumen, type LevelInstruktur, type PeranId, type StatusPetugas, type TempatSesi,
+  JENIS_PERIODE,
+  NAMA_BULAN,
+  NAMA_PERIODE,
+  PANJANG_PERIODE,
+  adaPendataan,
+  adaPeriode,
+  adalahAdhoc,
+  daftarPeriode,
+  hitungJadwal,
+  jendelaPeriode,
+  jendelaPola,
+  kecualiAktif,
+  ringkasPetugas,
+  selisihHari,
+  tglIndo,
+  type Form,
+  type Instrumen,
 } from "@/lib/keu/identifikasi";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, TglRentang, YaTidak } from "./Kontrol";
 import { BarisRelatif } from "./Relatif";
-import { WaktuIsian } from "./Waktu";
-import { mingguDariTanggal, mingguKe, namaBulan, namaHari, akhirBulanDari, polaDariTanggal, recPerk, tanggalLengkap } from "@/lib/keu/waktu";
+import { TabelJadwalTahap, TabelPeran, TabelRapat, TabelSesi, KartuHonorTim, type BarisTahap } from "./TabelAwal";
+import { mingguDariTanggal, mingguKe, namaBulan, namaHari, akhirBulanDari, polaDariTanggal, tanggalLengkap } from "@/lib/keu/waktu";
 import { keteranganHari } from "@/lib/keu/tanggalDurasi";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
@@ -29,11 +43,6 @@ export type PropsFormulir = {
   rujukan: OpsiRujukan[];
 };
 
-const BENTUK = ["Daring", "Luring", "Hybrid"] as const;
-const MEDIA = ["Apel pagi", "Tatap muka", "Zoom"] as const;
-const TEMPAT_PILIH = ["Kantor", "Hotel dalam kota", "Hotel luar kota", "Lokasi lain"] as const;
-const STATUS = ["Organik", "Mitra", "Organik dan mitra"] as const;
-const STATUS_SUP = ["Organik", "Organik dan mitra"] as const;
 
 export default function Formulir(p: PropsFormulir) {
   const { f, ubah, tahun, mati, pa, setPa, rujukan } = p;
@@ -55,33 +64,6 @@ export default function Formulir(p: PropsFormulir) {
 // ---------------------------------------------------------------------------------------------------------------------
 const pilihSel = "box-border min-h-[40px] rounded-md border border-[#C5D0E2] bg-white px-2 text-[13.5px] font-semibold text-[#0F2A52] focus:outline-2 focus:outline-[#1F5FD1] disabled:opacity-60";
 const ringkasHasil = (x: { mulai: string; selesai: string } | undefined): string => (x && x.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : "Belum dapat dihitung");
-
-/** Kartu satu tahap pada jadwal: nomor, nama, hasil tanggal, penanda Perkiraan/Fix (radio), dan isian di dalamnya. */
-function KartuTahap({ id, no, nama, hasil, aktif = true, perkEfektif, perkSendiri, onPerk, mati, toggle, catatan, children }: {
-  id: string; no: number; nama: string; hasil: string; aktif?: boolean; perkEfektif: boolean; perkSendiri: boolean; onPerk: (perk: boolean) => void; mati: boolean;
-  toggle?: ReactNode; catatan?: string; children?: ReactNode;
-}) {
-  const ikut = aktif && perkEfektif && !perkSendiri;
-  const warna = !aktif ? "border-l-[#C5D0E2] bg-white" : perkEfektif ? "border-l-[#C98A00] bg-[#FFFBEF]" : "border-l-[#2E9E63] bg-[#F5FBF7]";
-  return (
-    <div id={id} className={`scroll-mt-20 flex flex-col gap-2.5 rounded-lg border border-l-4 border-[#DCE3EE] p-3 ${warna}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#0F2A52] text-[12px] font-extrabold text-white" aria-hidden="true">{no}</span>
-        <strong className="text-[14.5px] text-[#0F2A52]">{nama}</strong>
-        {toggle}
-        {aktif && <div className="ml-auto"><FixPerk nama={`Jadwal ${nama}`} perk={perkSendiri} mati={mati} onPilih={onPerk} /></div>}
-      </div>
-      {aktif && (
-        <>
-          <p className="m-0 text-[14px] font-bold text-[#0F2A52]">{hasil}</p>
-          {ikut && <p className="m-0 text-[12px] font-semibold text-[#8A6200]">Masih perkiraan karena tahap sebelumnya masih perkiraan.</p>}
-          {catatan && <p className="m-0 text-[12.5px] text-[#44546F]">{catatan}</p>}
-          {children}
-        </>
-      )}
-    </div>
-  );
-}
 
 function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati"> & { pa: string; setPa: (p: string) => void; lst: string[] }) {
   const pend = adaPendataan(f);
@@ -246,6 +228,47 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
     </div>
   );
 
+  // (5 Nov 2026) Jadwal tahap sebagai tabel: tiap tahap satu baris; isian lengkapnya dibuka lewat tombol Ubah pada baris.
+  const barisTahap: BarisTahap[] = [];
+  if (pend) {
+    barisTahap.push({
+      id: "tahap-updating", no: 1, nama: "Updating", acuan: "Pendataan lapangan", aktif: f.adaUpdating, bolehTiada: true,
+      onAda: () => ubah((g) => { g.adaUpdating = !g.adaUpdating; }),
+      mulai: jp.updating?.mulai, selesai: jp.updating?.selesai, perkEfektif: !!jp.updating?.perk, perkSendiri: f.rel.updating.perk, onPerk: (v) => setRel("updating", { perk: v }),
+      isi: <BarisRelatif tahap="Updating" acuan="pendataan" rel={f.rel.updating} mulai={jp.updating?.mulai} selesai={jp.updating?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("updating", p)} />,
+    });
+    barisTahap.push({
+      id: "tahap-pendataan", no: 2, nama: "Pendataan lapangan", acuan: adaKe ? "Pola jendela periode" : "Jadwal tunggal", aktif: true,
+      mulai: jp.pendataan?.mulai, selesai: jp.pendataan?.selesai, perkEfektif: !!jp.pendataan?.perk, perkSendiri: adaKe ? !!J.perk : !!f.tunggal.perk,
+      onPerk: (v) => (adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; })),
+      catatan: adaKe ? (kecualiAktif(f, pa) ? "Periode ini memakai pengecualian (lihat bagian Pengecualian di bawah)." : "Mengikuti pola jendela di bawah, berlaku untuk semua periode yang dicentang.") : undefined,
+      isi: dasar,
+    });
+  }
+  barisTahap.push({
+    id: "tahap-pengolahan", no: pend ? 3 : 1, nama: "Pengolahan", acuan: pend ? "Pendataan lapangan" : "Jadwal dasar", aktif: true,
+    mulai: jp.pengolahan?.mulai, selesai: jp.pengolahan?.selesai, perkEfektif: !!jp.pengolahan?.perk, perkSendiri: pend ? f.rel.pengolahan.perk : adaKe ? !!J.perk : !!f.tunggal.perk,
+    onPerk: (v) => (pend ? setRel("pengolahan", { perk: v }) : adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; })),
+    catatan: pend ? "Bawaannya sama dengan jadwal pendataan (0 hari dari mulai dan selesai pendataan). Ubah selisihnya bila pengolahan berbeda." : "Tanpa pendataan: pengolahan memakai jadwal dasar di bawah.",
+    isi: pend ? (
+      <>
+        <BarisRelatif tahap="Pengolahan" acuan="pendataan" rel={f.rel.pengolahan} mulai={jp.pengolahan?.mulai} selesai={jp.pengolahan?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pengolahan", p)} />
+        <div><button type="button" className={tombolKecil} disabled={mati} onClick={() => setRel("pengolahan", { aM: "mulai", dM: 0, aS: "selesai", dS: 0 })}>Samakan dengan jadwal pendataan</button></div>
+      </>
+    ) : dasar,
+  });
+  barisTahap.push({
+    id: "tahap-pasca", no: pend ? 4 : 2, nama: "Pasca pengolahan", acuan: "Pengolahan", aktif: true,
+    mulai: jp.pasca?.mulai, selesai: jp.pasca?.selesai, perkEfektif: !!jp.pasca?.perk, perkSendiri: f.rel.pasca.perk, onPerk: (v) => setRel("pasca", { perk: v }),
+    isi: <BarisRelatif tahap="Pasca pengolahan" acuan="pengolahan" rel={f.rel.pasca} mulai={jp.pasca?.mulai} selesai={jp.pasca?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pasca", p)} />,
+  });
+  barisTahap.push({
+    id: "tahap-diseminasi", no: pend ? 5 : 3, nama: "Diseminasi", acuan: "Pasca pengolahan", aktif: f.adaDiseminasi, bolehTiada: true,
+    onAda: () => ubah((g) => { g.adaDiseminasi = !g.adaDiseminasi; }),
+    mulai: jp.diseminasi?.mulai, selesai: jp.diseminasi?.selesai, perkEfektif: !!jp.diseminasi?.perk, perkSendiri: f.rel.diseminasi.perk, onPerk: (v) => setRel("diseminasi", { perk: v }),
+    isi: <BarisRelatif tahap="Diseminasi" acuan="pasca pengolahan" rel={f.rel.diseminasi} mulai={jp.diseminasi?.mulai} selesai={jp.diseminasi?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("diseminasi", p)} />,
+  });
+
   return (
     <Bagian huruf="A" judul="Survei dan jadwal" gsbpm="GSBPM Manajemen" id="bagian-a">
       <Isian judul="Nama survei">
@@ -282,40 +305,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
           </div>
         )}
 
-        {pend && (
-          <KartuTahap id="tahap-updating" no={1} nama="Updating" mati={mati} hasil={ringkasHasil(jp.updating)} aktif={f.adaUpdating} perkEfektif={!!jp.updating?.perk} perkSendiri={f.rel.updating.perk} onPerk={(v) => setRel("updating", { perk: v })}
-            toggle={<Centang aktif={f.adaUpdating} mati={mati} onUbah={() => ubah((g) => { g.adaUpdating = !g.adaUpdating; })}>Ada updating</Centang>}>
-            <BarisRelatif tahap="Updating" acuan="pendataan" rel={f.rel.updating} mulai={jp.updating?.mulai} selesai={jp.updating?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("updating", p)} />
-          </KartuTahap>
-        )}
-
-        {pend && (
-          <KartuTahap id="tahap-pendataan" no={2} nama="Pendataan lapangan" mati={mati} hasil={ringkasHasil(jp.pendataan)} perkEfektif={!!jp.pendataan?.perk} perkSendiri={adaKe ? !!J.perk : !!f.tunggal.perk}
-            onPerk={(v) => (adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; }))}
-            catatan={adaKe ? (kecualiAktif(f, pa) ? "Periode ini memakai pengecualian (lihat bagian Pengecualian di bawah)." : "Mengikuti pola jendela di bawah, berlaku untuk semua periode yang dicentang.") : undefined}>
-            {dasar}
-          </KartuTahap>
-        )}
-
-        <KartuTahap id="tahap-pengolahan" no={pend ? 3 : 1} nama="Pengolahan" mati={mati} hasil={ringkasHasil(jp.pengolahan)} perkEfektif={!!jp.pengolahan?.perk} perkSendiri={pend ? f.rel.pengolahan.perk : adaKe ? !!J.perk : !!f.tunggal.perk}
-          onPerk={(v) => (pend ? setRel("pengolahan", { perk: v }) : adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; }))}
-          catatan={pend ? "Bawaannya sama dengan jadwal pendataan (0 hari dari mulai dan selesai pendataan). Ubah selisihnya bila pengolahan berbeda." : "Tanpa pendataan: pengolahan memakai jadwal dasar di bawah."}>
-          {pend ? (
-            <>
-              <BarisRelatif tahap="Pengolahan" acuan="pendataan" rel={f.rel.pengolahan} mulai={jp.pengolahan?.mulai} selesai={jp.pengolahan?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pengolahan", p)} />
-              <div><button type="button" className={tombolKecil} disabled={mati} onClick={() => setRel("pengolahan", { aM: "mulai", dM: 0, aS: "selesai", dS: 0 })}>Samakan dengan jadwal pendataan</button></div>
-            </>
-          ) : dasar}
-        </KartuTahap>
-
-        <KartuTahap id="tahap-pasca" no={pend ? 4 : 2} nama="Pasca pengolahan" mati={mati} hasil={ringkasHasil(jp.pasca)} perkEfektif={!!jp.pasca?.perk} perkSendiri={f.rel.pasca.perk} onPerk={(v) => setRel("pasca", { perk: v })}>
-          <BarisRelatif tahap="Pasca pengolahan" acuan="pengolahan" rel={f.rel.pasca} mulai={jp.pasca?.mulai} selesai={jp.pasca?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pasca", p)} />
-        </KartuTahap>
-
-        <KartuTahap id="tahap-diseminasi" no={pend ? 5 : 3} nama="Diseminasi" mati={mati} hasil={ringkasHasil(jp.diseminasi)} aktif={f.adaDiseminasi} perkEfektif={!!jp.diseminasi?.perk} perkSendiri={f.rel.diseminasi.perk} onPerk={(v) => setRel("diseminasi", { perk: v })}
-          toggle={<Centang aktif={f.adaDiseminasi} mati={mati} onUbah={() => ubah((g) => { g.adaDiseminasi = !g.adaDiseminasi; })}>Ada diseminasi</Centang>}>
-          <BarisRelatif tahap="Diseminasi" acuan="pasca pengolahan" rel={f.rel.diseminasi} mulai={jp.diseminasi?.mulai} selesai={jp.diseminasi?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("diseminasi", p)} />
-        </KartuTahap>
+        <TabelJadwalTahap baris={barisTahap} mati={mati} bukaAwal={[pend ? "tahap-pendataan" : "tahap-pengolahan"]} />
       </div>
 
       {adaKe && (banyak || adaKecuali) && <PengecualianPeriode f={f} ubah={ubah} tahun={tahun} mati={mati} lst={lst} />}
@@ -363,8 +353,6 @@ function PengecualianPeriode({ f, ubah, tahun, mati, lst }: Pick<PropsFormulir, 
 // B. Pelatihan dan briefing
 // ---------------------------------------------------------------------------------------------------------------------
 function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati" | "rujukan"> & { pa: string }) {
-  const turunan = periodeTurunan(f, pa, tahun);
-  const first = daftarPeriode(f)[0];
   const lainnya = rujukan.filter((r) => r.nama.trim().toLowerCase() !== f.nama.trim().toLowerCase());
   return (
     <Bagian huruf="B" judul="Pelatihan dan briefing" gsbpm="GSBPM 4.2" id="bagian-b">
@@ -383,64 +371,7 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
           <Cat>Pelatihan dan briefing mengikuti {f.rujukan || "survei yang dipilih di atas"}. Pertanyaan sesi tidak ditanya di sini dan tidak menambah kebutuhan anggaran survei ini.</Cat>
         </>
       ) : (
-        (["briefing", "pelatihan"] as const).map((id) => {
-          const s = f.sesi[id];
-          const nama = id === "briefing" ? "Briefing" : "Pelatihan";
-          const t = tanggalSesi(f, id, pa, tahun);
-          const luring = s.bentuk === "Luring"; const daring = s.bentuk === "Daring"; const hybrid = s.bentuk === "Hybrid";
-          return (
-            <div key={id} className="flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <strong className="text-[14px] text-[#0F2A52]">{nama}</strong>
-                <Centang aktif={s.on} mati={mati} onUbah={() => ubah((g) => { g.sesi[id].on = !g.sesi[id].on; })}>Ada {nama.toLowerCase()}</Centang>
-              </div>
-              {s.on && (
-                <>
-                  <Isian judul="Bentuk"><Pilihan nama={`Bentuk ${nama}`} nilai={s.bentuk as string} opsi={BENTUK as readonly string[]} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].bentuk = v as typeof BENTUK[number]; })} /></Isian>
-                  {(luring || hybrid) && <Isian judul="Tempat" ket="Hotel = paket meeting fullday atau fullboard (524114 dalam kota, 524119 luar kota). Kantor atau lokasi lain = konsumsi tanpa paket (521211).">
-                    <Pilihan nama={`Tempat ${nama}`} nilai={s.tempat as string} opsi={TEMPAT_PILIH as readonly string[]} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].tempat = v as TempatSesi; })} />
-                  </Isian>}
-                  {turunan ? (
-                    <Cat>Jadwal {nama.toLowerCase()} {pa}: {tglIndo(t.mulai)} s.d. {tglIndo(t.selesai)} ({recPerk(s.tgl[first]) ? "perkiraan" : "fix"}). Diturunkan dari periode acuan {first}, digeser mengikuti tanggal mulai pendataan {pa}. Ubah jadwalnya pada tab {first}.</Cat>
-                  ) : (
-                    <>
-                      {daftarPeriode(f).length > 1 && <span className="text-[12px] font-semibold text-[#44546F]">Periode: {pa}</span>}
-                      <WaktuIsian nama={`${nama} ${pa}`} rec={s.tgl[pa]} tahun={tahun} mati={mati} onUbah={(r) => ubah((g) => { g.sesi[id].tgl[pa] = r; })} />
-                    </>
-                  )}
-                  {(daring || hybrid) && <Isian judul="Biaya pulsa peserta (mitra)?"><YaTidak nama={`${nama} pulsa`} nilai={s.pulsa} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pulsa = v; })} /></Isian>}
-                  {id === "pelatihan" && (luring || hybrid) && <Isian judul="Perlengkapan pelatihan?"><YaTidak nama={`${nama} perlengkapan`} nilai={s.perl} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].perl = v; })} /></Isian>}
-                  <Isian judul="Ada instruktur (pengajar atau narasumber)?"><YaTidak nama={`${nama} pengajar`} nilai={s.pengajar} mati={mati} onPilih={(v) => ubah((g) => { g.sesi[id].pengajar = v; })} /></Isian>
-                  {s.pengajar && (() => {
-                    const ins = instrDari(s);
-                    const setI = (p: Partial<typeof ins>) => ubah((g) => { g.sesi[id].instr = { ...instrDari(g.sesi[id]), ...p }; });
-                    return (
-                      <div className="flex flex-col gap-2.5 rounded-lg border border-[#E3E9F2] bg-white p-2.5">
-                        <strong className="text-[13px] text-[#0F2A52]">Instruktur {nama.toLowerCase()}</strong>
-                        <div className={kisi}>
-                          <Isian judul="Jumlah instruktur"><Angka nama={`${nama} jumlah instruktur`} nilai={ins.jumlah} min={0} maks={50} mati={mati} onUbah={(v) => setI({ jumlah: v })} /></Isian>
-                          <Isian judul="Perkiraan jam mengajar" ket="Total jam semua instruktur."><Angka nama={`${nama} jam instruktur`} nilai={ins.jam} min={0} maks={500} mati={mati} onUbah={(v) => setI({ jam: v })} /></Isian>
-                        </div>
-                        <Isian judul="Level instruktur" ket="Innas = instruktur nasional, Inda = instruktur daerah (menentukan tarif honor pada lembar kebijakan).">
-                          <Pilihan<LevelInstruktur> nama={`${nama} level instruktur`} nilai={ins.level} opsi={["Innas", "Inda"]} mati={mati} onPilih={(v) => setI({ level: v })} />
-                        </Isian>
-                        <Isian judul="Asal instruktur">
-                          <Pilihan<AsalInstruktur> nama={`${nama} asal instruktur`} nilai={ins.asal} opsi={["Internal BPS", "Eksternal"]} mati={mati} onPilih={(v) => setI({ asal: v })} />
-                        </Isian>
-                        <Isian judul="Data instruktur"><FixPerk nama={`Instruktur ${nama}`} perk={ins.perk} mati={mati} onPilih={(v) => setI({ perk: v })} /></Isian>
-                        <Cat>Nama instruktur dan level pasti diisi pada identifikasi lanjutan. Honor pengajar dihitung dari jumlah jam dan tarif sesuai level.</Cat>
-                      </div>
-                    );
-                  })()}
-                  {luring && <Cat>Bentuk Luring: pulsa tidak ditanya (bernilai Tidak).</Cat>}
-                  {daring && <Cat>Bentuk Daring: tempat dan perlengkapan tidak ditanya.</Cat>}
-                  {(luring || hybrid) && <Cat>Konsumsi atau paket hanya dihitung bila ada petugas mitra. Perlengkapan hanya untuk pelatihan (bukan briefing), baik ada maupun tanpa mitra.</Cat>}
-                  {(daring || hybrid) && <Cat>Pulsa peserta hanya dihitung bila ada petugas mitra.</Cat>}
-                </>
-              )}
-            </div>
-          );
-        })
+        <TabelSesi f={f} ubah={ubah} tahun={tahun} mati={mati} pa={pa} />
       )}
     </Bagian>
   );
@@ -450,40 +381,9 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
 // C. Rapat (Instrumen pendataan kini di bagian A: KartuInstrumen)
 // ---------------------------------------------------------------------------------------------------------------------
 function BagianC({ f, ubah, tahun, mati, pa }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati"> & { pa: string }) {
-  const adaMitra = hitungMitra(f) > 0;
-  const turunan = periodeTurunan(f, pa, tahun);
-  const first = daftarPeriode(f)[0];
   return (
     <Bagian huruf="C" judul="Rapat" gsbpm="Manajemen dan GSBPM 8" id="bagian-c">
-      {(["persiapan", "pelaksanaan", "evaluasi"] as const).map((id) => {
-        const r = f.rapat[id];
-        const wajib = id === "evaluasi";
-        const on = wajib || r.on;
-        return (
-          <div key={id} className="flex flex-col gap-2 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <strong className="text-[14px] text-[#0F2A52]">Rapat {id}</strong>
-              {wajib ? <span className="rounded-full bg-[#EEF2F7] px-2.5 py-[2px] text-[11.5px] font-semibold text-[#44546F]">Wajib</span>
-                : <Centang aktif={r.on} mati={mati} onUbah={() => ubah((g) => { g.rapat[id].on = !g.rapat[id].on; })}>Ada rapat {id}</Centang>}
-            </div>
-            {on && (
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Media rapat ${id}`}>
-                {MEDIA.map((m) => <Centang key={m} aktif={r.media.includes(m)} mati={mati} onUbah={() => ubah((g) => { const a = g.rapat[id].media; g.rapat[id].media = a.includes(m) ? a.filter((x) => x !== m) : [...a, m]; })}>{m}</Centang>)}
-              </div>
-            )}
-            {on && (turunan ? (
-              <Cat>Jadwal rapat {id} {pa}: {tglIndo(tanggalRapat(f, id, pa, tahun).mulai)} s.d. {tglIndo(tanggalRapat(f, id, pa, tahun).selesai)} ({recPerk(r.tgl?.[first]) ? "perkiraan" : "fix"}). Diturunkan dari periode acuan {first}. Ubah jadwalnya pada tab {first}.</Cat>
-            ) : (
-              <>
-                {daftarPeriode(f).length > 1 && <span className="text-[12px] font-semibold text-[#44546F]">Periode: {pa}</span>}
-                <WaktuIsian nama={`Rapat ${id} ${pa}`} rec={r.tgl?.[pa]} tahun={tahun} mati={mati} onUbah={(x) => ubah((g) => { g.rapat[id].tgl = { ...(g.rapat[id].tgl ?? {}), [pa]: x }; })} />
-              </>
-            ))}
-            {on && r.media.includes("Tatap muka") && <Cat>Konsumsi rapat {id}: dihitung bila rapat luring (tatap muka) dan ada petugas mitra, keduanya harus terpenuhi. Saat ini {adaMitra ? "keduanya terpenuhi, konsumsi dihitung." : "belum ada petugas mitra, konsumsi belum dihitung."}</Cat>}
-            {on && r.media.length > 0 && !r.media.includes("Tatap muka") && <Cat>Rapat {id} tidak tatap muka (luring), sehingga konsumsi tidak dihitung.</Cat>}
-          </div>
-        );
-      })}
+      <TabelRapat f={f} ubah={ubah} tahun={tahun} mati={mati} pa={pa} />
     </Bagian>
   );
 }
@@ -515,65 +415,17 @@ function KartuInstrumen({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "m
 // ---------------------------------------------------------------------------------------------------------------------
 function BagianE({ f, ubah, mati }: Pick<PropsFormulir, "f" | "ubah" | "mati">) {
   const pend = adaPendataan(f);
-  const papi = f.instrumen === "PAPI";
   const rp = ringkasPetugas(f);
   const adhoc = adalahAdhoc(f);
   if (!pend && !adhoc) return (
     <Bagian huruf="D" judul="Organisasi pendataan lapangan" gsbpm="GSBPM 4.3, bukan pelatihan" id="bagian-d"><Cat>Tanpa pendataan: bagian ini tidak ditanya.</Cat></Bagian>
   );
-  const setP = (id: PeranId, patch: Partial<Form["peran"]["ppl"]>) => ubah((g) => { Object.assign(g.peran[id], patch); });
   return (
     <Bagian huruf="D" judul="Organisasi pendataan lapangan" gsbpm="GSBPM 4.3, bukan pelatihan" id="bagian-d">
-      {pend && PERAN_DEF.map((d) => {
-        const p = f.peran[d.id];
-        const terkunci = d.id === "entri" && !papi;
-        const adaOrg = p.status === "Organik" || p.status === "Organik dan mitra";
-        const adaMit = p.status === "Mitra" || p.status === "Organik dan mitra";
-        const honor = d.honor === "pilih" ? p.honor : false;
-        return (
-          <div key={d.id} className="flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <strong className="text-[14px] text-[#0F2A52]">{d.nama}</strong>
-              <Centang aktif={p.on && !terkunci} mati={mati || terkunci} onUbah={() => setP(d.id, { on: !p.on })}>Dipakai</Centang>
-              {terkunci && <span className="text-[12.5px] text-[#5B6B84]">Petugas entri hanya untuk instrumen PAPI.</span>}
-            </div>
-            {p.on && !terkunci && (
-              <>
-                <Isian judul="Status petugas" ket={d.id === "supervisor" ? "Supervisor: Organik, atau Organik dan mitra." : undefined}>
-                  <Pilihan nama={`Status ${d.nama}`} nilai={p.status as string} opsi={(d.id === "supervisor" ? STATUS_SUP : STATUS) as readonly string[]} mati={mati} onPilih={(v) => setP(d.id, { status: v as StatusPetugas })} />
-                </Isian>
-                <div className={kisi}>
-                  {adaOrg && <Isian judul={`Jumlah ${d.nama} organik`}><Angka nama={`Jumlah ${d.nama} organik`} nilai={p.nOrg} min={0} mati={mati} onUbah={(v) => setP(d.id, { nOrg: v })} /></Isian>}
-                  {adaMit && <Isian judul={`Jumlah ${d.nama} mitra`}><Angka nama={`Jumlah ${d.nama} mitra`} nilai={p.nMit} min={0} mati={mati} onUbah={(v) => setP(d.id, { nMit: v })} /></Isian>}
-                </div>
-                <Isian judul="Jumlah petugas ini"><FixPerk nama={`Jumlah ${d.nama}`} perk={p.perk} mati={mati} onPilih={(v) => setP(d.id, { perk: v })} /></Isian>
-                {d.translok === "pilih" && <Isian judul="Translok?" ket="Semua peran ditanya. Rencana boleh tidak direalisasi; selisihnya dicatat saat evaluasi."><YaTidak nama={`Translok ${d.nama}`} nilai={p.translok} mati={mati} onPilih={(v) => setP(d.id, { translok: v })} /></Isian>}
-                {d.honor === "pilih" && <Isian judul="Honorarium?"><YaTidak nama={`Honor ${d.nama}`} nilai={p.honor} mati={mati} onPilih={(v) => setP(d.id, { honor: v })} /></Isian>}
-                {honor && p.status === "Organik" && (
-                  <Isian judul="Dasar honorarium organik (SK atau juknis)" ket="Honorarium untuk petugas organik perlu dasar tertulis.">
-                    <input className={kolom} value={p.dasar} maxLength={200} disabled={mati} onChange={(e) => setP(d.id, { dasar: e.target.value })} aria-label={`Dasar honor ${d.nama}`} placeholder="mis. Juknis honor organik 2026" />
-                  </Isian>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })}
+      {pend && <TabelPeran f={f} ubah={ubah} mati={mati} />}
       {pend && <Cat>Total petugas: {rp.total} (organik {rp.totOrg}, mitra {rp.totMit}). {rp.perkPeran.length > 0 ? `${rp.perkPeran.length} peran masih perkiraan.` : "Semua fix."}</Cat>}
 
-      {adhoc && (
-        <div className="flex flex-col gap-3 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3">
-          <strong className="text-[14px] text-[#0F2A52]">Honor anggota tim (kegiatan Ad-hoc)</strong>
-          <Isian judul="Ada honor untuk anggota tim?"><YaTidak nama="Honor tim" nilai={f.tim.honor} mati={mati} onPilih={(v) => ubah((g) => { g.tim.honor = v; })} /></Isian>
-          {f.tim.honor && (
-            <Isian judul="Yang menerima honor" ket="Centang jabatan tim yang menerima honor.">
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Jabatan tim penerima honor">
-                {JABATAN_TIM.map((j) => <Centang key={j.id} aktif={f.tim[j.id]} mati={mati} onUbah={() => ubah((g) => { g.tim[j.id] = !g.tim[j.id]; })}>{j.nama}</Centang>)}
-              </div>
-            </Isian>
-          )}
-        </div>
-      )}
+      {adhoc && <KartuHonorTim f={f} ubah={ubah} mati={mati} />}
     </Bagian>
   );
 }

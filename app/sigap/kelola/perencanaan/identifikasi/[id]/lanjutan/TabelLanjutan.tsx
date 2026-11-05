@@ -9,9 +9,8 @@
 //   * Mengetik jumlah per peran lebih kecil dari jumlah slot ditolak dan diarahkan ke slot.
 // Kartu isian lama (Isian.tsx: KartuKelas, KartuPeran, KartuPetugas) tetap ada; halaman ini tidak lagi memakainya.
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { kolom, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
-import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { JABATAN, type KodeJabatan } from "@/lib/keu/kebijakan";
 import {
   ID_LJ, KODE_PERAN, NAMA_PERAN, NAMA_SUMBER, awalLanjutan, hariKelas, jumlahPetugas, pesertaKelas,
@@ -27,133 +26,7 @@ import { idBaru } from "@/lib/keu/lanjutan";
 import PilihNama from "../../PilihNama";
 import { Bagian, Cat, Centang } from "../../Kontrol";
 import { KelasSatu, lengkapiKerangka, type Ubah } from "./Isian";
-
-// ---------------------------------------------------------------------------------------------------------------------
-// Tabel umum dengan tombol saring di tiap judul kolom
-// ---------------------------------------------------------------------------------------------------------------------
-export type NilaiSaring = Record<string, string[]>;
-export type Kol<T> = {
-  id: string; judul: string; jenis: "teks" | "pilih"; nilai: (r: T) => string; sel: (r: T) => ReactNode; kelasTd?: string;
-  /** Kolom menempel di tepi kanan saat tabel digulir ke samping (dipakai kolom aksi agar tombolnya selalu terlihat). */
-  lekat?: boolean;
-};
-const LEKAT = "sticky right-0 z-10 bg-white shadow-[-8px_0_8px_-8px_rgba(15,42,82,0.25)]";
-
-const lolos = (saring: NilaiSaring, id: string, nilai: string, teks: boolean): boolean => {
-  const f = saring[id];
-  if (!f || f.length === 0) return true;
-  return teks ? nilai.toLowerCase().includes(f[0].trim().toLowerCase()) : f.includes(nilai);
-};
-
-function ThSaring({ judul, id, jenis, pilihan, saring, setSaring, lekat }: {
-  judul: string; id: string; jenis: "teks" | "pilih"; pilihan: string[]; saring: NilaiSaring; setSaring: (f: (s: NilaiSaring) => NilaiSaring) => void; lekat?: boolean;
-}) {
-  const [buka, setBuka] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-  const kotak = useRef<HTMLTableCellElement>(null);
-  const tombol = useRef<HTMLButtonElement>(null);
-  useTutupDenganBack(buka, () => setBuka(false)); // Back HP menutup kotak saringan
-  const sekarang = saring[id] ?? [];
-  const aktif = sekarang.length > 0 && sekarang.some((x) => x.trim() !== "");
-  useEffect(() => {
-    if (!buka) return;
-    const tutup = (e: PointerEvent) => { if (!kotak.current?.contains(e.target as Node)) setBuka(false); };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setBuka(false); tombol.current?.focus(); } };
-    const geser = (e: Event) => { if (!(e.target instanceof Node) || !kotak.current?.contains(e.target)) setBuka(false); };
-    document.addEventListener("pointerdown", tutup);
-    document.addEventListener("keydown", esc);
-    window.addEventListener("scroll", geser, true);
-    window.addEventListener("resize", geser);
-    return () => { document.removeEventListener("pointerdown", tutup); document.removeEventListener("keydown", esc); window.removeEventListener("scroll", geser, true); window.removeEventListener("resize", geser); };
-  }, [buka]);
-  // Kotak saringan memakai posisi tetap (fixed) agar tidak terpotong oleh pembungkus tabel yang dapat digulir
-  const bukaKotak = () => {
-    const r = tombol.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - 232)) });
-    setBuka((b) => !b);
-  };
-  const semua = Array.from(new Set([...pilihan, ...sekarang]));
-  return (
-    <th ref={kotak} scope="col" className={`py-1.5 pr-2 text-left align-bottom font-bold ${lekat ? LEKAT : ""}`}>
-      <button
-        ref={tombol} type="button" aria-haspopup="dialog" aria-expanded={buka} aria-label={`Saring kolom ${judul}${aktif ? " (saringan aktif)" : ""}`}
-        onClick={bukaKotak}
-        className={`inline-flex min-h-[32px] items-center gap-1 rounded px-1 uppercase tracking-[0.04em] hover:bg-[#EEF3FB] ${aktif ? "bg-[#E3EEFF] text-[#1F5FD1]" : ""}`}
-      >
-        <span>{judul}</span><span aria-hidden>{aktif ? "●" : "▾"}</span>
-      </button>
-      {buka && (
-        <div role="dialog" aria-label={`Saring ${judul}`} style={{ position: "fixed", top: pos.top, left: pos.left }} className="z-50 w-56 rounded-lg border border-[#DCE3EE] bg-white p-2 text-left normal-case tracking-normal text-[#1B2B4B] shadow-lg">
-          {jenis === "teks" ? (
-            <input
-              autoFocus className={kolom} aria-label={`Kata kunci ${judul}`} placeholder="Ketik untuk menyaring" value={sekarang[0] ?? ""}
-              onChange={(e) => { const v = e.target.value; setSaring((s) => ({ ...s, [id]: v === "" ? [] : [v] })); }}
-            />
-          ) : (
-            <ul className="m-0 max-h-56 list-none overflow-y-auto p-0">
-              {semua.length === 0 && <li className="px-1 py-1 text-[12.5px] text-[#5B6B84]">Tidak ada pilihan.</li>}
-              {semua.map((o) => (
-                <li key={o}>
-                  <label className="flex min-h-[36px] cursor-pointer items-center gap-2 text-[13px]">
-                    <input
-                      type="checkbox" className="h-4 w-4 accent-[#1F5FD1]" checked={sekarang.includes(o)}
-                      onChange={() => setSaring((s) => { const a = s[id] ?? []; return { ...s, [id]: a.includes(o) ? a.filter((x) => x !== o) : [...a, o] }; })}
-                    />
-                    {o === "" ? "(kosong)" : o}
-                  </label>
-                </li>
-              ))}
-            </ul>
-          )}
-          <button type="button" className={`${tombolKecil} mt-2 w-full`} disabled={!aktif} onClick={() => setSaring((s) => ({ ...s, [id]: [] }))}>Hapus saringan</button>
-        </div>
-      )}
-    </th>
-  );
-}
-
-export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tidak ada baris." }: {
-  label: string; kols: Kol<T>[]; data: T[]; kunci: (r: T) => string; bawah?: (r: T) => ReactNode; kosong?: string;
-}) {
-  const [saring, setSaring] = useState<NilaiSaring>({});
-  const tampil = data.filter((r) => kols.every((k) => lolos(saring, k.id, k.nilai(r), k.jenis === "teks")));
-  const adaSaring = kols.some((k) => (saring[k.id] ?? []).some((x) => x.trim() !== ""));
-  return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      {adaSaring && (
-        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#44546F]" role="status">
-          <span>Saringan aktif: menampilkan {tampil.length} dari {data.length} baris.</span>
-          <button type="button" className={tombolKecil} onClick={() => setSaring({})}>Hapus semua saringan</button>
-        </div>
-      )}
-      <div className="min-w-0 overflow-x-auto">
-        <table aria-label={label} className="w-full border-collapse text-[12.5px]">
-          <thead>
-            <tr className="text-[11px] text-[#5B6B84]">
-              {kols.map((k) => (
-                <ThSaring
-                  key={k.id} id={k.id} judul={k.judul} jenis={k.jenis} saring={saring} setSaring={setSaring} lekat={k.lekat}
-                  pilihan={k.jenis === "pilih" ? Array.from(new Set(data.map(k.nilai))).sort((a, b) => a.localeCompare(b, "id")) : []}
-                />
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {tampil.map((r) => (
-              <Fragment key={kunci(r)}>
-                <tr className="border-t border-[#EEF2F7] align-top">
-                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-2 ${k.lekat ? LEKAT : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
-                </tr>
-                {bawah?.(r)}
-              </Fragment>
-            ))}
-            {tampil.length === 0 && <tr className="border-t border-[#EEF2F7]"><td colSpan={kols.length} className="py-3 text-[13px] text-[#5B6B84]">{data.length === 0 ? kosong : "Tidak ada baris yang cocok dengan saringan."}</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
+import { TabelSaring, type Kol } from "../../TabelSaring";
 
 const Pesan = ({ children }: { children: ReactNode }) => (
   <div role="status" className="rounded-lg border border-[#F2D58A] bg-[#FFF8E6] px-3 py-2 text-[12.5px] leading-snug text-[#6B4D00]">{children}</div>
@@ -387,7 +260,7 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
     {
       id: "peran", judul: "Peran", jenis: "pilih", nilai: (r) => (r.p.peran ? NAMA_PERAN[r.p.peran] : "(belum dipilih)"),
       sel: ({ p, i }) => (
-        <select aria-label={`Peran petugas ${i + 1}`} className={`${kolom} min-w-[110px]`} disabled={mati} value={p.peran} onChange={(e) => set(p.id, (x) => { x.peran = e.target.value as Petugas["peran"]; })}>
+        <select aria-label={`Peran petugas ${i + 1}`} className={`${kolom} min-w-[128px]`} disabled={mati} value={p.peran} onChange={(e) => set(p.id, (x) => { x.peran = e.target.value as Petugas["peran"]; })}>
           <option value="">(belum dipilih)</option>
           {KODE_PERAN.map((k) => <option key={k} value={k}>{NAMA_PERAN[k]}</option>)}
         </select>
