@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { kolom, tombolKecil, tombolUtama } from "@/app/sigap/keu-ui";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import type { Dampak } from "@/lib/keu/selisihLanjutan";
 
 export type PilihanSimpan = "terapkan" | "saja";
@@ -19,6 +20,8 @@ function Lapisan({ judul, idJudul, onTutup, children }: { judul: string; idJudul
   const panel = useRef<HTMLDivElement>(null);
   const tutupRef = useRef(onTutup);
   tutupRef.current = onTutup;
+  // Back HP menutup dialog ini (satu langkah), sama dengan Escape / Batal
+  useTutupDenganBack(true, onTutup);
   // dipasang sekali: fokus awal ke dialog, Escape menutup (pemanggil terbaru lewat ref agar fokus tidak berpindah saat mengetik)
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") tutupRef.current(); };

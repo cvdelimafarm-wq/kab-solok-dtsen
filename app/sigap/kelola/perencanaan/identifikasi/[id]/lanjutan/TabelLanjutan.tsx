@@ -11,6 +11,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { kolom, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { JABATAN, type KodeJabatan } from "@/lib/keu/kebijakan";
 import {
   ID_LJ, KODE_PERAN, NAMA_PERAN, NAMA_SUMBER, awalLanjutan, hariKelas, jumlahPetugas, pesertaKelas,
@@ -33,7 +34,10 @@ import { KelasSatu, lengkapiKerangka, type Ubah } from "./Isian";
 export type NilaiSaring = Record<string, string[]>;
 export type Kol<T> = {
   id: string; judul: string; jenis: "teks" | "pilih"; nilai: (r: T) => string; sel: (r: T) => ReactNode; kelasTd?: string;
+  /** Kolom menempel di tepi kanan saat tabel digulir ke samping (dipakai kolom aksi agar tombolnya selalu terlihat). */
+  lekat?: boolean;
 };
+const LEKAT = "sticky right-0 z-10 bg-white shadow-[-8px_0_8px_-8px_rgba(15,42,82,0.25)]";
 
 const lolos = (saring: NilaiSaring, id: string, nilai: string, teks: boolean): boolean => {
   const f = saring[id];
@@ -41,13 +45,14 @@ const lolos = (saring: NilaiSaring, id: string, nilai: string, teks: boolean): b
   return teks ? nilai.toLowerCase().includes(f[0].trim().toLowerCase()) : f.includes(nilai);
 };
 
-function ThSaring({ judul, id, jenis, pilihan, saring, setSaring }: {
-  judul: string; id: string; jenis: "teks" | "pilih"; pilihan: string[]; saring: NilaiSaring; setSaring: (f: (s: NilaiSaring) => NilaiSaring) => void;
+function ThSaring({ judul, id, jenis, pilihan, saring, setSaring, lekat }: {
+  judul: string; id: string; jenis: "teks" | "pilih"; pilihan: string[]; saring: NilaiSaring; setSaring: (f: (s: NilaiSaring) => NilaiSaring) => void; lekat?: boolean;
 }) {
   const [buka, setBuka] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const kotak = useRef<HTMLTableCellElement>(null);
   const tombol = useRef<HTMLButtonElement>(null);
+  useTutupDenganBack(buka, () => setBuka(false)); // Back HP menutup kotak saringan
   const sekarang = saring[id] ?? [];
   const aktif = sekarang.length > 0 && sekarang.some((x) => x.trim() !== "");
   useEffect(() => {
@@ -69,7 +74,7 @@ function ThSaring({ judul, id, jenis, pilihan, saring, setSaring }: {
   };
   const semua = Array.from(new Set([...pilihan, ...sekarang]));
   return (
-    <th ref={kotak} scope="col" className="py-1.5 pr-2 text-left align-bottom font-bold">
+    <th ref={kotak} scope="col" className={`py-1.5 pr-2 text-left align-bottom font-bold ${lekat ? LEKAT : ""}`}>
       <button
         ref={tombol} type="button" aria-haspopup="dialog" aria-expanded={buka} aria-label={`Saring kolom ${judul}${aktif ? " (saringan aktif)" : ""}`}
         onClick={bukaKotak}
@@ -127,7 +132,7 @@ export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tida
             <tr className="text-[11px] text-[#5B6B84]">
               {kols.map((k) => (
                 <ThSaring
-                  key={k.id} id={k.id} judul={k.judul} jenis={k.jenis} saring={saring} setSaring={setSaring}
+                  key={k.id} id={k.id} judul={k.judul} jenis={k.jenis} saring={saring} setSaring={setSaring} lekat={k.lekat}
                   pilihan={k.jenis === "pilih" ? Array.from(new Set(data.map(k.nilai))).sort((a, b) => a.localeCompare(b, "id")) : []}
                 />
               ))}
@@ -137,7 +142,7 @@ export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tida
             {tampil.map((r) => (
               <Fragment key={kunci(r)}>
                 <tr className="border-t border-[#EEF2F7] align-top">
-                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-2 ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
+                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-2 ${k.lekat ? LEKAT : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
                 </tr>
                 {bawah?.(r)}
               </Fragment>
@@ -181,12 +186,10 @@ export function TabelKelas({ isi, ubah, mati, form, organik, tahun }: { isi: Isi
     { id: "no", judul: "No", jenis: "teks", nilai: (r) => String(r.i + 1), sel: (r) => r.i + 1, kelasTd: "w-10" },
     { id: "nama", judul: "Kelas", jenis: "teks", nilai: (r) => r.k.nama, sel: (r) => <strong className="text-[#0F2A52]">{r.k.nama || "(tanpa nama)"}</strong>, kelasTd: "min-w-[150px]" },
     { id: "sesi", judul: "Sesi", jenis: "pilih", nilai: (r) => (r.k.sesi === "briefing" ? "Briefing" : "Pelatihan"), sel: (r) => (r.k.sesi === "briefing" ? "Briefing" : "Pelatihan") },
-    { id: "periode", judul: "Periode", jenis: "pilih", nilai: (r) => r.k.periode || "—", sel: (r) => r.k.periode || "—" },
     { id: "metode", judul: "Metode", jenis: "pilih", nilai: (r) => r.k.metode || "—", sel: (r) => r.k.metode || "—" },
     { id: "tempat", judul: "Tempat", jenis: "pilih", nilai: (r) => r.k.tempat || "—", sel: (r) => r.k.tempat || "—" },
     { id: "mulai", judul: "Mulai", jenis: "teks", nilai: (r) => r.k.mulai || "—", sel: (r) => r.k.mulai || "—", kelasTd: "whitespace-nowrap" },
     { id: "selesai", judul: "Selesai", jenis: "teks", nilai: (r) => r.k.selesai || "—", sel: (r) => r.k.selesai || "—", kelasTd: "whitespace-nowrap" },
-    { id: "hari", judul: "Hari", jenis: "teks", nilai: (r) => String(hariKelas(r.k.mulai, r.k.selesai)), sel: (r) => hariKelas(r.k.mulai, r.k.selesai) || "—" },
     { id: "peserta", judul: "Peserta", jenis: "teks", nilai: (r) => String(pesertaKelas(isi, r.k)), sel: (r) => pesertaKelas(isi, r.k) },
     {
       id: "awal", judul: "Terhadap awal", jenis: "pilih", nilai: (r) => statusTaut(r.k),
@@ -200,6 +203,7 @@ export function TabelKelas({ isi, ubah, mati, form, organik, tahun }: { isi: Isi
     {
       id: "aksi", judul: "Rincian", jenis: "pilih", nilai: (r) => (terbuka.has(r.k.id) ? "Terbuka" : "Tertutup"),
       sel: (r) => <button type="button" aria-expanded={terbuka.has(r.k.id)} className={tombolKecil} onClick={() => alih(r.k.id)}>{terbuka.has(r.k.id) ? "Tutup" : mati ? "Lihat" : "Ubah"}</button>,
+      lekat: true,
     },
   ];
   return (
@@ -247,7 +251,7 @@ function AngkaJumlah({ nilai, minimal, mati, nama, onUbah, onTolak }: { nilai: n
   useEffect(() => { setTeks((t) => (parseInt(t, 10) === nilai ? t : String(nilai))); }, [nilai]);
   return (
     <input
-      type="number" inputMode="numeric" aria-label={nama} className={`${kolom} w-24`} min={minimal} max={10000} value={teks} disabled={mati}
+      type="number" inputMode="numeric" aria-label={nama} className={`${kolom} w-20`} min={minimal} max={10000} value={teks} disabled={mati}
       onChange={(e) => { const t = e.target.value; setTeks(t); const n = parseInt(t, 10); if (!Number.isNaN(n) && n >= minimal && n <= 10000 && n !== nilai) onUbah(n); }}
       onBlur={() => { const n = parseInt(teks, 10); if (!Number.isNaN(n) && n < minimal) onTolak(n); if (Number.isNaN(n) || n < minimal || n > 10000) setTeks(String(nilai)); }}
     />
@@ -256,6 +260,7 @@ function AngkaJumlah({ nilai, minimal, mati, nama, onUbah, onTolak }: { nilai: n
 
 export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan; ubah: Ubah; mati: boolean; form: Form | null; tahun: number | null }) {
   const [tolak, setTolak] = useState<string | null>(null);
+  useEffect(() => { if (mati) setTolak(null); }, [mati]);
   const selisih = useMemo(() => selisihDariAwal(isi, form, tahun), [isi, form, tahun]);
   const awal = useMemo(() => (form && tahun !== null ? awalLanjutan(form, tahun) : null), [form, tahun]);
   const set = <F extends "on" | "nOrg" | "nMit" | "translok" | "penginapan" | "fix">(kode: KodePeran, f: F, v: IsiLanjutan["peran"][KodePeran][F]) => ubah((g) => { g.peran[kode][f] = v; });
@@ -278,7 +283,7 @@ export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan;
     { id: "org", judul: "Organik", jenis: "teks", nilai: (r) => String(isi.peran[r.kode].nOrg), sel: (r) => jumlah(r.kode, "Organik", NAMA_PERAN[r.kode]) },
     { id: "mit", judul: "Mitra", jenis: "teks", nilai: (r) => String(isi.peran[r.kode].nMit), sel: (r) => jumlah(r.kode, "Mitra", NAMA_PERAN[r.kode]) },
     {
-      id: "slot", judul: "Terisi nama", jenis: "teks",
+      id: "slot", judul: "Nama terisi", jenis: "teks",
       nilai: (r) => `${jumlahBernama(isi, r.kode, "Organik")}/${jumlahSlot(isi, r.kode, "Organik")} ${jumlahBernama(isi, r.kode, "Mitra")}/${jumlahSlot(isi, r.kode, "Mitra")}`,
       sel: (r) => {
         if (!isi.peran[r.kode].on) return "—";
@@ -286,27 +291,27 @@ export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan;
         const org = [jumlahBernama(isi, r.kode, "Organik"), jumlahSlot(isi, r.kode, "Organik")];
         const mit = [jumlahBernama(isi, r.kode, "Mitra"), jumlahSlot(isi, r.kode, "Mitra")];
         const beda = org[1] !== x.nOrg || mit[1] !== x.nMit;
-        return <span className={beda || org[0] < org[1] || mit[0] < mit[1] ? "text-[#8A6200]" : "text-[#14653A]"}>Organik {org[0]} dari {org[1]} baris · Mitra {mit[0]} dari {mit[1]} baris{beda ? " · jumlah baris belum sama dengan alokasi" : ""}</span>;
+        return <span className={beda || org[0] < org[1] || mit[0] < mit[1] ? "text-[#8A6200]" : "text-[#14653A]"} title={beda ? "Jumlah baris belum sama dengan alokasi" : undefined}>Org {org[0]}/{org[1]} · Mit {mit[0]}/{mit[1]}{beda ? " ≠" : ""}</span>;
       },
-      kelasTd: "min-w-[170px]",
+      kelasTd: "min-w-[120px]",
     },
     {
-      id: "awal", judul: "Identifikasi awal", jenis: "teks",
+      id: "awal", judul: "Awal", jenis: "teks",
       nilai: (r) => { const a = awal?.peran[r.kode]; return a?.on ? `${a.nOrg} ${a.nMit}` : "—"; },
       sel: (r) => {
         const a = awal?.peran[r.kode]; const x = isi.peran[r.kode];
         if (!a || !a.on) return "—";
         const sama = a.nOrg === (x.on ? x.nOrg : 0) && a.nMit === (x.on ? x.nMit : 0);
-        return <span>{a.nOrg} organik · {a.nMit} mitra {sama ? <span className="ml-1 font-semibold text-[#1B7A3E]">✓ sama</span> : <span className="ml-1 font-semibold text-[#8A6200]">berbeda</span>}</span>;
+        return <span>{a.nOrg} org · {a.nMit} mit {sama ? <span className="ml-1 font-semibold text-[#1B7A3E]">✓</span> : <span className="ml-1 font-semibold text-[#8A6200]">≠</span>}</span>;
       },
-      kelasTd: "min-w-[170px]",
+      kelasTd: "min-w-[110px]",
     },
     { id: "translok", judul: "Translok", jenis: "pilih", nilai: (r) => ya(isi.peran[r.kode].translok), sel: (r) => <Kotak aktif={isi.peran[r.kode].translok} mati={mati || !isi.peran[r.kode].on} nama={`Translok ${NAMA_PERAN[r.kode]}`} onUbah={(v) => set(r.kode, "translok", v)} /> },
     { id: "inap", judul: "Penginapan", jenis: "pilih", nilai: (r) => ya(isi.peran[r.kode].penginapan), sel: (r) => <Kotak aktif={isi.peran[r.kode].penginapan} mati={mati || !isi.peran[r.kode].on} nama={`Penginapan ${NAMA_PERAN[r.kode]}`} onUbah={(v) => set(r.kode, "penginapan", v)} /> },
     {
       id: "fix", judul: "Kematangan", jenis: "pilih", nilai: (r) => (isi.peran[r.kode].fix ? "Fix" : "Perkiraan"),
       sel: (r) => (
-        <select aria-label={`Kematangan jumlah ${NAMA_PERAN[r.kode]}`} className={`${kolom} w-32`} disabled={mati || !isi.peran[r.kode].on} value={isi.peran[r.kode].fix ? "fix" : "perk"} onChange={(e) => set(r.kode, "fix", e.target.value === "fix")}>
+        <select aria-label={`Kematangan jumlah ${NAMA_PERAN[r.kode]}`} className={`${kolom} w-28`} disabled={mati || !isi.peran[r.kode].on} value={isi.peran[r.kode].fix ? "fix" : "perk"} onChange={(e) => set(r.kode, "fix", e.target.value === "fix")}>
           <option value="perk">≈ Perkiraan</option><option value="fix">Fix</option>
         </select>
       ),
@@ -314,7 +319,7 @@ export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan;
   ];
   return (
     <Bagian huruf="3" judul="Jumlah petugas per peran" id={ID_LJ.peran}>
-      <Cat>Jumlah di sini harus sama dengan jumlah petugas bernama pada kartu berikutnya sebelum data dapat berstatus Final. Menaikkan jumlah menambah kebutuhan baris (klik Buat baris sesuai jumlah). Menurunkan dilakukan dari kartu Daftar petugas: kosongkan nama, lalu Hapus alokasi.</Cat>
+      <Cat>Jumlah di sini harus sama dengan jumlah petugas bernama pada kartu berikutnya sebelum data dapat berstatus Final. Menaikkan jumlah menambah kebutuhan baris (klik Buat baris sesuai jumlah). Menurunkan dilakukan dari kartu Daftar petugas: kosongkan nama, lalu Hapus alokasi. Nama terisi = baris bernama / jumlah baris; Awal = jumlah pada identifikasi awal (✓ sama, ≠ berbeda).</Cat>
       {selisih.length > 0 && (
         <Pesan>
           <strong>Berbeda dari identifikasi awal (perencanaan):</strong>
@@ -338,6 +343,7 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
 }) {
   const [terbuka, setTerbuka] = useState<Set<string>>(new Set());
   const [info, setInfo] = useState<string | null>(null);
+  useEffect(() => { if (mati) setInfo(null); }, [mati]);
   const j = jumlahPetugas(isi);
   const daftarUntuk = (p: Petugas): readonly CalonNama[] => (p.status === "Mitra" ? mitra : organik) ?? [];
   const bernama = isi.petugas.filter((p) => !slotKosong(p));
@@ -376,12 +382,12 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
           }}
         />
       ),
-      kelasTd: "min-w-[240px]",
+      kelasTd: "min-w-[200px]",
     },
     {
       id: "peran", judul: "Peran", jenis: "pilih", nilai: (r) => (r.p.peran ? NAMA_PERAN[r.p.peran] : "(belum dipilih)"),
       sel: ({ p, i }) => (
-        <select aria-label={`Peran petugas ${i + 1}`} className={`${kolom} min-w-[120px]`} disabled={mati} value={p.peran} onChange={(e) => set(p.id, (x) => { x.peran = e.target.value as Petugas["peran"]; })}>
+        <select aria-label={`Peran petugas ${i + 1}`} className={`${kolom} min-w-[110px]`} disabled={mati} value={p.peran} onChange={(e) => set(p.id, (x) => { x.peran = e.target.value as Petugas["peran"]; })}>
           <option value="">(belum dipilih)</option>
           {KODE_PERAN.map((k) => <option key={k} value={k}>{NAMA_PERAN[k]}</option>)}
         </select>
@@ -401,7 +407,7 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
     {
       id: "sumber", judul: "Sumber mitra", jenis: "pilih", nilai: (r) => (r.p.status === "Mitra" ? NAMA_SUMBER[r.p.sumber] ?? "—" : "—"),
       sel: ({ p, i }) => p.status !== "Mitra" ? "—" : (
-        <select aria-label={`Sumber mitra ${i + 1}`} className={`${kolom} min-w-[150px]`} disabled={mati} value={p.sumber} onChange={(e) => set(p.id, (x) => { x.sumber = e.target.value as Petugas["sumber"]; })}>
+        <select aria-label={`Sumber mitra ${i + 1}`} className={`${kolom} min-w-[130px]`} disabled={mati} value={p.sumber} onChange={(e) => set(p.id, (x) => { x.sumber = e.target.value as Petugas["sumber"]; })}>
           {(["kepka", "seleksi"] as const).map((s) => <option key={s} value={s}>{NAMA_SUMBER[s]}</option>)}
         </select>
       ),
@@ -410,8 +416,12 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
     {
       id: "jabatan", judul: "Jabatan", jenis: "teks", nilai: (r) => teksJabatan(r.p.jabatan) || "—",
       sel: ({ p }) => (
-        <div className="flex min-w-[130px] flex-wrap items-center gap-1">
-          {p.jabatan.length === 0 ? <span className="text-[#5B6B84]">—</span> : p.jabatan.map((k) => <span key={k} className="rounded-full bg-[#EEF2F7] px-2 py-[1px] text-[11.5px] font-semibold text-[#44546F]">{teksJabatan([k])}</span>)}
+        <div className="flex min-w-[110px] flex-wrap items-center gap-1">
+          {p.jabatan.length === 0 ? <span className="text-[#5B6B84]">—</span> : (
+            <span title={teksJabatan(p.jabatan)} className="rounded-full bg-[#EEF2F7] px-2 py-[1px] text-[11.5px] font-semibold text-[#44546F]">
+              {teksJabatan([p.jabatan[0]]).split(" (")[0]}{p.jabatan.length > 1 ? ` +${p.jabatan.length - 1}` : ""}
+            </span>
+          )}
           <button type="button" aria-expanded={terbuka.has(p.id)} className="rounded px-1 text-[12px] font-semibold text-[#1F5FD1] underline" onClick={() => alih(p.id)}>{terbuka.has(p.id) ? "Tutup" : "Atur"}</button>
         </div>
       ),
@@ -428,7 +438,7 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
           </div>
         );
       },
-      kelasTd: "min-w-[140px]",
+      kelasTd: "min-w-[130px]", lekat: true,
     },
   ];
   return (
