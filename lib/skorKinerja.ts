@@ -1,9 +1,10 @@
 // lib/skorKinerja.ts  (murni: tanpa database, tanpa jaringan)
 //
 // (15 Okt 2026) Skor kinerja harian Transport Lokal PPL -- keputusan M. Iqbal Hadi (lihat Project: rancangan-skor-kinerja-harian-target-harian).
-// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per km jarak. Target minimal 75 poin/hari = 1 O-K (mulai 29 Okt 2026; 20-28 Okt 60; 15-19 Okt 45).
+// Poin hari = 5 x KK terdampak + 1 x KK tidak terdampak + 1 poin per km jarak. Target minimal 120 poin/hari = 1 O-K (mulai 5 Nov 2026; 29 Okt-4 Nov 75; 20-28 Okt 60; 15-19 Okt 45).
 // (20 Okt 2026, keputusan user) Mulai 20 Okt 2026: target 45 -> 60 poin (poin jarak tetap 1 per km; sempat diusulkan 1 per 5 km tetapi dibatalkan user).
 // (29 Okt 2026, keputusan user) Mulai 29 Okt 2026: target 60 -> 75 poin (poin jarak tetap). Hari 15-19 Okt tetap 45 poin, 20-28 Okt tetap 60 poin.
+// (5 Nov 2026, keputusan user) Mulai 5 Nov 2026: target 75 -> 120 poin (poin KK dan poin jarak tetap, termasuk 0,7 poin per km di atas 15 km). Hari 29 Okt-4 Nov tetap 75 poin.
 // TIDAK berlaku mundur: hari sebelum 20 Okt tetap memakai target lama (45 poin). Aturan dipilih per tanggal lewat RIWAYAT_ATURAN / aturanUntukTanggal; hutang dibawa dalam satuan O-K
 // (pecahan hari) supaya bisa dibawa melewati pergantian aturan.
 //
@@ -56,8 +57,8 @@ export const ATURAN_POIN_V2: AturanPoin = {
   mulaiBobot: "2026-10-20",
 };
 
-/** Aturan berlaku sekarang: mulai 29 Okt 2026 (target 75 poin, 1 poin per km tetap). */
-export const ATURAN_POIN: AturanPoin = {
+/** Aturan ketiga: berlaku 29 Okt-4 Nov 2026 (target 75 poin; km di atas 15 bernilai 0,7 poin). Dipertahankan untuk hari-hari yang sudah berlalu. */
+export const ATURAN_POIN_V3: AturanPoin = {
   poinTerdampak: 5,
   poinTidakTerdampak: 1,
   poinTidakDitemukan: 0,
@@ -68,8 +69,20 @@ export const ATURAN_POIN: AturanPoin = {
   poinPerKmLebih: 0.7, // 15 km pertama 1 poin per km; km selebihnya 0,7 poin per km (tidak ada batas atas)
 };
 
+/** Aturan berlaku sekarang: mulai 5 Nov 2026 (target 120 poin; poin KK dan poin jarak sama dengan aturan sebelumnya). */
+export const ATURAN_POIN: AturanPoin = {
+  poinTerdampak: 5,
+  poinTidakTerdampak: 1,
+  poinTidakDitemukan: 0,
+  poinPerKm: 1, // tetap 1 poin per km
+  maksPoinJarak: 15,
+  targetHarian: 120,
+  mulaiBobot: "2026-11-05",
+  poinPerKmLebih: 0.7, // tetap: 15 km pertama 1 poin per km; km selebihnya 0,7 poin per km
+};
+
 /** Daftar aturan menurut tanggal mulai (naik). Tanggal sebelum aturan pertama = aturan "lama" (hari lengkap = 1 O-K penuh). */
-export const RIWAYAT_ATURAN: AturanPoin[] = [ATURAN_POIN_V1, ATURAN_POIN_V2, ATURAN_POIN];
+export const RIWAYAT_ATURAN: AturanPoin[] = [ATURAN_POIN_V1, ATURAN_POIN_V2, ATURAN_POIN_V3, ATURAN_POIN];
 
 /** Tanggal pertama penilaian bobot poin (15 Okt 2026); sebelumnya hari lengkap dihitung penuh. */
 export const MULAI_BOBOT_AWAL = RIWAYAT_ATURAN[0].mulaiBobot;

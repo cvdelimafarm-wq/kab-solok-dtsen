@@ -129,9 +129,9 @@ function TabRealisasi({ d }: { d: Aktif }) {
       <p className="mt-2 text-[12.5px] leading-snug text-[#5B6B84]">
         {formatAngka(a.targetHarian)} poin = 1 O-K. Capaian di atas 100% pada satu hari tidak menambah pembayaran. Hari yang belum lengkap (laporan atau foto) belum dihitung.
       </p>
-      {/* (20 Okt dan 29 Okt 2026) aturan berganti per tanggal, tidak berlaku mundur */}
+      {/* (20 Okt, 29 Okt, dan 5 Nov 2026) aturan berganti per tanggal, tidak berlaku mundur */}
       <p className="mt-2 rounded-[12px] bg-[#E6EDFB] px-3 py-2 text-[12.5px] leading-snug text-[#1F4FBF]">
-        Mulai 29 Okt 2026: target naik menjadi 75 poin = 1 O-K (1 poin per km sampai 15 km; km di atas 15 bernilai 0,7 poin). Tanggal 20–28 Okt tetap memakai target 60 poin, dan 15–19 Okt tetap 45 poin.
+        Mulai 5 Nov 2026: target naik menjadi 120 poin = 1 O-K (1 poin per km sampai 15 km; km di atas 15 bernilai 0,7 poin). Tanggal 29 Okt–4 Nov tetap memakai target 75 poin, 20–28 Okt 60 poin, dan 15–19 Okt 45 poin.
       </p>
     </div>
   );

@@ -60,6 +60,18 @@ const TEMPLAT: Templat[] = [
     jenis: "perhatian",
   },
   {
+    // (5 Nov 2026) Perubahan target harian 75 -> 120 poin, berlaku mulai 5 Nov 2026 (tidak berlaku mundur; poin KK dan poin jarak tetap). Modal tombolnya ke Lembar Pendataan (PML/PPL).
+    nama: "Perubahan target harian (mulai 5 Nov 2026)",
+    judul: "Target harian jadi 120 poin, berlaku 5 Nov 2026",
+    isi: "Ketentuan ini mulai berlaku sejak 5 November 2026: target harian naik dari 75 ke 120 poin (1 O-K). Poin KK dan poin jarak tidak berubah. Hari sebelumnya tidak berubah. Ketuk untuk melihat capaian Anda.",
+    mJudul: "PERUBAHAN TARGET HARIAN",
+    mIsi: "**Perubahan target harian.**\n\n==Ketentuan ini mulai berlaku sejak 5 November 2026.==\n\n- **Target harian** naik dari 75 menjadi ==120 poin== (120 poin = 1 O-K)\n- **Poin KK** tidak berubah: terdampak 5 poin, tidak terdampak 1 poin\n- **Poin jarak** tidak berubah: 1 poin per km sampai 15 km, km di atas 15 bernilai 0,7 poin\n- ==Tidak berlaku mundur==: hari 29 Oktober sampai 4 November tetap dihitung dengan target 75 poin\n- Kekurangan (hutang) dari hari sebelumnya tetap dibawa dan ditutup lebih dulu oleh poin hari berikutnya\n\nPantau capaian Anda lewat tombol **Capaian hari ini** di Lembar Pendataan.",
+    tLabel: "Buka Lembar Pendataan",
+    tUrl: "/sigap/pendataan",
+    url: "/sigap/pendataan",
+    jenis: "perhatian",
+  },
+  {
     // (19 Okt 2026) Briefing pendataan PSP via Zoom (Selasa 20 Okt 2026, 08.00-08.45 WIB). Tombol modal membuka Zoom; tombol "Salin tautan" muncul otomatis di bawahnya.
     nama: "Briefing pendataan PSP via Zoom (20 Okt 2026)",
     judul: "Briefing Pendataan PSP: Selasa 20 Okt, 08.00 WIB",
