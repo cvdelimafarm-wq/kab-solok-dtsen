@@ -7,11 +7,12 @@
 //   * Hapus nama   = mengosongkan slot (slot tetap ada, kembali "menyusul", jabatan dilepas);
 //   * Hapus alokasi = hanya pada slot kosong; mengurangi jumlah per peran satu;
 //   * Mengetik jumlah per peran lebih kecil dari jumlah slot ditolak dan diarahkan ke slot.
+// (6 Nov 2026) Jabatan dalam tim tidak lagi dicentang di sini: kolom Jabatan hanya menampilkan; pengaturannya ada di langkah "3 · Susunan tim kerja" (tim/page.tsx).
 // Kartu isian lama (Isian.tsx: KartuKelas, KartuPeran, KartuPetugas) tetap ada; halaman ini tidak lagi memakainya.
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { kolom, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
-import { JABATAN, type KodeJabatan } from "@/lib/keu/kebijakan";
 import {
   ID_LJ, KODE_PERAN, NAMA_PERAN, NAMA_SUMBER, awalLanjutan, hariKelas, jumlahPetugas, pesertaKelas,
   type IsiLanjutan, type Kelas, type KodePeran, type Petugas,
@@ -24,7 +25,7 @@ import {
 } from "@/lib/keu/selisihLanjutan";
 import { idBaru } from "@/lib/keu/lanjutan";
 import PilihNama from "../../PilihNama";
-import { Bagian, Cat, Centang } from "../../Kontrol";
+import { Bagian, Cat } from "../../Kontrol";
 import { KelasSatu, lengkapiKerangka, type Ubah } from "./Isian";
 import { TabelSaring, type Kol } from "../../TabelSaring";
 
@@ -211,10 +212,11 @@ export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan;
 // ---------------------------------------------------------------------------------------------------------------------
 type Props = { isi: IsiLanjutan; ubah: Ubah; mati: boolean };
 
-export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tugasTerbit }: Props & {
+export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tugasTerbit, hrefTim }: Props & {
   organik?: readonly CalonNama[] | null; mitra?: readonly CalonNama[] | null; galatDaftar?: boolean; tugasTerbit?: ReadonlySet<string>;
+  /** alamat langkah "3 · Susunan tim kerja" (jabatan diatur di sana, bukan di sini) */
+  hrefTim?: string;
 }) {
-  const [terbuka, setTerbuka] = useState<Set<string>>(new Set());
   const [info, setInfo] = useState<string | null>(null);
   useEffect(() => { if (mati) setInfo(null); }, [mati]);
   const j = jumlahPetugas(isi);
@@ -223,7 +225,6 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
   const tertaut = bernama.filter((p) => p.akun !== undefined).length;
   const bisaOtomatis = bernama.filter((p) => p.akun === undefined && cariAkunUnik(daftarUntuk(p), p.nama) !== null).length;
   const set = (id: string, fn: (x: Petugas) => void) => ubah((g) => { const x = g.petugas.find((e) => e.id === id); if (x) fn(x); });
-  const alih = (id: string) => setTerbuka((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const terkunci = (p: Petugas): boolean => !!tugasTerbit?.has(p.id);
 
   const hapusNm = (p: Petugas) => {
@@ -295,7 +296,6 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
               {teksJabatan([p.jabatan[0]]).split(" (")[0]}{p.jabatan.length > 1 ? ` +${p.jabatan.length - 1}` : ""}
             </span>
           )}
-          <button type="button" aria-expanded={terbuka.has(p.id)} className="rounded px-1 text-[12px] font-semibold text-[#1F5FD1] underline" onClick={() => alih(p.id)}>{terbuka.has(p.id) ? "Tutup" : "Atur"}</button>
         </div>
       ),
     },
@@ -322,7 +322,7 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
         {j.baru > 0 && <span>{j.baru} petugas baru</span>}
         {bernama.length > 0 && <span className={tertaut === bernama.length ? "font-semibold text-[#1B7A3E]" : "font-semibold text-[#8A6200]"}>{tertaut} dari {bernama.length} nama tertaut ke akun</span>}
       </div>
-      <Cat>Pilih nama dari daftar agar tertaut ke akun SIGAP. Hapus nama mengosongkan baris (jabatannya ikut dilepas). Hanya baris kosong yang punya tombol Hapus alokasi, yang mengurangi jumlah per peran. Data tetap Draf sampai semua nama terisi.</Cat>
+      <Cat>Pilih nama dari daftar agar tertaut ke akun SIGAP. Hapus nama mengosongkan baris (jabatannya ikut dilepas). Jabatan dalam tim (ketua, wakil, penanggung jawab) diatur pada langkah {hrefTim ? <Link href={hrefTim} className="font-semibold text-[#1F5FD1] underline">3 · Susunan tim kerja</Link> : "3 · Susunan tim kerja"}; kolom Jabatan di sini hanya menampilkan. Hanya baris kosong yang punya tombol Hapus alokasi, yang mengurangi jumlah per peran. Data tetap Draf sampai semua nama terisi.</Cat>
       {galatDaftar && <Cat>Daftar pegawai atau mitra belum dapat dimuat, jadi nama sementara diketik bebas dan belum tertaut ke akun. Muat ulang halaman; bila tetap sama, jalankan SQL 20261102a.</Cat>}
       {info && <Pesan>{info}</Pesan>}
       <div className="flex flex-wrap gap-2">
@@ -332,19 +332,6 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
       </div>
       <TabelSaring
         label="Daftar petugas" kols={kols} data={data} kunci={(r) => r.p.id} kosong="Belum ada petugas."
-        bawah={({ p, i }) => !terbuka.has(p.id) ? null : (
-          <tr><td colSpan={kols.length} className="pb-2 pt-1">
-            <div className="rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-2.5">
-              <span className="mb-1 block text-[11.5px] font-semibold text-[#5B6B84]">Jabatan dalam tim, petugas {i + 1}{p.nama ? ` (${p.nama})` : ""}</span>
-              <div className="flex flex-wrap gap-1.5">
-                {JABATAN.map((jb) => (
-                  <Centang key={jb.k} aktif={p.jabatan.includes(jb.k)} mati={mati || slotKosong(p)} onUbah={() => set(p.id, (x) => { x.jabatan = x.jabatan.includes(jb.k) ? x.jabatan.filter((y) => y !== jb.k) : (JABATAN.map((q) => q.k) as KodeJabatan[]).filter((q) => q === jb.k || x.jabatan.includes(q)); })}>{jb.nama}</Centang>
-                ))}
-              </div>
-              {slotKosong(p) && <p className="m-0 mt-1 text-[12px] text-[#5B6B84]">Jabatan hanya dapat diatur untuk baris yang sudah bernama.</p>}
-            </div>
-          </td></tr>
-        )}
       />
     </Bagian>
   );

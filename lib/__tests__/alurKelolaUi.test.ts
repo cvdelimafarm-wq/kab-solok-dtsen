@@ -41,7 +41,7 @@ describe("komponen alur", () => {
   it("alur berhalaman: tombol berupa tautan", () => {
     const h = renderToStaticMarkup(e(NavAlur, { posisi: posisiAlur(alurIdentifikasi(9), "lanjutan") }));
     expect(h).toContain('href="/sigap/kelola/perencanaan/identifikasi/9"');
-    expect(h).toContain('href="/sigap/kelola/perencanaan/identifikasi/9/kebutuhan"');
+    expect(h).toContain('href="/sigap/kelola/perencanaan/identifikasi/9/tim"');
   });
   it("peringatan tampil bila diberikan, tidak memblokir tombol", () => {
     const h = renderToStaticMarkup(e(NavAlur, { posisi: posisiAlur(tab, "persiapan"), onPilih: () => undefined, peringatan: "Daftar KK belum diunggah." }));
@@ -54,8 +54,8 @@ describe("komponen alur", () => {
   });
   it("daftar seluruh tahap: semua tahap tampil, tahap sekarang ditandai, tahap lain berupa tautan", () => {
     const h = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur identifikasi survei", posisi: posisiAlur(alurIdentifikasi(9), "pelatihan") }));
-    expect(h).toContain("Lihat seluruh tahap (6)");
-    for (const nama of ["1 · Identifikasi awal", "2 · Identifikasi lanjutan", "3 · Rekrutmen dan pengadaan", "4 · Persiapan pelatihan", "5 · Persiapan pendataan", "6 · Gap pelaksanaan"]) {
+    expect(h).toContain("Lihat seluruh tahap (7)");
+    for (const nama of ["1 · Identifikasi awal", "2 · Identifikasi lanjutan", "3 · Susunan tim kerja", "4 · Rekrutmen dan pengadaan", "5 · Persiapan pelatihan", "6 · Persiapan pendataan", "7 · Gap pelaksanaan"]) {
       expect(h).toContain(nama);
     }
     expect(h).toContain("(Anda di sini)");
@@ -66,10 +66,10 @@ describe("komponen alur", () => {
   it("lajur ikon: satu ikon per tahap, tahap sekarang ditandai, tahap lain bisa dibuka (tautan)", () => {
     const h = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur identifikasi survei", posisi: posisiAlur(alurIdentifikasi(9), "pelatihan") }));
     expect(h).toContain('aria-label="Ikon tahap alur"');
-    expect(h.match(/<svg/g)?.length).toBe(6);
+    expect(h.match(/<svg/g)?.length).toBe(7);
     expect(h.match(/aria-current="step"/g)?.length).toBeGreaterThanOrEqual(2); // judul + ikon sekarang
-    expect(h).toContain('aria-label="Buka tahap 5 · Persiapan pendataan"');
-    expect(h).not.toContain('aria-label="Buka tahap 4 · Persiapan pelatihan"'); // tahap sekarang bukan tautan
+    expect(h).toContain('aria-label="Buka tahap 6 · Persiapan pendataan"');
+    expect(h).not.toContain('aria-label="Buka tahap 5 · Persiapan pelatihan"'); // tahap sekarang bukan tautan
   });
   it("lajur ikon alur bertab: tombol per tahap lain, Ringkasan tanpa nomor", () => {
     const h = renderToStaticMarkup(e(PenunjukAlur, { nama: "Alur pendataan", posisi: posisiAlur(tab, "persiapan"), onPilih: () => undefined }));

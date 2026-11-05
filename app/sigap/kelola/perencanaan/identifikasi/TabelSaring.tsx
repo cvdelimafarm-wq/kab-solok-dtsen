@@ -19,7 +19,9 @@ export type Kol<T> = {
   /** Kolom menempel di tepi kanan saat tabel digulir ke samping (dipakai kolom aksi agar tombolnya selalu terlihat). */
   lekat?: boolean;
 };
-const LEKAT = "sticky right-0 z-10 bg-white shadow-[-8px_0_8px_-8px_rgba(15,42,82,0.25)]";
+const LEKAT_SHADOW = "sticky right-0 z-10 shadow-[-8px_0_8px_-8px_rgba(15,42,82,0.25)]";
+const LEKAT = `${LEKAT_SHADOW} bg-white`;
+const LEKAT_MATI = `${LEKAT_SHADOW} bg-[#F6F8FB]`;
 
 const lolos = (saring: NilaiSaring, id: string, nilai: string, teks: boolean): boolean => {
   const f = saring[id];
@@ -110,12 +112,14 @@ function BarisTabel({ id, kelas, onBuka, children }: { id?: string; kelas: strin
   return <tr ref={ref} id={id} className={`border-t border-[#EEF2F7] align-top ${kelas}`}>{children}</tr>;
 }
 
-export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tidak ada baris.", idBaris, kelasBaris, bukaBaris }: {
+export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tidak ada baris.", idBaris, kelasBaris, matiBaris, bukaBaris }: {
   label: string; kols: Kol<T>[]; data: T[]; kunci: (r: T) => string; bawah?: (r: T) => ReactNode; kosong?: string;
   /** id elemen baris (untuk tautan loncat dari kartu lain) */
   idBaris?: (r: T) => string | undefined;
   /** kelas tambahan baris, mis. abu-abu bila baris tidak dipakai */
   kelasBaris?: (r: T) => string;
+  /** baris tidak dipakai: sel lekat (sticky) ikut berlatar abu-abu agar sama dengan baris */
+  matiBaris?: (r: T) => boolean;
   /** dipanggil saat baris diminta terbuka lewat loncat() (peristiwa "bukabaris") */
   bukaBaris?: (r: T) => void;
 }) {
@@ -146,7 +150,7 @@ export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tida
             {tampil.map((r) => (
               <Fragment key={kunci(r)}>
                 <BarisTabel id={idBaris?.(r)} kelas={kelasBaris?.(r) ?? ""} onBuka={bukaBaris ? () => bukaBaris(r) : undefined}>
-                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-2 ${k.lekat ? LEKAT : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
+                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-2 ${k.lekat ? (matiBaris?.(r) ? LEKAT_MATI : LEKAT) : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
                 </BarisTabel>
                 {bawah?.(r)}
               </Fragment>

@@ -39,7 +39,7 @@ function KotakCentang({ aktif, onUbah, mati, nama }: { aktif: boolean; onUbah: (
 }
 function PilKecil<T extends string>({ nilai, opsi, onPilih, mati, nama, kosong }: { nilai: T; opsi: readonly T[]; onPilih: (v: T) => void; mati?: boolean; nama: string; kosong?: string }) {
   return (
-    <select aria-label={nama} className={`${selKecil} min-w-[104px]`} value={nilai} disabled={mati} onChange={(e) => onPilih(e.target.value as T)}>
+    <select aria-label={nama} className={`${selKecil} min-w-[92px]`} value={nilai} disabled={mati} onChange={(e) => onPilih(e.target.value as T)}>
       {kosong !== undefined && <option value="">{kosong}</option>}
       {opsi.map((o) => <option key={o} value={o}>{o}</option>)}
     </select>
@@ -47,7 +47,7 @@ function PilKecil<T extends string>({ nilai, opsi, onPilih, mati, nama, kosong }
 }
 function YaTidakKecil({ nilai, onPilih, mati, nama }: { nilai: boolean; onPilih: (v: boolean) => void; mati?: boolean; nama: string }) {
   return (
-    <select aria-label={nama} className={`${selKecil} w-[84px]`} value={nilai ? "ya" : "tidak"} disabled={mati} onChange={(e) => onPilih(e.target.value === "ya")}>
+    <select aria-label={nama} className={`${selKecil} w-[72px]`} value={nilai ? "ya" : "tidak"} disabled={mati} onChange={(e) => onPilih(e.target.value === "ya")}>
       <option value="ya">Ya</option>
       <option value="tidak">Tidak</option>
     </select>
@@ -58,7 +58,7 @@ function PerkKecil({ perk, onPilih, mati, nama }: { perk: boolean; onPilih: (per
   return (
     <select
       aria-label={`${nama}: Perkiraan atau Fix`} disabled={mati} value={perk ? "perk" : "fix"} onChange={(e) => onPilih(e.target.value === "perk")}
-      className={`${selKecil} w-[118px] font-semibold ${perk ? "border-[#C98A00] bg-[#FFF4D6] text-[#8A6200]" : "border-[#2E9E63] bg-[#E6F6EC] text-[#14653A]"}`}
+      className={`${selKecil} w-[112px] font-semibold ${perk ? "border-[#C98A00] bg-[#FFF4D6] text-[#8A6200]" : "border-[#2E9E63] bg-[#E6F6EC] text-[#14653A]"}`}
     >
       <option value="perk">≈ Perkiraan</option>
       <option value="fix">Fix</option>
@@ -129,7 +129,7 @@ export function TabelJadwalTahap({ baris, mati, bukaAwal = [] }: { baris: BarisT
   return (
     <TabelSaring
       label="Jadwal tahap kegiatan" kols={kols} data={baris} kunci={(r) => r.id}
-      idBaris={(r) => r.id} kelasBaris={(r) => (r.aktif ? "" : KELAS_MATI)} bukaBaris={(r) => { if (r.aktif) buka(r.id); }}
+      idBaris={(r) => r.id} kelasBaris={(r) => (r.aktif ? "" : KELAS_MATI)} matiBaris={(r) => !r.aktif} bukaBaris={(r) => { if (r.aktif) buka(r.id); }}
       bawah={(r) => !r.aktif || !terbuka.has(r.id) ? null : (
         <BarisIsi lebar={kols.length}>
           <div id={`isi-${r.id}`} className="flex flex-col gap-2.5">
@@ -171,7 +171,7 @@ export function TabelSesi({ f, ubah, tahun, mati, pa }: PropsTabel) {
       sel: (id) => f.sesi[id].on && (f.sesi[id].bentuk === "Luring" || f.sesi[id].bentuk === "Hybrid")
         ? <PilKecil nilai={f.sesi[id].tempat as string} opsi={TEMPAT_PILIH as readonly string[]} mati={mati} nama={`Tempat ${nama(id)}`} onPilih={(v) => set(id, (s) => { s.tempat = v as TempatSesi; })} />
         : <Strip />,
-      kelasTd: "min-w-[130px]",
+      kelasTd: "min-w-[108px]",
     },
     { id: "mulai", judul: "Mulai", jenis: "teks", nilai: (id) => tgl(jd(id)?.mulai), sel: (id) => (jd(id) ? <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{tgl(jd(id)?.mulai)}</span> : <Strip />) },
     { id: "selesai", judul: "Selesai", jenis: "teks", nilai: (id) => tgl(jd(id)?.selesai), sel: (id) => (jd(id) ? <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{tgl(jd(id)?.selesai)}</span> : <Strip />) },
@@ -208,7 +208,7 @@ export function TabelSesi({ f, ubah, tahun, mati, pa }: PropsTabel) {
   return (
     <TabelSaring
       label="Pelatihan dan briefing" kols={kols} data={ids} kunci={(id) => id}
-      idBaris={(id) => `sesi-${id}`} kelasBaris={(id) => (f.sesi[id].on ? "" : KELAS_MATI)} bukaBaris={(id) => { if (f.sesi[id].on) buka(id); }}
+      idBaris={(id) => `sesi-${id}`} kelasBaris={(id) => (f.sesi[id].on ? "" : KELAS_MATI)} matiBaris={(id) => !f.sesi[id].on} bukaBaris={(id) => { if (f.sesi[id].on) buka(id); }}
       bawah={(id) => {
         if (!f.sesi[id].on || !terbuka.has(id)) return null;
         const s = f.sesi[id];
@@ -313,7 +313,7 @@ export function TabelRapat({ f, ubah, tahun, mati, pa }: PropsTabel) {
   return (
     <TabelSaring
       label="Rapat" kols={kols} data={ids} kunci={(id) => id}
-      idBaris={(id) => `rapat-${id}`} kelasBaris={(id) => (aktif(id) ? "" : KELAS_MATI)} bukaBaris={(id) => { if (aktif(id)) buka(id); }}
+      idBaris={(id) => `rapat-${id}`} kelasBaris={(id) => (aktif(id) ? "" : KELAS_MATI)} matiBaris={(id) => !aktif(id)} bukaBaris={(id) => { if (aktif(id)) buka(id); }}
       bawah={(id) => {
         if (!aktif(id) || !terbuka.has(id)) return null;
         const r = f.rapat[id];
@@ -404,7 +404,7 @@ export function TabelPeran({ f, ubah, mati }: { f: Form; ubah: (fn: (g: Form) =>
   return (
     <TabelSaring
       label="Organisasi pendataan lapangan" kols={kols} data={[...PERAN_DEF]} kunci={(d) => d.id}
-      idBaris={(d) => `peran-${d.id}`} kelasBaris={(d) => (pakai(d) ? "" : KELAS_MATI)}
+      idBaris={(d) => `peran-${d.id}`} kelasBaris={(d) => (pakai(d) ? "" : KELAS_MATI)} matiBaris={(d) => !pakai(d)}
     />
   );
 }

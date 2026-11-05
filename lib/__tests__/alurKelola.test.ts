@@ -81,32 +81,40 @@ describe("posisiAlur (alur bertab)", () => {
 });
 
 describe("alur Identifikasi survei (berhalaman)", () => {
-  it("enam tahap berurutan dengan alamat benar", () => {
+  it("tujuh tahap berurutan dengan alamat benar (6 Nov 2026: Susunan tim kerja menjadi tahap 3)", () => {
     const u = alurIdentifikasi(42);
-    expect(u.map((t) => t.kode)).toEqual(["awal", "lanjutan", "kebutuhan", "pelatihan", "pendataan", "gap"]);
-    expect(u.map((t) => nomorDariLabel(t.label))).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(u.map((t) => t.kode)).toEqual(["awal", "lanjutan", "tim", "kebutuhan", "pelatihan", "pendataan", "gap"]);
+    expect(u.map((t) => nomorDariLabel(t.label))).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(u[0].href).toBe("/sigap/kelola/perencanaan/identifikasi/42");
-    expect(u[3].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/pelatihan");
-    expect(u[4].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/pendataan");
-    expect(u[5].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/gap");
+    expect(u[2].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/tim");
+    expect(u[4].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/pelatihan");
+    expect(u[5].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/pendataan");
+    expect(u[6].href).toBe("/sigap/kelola/perencanaan/identifikasi/42/gap");
   });
-  it("tahap 4 dan 5 disebut sebagai persiapan yang rinciannya di menu masing-masing", () => {
+  it("tahap 5 dan 6 disebut sebagai persiapan yang rinciannya di menu masing-masing", () => {
     const u = alurIdentifikasi(1);
-    expect(u[3].label).toBe("4 · Persiapan pelatihan");
-    expect(u[3].ket).toContain("menu Pelatihan");
-    expect(u[4].label).toBe("5 · Persiapan pendataan");
-    expect(u[4].ket).toContain("menu Pendataan");
+    expect(u[4].label).toBe("5 · Persiapan pelatihan");
+    expect(u[4].ket).toContain("menu Pelatihan");
+    expect(u[5].label).toBe("6 · Persiapan pendataan");
+    expect(u[5].ket).toContain("menu Pendataan");
+  });
+  it("Susunan tim kerja berada di antara identifikasi lanjutan dan rekrutmen dan pengadaan", () => {
+    const p = posisiAlur(alurIdentifikasi("7"), "tim")!;
+    expect(p.no).toBe(3);
+    expect(p.total).toBe(7);
+    expect(p.sebelumnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7/lanjutan");
+    expect(p.berikutnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7/kebutuhan");
   });
   it("posisi persiapan pelatihan: sebelumnya rekrutmen, berikutnya persiapan pendataan", () => {
     const p = posisiAlur(alurIdentifikasi("7"), "pelatihan")!;
-    expect(p.no).toBe(4);
-    expect(p.total).toBe(6);
+    expect(p.no).toBe(5);
+    expect(p.total).toBe(7);
     expect(p.sebelumnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7/kebutuhan");
     expect(p.berikutnya?.href).toBe("/sigap/kelola/perencanaan/identifikasi/7/pendataan");
   });
   it("gap adalah tahap terakhir dan sebelumnya persiapan pendataan", () => {
     const p = posisiAlur(alurIdentifikasi(3), "gap")!;
-    expect(p.no).toBe(6);
+    expect(p.no).toBe(7);
     expect(tahapTerakhir(p)).toBe(true);
     expect(p.sebelumnya?.kode).toBe("pendataan");
   });

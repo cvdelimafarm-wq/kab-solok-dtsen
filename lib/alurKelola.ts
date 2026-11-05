@@ -104,25 +104,27 @@ export function urutanSubAlur(daftar: readonly { kode: string; label: string; ke
 // Alur berhalaman: Identifikasi survei (GSBPM tahap awal). Tiap survei mengikuti urutan yang sama.
 // ---------------------------------------------------------------------------------------------------------------------------------
 
-export const KODE_IDENTIFIKASI = ["awal", "lanjutan", "kebutuhan", "pelatihan", "pendataan", "gap"] as const;
+export const KODE_IDENTIFIKASI = ["awal", "lanjutan", "tim", "kebutuhan", "pelatihan", "pendataan", "gap"] as const;
 export type KodeIdentifikasi = (typeof KODE_IDENTIFIKASI)[number];
 
 /** Alamat dasar satu survei; id harus bilangan bulat positif atau teks angka. */
 export const alamatIdentifikasi = (id: string | number): string => `/sigap/kelola/perencanaan/identifikasi/${encodeURIComponent(String(id))}`;
 
 /**
- * (1 Nov 2026, keputusan user) Enam tahap, dijejerkan agar jelas apa yang harus dikerjakan. Tahap 4 dan 5 hanya MENARIK data dari identifikasi;
+ * (6 Nov 2026) Tujuh tahap: "3 · Susunan tim kerja" disisipkan sebelum Rekrutmen dan pengadaan (jabatan dipindah dari kartu petugas lanjutan).
+ * (1 Nov 2026, keputusan user) Dijejerkan agar jelas apa yang harus dikerjakan. Tahap 5 dan 6 hanya MENARIK data dari identifikasi;
  * rinciannya kelak dikerjakan di menu Pelatihan dan menu Pendataan (data kedua menu itu ditarik dari sini). Halaman "Pelaksanaan" lama (tautan kegiatan,
- * usulan penugasan, laporan harian, Bendahara) tetap ada sebagai halaman rincian, dibuka dari tahap 5 dan 6.
+ * usulan penugasan, laporan harian, Bendahara) tetap ada sebagai halaman rincian, dibuka dari tahap 6 dan 7.
  */
 export function alurIdentifikasi(id: string | number): TahapAlur[] {
   const dasar = alamatIdentifikasi(id);
   return [
     { kode: "awal", label: "1 · Identifikasi awal", ket: "Formulir A-F, pengesahan (PPK dan TU, KPA terakhir), kematangan Fix/Perkiraan, penegasan H-15.", href: dasar },
     { kode: "lanjutan", label: "2 · Identifikasi lanjutan", ket: "Perkiraan menjadi data Fix: kelas, jumlah dan nama petugas, sumber mitra, translok, penginapan.", href: `${dasar}/lanjutan` },
-    { kode: "kebutuhan", label: "3 · Rekrutmen dan pengadaan", ket: "Kebutuhan hilir: rekrutmen mitra dan draf pengadaan (hanya dibaca dari identifikasi lanjutan).", href: `${dasar}/kebutuhan` },
-    { kode: "pelatihan", label: "4 · Persiapan pelatihan", ket: "Sesi, instruktur, dan peserta dari identifikasi; rinciannya dikerjakan di menu Pelatihan.", href: `${dasar}/pelatihan` },
-    { kode: "pendataan", label: "5 · Persiapan pendataan", ket: "Instrumen, jadwal, dan petugas lapangan dari identifikasi; rinciannya dikerjakan di menu Pendataan.", href: `${dasar}/pendataan` },
-    { kode: "gap", label: "6 · Gap pelaksanaan", ket: "Rencana identifikasi lanjutan dibanding kenyataan di SIGAP; temuan ditanggapi.", href: `${dasar}/gap` },
+    { kode: "tim", label: "3 · Susunan tim kerja", ket: "Jabatan dalam tim (ketua, wakil, penanggung jawab) dipilih dari daftar petugas identifikasi lanjutan; rangkap dihitung otomatis.", href: `${dasar}/tim` },
+    { kode: "kebutuhan", label: "4 · Rekrutmen dan pengadaan", ket: "Kebutuhan hilir: rekrutmen mitra dan draf pengadaan (hanya dibaca dari identifikasi lanjutan).", href: `${dasar}/kebutuhan` },
+    { kode: "pelatihan", label: "5 · Persiapan pelatihan", ket: "Sesi, instruktur, dan peserta dari identifikasi; rinciannya dikerjakan di menu Pelatihan.", href: `${dasar}/pelatihan` },
+    { kode: "pendataan", label: "6 · Persiapan pendataan", ket: "Instrumen, jadwal, dan petugas lapangan dari identifikasi; rinciannya dikerjakan di menu Pendataan.", href: `${dasar}/pendataan` },
+    { kode: "gap", label: "7 · Gap pelaksanaan", ket: "Rencana identifikasi lanjutan dibanding kenyataan di SIGAP; temuan ditanggapi.", href: `${dasar}/gap` },
   ];
 }

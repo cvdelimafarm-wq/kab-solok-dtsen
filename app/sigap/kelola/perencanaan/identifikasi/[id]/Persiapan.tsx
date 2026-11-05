@@ -2,7 +2,7 @@
 
 // app/sigap/kelola/perencanaan/identifikasi/[id]/Persiapan.tsx
 //
-// (1 Nov 2026, keputusan user) Tahap 4 "Persiapan pelatihan" dan tahap 5 "Persiapan pendataan" pada alur Identifikasi survei. Halaman ini MENARIK data dari
+// (1 Nov 2026, keputusan user) Tahap 5 "Persiapan pelatihan" dan tahap 6 "Persiapan pendataan" (sebelum 6 Nov 2026: tahap 4 dan 5) pada alur Identifikasi survei. Halaman ini MENARIK data dari
 // identifikasi (formulir awal yang sah) dan merangkumnya; rinciannya kelak dikerjakan di menu Pelatihan dan menu Pendataan, yang membaca data dari sini.
 // Hanya-baca: tidak ada yang ditulis, tidak ada yang memblokir. Logika ringkasan dan daftar periksa: lib/keu/persiapanHilir.ts.
 
