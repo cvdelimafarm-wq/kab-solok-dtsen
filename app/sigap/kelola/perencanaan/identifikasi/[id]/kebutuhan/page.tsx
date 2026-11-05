@@ -36,7 +36,7 @@ function Isi() {
   const hariIni = hariIniWib();
 
   const formSah = useMemo(() => (row && row.ver >= 1 && row.form_sah ? normalisasi(row.form_sah) : null), [row]);
-  const tersimpan = lj.row;
+  const tersimpan = lj.rowHilir; // (5 Nov 2026) versi yang dipakai modul hilir (penanda 20261105a) atau, tanpa penanda, versi terbaru
   const dariAwal = !tersimpan;
   const isi = useMemo(() => (tersimpan ? normalisasiLanjutan(tersimpan.isi) : formSah && row ? awalLanjutan(formSah, row.tahun) : null), [tersimpan, formSah, row]);
   const upd = useMemo(() => ((row?.upd ?? null) as Record<string, { mulai: string; selesai: string }> | null), [row]);

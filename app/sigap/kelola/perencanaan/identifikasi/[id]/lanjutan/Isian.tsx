@@ -87,7 +87,7 @@ export function KartuKelas({ isi, ubah, mati, form, organik, tahun }: Props & { 
   );
 }
 
-function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSamakan }: { k: Kelas; i: number; isi: IsiLanjutan; ubah: Ubah; mati: boolean; periode: string[]; organik: readonly CalonNama[] | null; taut: TautKelas | null; onSamakan: () => void }) {
+export function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSamakan }: { k: Kelas; i: number; isi: IsiLanjutan; ubah: Ubah; mati: boolean; periode: string[]; organik: readonly CalonNama[] | null; taut: TautKelas | null; onSamakan: () => void }) {
   const set = <T extends keyof Kelas>(f: T, v: Kelas[T]) => ubah((g) => { const x = g.kelas.find((e) => e.id === k.id); if (x) x[f] = v; });
   const luring = k.metode === "Luring" || k.metode === "Hybrid";
   const hotel = k.tempat === "Hotel dalam kota" || k.tempat === "Hotel luar kota";

@@ -24,6 +24,8 @@ export function KartuStatusLj(p: {
   status: StatusLanjutan; ada: boolean; ver: number | null; pascaH15: boolean; dirty: boolean;
   alasanDraf: string[]; peringatan: string[]; alasan: string; setAlasan: (s: string) => void; wajibAlasan: boolean;
   bisa: boolean; mengirim: boolean; galat: string | null; onSimpan: () => void; syaratKurang: string[]; dikecualikan?: Set<string>;
+  /** (5 Nov 2026) Tombol Simpan dan kolom alasan pindah ke bilah simpan halaman dan dialog; kartu ini hanya menampilkan status. */
+  tanpaSimpan?: boolean;
 }) {
   const st = labelStatusLanjutan(p.status);
   return (
@@ -49,18 +51,20 @@ export function KartuStatusLj(p: {
           <Poin kelas="!text-[#5C4300]" butir={p.peringatan.map((w) => <span key={w}><Tautan ke={tujuanLanjutan(w)}>{w}</Tautan>{p.dikecualikan?.has(w) && <span className="ml-1.5 rounded bg-[#E6F6EC] px-1.5 text-[11px] font-semibold text-[#14653A]">dikecualikan KPA</span>}</span>)} />
         </Catatan>
       )}
-      {p.wajibAlasan && (
+      {p.wajibAlasan && !p.tanpaSimpan && (
         <label className="block">
           <span className="mb-1 block text-[11.5px] font-semibold text-[#5B6B84]">Alasan perubahan sesudah H-15 (wajib, minimal 10 huruf)</span>
           <textarea className={`${kolom} min-h-[64px] py-2`} rows={2} maxLength={500} value={p.alasan} onChange={(e) => p.setAlasan(e.target.value)} />
         </label>
       )}
       {p.syaratKurang.length > 0 && <Poin butir={p.syaratKurang} />}
-      {p.galat && <p role="alert" className="m-0 rounded-lg border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{p.galat}</p>}
+      {p.galat && !p.tanpaSimpan && <p role="alert" className="m-0 rounded-lg border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{p.galat}</p>}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={tombolUtama} disabled={!p.bisa || p.mengirim || !p.dirty && p.ada || p.syaratKurang.length > 0} onClick={p.onSimpan}>
-          {p.mengirim ? "Menyimpan…" : p.ada ? "Simpan identifikasi lanjutan" : "Simpan versi pertama"}
-        </button>
+        {!p.tanpaSimpan && (
+          <button type="button" className={tombolUtama} disabled={!p.bisa || p.mengirim || !p.dirty && p.ada || p.syaratKurang.length > 0} onClick={p.onSimpan}>
+            {p.mengirim ? "Menyimpan…" : p.ada ? "Simpan identifikasi lanjutan" : "Simpan versi pertama"}
+          </button>
+        )}
         {!p.bisa && <span className="text-[12.5px] text-[#5B6B84]">Menyusun hanya untuk ketua tim, admin RO, atau PPK RO ini.</span>}
       </div>
     </section>

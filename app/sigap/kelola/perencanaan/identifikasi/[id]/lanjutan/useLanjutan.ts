@@ -17,6 +17,8 @@ export type BarisLanjutan = {
   id: number; ident_id: number; tahun: number; ro_kode: string; ver: number; ident_ver: number; ident_ver_sekarang: number;
   kebijakan_id: number | null; kebijakan_ver: number | null; isi: unknown; status: StatusLanjutan; pasca_h15: boolean;
   dibuat_oleh: number | null; diubah_oleh: number | null; diubah_oleh_nama: string | null; dibuat_at: string; diubah_at: string;
+  /** (5 Nov 2026, SQL 20261105a) Penanda versi yang DIPAKAI modul hilir; kosong = hilir mengikuti versi terbaru. Tidak ada bila SQL belum dijalankan. */
+  ver_hilir?: number | null; status_hilir?: StatusLanjutan | null; isi_hilir?: unknown;
 };
 export type VersiLanjutan = { id: number; ident_id: number; ver: number; status: StatusLanjutan; ident_ver: number; kebijakan_id: number | null; pasca_h15: boolean; alasan: string; oleh_nama: string | null; waktu: string };
 export type BarisDokumen = {
@@ -42,8 +44,17 @@ export function useLanjutan(identId: number | null, tahun: number | null, ro: st
   const lembar = useBacaKeu<LembarBerlaku>(tahun ? urlBaca("keu_v_kebijakan_berlaku", { tahun }, { batas: 1 }) : null);
   const muatSemua = useCallback(async () => { await Promise.all([baris.muat(), versi.muat(), dok.muat(), pengecualian.muat()]); }, [baris, versi, dok, pengecualian]);
   const calon = useMemo(() => (ttd.baris ?? []).filter((t) => t.ro_kode === null || t.ro_kode === ro), [ttd.baris, ro]);
+  const row = baris.baris?.[0] ?? null;
+  // Baris menurut modul hilir: bila ada penanda, versi/status/isi diganti salinan penanda; selain itu sama dengan baris terbaru.
+  const pinAda = !!(row && row.ver_hilir != null && row.isi_hilir != null);
+  const rowHilir = useMemo<BarisLanjutan | null>(
+    () => (row && row.ver_hilir != null && row.isi_hilir != null ? { ...row, ver: row.ver_hilir, status: row.status_hilir ?? row.status, isi: row.isi_hilir } : row),
+    [row],
+  );
   return {
-    row: baris.baris?.[0] ?? null,
+    row,
+    rowHilir,
+    pinAda,
     versi: versi.baris ?? [],
     dokumen: dok.baris ?? [],
     pengecualian: pengecualian.baris ?? [],

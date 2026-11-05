@@ -36,7 +36,7 @@ function Isi() {
   const kirim = useKirim(muatSemua);
 
   const formSah = useMemo(() => (row && row.ver >= 1 && row.form_sah ? normalisasi(row.form_sah) : null), [row]);
-  const tersimpan = lj.row;
+  const tersimpan = lj.rowHilir; // (5 Nov 2026) versi yang dipakai modul hilir (penanda 20261105a) atau, tanpa penanda, versi terbaru
   const isi = useMemo(() => (tersimpan ? normalisasiLanjutan(tersimpan.isi) : null), [tersimpan]);
   const hariIni = hariIniWib();
   const terkunci = !row || row.ver < 1 || row.status === "dibatalkan";
