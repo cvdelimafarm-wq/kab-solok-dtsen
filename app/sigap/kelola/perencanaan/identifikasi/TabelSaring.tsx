@@ -58,7 +58,7 @@ function ThSaring({ judul, id, jenis, pilihan, saring, setSaring, lekat }: {
   };
   const semua = Array.from(new Set([...pilihan, ...sekarang]));
   return (
-    <th ref={kotak} scope="col" className={`py-1.5 pr-2 text-left align-bottom font-bold ${lekat ? LEKAT : ""}`}>
+    <th ref={kotak} scope="col" className={`py-1.5 pr-1.5 text-left align-bottom font-bold ${lekat ? LEKAT : ""}`}>
       <button
         ref={tombol} type="button" aria-haspopup="dialog" aria-expanded={buka} aria-label={`Saring kolom ${judul}${aktif ? " (saringan aktif)" : ""}`}
         onClick={bukaKotak}
@@ -150,7 +150,7 @@ export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tida
             {tampil.map((r) => (
               <Fragment key={kunci(r)}>
                 <BarisTabel id={idBaris?.(r)} kelas={kelasBaris?.(r) ?? ""} onBuka={bukaBaris ? () => bukaBaris(r) : undefined}>
-                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-2 ${k.lekat ? (matiBaris?.(r) ? LEKAT_MATI : LEKAT) : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
+                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-1.5 ${k.lekat ? (matiBaris?.(r) ? LEKAT_MATI : LEKAT) : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
                 </BarisTabel>
                 {bawah?.(r)}
               </Fragment>

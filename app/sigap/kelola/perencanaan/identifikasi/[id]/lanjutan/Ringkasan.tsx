@@ -19,6 +19,9 @@ const waktu = (iso: string): string => {
   try { return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(new Date(iso)); } catch { return iso; }
 };
 
+/** Butir peringatan soal jabatan dalam tim (minimal per strata, batas jabatan, rangkap): diatur di langkah "Susunan tim kerja", bukan di daftar petugas. */
+export const butirJabatan = (t: string): boolean => /: minimal \d+ pada S\d|memegang \d+ jabatan|merangkap .*yang tidak boleh dirangkap/i.test(t);
+
 // ---------------------------------------------------------------------------------------------------------------------
 export function KartuStatusLj(p: {
   status: StatusLanjutan; ada: boolean; ver: number | null; pascaH15: boolean; dirty: boolean;
@@ -26,6 +29,8 @@ export function KartuStatusLj(p: {
   bisa: boolean; mengirim: boolean; galat: string | null; onSimpan: () => void; syaratKurang: string[]; dikecualikan?: Set<string>;
   /** (5 Nov 2026) Tombol Simpan dan kolom alasan pindah ke bilah simpan halaman dan dialog; kartu ini hanya menampilkan status. */
   tanpaSimpan?: boolean;
+  /** (6 Nov 2026) alamat langkah "3 · Susunan tim kerja"; butir peringatan soal jabatan (minimal, rangkap) menautkan ke sana. */
+  hrefTim?: string;
 }) {
   const st = labelStatusLanjutan(p.status);
   return (
@@ -48,7 +53,7 @@ export function KartuStatusLj(p: {
       {p.peringatan.length > 0 && (
         <Catatan>
           <p className="m-0 mb-1 font-semibold">Peringatan terhadap identifikasi awal dan lembar kebijakan (tidak memblokir penyimpanan):</p>
-          <Poin kelas="!text-[#5C4300]" butir={p.peringatan.map((w) => <span key={w}><Tautan ke={tujuanLanjutan(w)}>{w}</Tautan>{p.dikecualikan?.has(w) && <span className="ml-1.5 rounded bg-[#E6F6EC] px-1.5 text-[11px] font-semibold text-[#14653A]">dikecualikan KPA</span>}</span>)} />
+          <Poin kelas="!text-[#5C4300]" butir={p.peringatan.map((w) => <span key={w}>{p.hrefTim && butirJabatan(w) ? <Link href={p.hrefTim} className="underline decoration-[#1F5FD1]/50 decoration-dotted underline-offset-[3px] hover:text-[#1F5FD1] hover:decoration-solid" title="Atur di Susunan tim kerja">{w}<span aria-hidden className="ml-1 text-[#1F5FD1]">→</span></Link> : <Tautan ke={tujuanLanjutan(w)}>{w}</Tautan>}{p.dikecualikan?.has(w) && <span className="ml-1.5 rounded bg-[#E6F6EC] px-1.5 text-[11px] font-semibold text-[#14653A]">dikecualikan KPA</span>}</span>)} />
         </Catatan>
       )}
       {p.wajibAlasan && !p.tanpaSimpan && (

@@ -223,7 +223,7 @@ function Isi() {
               <KartuStatusLj
                 status={status} ada={!!tersimpan} ver={tersimpan?.ver ?? null} pascaH15={!!tersimpan?.pasca_h15} dirty={dirty}
                 alasanDraf={sebabDraf} peringatan={peringatan} alasan={alasan} setAlasan={(s) => { setAlasan(s); }} wajibAlasan={wajibAlasan}
-                bisa={bolehSusun} mengirim={kirim.mengirim} galat={kirim.galat} onSimpan={klikSimpan} syaratKurang={syaratKurang} dikecualikan={dikecualikan} tanpaSimpan
+                bisa={bolehSusun} mengirim={kirim.mengirim} galat={kirim.galat} onSimpan={klikSimpan} syaratKurang={syaratKurang} dikecualikan={dikecualikan} tanpaSimpan hrefTim={`/sigap/kelola/perencanaan/identifikasi/${row.id}/tim`}
               />
               <KartuRincian baris={rincian} adaLembar={!!lj.lembar} />
               {tersimpan
