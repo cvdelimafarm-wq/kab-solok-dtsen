@@ -10,7 +10,7 @@ import { useState } from "react";
 import { angka } from "@/lib/keu/ro";
 import { Catatan, Chip, Galat, judulKartu, kartu, kolom, tombolBahaya, tombolKecil, tombolUtama } from "@/app/sigap/keu-ui";
 import {
-  TAHAP, adaPendataan, adaPeriode, daftarPeriode, tglIndo, type Beda, type Butir, type Form,
+  TAHAP, adaPendataan, adaPeriode, daftarPeriode, tglIndo, type Butir, type Form, type TabelBeda,
 } from "@/lib/keu/identifikasi";
 import {
   agendaPeriode, barisH15, cocokkanPok, evaluasiDari, labelStatus, langkahTampil, namaVersi, paketUntukAkun, periksaGeser, rekrutmenDari, siapaMenunggu,
@@ -29,10 +29,67 @@ export const LABEL_AKSI: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+// Tabel perubahan (6 Nov 2026): menggantikan daftar kalimat "Pola jendela pendataan: hari mulai: 1 → 5". Jadwal ditampilkan sebagai tanggal jadi
+// per tahap/sesi/rapat dan periode; isian lain per bagian dengan nilai semula dan menjadi.
+// ---------------------------------------------------------------------------------------------------------------------
+const TH = "py-1.5 pr-3 text-left align-bottom text-[11.5px] font-bold uppercase tracking-[0.04em] text-[#44546F]";
+const TD = "py-1.5 pr-3 align-top text-[12.5px] text-[#1B2B4B]";
+const CHIP_BARU = "rounded bg-[#E6F6EC] px-1.5 py-[1px] font-semibold text-[#14653A]";
+const CHIP_LAMA = "text-[#8A97AD] line-through decoration-[#C5D0E2]";
+
+function TabelPerubahan({ beda }: { beda: TabelBeda }) {
+  const adaPeriodeBeda = beda.jadwal.some((r) => r.periode !== "—");
+  return (
+    <div className="flex flex-col gap-3">
+      {beda.jadwal.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left" aria-label="Perubahan jadwal">
+            <caption className="pb-1 text-left text-[12px] font-semibold text-[#44546F]">Jadwal yang berubah ({beda.jadwal.length})</caption>
+            <thead><tr className="border-b border-[#DCE3EE]">
+              <th scope="col" className={TH}>Kegiatan</th>{adaPeriodeBeda && <th scope="col" className={TH}>Periode</th>}<th scope="col" className={TH}>Semula</th><th scope="col" className={TH}>Menjadi</th>
+            </tr></thead>
+            <tbody>
+              {beda.jadwal.map((r, i) => (
+                <tr key={`${r.kelompok}|${r.nama}|${r.periode}|${i}`} className="border-b border-[#EEF2F7]">
+                  <td className={`${TD} font-semibold text-[#0F2A52]`}>{r.nama}</td>
+                  {adaPeriodeBeda && <td className={`${TD} whitespace-nowrap`}>{r.periode}</td>}
+                  <td className={`${TD} ${r.semula === "—" ? "text-[#8A97AD]" : ""}`}>{r.semula}</td>
+                  <td className={TD}>{r.menjadi === "—" ? <span className="text-[#8A97AD]">— (ditiadakan)</span> : <span className={CHIP_BARU}>{r.menjadi}</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {beda.lain.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left" aria-label="Perubahan isian lain">
+            <caption className="pb-1 text-left text-[12px] font-semibold text-[#44546F]">Isian lain yang berubah ({beda.lain.length})</caption>
+            <thead><tr className="border-b border-[#DCE3EE]">
+              <th scope="col" className={TH}>Bagian</th><th scope="col" className={TH}>Isian</th><th scope="col" className={TH}>Semula</th><th scope="col" className={TH}>Menjadi</th>
+            </tr></thead>
+            <tbody>
+              {beda.lain.map((r) => (
+                <tr key={r.path} className="border-b border-[#EEF2F7]">
+                  <td className={`${TD} text-[#44546F]`}>{r.bagian}</td>
+                  <td className={`${TD} font-semibold text-[#0F2A52]`}>{r.isian}</td>
+                  <td className={`${TD} ${CHIP_LAMA}`}>{r.semula}</td>
+                  <td className={TD}><span className={CHIP_BARU}>{r.menjadi}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
 // Pengesahan
 // ---------------------------------------------------------------------------------------------------------------------
 export function KartuPengesahan(p: {
-  row: BarisIdent; tersedia: AksiIdent[]; syarat: string[]; beda: Beda[]; dampak: string; nPerk: number;
+  row: BarisIdent; tersedia: AksiIdent[]; syarat: string[]; beda: TabelBeda; dampak: string; nPerk: number;
   alasan: string; setAlasan: (s: string) => void; dirty: boolean; mengirim: boolean; galat: string | null; onAksi: (a: AksiIdent, catatan: string) => void; onSimpan: () => void;
 }) {
   const { row, tersedia } = p;
@@ -72,11 +129,11 @@ export function KartuPengesahan(p: {
           <textarea id="alasan-revisi" className={`${kolom} min-h-[72px] py-2`} value={p.alasan} maxLength={500} disabled={!tersedia.includes("simpan")} onChange={(e) => p.setAlasan(e.target.value)} />
         </div>
       )}
-      {revisi && p.beda.length > 0 && (
-        <div>
-          <h3 className="m-0 mb-1 text-[13px] font-bold text-[#0F2A52]">Perubahan dibanding {namaVersi(row.ver).toLowerCase()}</h3>
-          <ul className="m-0 space-y-0.5 pl-5 text-[12.5px] text-[#1B2B4B]">{p.beda.map((b) => <li key={b.path}>{b.t}</li>)}</ul>
-          {p.dampak && <p className="mt-2 text-[12.5px] text-[#44546F]">{p.dampak}</p>}
+      {revisi && (p.beda.jadwal.length > 0 || p.beda.lain.length > 0 || p.dampak !== "") && (
+        <div className="flex flex-col gap-2.5">
+          <h3 className="m-0 text-[13px] font-bold text-[#0F2A52]">Perubahan dibanding {namaVersi(row.ver).toLowerCase()}</h3>
+          {p.beda.jadwal.length > 0 || p.beda.lain.length > 0 ? <TabelPerubahan beda={p.beda} /> : <p className="m-0 text-[12.5px] text-[#44546F]">Perubahan tidak memengaruhi tanggal maupun isian yang ditampilkan (mis. pengaturan tahap yang sedang tidak aktif).</p>}
+          {p.dampak && <p className="m-0 text-[12.5px] text-[#44546F]">{p.dampak}</p>}
         </div>
       )}
       {p.syarat.length > 0 && tersedia.includes("kirim") && <Catatan>{p.syarat.map((s) => <span key={s} className="block">{s}</span>)}</Catatan>}

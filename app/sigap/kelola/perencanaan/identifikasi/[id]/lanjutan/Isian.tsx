@@ -18,6 +18,7 @@ import { adaDiDaftar, cariAkunUnik, namaTerpakaiPeran, terpakaiLain, type CalonN
 import { PILIHAN_LAINNYA, terapkanPilihan } from "@/lib/keu/pilihInstruktur";
 import PilihNama from "../../PilihNama";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl } from "../../Kontrol";
+import { ketRentang } from "@/lib/keu/isianTanggal";
 import SelectCari from "@/app/components/SelectCari";
 
 export type Ubah = (fn: (g: IsiLanjutan) => void) => void;
@@ -90,6 +91,14 @@ export function KartuKelas({ isi, ubah, mati, form, organik, tahun }: Props & { 
 
 export function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSamakan }: { k: Kelas; i: number; isi: IsiLanjutan; ubah: Ubah; mati: boolean; periode: string[]; organik: readonly CalonNama[] | null; taut: TautKelas | null; onSamakan: () => void }) {
   const set = <T extends keyof Kelas>(f: T, v: Kelas[T]) => ubah((g) => { const x = g.kelas.find((e) => e.id === k.id); if (x) x[f] = v; });
+  // (6 Nov 2026) Mengisi salah satu tanggal saat yang lain masih kosong langsung menyamakannya (kelas satu hari = tanggal yang sama).
+  const setTgl = (sisi: "mulai" | "selesai", v: string) => ubah((g) => {
+    const x = g.kelas.find((e) => e.id === k.id); if (!x) return;
+    const lain = sisi === "mulai" ? "selesai" : "mulai";
+    x[sisi] = v;
+    if (v && !x[lain]) x[lain] = v;
+  });
+  const ketHari = ketRentang(k.mulai, k.selesai);
   const luring = k.metode === "Luring" || k.metode === "Hybrid";
   const hotel = k.tempat === "Hotel dalam kota" || k.tempat === "Hotel luar kota";
   const hari = hariKelas(k.mulai, k.selesai);
@@ -128,8 +137,8 @@ export function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSam
           </Isian>
         )}
         {hotel && <Isian judul="Paket hotel">{opsiKolom(k.paket, (s) => set("paket", s as Kelas["paket"]), mati, `Paket kelas ${i + 1}`, PAKET_KELAS)}</Isian>}
-        <Isian judul="Tanggal mulai"><Tgl nama={`Mulai kelas ${i + 1}`} nilai={k.mulai} mati={mati} onUbah={(v) => set("mulai", v)} /></Isian>
-        <Isian judul="Tanggal selesai"><Tgl nama={`Selesai kelas ${i + 1}`} nilai={k.selesai} min={k.mulai || undefined} mati={mati} onUbah={(v) => set("selesai", v)} /></Isian>
+        <Isian judul="Tanggal mulai"><Tgl nama={`Mulai kelas ${i + 1}`} nilai={k.mulai} mati={mati} onUbah={(v) => setTgl("mulai", v)} /></Isian>
+        <Isian judul="Tanggal selesai" ket={ketHari.teks ? <span role={ketHari.galat ? "alert" : undefined} className={ketHari.galat ? "font-semibold text-[#9B1C23]" : "font-semibold text-[#44546F]"}>{ketHari.teks}</span> : undefined}><Tgl nama={`Selesai kelas ${i + 1}`} nilai={k.selesai} min={k.mulai || undefined} mati={mati} onUbah={(v) => setTgl("selesai", v)} /></Isian>
         <Isian judul="Jumlah OH (hari)" ket="Orang-hari per peserta."><Angka nama={`OH kelas ${i + 1}`} nilai={k.oh} maks={60} mati={mati} onUbah={(v) => set("oh", v)} /></Isian>
       </div>
       <div>

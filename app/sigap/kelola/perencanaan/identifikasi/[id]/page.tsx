@@ -15,7 +15,7 @@ import { NavAlur, PenunjukAlur } from "@/app/sigap/kelola/AlurKelola";
 import { alurIdentifikasi, posisiAlur } from "@/lib/alurKelola";
 import { Catatan, Chip, Galat, Kosong, Memuat } from "@/app/sigap/keu-ui";
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
-import { bedaForm, dampakRevisi, daftarPeriode, kematangan, normalisasi, periksa, sesudahH15, tanggalH15, tglIndo, type Form } from "@/lib/keu/identifikasi";
+import { bedaForm, bedaTabel, dampakRevisi, daftarPeriode, kematangan, normalisasi, periksa, sesudahH15, tanggalH15, tglIndo, type Form } from "@/lib/keu/identifikasi";
 import { aksiTersedia, labelStatus, namaVersi, type AksiIdent, type UpdTercatat } from "@/lib/keu/identifikasiHilir";
 import Formulir, { type OpsiRujukan } from "../Formulir";
 import PetaJadwal from "../PetaJadwal";
@@ -67,14 +67,15 @@ function Isi() {
   const rujukanDipilih = f?.berbagi && f.rujukan ? rujukan.find((r) => r.nama === f.rujukan) ?? null : null;
   const hasil = useMemo(() => (f ? periksa(f, tahun, { rujukan: rujukanDipilih }) : { masalah: [], peringatan: [] }), [f, tahun, rujukanDipilih]);
   const kem = useMemo(() => (f ? kematangan(f) : { butir: [], nFix: 0, nPerk: 0 }), [f]);
-  const beda = useMemo(() => (f && formSah ? bedaForm(formSah, f) : []), [f, formSah]);
+  const beda = useMemo(() => (f && formSah ? bedaTabel(formSah, f, tahun) : { jadwal: [], lain: [] }), [f, formSah, tahun]);
   const dampak = useMemo(() => (f && formSah ? dampakRevisi(formSah, f) : ""), [f, formSah]);
+  const nBeda = useMemo(() => (f && formSah ? bedaForm(formSah, f).length : 0), [f, formSah]); // jumlah butir berubah (syarat kirim revisi); tabel `beda` hanya menampilkan yang berdampak pada tanggal/isian
 
   const syarat: string[] = [];
   if (row && (row.status === "draf" || row.status === "revisi")) {
     if (hasil.masalah.length > 0) syarat.push(`${hasil.masalah.length} hal wajib belum lengkap (lihat Hasil identifikasi).`);
     if (row.status === "revisi" && alasan.trim().length < 10) syarat.push("Alasan revisi wajib diisi (minimal 10 huruf).");
-    if (row.status === "revisi" && beda.length === 0) syarat.push("Belum ada perubahan dibanding versi yang berlaku.");
+    if (row.status === "revisi" && nBeda === 0) syarat.push("Belum ada perubahan dibanding versi yang berlaku.");
   }
 
   const simpanArgs = useCallback(() => ({

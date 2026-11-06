@@ -8,7 +8,8 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { kartu, kolom, label as kelasLabel } from "@/app/sigap/keu-ui";
 import { tanggalLengkap } from "@/lib/keu/waktu";
-import { HARI_MAKS, gantiJumlahHari, gantiMulai, gantiSelesai, jumlahHariAntara, type Rentang } from "@/lib/keu/tanggalDurasi";
+import { type Rentang } from "@/lib/keu/tanggalDurasi";
+import { isiMulai, isiSelesai, ketRentang } from "@/lib/keu/isianTanggal";
 
 const pil = "min-h-[40px] rounded-md border px-3 text-[13px] font-semibold disabled:opacity-60";
 const pilMati = `${pil} border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]`;
@@ -102,35 +103,22 @@ export function Angka({ nilai, onUbah, mati, nama, min = 0, maks = 100000 }: { n
   );
 }
 
-/** Isian jumlah hari (>= 1): kosong boleh sementara mengetik; hanya angka sah yang diteruskan. */
-function JumlahHari({ nilai, onUbah, mati, nama }: { nilai: number | null; onUbah: (n: number) => void; mati?: boolean; nama: string }) {
-  const [teks, setTeks] = useState<string>(nilai === null ? "" : String(nilai));
-  useEffect(() => { setTeks(nilai === null ? "" : String(nilai)); }, [nilai]);
-  return (
-    <input
-      type="number" inputMode="numeric" aria-label={nama} className={kolom} value={teks} min={1} max={HARI_MAKS} disabled={mati}
-      onChange={(e) => { const t = e.target.value; setTeks(t); const n = parseInt(t, 10); if (!Number.isNaN(n) && n >= 1) onUbah(Math.min(HARI_MAKS, n)); }}
-      onBlur={() => setTeks(nilai === null ? "" : String(nilai))}
-    />
-  );
-}
-
 /**
- * (28 Okt 2026) Tiga isian berurutan untuk satu rentang tanggal (letakkan di dalam kotak `kisi`): tanggal mulai, jumlah hari, tanggal selesai.
- * Mulai + jumlah hari mengisi selesai; mulai + selesai mengisi jumlah hari (lib/keu/tanggalDurasi). Jumlah hari tidak disimpan.
+ * (6 Nov 2026) Dua isian tanggal untuk satu rentang (letakkan di dalam kotak `kisi`): mulai dan selesai. Satu hari = tanggal yang sama.
+ * Mengisi mulai saat selesai masih kosong langsung menyamakan selesai; jumlah hari tampil otomatis di bawah selesai (tidak perlu diisi).
+ * Dulu ada tiga isian (mulai, jumlah hari, selesai) dan, di rapat, pilihan Satu tanggal/Rentang/Minggu.
  */
 export function TglRentang({ mulai, selesai, onUbah, mati, nama, judulMulai = "Tanggal mulai", judulSelesai = "Tanggal selesai" }: {
   mulai: string; selesai: string; onUbah: (r: Rentang) => void; mati?: boolean; nama: string; judulMulai?: string; judulSelesai?: string;
 }) {
   const r: Rentang = { mulai, selesai };
-  const n = jumlahHariAntara(mulai, selesai);
-  const terbalik = !!mulai && !!selesai && n === null;
-  const ket = terbalik ? "Tanggal selesai mendahului tanggal mulai." : !mulai && !selesai ? "Isi tanggal mulai (atau selesai) dahulu." : undefined;
+  const k = ketRentang(mulai, selesai);
   return (
     <>
-      <Isian judul={judulMulai}><Tgl nama={`${nama} mulai`} nilai={mulai} mati={mati} onUbah={(v) => onUbah(gantiMulai(r, v))} /></Isian>
-      <Isian judul="Jumlah hari" ket={ket}><JumlahHari nama={`${nama} jumlah hari`} nilai={n} mati={mati} onUbah={(h) => onUbah(gantiJumlahHari(r, h))} /></Isian>
-      <Isian judul={judulSelesai}><Tgl nama={`${nama} selesai`} nilai={selesai} min={mulai} mati={mati} onUbah={(v) => onUbah(gantiSelesai(r, v))} /></Isian>
+      <Isian judul={judulMulai}><Tgl nama={`${nama} mulai`} nilai={mulai} mati={mati} onUbah={(v) => onUbah(isiMulai(r, v))} /></Isian>
+      <Isian judul={judulSelesai} ket={k.teks ? <span role={k.galat ? "alert" : undefined} className={k.galat ? "font-semibold text-[#9B1C23]" : "font-semibold text-[#44546F]"}>{k.teks}</span> : undefined}>
+        <Tgl nama={`${nama} selesai`} nilai={selesai} min={mulai || undefined} mati={mati} onUbah={(v) => onUbah(isiSelesai(r, v))} />
+      </Isian>
     </>
   );
 }

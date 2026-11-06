@@ -17,7 +17,7 @@ import {
 } from "@/lib/keu/identifikasi";
 import { jumlahHariAntara } from "@/lib/keu/tanggalDurasi";
 import { recPerk } from "@/lib/keu/waktu";
-import { Angka, Cat, Centang, FixPerk, Isian, Pilihan, YaTidak } from "./Kontrol";
+import { Angka, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, YaTidak } from "./Kontrol";
 import { WaktuIsian } from "./Waktu";
 import { TabelSaring, type Kol } from "./TabelSaring";
 import SelectCari from "@/app/components/SelectCari";
@@ -55,7 +55,7 @@ function YaTidakKecil({ nilai, onPilih, mati, nama }: { nilai: boolean; onPilih:
   );
 }
 /** Penanda Fix atau Perkiraan satu kolom (pilihan ganda). */
-function PerkKecil({ perk, onPilih, mati, nama }: { perk: boolean; onPilih: (perk: boolean) => void; mati?: boolean; nama: string }) {
+export function PerkKecil({ perk, onPilih, mati, nama }: { perk: boolean; onPilih: (perk: boolean) => void; mati?: boolean; nama: string }) {
   return (
     <SelectCari
       aria-label={`${nama}: Perkiraan atau Fix`} disabled={mati} value={perk ? "perk" : "fix"} onChange={(e) => onPilih(e.target.value === "perk")}
@@ -94,8 +94,21 @@ export type BarisTahap = {
   mulai?: string; selesai?: string;
   perkEfektif: boolean; perkSendiri: boolean; onPerk: (perk: boolean) => void;
   catatan?: string;
-  /** isian lengkap tahap ini (pola jendela, selisih hari, dll) */
-  isi: ReactNode;
+  /**
+   * (6 Nov 2026) Tanggal mulai dan selesai diisi langsung di selnya bila `onMulai`/`onSelesai` ada (tanpa tombol Ubah dan tanpa "10 hari sebelum...").
+   * Argumen = tanggal lengkap yang sah. `aksi` = tombol kecil di kolom Aksi (mis. "Samakan dengan pendataan").
+   */
+  onMulai?: (tgl: string) => void; onSelesai?: (tgl: string) => void; aksi?: ReactNode;
+  /** rincian tambahan yang dibuka lewat tombol Ubah/Lihat (mis. jadwal tiap periode); tanpa ini baris tidak punya tombol Ubah */
+  isi?: ReactNode;
+};
+
+const SelTgl = ({ r, sisi, mati }: { r: BarisTahap; sisi: "mulai" | "selesai"; mati: boolean }) => {
+  const nilai = (sisi === "mulai" ? r.mulai : r.selesai) ?? "";
+  const ubahTgl = sisi === "mulai" ? r.onMulai : r.onSelesai;
+  if (!r.aktif) return <Strip />;
+  if (!ubahTgl || mati) return <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{tgl(nilai)}</span>;
+  return <div className="w-[152px]"><Tgl nama={`${r.nama} ${sisi}`} nilai={nilai} onUbah={(v) => { if (v) ubahTgl(v); }} /></div>;
 };
 
 export function TabelJadwalTahap({ baris, mati, bukaAwal = [] }: { baris: BarisTahap[]; mati: boolean; bukaAwal?: string[] }) {
@@ -107,8 +120,8 @@ export function TabelJadwalTahap({ baris, mati, bukaAwal = [] }: { baris: BarisT
       id: "ada", judul: "Ada", jenis: "pilih", nilai: (r) => (r.aktif ? "Ya" : "Tidak"),
       sel: (r) => (r.bolehTiada ? <KotakCentang aktif={r.aktif} mati={mati} onUbah={() => r.onAda?.()} nama={`Ada ${r.nama.toLowerCase()}`} /> : <span className="text-[#44546F]">Wajib</span>),
     },
-    { id: "mulai", judul: "Mulai", jenis: "teks", nilai: (r) => (r.aktif ? tgl(r.mulai) : "—"), sel: (r) => (r.aktif ? <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{tgl(r.mulai)}</span> : <Strip />) },
-    { id: "selesai", judul: "Selesai", jenis: "teks", nilai: (r) => (r.aktif ? tgl(r.selesai) : "—"), sel: (r) => (r.aktif ? <span className="whitespace-nowrap font-semibold text-[#0F2A52]">{tgl(r.selesai)}</span> : <Strip />) },
+    { id: "mulai", judul: "Mulai", jenis: "teks", nilai: (r) => (r.aktif ? tgl(r.mulai) : "—"), sel: (r) => <SelTgl r={r} sisi="mulai" mati={mati} /> },
+    { id: "selesai", judul: "Selesai", jenis: "teks", nilai: (r) => (r.aktif ? tgl(r.selesai) : "—"), sel: (r) => <SelTgl r={r} sisi="selesai" mati={mati} /> },
     { id: "hari", judul: "Hari", jenis: "teks", nilai: (r) => (r.aktif ? hari(r.mulai, r.selesai) : "—"), sel: (r) => (r.aktif ? hari(r.mulai, r.selesai) : <Strip />) },
     {
       id: "perk", judul: "Kematangan", jenis: "pilih", nilai: (r) => (!r.aktif ? "—" : r.perkEfektif ? "Perkiraan" : "Fix"),
@@ -121,17 +134,20 @@ export function TabelJadwalTahap({ baris, mati, bukaAwal = [] }: { baris: BarisT
     },
     { id: "acuan", judul: "Dihitung dari", jenis: "pilih", nilai: (r) => r.acuan, sel: (r) => <span className="text-[#44546F]">{r.acuan}</span>, kelasTd: "min-w-[120px]" },
     {
-      id: "rinci", judul: "Rincian", jenis: "pilih", nilai: (r) => (terbuka.has(r.id) ? "Terbuka" : "Tertutup"), lekat: true,
-      sel: (r) => r.aktif
-        ? <button type="button" aria-expanded={terbuka.has(r.id)} aria-controls={terbuka.has(r.id) ? `isi-${r.id}` : undefined} className={tombolKecil} onClick={() => alih(r.id)}>{terbuka.has(r.id) ? "Tutup" : mati ? "Lihat" : "Ubah"}</button>
-        : <Strip />,
+      id: "rinci", judul: "Aksi", jenis: "pilih", nilai: (r) => (!r.isi ? "—" : terbuka.has(r.id) ? "Terbuka" : "Tertutup"), lekat: true,
+      sel: (r) => !r.aktif || (!r.isi && !r.aksi) ? <Strip /> : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {r.aksi}
+          {r.isi && <button type="button" aria-expanded={terbuka.has(r.id)} aria-controls={terbuka.has(r.id) ? `isi-${r.id}` : undefined} className={tombolKecil} onClick={() => alih(r.id)}>{terbuka.has(r.id) ? "Tutup" : mati ? "Lihat" : "Ubah"}</button>}
+        </div>
+      ),
     },
   ];
   return (
     <TabelSaring
       label="Jadwal tahap kegiatan" kols={kols} data={baris} kunci={(r) => r.id}
       idBaris={(r) => r.id} kelasBaris={(r) => (r.aktif ? "" : KELAS_MATI)} matiBaris={(r) => !r.aktif} bukaBaris={(r) => { if (r.aktif) buka(r.id); }}
-      bawah={(r) => !r.aktif || !terbuka.has(r.id) ? null : (
+      bawah={(r) => !r.aktif || !r.isi || !terbuka.has(r.id) ? null : (
         <BarisIsi lebar={kols.length}>
           <div id={`isi-${r.id}`} className="flex flex-col gap-2.5">
             {r.catatan && <p className="m-0 text-[12.5px] text-[#44546F]">{r.catatan}</p>}

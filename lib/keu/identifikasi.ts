@@ -818,6 +818,96 @@ export function bedaForm(a: Form, b: Form): Beda[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Perubahan dalam bentuk tabel (6 Nov 2026)
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Satu baris perubahan jadwal: tahap, sesi, atau rapat pada satu periode, dengan tanggal jadi (bukan angka pola). */
+export type BedaJadwal = { kelompok: "Tahap" | "Pelatihan dan briefing" | "Rapat"; nama: string; periode: string; semula: string; menjadi: string };
+/** Satu baris perubahan isian lain (bukan jadwal): bagian formulir, nama isian, nilai semula dan menjadi. */
+export type BedaIsian = { path: string; bagian: string; isian: string; semula: string; menjadi: string };
+export type TabelBeda = { jadwal: BedaJadwal[]; lain: BedaIsian[] };
+
+const teksJadwal = (j: { mulai: string; selesai: string } | null | undefined, perk: boolean): string => {
+  if (!j || !j.mulai) return "—";
+  const r = !j.selesai || j.selesai === j.mulai ? tglIndo(j.mulai) : `${tglIndo(j.mulai)} s.d. ${tglIndo(j.selesai)}`;
+  return `${r} (${perk ? "Perkiraan" : "Fix"})`;
+};
+
+/** Bagian formulir tempat sebuah isian berada (untuk pengelompokan di tabel perubahan). */
+function bagianDariJalur(p: string): string {
+  const k = p.split(".")[0];
+  if (["nama", "periode", "keList", "adaUpdating", "adaDiseminasi", "jend", "rel", "kecuali", "tunggal", "instrumen", "cetakPapi", "pulsaLap"].includes(k)) return "Survei dan jadwal";
+  if (["berbagi", "rujukan", "sesi"].includes(k)) return "Pelatihan dan briefing";
+  if (k === "rapat") return "Rapat";
+  if (k === "peran" || k === "tim") return "Organisasi pendataan";
+  if (k === "vanguard") return "Vanguard";
+  return "Konsultasi, rekonsiliasi, diseminasi";
+}
+const URUTAN_BAGIAN = ["Survei dan jadwal", "Pelatihan dan briefing", "Rapat", "Organisasi pendataan", "Konsultasi, rekonsiliasi, diseminasi", "Vanguard"];
+
+/** Jalur yang sudah terwakili oleh baris jadwal (tanggal jadi) sehingga tidak diulang sebagai angka pola/selisih. */
+function terwakiliJadwal(p: string): boolean {
+  const s = p.split(".");
+  if (["jend", "rel", "tunggal"].includes(s[0])) return true;
+  if (s[0] === "kecuali") return ["mulai", "selesai", "perk"].includes(s[2]);
+  if ((s[0] === "sesi" || s[0] === "rapat") && s[2] === "tgl") return true;
+  return false;
+}
+
+/**
+ * Perubahan antara dua salinan formulir sebagai TABEL: (1) jadwal yang benar-benar berubah, dinyatakan sebagai tanggal jadi per tahap, sesi
+ * dan rapat untuk tiap periode (pola hari dan selisih hari tidak ditampilkan mentah); (2) isian lain, tiap isian satu baris dengan nilai semula
+ * dan menjadi. `bedaForm` (kalimat) tetap ada dan dipakai untuk dampak revisi.
+ */
+export function bedaTabel(a: Form, b: Form, tahun: number): TabelBeda {
+  const jadwal: BedaJadwal[] = [];
+  const periodeSemua = Array.from(new Set([...daftarPeriode(a), ...daftarPeriode(b)]));
+  const banyak = periodeSemua.length > 1 || adaPeriode(a) !== adaPeriode(b);
+  const namaP = (P: string) => (banyak || P !== "Kegiatan" ? P : "—");
+  for (const P of periodeSemua) {
+    const ja = daftarPeriode(a).includes(P) ? hitungJadwal(a, P, tahun) : {};
+    const jb = daftarPeriode(b).includes(P) ? hitungJadwal(b, P, tahun) : {};
+    for (const [k, nama] of TAHAP) {
+      const x = teksJadwal(ja[k], !!ja[k]?.perk); const y = teksJadwal(jb[k], !!jb[k]?.perk);
+      if (x !== y) jadwal.push({ kelompok: "Tahap", nama, periode: namaP(P), semula: x, menjadi: y });
+    }
+    const ada = (f: Form, ps: string[]) => ps.includes(P);
+    for (const [id, nama] of [["briefing", "Briefing"], ["pelatihan", "Pelatihan"]] as const) {
+      const teks = (f: Form): string => {
+        if (!ada(f, daftarPeriode(f)) || !f.sesi[id].on || f.berbagi) return "—";
+        const first = daftarPeriode(f)[0];
+        const rec = f.sesi[id].tgl?.[periodeTurunan(f, P, tahun) ? first : P];
+        return teksJadwal(tanggalSesi(f, id, P, tahun), recPerk(rec));
+      };
+      const x = teks(a); const y = teks(b);
+      if (x !== y) jadwal.push({ kelompok: "Pelatihan dan briefing", nama, periode: namaP(P), semula: x, menjadi: y });
+    }
+    for (const [id, nama] of [["persiapan", "Rapat persiapan"], ["pelaksanaan", "Rapat pelaksanaan"], ["evaluasi", "Rapat evaluasi"]] as const) {
+      const teks = (f: Form): string => {
+        if (!ada(f, daftarPeriode(f)) || !(id === "evaluasi" || f.rapat[id].on)) return "—";
+        const first = daftarPeriode(f)[0];
+        const rec = f.rapat[id].tgl?.[periodeTurunan(f, P, tahun) ? first : P];
+        return teksJadwal(tanggalRapat(f, id, P, tahun), recPerk(rec));
+      };
+      const x = teks(a); const y = teks(b);
+      if (x !== y) jadwal.push({ kelompok: "Rapat", nama, periode: namaP(P), semula: x, menjadi: y });
+    }
+  }
+  const lain: BedaIsian[] = [];
+  const fa = ratakan(a, "", {}); const fb = ratakan(b, "", {});
+  const paths = Object.keys(fa).concat(Object.keys(fb).filter((k) => !(k in fa)));
+  const norm = (p: string, v: unknown) => (v === undefined ? (p.split(".").pop() === "perk" ? false : "") : v);
+  for (const p of paths) {
+    if (terwakiliJadwal(p)) continue;
+    const x = norm(p, fa[p]); const y = norm(p, fb[p]);
+    if (x === y) continue;
+    lain.push({ path: p, bagian: bagianDariJalur(p), isian: labelJalur(p), semula: nilaiTeks(p, x), menjadi: nilaiTeks(p, y) });
+  }
+  lain.sort((m, n) => URUTAN_BAGIAN.indexOf(m.bagian) - URUTAN_BAGIAN.indexOf(n.bagian));
+  return { jadwal, lain };
+}
+
 /** Kalimat dampak bila revisi `baru` disahkan menggantikan `sah`; kosong bila tidak ada perubahan. */
 export function dampakRevisi(sah: Form, baru: Form): string {
   const beda = bedaForm(sah, baru);

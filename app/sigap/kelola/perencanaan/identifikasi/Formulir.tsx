@@ -6,31 +6,27 @@
 // lib/keu/identifikasi.ts. `mati` = formulir terkunci (menunggu persetujuan, sudah sah, atau akun tanpa hak menyusun).
 
 import { useMemo, useState } from "react";
-import { kisi, kolom, tombolKecil } from "@/app/sigap/keu-ui";
+import { kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import {
   JENIS_PERIODE,
-  NAMA_BULAN,
   NAMA_PERIODE,
-  PANJANG_PERIODE,
   adaPendataan,
   adaPeriode,
   adalahAdhoc,
   daftarPeriode,
   hitungJadwal,
+  jadwalValid,
   jendelaPeriode,
-  jendelaPola,
   kecualiAktif,
   ringkasPetugas,
-  selisihHari,
   tglIndo,
   type Form,
   type Instrumen,
 } from "@/lib/keu/identifikasi";
-import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl, TglRentang, YaTidak } from "./Kontrol";
-import { BarisRelatif } from "./Relatif";
-import { TabelJadwalTahap, TabelPeran, TabelRapat, TabelSesi, KartuHonorTim, type BarisTahap } from "./TabelAwal";
-import { mingguDariTanggal, mingguKe, namaBulan, namaHari, akhirBulanDari, polaDariTanggal, tanggalLengkap } from "@/lib/keu/waktu";
-import { keteranganHari } from "@/lib/keu/tanggalDurasi";
+import { Bagian, Cat, Centang, Isian, Pilihan, YaTidak } from "./Kontrol";
+import { PerkKecil, TabelJadwalTahap, TabelPeran, TabelRapat, TabelSesi, KartuHonorTim, type BarisTahap } from "./TabelAwal";
+import { jumlahHariAntara } from "@/lib/keu/tanggalDurasi";
+import { ALASAN_KHUSUS, putusanPendataan, relDariTanggal, relSamaDenganAcuan, relSudahSama, terapkanTanggalPendataan } from "@/lib/keu/isianTanggal";
 import SelectCari from "@/app/components/SelectCari";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
@@ -63,51 +59,24 @@ export default function Formulir(p: PropsFormulir) {
 // ---------------------------------------------------------------------------------------------------------------------
 // A. Survei dan jadwal
 // ---------------------------------------------------------------------------------------------------------------------
-const pilihSel = "box-border min-h-[40px] rounded-md border border-[#C5D0E2] bg-white px-2 text-[13.5px] font-semibold text-[#0F2A52] focus:outline-2 focus:outline-[#1F5FD1] disabled:opacity-60";
-const ringkasHasil = (x: { mulai: string; selesai: string } | undefined): string => (x && x.mulai ? `${tglIndo(x.mulai)} s.d. ${tglIndo(x.selesai)}${keteranganHari(x.mulai, x.selesai)}` : "Belum dapat dihitung");
+/** Tahap acuan tiap tahap turunan (kembaran ANC di lib/keu/identifikasi.ts). */
+const ACUAN_TAHAP = { updating: "pendataan", pengolahan: "pendataan", pasca: "pengolahan", diseminasi: "pasca" } as const;
+type KunciRel = keyof typeof ACUAN_TAHAP;
 
 function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati"> & { pa: string; setPa: (p: string) => void; lst: string[] }) {
   const pend = adaPendataan(f);
   const adaKe = adaPeriode(f);
   const opsKe = NAMA_PERIODE[f.periode];
-  const LEN = PANJANG_PERIODE[f.periode];
   const first = lst[0];
   const banyak = lst.length > 1;
   const J = f.jend;
-  const [modeIsi, setModeIsi] = useState<{ mulai: "Tanggal" | "Minggu"; selesai: "Tanggal" | "Minggu" }>({ mulai: "Tanggal", selesai: "Tanggal" });
-  const [salahTgl, setSalahTgl] = useState<{ mulai: string; selesai: string }>({ mulai: "", selesai: "" });
   const jp = useMemo(() => hitungJadwal(f, pa, tahun), [f, pa, tahun]);
+  // Pesan sesaat per tahap (mis. tanggal terlalu jauh dari tahap acuan, atau di luar jangkauan pola); hilang begitu tanggal berikutnya sah.
+  const [catatanTgl, setCatatanTgl] = useState<Record<string, string>>({});
+  const setCat = (k: string, v: string) => setCatatanTgl((x) => ((x[k] ?? "") === v ? x : { ...x, [k]: v }));
 
-  const setJend = (patch: Partial<Form["jend"]>) => ubah((g) => { Object.assign(g.jend, patch); });
   const semua = opsKe.length > 0 && f.keList.length === opsKe.length;
-  const bulanTeks = (off: number) => {
-    const awal = NAMA_PERIODE[f.periode].indexOf(first) * LEN;
-    const nm = first && awal >= 0 ? NAMA_BULAN[(awal + off) % 12] : "";
-    const contoh = nm ? ` (${nm} untuk ${first})` : "";
-    if (LEN === 1) return (off === 0 ? "bulan periode" : `${off} bulan setelah periode`) + contoh;
-    return (off < LEN ? `bulan ke-${off + 1} periode` : `${off - LEN + 1} bulan setelah periode`) + contoh;
-  };
-  const PRESET: [string, Partial<Form["jend"]>][] = [];
-  if (LEN !== 12) {
-    if (LEN === 1) PRESET.push(["7 hari terakhir bulan periode", { mb: 0, mj: "akhir", mn: 7, sb: 0, sj: "akhir", sn: 0 }]);
-    PRESET.push([LEN === 1 ? "Tanggal 1–15 bulan periode" : "Tanggal 1–15 bulan pertama periode", { mb: 0, mj: "tgl", mn: 1, sb: 0, sj: "tgl", sn: 15 }]);
-    PRESET.push(["Tanggal 1–15 bulan setelah periode", { mb: LEN, mj: "tgl", mn: 1, sb: LEN, sj: "tgl", sn: 15 }]);
-    PRESET.push([LEN === 1 ? "Seluruh bulan periode" : "Seluruh bulan terakhir periode", { mb: LEN - 1, mj: "tgl", mn: 1, sb: LEN - 1, sj: "akhir", sn: 0 }]);
-    PRESET.push([LEN === 1 ? "Seluruh bulan berikutnya" : "Seluruh periode berikutnya", { mb: LEN, mj: "tgl", mn: 1, sb: 2 * LEN - 1, sj: "akhir", sn: 0 }]);
-  }
-  // (2 Nov 2026) "Tanpa pola": tiap periode yang dicentang diberi jadwal sendiri (lewat mekanisme pengecualian), jadi tanggal bebas diisi tanpa terikat pola bulan ke-n.
-  const ALASAN_TANPA_POLA = "Tanpa pola: jadwal tiap periode diisi sendiri.";
-  const tanpaPola = adaKe && lst.length > 0 && lst.every((P) => !!kecualiAktif(f, P));
   const adaKecuali = adaKe && lst.some((P) => !!kecualiAktif(f, P));
-  const aturTanpaPola = () => ubah((g) => {
-    if (tanpaPola) { for (const P of lst) delete g.kecuali[P]; return; }
-    for (const P of lst) {
-      if (g.kecuali[P]?.on) continue;
-      const w = jendelaPola(f, P, tahun);
-      g.kecuali[P] = { on: true, mulai: w.mulai, selesai: w.selesai, alasan: ALASAN_TANPA_POLA, perk: false };
-    }
-  });
-  const samaPola = (q: Partial<Form["jend"]>) => J.mb === q.mb && J.sb === q.sb && J.mj === q.mj && J.sj === q.sj && J.mn === q.mn && (J.sj === "akhir" || J.sn === q.sn);
 
   const gantiJenis = (jenis: Form["periode"]) => ubah((g) => {
     g.periode = jenis;
@@ -119,156 +88,71 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
     g.keList = NAMA_PERIODE[g.periode].filter((x) => s.includes(x));
     for (const k of Object.keys(g.kecuali)) if (!g.keList.includes(k)) delete g.kecuali[k];
   });
-  const setRel = (k: "updating" | "pengolahan" | "pasca" | "diseminasi", patch: Partial<Form["rel"]["updating"]>) => ubah((g) => { Object.assign(g.rel[k], patch); });
+  const setRel = (k: KunciRel, patch: Partial<Form["rel"]["updating"]>) => ubah((g) => { Object.assign(g.rel[k], patch); });
 
-  // Jadwal dasar (pola jendela bila ada periode, atau jadwal tunggal): dipakai Pendataan, atau Pengolahan bila tanpa pendataan.
-  const wPola = jendelaPeriode(f, pa, tahun);
-  const barisPola = (sisi: "mulai" | "selesai") => {
-    const m = sisi === "mulai";
-    // (2 Nov 2026) Bila periode acuan memakai pengecualian ("Tanpa pola" atau tanggal di luar pola), semua isian di sini mengubah pengecualian itu
-    // (tanggal mutlak). Pilihan "akhir bulan" milik pola jadi tidak berlaku, supaya tidak ada dua sumber yang saling bertentangan.
-    const kcF = first ? kecualiAktif(f, first) : null;
-    const akhir = !kcF && (m ? J.mj : J.sj) === "akhir";
-    const bln = m ? J.mb : J.sb;
-    const n = m ? J.mn : J.sn;
-    const awal = first ? NAMA_PERIODE[f.periode].indexOf(first) * LEN : -1;
-    const ac = first ? jendelaPeriode(f, first, tahun) : null;
-    const tglAcuan = ac ? (m ? ac.mulai : ac.selesai) : "";
-    const mg = mingguDariTanggal(tglAcuan);
-    const mode = modeIsi[sisi];
-    // Tanggal kalender pada periode acuan diterjemahkan menjadi pola (bulan ke-n periode + hari) yang berlaku untuk semua periode.
-    // (2 Nov 2026) Tanggal di luar jangkauan pola (sebelum awal periode atau lebih dari 25 bulan sesudahnya) TIDAK ditolak: hanya diberi peringatan,
-    // lalu disimpan sebagai jadwal khusus periode acuan (pengecualian dengan tanggal mutlak) karena improvisasi sepanjang tahun lazim terjadi.
-    // Bila periode acuan sudah memakai pengecualian (mis. "Tanpa pola"), tanggal selalu langsung mengisi pengecualian itu.
-    const pasang = (d: string) => {
-      const p = polaDariTanggal(d, awal, tahun);
-      const kc = first ? kecualiAktif(f, first) : null;
-      if (p && !kc) {
-        setSalahTgl((x) => ({ ...x, [sisi]: "" }));
-        setJend(m ? { mb: p.bulanKe, mj: "tgl", mn: p.hari } : { sb: p.bulanKe, sj: "tgl", sn: p.hari });
-        return;
-      }
-      if (!first || !tanggalLengkap(d)) return;
-      setSalahTgl((x) => ({ ...x, [sisi]: kc ? "" : `Peringatan: tanggal ini di luar jangkauan pola (awal periode ${first} sampai 25 bulan sesudahnya), jadi disimpan sebagai jadwal khusus ${first}. Pastikan sudah benar; bisa dikembalikan lewat "Kembali ke pola".` }));
-      ubah((g) => {
-        const w = jendelaPeriode(f, first, tahun);
-        const e = g.kecuali[first]?.on ? g.kecuali[first] : { on: true, mulai: w.mulai, selesai: w.selesai, alasan: "", perk: false };
-        e[m ? "mulai" : "selesai"] = d;
-        if (!String(e.alasan || "").trim()) e.alasan = "Di luar jangkauan pola; jadwal diisi manual.";
-        g.kecuali[first] = e;
-      });
-    };
-    const pasangMinggu = (b: number, k: number) => { const w = mingguKe(tahun, b, k); pasang(m ? w.mulai : w.selesai); };
-    const namaBln = (off: number) => { const t = awal + off; return `${NAMA_BULAN[t % 12]}${t >= 12 ? ` ${tahun + Math.floor(t / 12)}` : ""}`; };
-    return (
-      <div className="flex flex-col gap-1.5 rounded-lg border border-[#E3E9F2] bg-[#FAFBFD] p-2.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="w-14 shrink-0 text-[13px] font-bold text-[#0F2A52]">{m ? "Mulai" : "Selesai"}</span>
-          {!akhir && <Pilihan nama={`Cara mengisi ${sisi}`} nilai={mode} opsi={["Tanggal", "Minggu"] as const} mati={mati} onPilih={(v) => setModeIsi((x) => ({ ...x, [sisi]: v }))} />}
-          {kcF ? (!m && tglAcuan && <button type="button" disabled={mati} className={tombolKecil} onClick={() => pasang(akhirBulanDari(tglAcuan))}>Pindah ke akhir bulan</button>) : <Centang aktif={akhir} mati={mati} onUbah={() => setJend(m ? (akhir ? { mj: "tgl", mn: 1 } : { mj: "akhir", mn: 7 }) : (akhir ? { sj: "tgl", sn: 15 } : { sj: "akhir", sn: 0 }))}>{m ? "Hitung dari akhir bulan" : "Akhir bulan"}</Centang>}
-        </div>
-        {akhir ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {m && <><div className="w-[84px]"><Angka nama="Jumlah hari terakhir" nilai={n} min={1} maks={31} mati={mati} onUbah={(v) => setJend({ mn: v })} /></div><span className="text-[13px] text-[#44546F]">hari terakhir</span></>}
-            <span className="text-[13px] text-[#44546F]">bulan</span>
-            <SelectCari aria-label={`Bulan ${sisi}`} className={pilihSel} value={bln} disabled={mati} onChange={(e) => setJend(m ? { mb: Number(e.target.value) } : { sb: Number(e.target.value) })}>
-              {Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{awal >= 0 ? namaBln(i) : `bulan ke-${i + 1}`}</option>)}
-            </SelectCari>
-          </div>
-        ) : mode === "Tanggal" ? (
-          <div className="w-[200px]"><Tgl nama={`Tanggal ${sisi} (periode acuan ${first})`} nilai={tglAcuan} mati={mati} onUbah={(v) => { if (v) pasang(v); }} /></div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <SelectCari aria-label={`Bulan ${sisi}`} className={pilihSel} value={mg ? mg.bulan : ""} disabled={mati} onChange={(e) => pasangMinggu(Number(e.target.value), mg?.minggu ?? 1)}>
-              {!mg && <option value="">Pilih bulan…</option>}
-              {Array.from({ length: 12 }, (_, i) => <option key={i} value={i}>{namaBulan(i)}</option>)}
-            </SelectCari>
-            <SelectCari aria-label={`Minggu ke- ${sisi}`} className={pilihSel} value={mg ? mg.minggu : 1} disabled={mati || !mg} onChange={(e) => mg && pasangMinggu(mg.bulan, Number(e.target.value))}>
-              {[1, 2, 3, 4, 5].map((k) => <option key={k} value={k}>Minggu ke-{k}</option>)}
-            </SelectCari>
-          </div>
-        )}
-        {salahTgl[sisi] && <span role="status" className="rounded-md border border-[#F2D58A] bg-[#FFF8E6] px-2 py-1 text-[12px] font-semibold text-[#8A5A00]">{salahTgl[sisi]}</span>}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="rounded-md border border-[#CFE6D8] bg-white px-2 py-1 text-[12.5px] font-bold text-[#14653A]">→ {tglIndo(m ? wPola.mulai : wPola.selesai)}{banyak ? ` (${pa})` : ""}</span>
-          <span className="text-[12px] text-[#5B6B84]">
-            {akhir ? bulanTeks(bln)
-              : mode === "Tanggal" ? (mg ? `${namaHari(tglAcuan)}, setara minggu ke-${mg.minggu} ${namaBulan(mg.bulan)}` : "")
-              : `${m ? "Senin" : "Jumat"}, ${tglIndo(tglAcuan)}`}
-          </span>
-        </div>
-      </div>
-    );
+  // (6 Nov 2026) Tanggal diisi langsung pada barisnya. Pendataan (atau Pengolahan bila tanpa pendataan) disimpan sebagai pola/pengecualian/jadwal tunggal,
+  // tahap lain sebagai selisih hari terhadap tahap acuannya; keduanya diurus lib/keu/isianTanggal.ts.
+  const aturDasar = (sisi: "mulai" | "selesai", d: string) => {
+    const k = putusanPendataan(f, pa, sisi, d, tahun);
+    setCat("dasar", k.aksi === "khusus" && k.luarPola ? "Tanggal ini di luar jangkauan pola (sebelum awal periode atau lebih dari 24 bulan sesudahnya), jadi disimpan sebagai jadwal khusus periode ini." : "");
+    ubah((g) => { terapkanTanggalPendataan(g, pa, sisi, d, tahun); });
   };
-  const dasar = adaKe ? (
-    <div className="flex flex-col gap-3">
-      {(PRESET.length > 0 || adaKe) && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[12.5px] font-semibold text-[#44546F]">Pola umum (ketuk untuk mengisi otomatis):</span>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Pola umum">
-            {PRESET.map(([l, q]) => (
-              <button key={l} type="button" disabled={mati} aria-pressed={!tanpaPola && samaPola(q)} onClick={() => { if (tanpaPola) aturTanpaPola(); setJend(q); }}
-                className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${!tanpaPola && samaPola(q) ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>{l}</button>
-            ))}
-            <button type="button" disabled={mati} aria-pressed={tanpaPola} onClick={aturTanpaPola}
-              className={`min-h-[40px] rounded-md border px-3 text-[13px] font-semibold ${tanpaPola ? "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" : "border-[#C5D0E2] bg-white text-[#1B2B4B] hover:bg-[#EEF2F7]"}`}>Tanpa pola (isi tanggal tiap periode sendiri)</button>
-          </div>
-        </div>
-      )}
-      {banyak && <span className="text-[12.5px] text-[#44546F]">Isi tanggal untuk periode acuan <b>{first}</b>. Periode lain memakai pola yang sama (bulan ke-n sejak awal periode, tanggal yang sama).</span>}
-      {barisPola("mulai")}
-      {barisPola("selesai")}
-      <ul className="m-0 list-none space-y-0.5 p-0 text-[12.5px] text-[#44546F]" aria-label="Hasil pola tiap periode">
-        {lst.slice(0, 4).map((P) => { const w = jendelaPeriode(f, P, tahun); return <li key={P}>{P}{kecualiAktif(f, P) ? " (jadwal khusus)" : ""}: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}{keteranganHari(w.mulai, w.selesai)}</li>; })}
-        {lst.length > 4 && <li>… dan {lst.length - 4} periode lain</li>}
-      </ul>
-    </div>
-  ) : (
-    <div className={kisi}>
-      <TglRentang nama="Jadwal" judulMulai="Mulai" judulSelesai="Selesai" mulai={f.tunggal.mulai} selesai={f.tunggal.selesai} mati={mati} onUbah={(r) => ubah((g) => { g.tunggal.mulai = r.mulai; g.tunggal.selesai = r.selesai; })} />
-    </div>
-  );
+  const aturRel = (k: KunciRel, sisi: "mulai" | "selesai", d: string) => {
+    const h = relDariTanggal(f.rel[k], jp[ACUAN_TAHAP[k]], sisi, d);
+    if ("galat" in h) { setCat(k, h.galat); return; }
+    setCat(k, "");
+    setRel(k, h.patch);
+  };
 
-  // (5 Nov 2026) Jadwal tahap sebagai tabel: tiap tahap satu baris; isian lengkapnya dibuka lewat tombol Ubah pada baris.
+  // Perkiraan/Fix jadwal dasar: milik pengecualian bila periode ini punya pengecualian, selain itu milik pola atau jadwal tunggal.
+  const eIni = adaKe ? kecualiAktif(f, pa) : null;
+  const perkDasar = eIni ? !!eIni.perk : adaKe ? !!J.perk : !!f.tunggal.perk;
+  const setPerkDasar = (v: boolean) => ubah((g) => {
+    if (adaKe) { const e = g.kecuali[pa]; if (e?.on) e.perk = v; else g.jend.perk = v; } else g.tunggal.perk = v;
+  });
+  const acuanDasar = !adaKe ? "Jadwal tunggal" : eIni ? "Jadwal khusus periode ini" : pa === first ? (banyak ? "Pola, berlaku untuk semua periode" : "Pola jendela periode") : `Mengikuti pola ${first}`;
+  const rinciPeriode = adaKe && (banyak || adaKecuali) ? <JadwalPeriode f={f} ubah={ubah} tahun={tahun} mati={mati} lst={lst} pa={pa} /> : undefined;
+
+  // (5 Nov 2026) Jadwal tahap sebagai tabel: tiap tahap satu baris. (6 Nov 2026) Tanggal mulai dan selesai diisi langsung di baris.
   const barisTahap: BarisTahap[] = [];
   if (pend) {
     barisTahap.push({
       id: "tahap-updating", no: 1, nama: "Updating", acuan: "Pendataan lapangan", aktif: f.adaUpdating, bolehTiada: true,
       onAda: () => ubah((g) => { g.adaUpdating = !g.adaUpdating; }),
       mulai: jp.updating?.mulai, selesai: jp.updating?.selesai, perkEfektif: !!jp.updating?.perk, perkSendiri: f.rel.updating.perk, onPerk: (v) => setRel("updating", { perk: v }),
-      isi: <BarisRelatif tahap="Updating" acuan="pendataan" rel={f.rel.updating} mulai={jp.updating?.mulai} selesai={jp.updating?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("updating", p)} />,
+      onMulai: (d) => aturRel("updating", "mulai", d), onSelesai: (d) => aturRel("updating", "selesai", d),
     });
     barisTahap.push({
-      id: "tahap-pendataan", no: 2, nama: "Pendataan lapangan", acuan: adaKe ? "Pola jendela periode" : "Jadwal tunggal", aktif: true,
-      mulai: jp.pendataan?.mulai, selesai: jp.pendataan?.selesai, perkEfektif: !!jp.pendataan?.perk, perkSendiri: adaKe ? !!J.perk : !!f.tunggal.perk,
-      onPerk: (v) => (adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; })),
-      catatan: adaKe ? (kecualiAktif(f, pa) ? "Periode ini memakai pengecualian (lihat bagian Pengecualian di bawah)." : "Mengikuti pola jendela di bawah, berlaku untuk semua periode yang dicentang.") : undefined,
-      isi: dasar,
+      id: "tahap-pendataan", no: 2, nama: "Pendataan lapangan", acuan: acuanDasar, aktif: true,
+      mulai: jp.pendataan?.mulai, selesai: jp.pendataan?.selesai, perkEfektif: !!jp.pendataan?.perk, perkSendiri: perkDasar, onPerk: setPerkDasar,
+      onMulai: (d) => aturDasar("mulai", d), onSelesai: (d) => aturDasar("selesai", d),
+      catatan: banyak ? `Daftar jadwal tiap periode. Tanggal yang diisi pada ${first} berlaku untuk semua periode; mengubah periode lain menjadikannya jadwal khusus.` : undefined,
+      isi: rinciPeriode,
     });
   }
   barisTahap.push({
-    id: "tahap-pengolahan", no: pend ? 3 : 1, nama: "Pengolahan", acuan: pend ? "Pendataan lapangan" : "Jadwal dasar", aktif: true,
-    mulai: jp.pengolahan?.mulai, selesai: jp.pengolahan?.selesai, perkEfektif: !!jp.pengolahan?.perk, perkSendiri: pend ? f.rel.pengolahan.perk : adaKe ? !!J.perk : !!f.tunggal.perk,
-    onPerk: (v) => (pend ? setRel("pengolahan", { perk: v }) : adaKe ? setJend({ perk: v }) : ubah((g) => { g.tunggal.perk = v; })),
-    catatan: pend ? "Bawaannya sama dengan jadwal pendataan (0 hari dari mulai dan selesai pendataan). Ubah selisihnya bila pengolahan berbeda." : "Tanpa pendataan: pengolahan memakai jadwal dasar di bawah.",
-    isi: pend ? (
-      <>
-        <BarisRelatif tahap="Pengolahan" acuan="pendataan" rel={f.rel.pengolahan} mulai={jp.pengolahan?.mulai} selesai={jp.pengolahan?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pengolahan", p)} />
-        <div><button type="button" className={tombolKecil} disabled={mati} onClick={() => setRel("pengolahan", { aM: "mulai", dM: 0, aS: "selesai", dS: 0 })}>Samakan dengan jadwal pendataan</button></div>
-      </>
-    ) : dasar,
+    id: "tahap-pengolahan", no: pend ? 3 : 1, nama: "Pengolahan", acuan: pend ? "Pendataan lapangan" : acuanDasar, aktif: true,
+    mulai: jp.pengolahan?.mulai, selesai: jp.pengolahan?.selesai, perkEfektif: !!jp.pengolahan?.perk, perkSendiri: pend ? f.rel.pengolahan.perk : perkDasar,
+    onPerk: (v) => (pend ? setRel("pengolahan", { perk: v }) : setPerkDasar(v)),
+    onMulai: (d) => (pend ? aturRel("pengolahan", "mulai", d) : aturDasar("mulai", d)),
+    onSelesai: (d) => (pend ? aturRel("pengolahan", "selesai", d) : aturDasar("selesai", d)),
+    aksi: pend && !relSudahSama(f.rel.pengolahan) && !mati ? <button type="button" className={tombolKecil} onClick={() => setRel("pengolahan", relSamaDenganAcuan())}>Samakan dengan pendataan</button> : undefined,
+    catatan: !pend && banyak ? `Daftar jadwal tiap periode. Tanggal yang diisi pada ${first} berlaku untuk semua periode; mengubah periode lain menjadikannya jadwal khusus.` : undefined,
+    isi: pend ? undefined : rinciPeriode,
   });
   barisTahap.push({
     id: "tahap-pasca", no: pend ? 4 : 2, nama: "Pasca pengolahan", acuan: "Pengolahan", aktif: true,
     mulai: jp.pasca?.mulai, selesai: jp.pasca?.selesai, perkEfektif: !!jp.pasca?.perk, perkSendiri: f.rel.pasca.perk, onPerk: (v) => setRel("pasca", { perk: v }),
-    isi: <BarisRelatif tahap="Pasca pengolahan" acuan="pengolahan" rel={f.rel.pasca} mulai={jp.pasca?.mulai} selesai={jp.pasca?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("pasca", p)} />,
+    onMulai: (d) => aturRel("pasca", "mulai", d), onSelesai: (d) => aturRel("pasca", "selesai", d),
   });
   barisTahap.push({
     id: "tahap-diseminasi", no: pend ? 5 : 3, nama: "Diseminasi", acuan: "Pasca pengolahan", aktif: f.adaDiseminasi, bolehTiada: true,
     onAda: () => ubah((g) => { g.adaDiseminasi = !g.adaDiseminasi; }),
     mulai: jp.diseminasi?.mulai, selesai: jp.diseminasi?.selesai, perkEfektif: !!jp.diseminasi?.perk, perkSendiri: f.rel.diseminasi.perk, onPerk: (v) => setRel("diseminasi", { perk: v }),
-    isi: <BarisRelatif tahap="Diseminasi" acuan="pasca pengolahan" rel={f.rel.diseminasi} mulai={jp.diseminasi?.mulai} selesai={jp.diseminasi?.selesai} ringkas="" mati={mati} onUbah={(p) => setRel("diseminasi", p)} />,
+    onMulai: (d) => aturRel("diseminasi", "mulai", d), onSelesai: (d) => aturRel("diseminasi", "selesai", d),
   });
+  const masalahJadwal = jadwalValid(f, pa, tahun).masalah;
+  const pesanSesaat = Object.values(catatanTgl).filter(Boolean);
 
   return (
     <Bagian huruf="A" judul="Survei dan jadwal" gsbpm="GSBPM Manajemen" id="bagian-a">
@@ -294,7 +178,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
       <div id="jadwal-tahap" className="scroll-mt-20 flex flex-col gap-3 rounded-xl border border-[#C5D0E2] bg-white p-3">
         <div>
           <h3 className="m-0 text-[15px] font-extrabold text-[#0F2A52]">Jadwal tahap kegiatan{banyak ? ` · ${pa}` : ""}</h3>
-          <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-[#44546F]">Isi dari atas ke bawah. Tahap sesudah pendataan dihitung dari tahap sebelumnya, jadi cukup atur selisih harinya. Semua tanggal bawaannya <b>Perkiraan</b>; pilih <b>Fix</b> bila sudah pasti.</p>
+          <p className="m-0 mt-0.5 text-[12.5px] leading-snug text-[#44546F]">Isi tanggal mulai dan selesai langsung di tiap baris. Tahap sesudah pendataan ikut bergeser bila tahap acuannya berubah. Semua tanggal bawaannya <b>Perkiraan</b>; pilih <b>Fix</b> bila sudah pasti.</p>
         </div>
 
         {banyak && (
@@ -307,45 +191,64 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
         )}
 
         <TabelJadwalTahap baris={barisTahap} mati={mati} bukaAwal={[pend ? "tahap-pendataan" : "tahap-pengolahan"]} />
-      </div>
 
-      {adaKe && (banyak || adaKecuali) && <PengecualianPeriode f={f} ubah={ubah} tahun={tahun} mati={mati} lst={lst} />}
+        {(masalahJadwal.length > 0 || pesanSesaat.length > 0) && (
+          <ul role="alert" className="m-0 flex list-none flex-col gap-1 p-0">
+            {pesanSesaat.map((m) => <li key={m} className="rounded-md border border-[#F2D58A] bg-[#FFF8E6] px-2.5 py-1.5 text-[12.5px] font-semibold text-[#8A5A00]">{m}</li>)}
+            {masalahJadwal.map((m) => <li key={m} className="rounded-md bg-[#FDE8E8] px-2.5 py-1.5 text-[12.5px] font-semibold text-[#9B1C23]">{m}</li>)}
+          </ul>
+        )}
+      </div>
     </Bagian>
   );
 }
 
-function PengecualianPeriode({ f, ubah, tahun, mati, lst }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati"> & { lst: string[] }) {
+/**
+ * (6 Nov 2026) Daftar jadwal pendataan tiap periode (menggantikan "Jendela tiap periode dan pengecualian"): satu tabel, satu baris per periode.
+ * Tanggal diubah lewat baris Pendataan setelah memilih periodenya (tab di atas tabel jadwal tahap). Periode yang jadwalnya berbeda otomatis menjadi
+ * "Jadwal khusus" dengan alasan yang terisi sendiri (boleh ditulis ulang); "Kembali ke pola" menghapus kekhususannya.
+ */
+function JadwalPeriode({ f, ubah, tahun, mati, lst, pa }: Pick<PropsFormulir, "f" | "ubah" | "tahun" | "mati"> & { lst: string[]; pa: string }) {
+  const th = "py-1.5 pr-3 text-left text-[11.5px] font-bold uppercase tracking-[0.04em] text-[#44546F]";
+  const td = "py-1.5 pr-3 align-top text-[13px]";
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="m-0 text-[14px] font-bold text-[#0F2A52]">Jendela tiap periode dan pengecualian</h3>
-      <p className="m-0 text-[12.5px] text-[#44546F]">Semua periode mengikuti pola di atas. Bila satu periode jadwalnya berbeda (mis. libur panjang), buat pengecualian dan tulis alasannya.</p>
-      {lst.map((P) => {
-        const w = jendelaPola(f, P, tahun);
-        const e = kecualiAktif(f, P);
-        const geser = e && w.mulai && e.mulai ? selisihHari(e.mulai, w.mulai) : 0;
-        const setE = (patch: Partial<NonNullable<typeof e>>) => ubah((g) => { Object.assign(g.kecuali[P], patch); });
-        return (
-          <div key={P} className={`rounded-lg border border-[#DCE3EE] p-3 ${e ? "bg-[#FFFBEF]" : "bg-white"}`}>
-            <div className="flex flex-wrap items-center gap-2">
-              <strong className="text-[14px] text-[#0F2A52]">{P}</strong>
-              <span className="text-[12.5px] text-[#44546F]">Pola: {tglIndo(w.mulai)} s.d. {tglIndo(w.selesai)}</span>
-              {!e && <button type="button" className={`${tombolKecil} ml-auto`} disabled={mati} onClick={() => ubah((g) => { g.kecuali[P] = { on: true, mulai: w.mulai, selesai: w.selesai, alasan: "", perk: false }; })}>Buat pengecualian</button>}
-              {e && <button type="button" className={`${tombolKecil} ml-auto`} disabled={mati} onClick={() => ubah((g) => { delete g.kecuali[P]; })}>Kembali ke pola</button>}
-            </div>
-            {e && (
-              <div className="mt-2 flex flex-col gap-2">
-                <div className={kisi}>
-                  <TglRentang nama={P} judulMulai={`${P} mulai`} judulSelesai={`${P} selesai`} mulai={e.mulai} selesai={e.selesai} mati={mati} onUbah={(r) => setE({ mulai: r.mulai, selesai: r.selesai })} />
-                </div>
-                <Isian judul="Alasan pengecualian" ket={`Bergeser ${geser > 0 ? "+" : ""}${geser} hari pada tanggal mulai dibanding pola.`}>
-                  <input className={kolom} value={e.alasan} maxLength={200} disabled={mati} onChange={(ev) => setE({ alasan: ev.target.value })} aria-label={`Alasan pengecualian ${P}`} />
-                </Isian>
-                <FixPerk nama={`Pengecualian ${P}`} perk={e.perk} mati={mati} onPilih={(v) => setE({ perk: v })} />
-              </div>
-            )}
-          </div>
-        );
-      })}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-left" aria-label="Jadwal pendataan tiap periode">
+          <thead><tr className="border-b border-[#DCE3EE]">
+            <th scope="col" className={th}>Periode</th><th scope="col" className={th}>Mulai</th><th scope="col" className={th}>Selesai</th><th scope="col" className={th}>Hari</th>
+            <th scope="col" className={th}>Jadwal</th>
+          </tr></thead>
+          <tbody>
+            {lst.map((P) => {
+              const w = jendelaPeriode(f, P, tahun);
+              const e = kecualiAktif(f, P);
+              const setE = (patch: Partial<NonNullable<typeof e>>) => ubah((g) => { Object.assign(g.kecuali[P], patch); });
+              return (
+                <tr key={P} className={`border-b border-[#EEF2F7] ${e ? "bg-[#FFFBEF]" : P === pa ? "bg-[#F3F7FE]" : ""}`}>
+                  <td className={`${td} font-bold text-[#0F2A52]`}>{P}{P === pa && <span className="ml-1.5 rounded bg-[#E3EEFF] px-1.5 text-[11px] font-semibold text-[#1F5FD1]">dipilih</span>}</td>
+                  <td className={`${td} whitespace-nowrap font-semibold text-[#0F2A52]`}>{tglIndo(w.mulai)}</td>
+                  <td className={`${td} whitespace-nowrap font-semibold text-[#0F2A52]`}>{tglIndo(w.selesai)}</td>
+                  <td className={td}>{jumlahHariAntara(w.mulai, w.selesai) ?? "—"}</td>
+                  <td className={`${td} min-w-[220px]`}>
+                    {!e ? <span className="text-[#44546F]">Mengikuti pola</span> : (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <strong className="text-[#8A5A00]">Jadwal khusus</strong>
+                          <PerkKecil perk={!!e.perk} mati={mati} nama={`Jadwal khusus ${P}`} onPilih={(v) => setE({ perk: v })} />
+                          {!mati && <button type="button" className={tombolKecil} onClick={() => ubah((g) => { delete g.kecuali[P]; })}>Kembali ke pola</button>}
+                        </div>
+                        <input className={kolom} value={e.alasan} maxLength={200} disabled={mati} placeholder={ALASAN_KHUSUS} onChange={(ev) => setE({ alasan: ev.target.value })} aria-label={`Alasan jadwal khusus ${P}`} />
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="m-0 text-[12px] text-[#5B6B84]">Pilih periode lewat tab di atas tabel, lalu ubah tanggalnya di baris Pendataan.</p>
     </div>
   );
 }
