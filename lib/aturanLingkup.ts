@@ -56,8 +56,9 @@ export function periksaSasaranReset(aktor: { adminAplikasi: boolean; lingkup: Li
   if (sasaran.peranKode.some((k) => PERAN_PIN_TERLINDUNGI.includes(k)) || sasaran.punyaIzinKelola) {
     return { error: "PIN akun admin atau pengelola hanya dapat direset oleh Admin Aplikasi.", status: 403 };
   }
-  if (aktor.lingkup === "semua") return null;
-  const ada = sasaran.kegiatanPenugasan.some((k) => aktor.lingkup.includes(k));
+  const l = aktor.lingkup;
+  if (l === "semua") return null;
+  const ada = sasaran.kegiatanPenugasan.some((k) => l.includes(k));
   if (!ada) return { error: "Akun ini tidak bertugas di kegiatan yang Anda kelola.", status: 403 };
   return null;
 }

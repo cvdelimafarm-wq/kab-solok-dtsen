@@ -77,7 +77,7 @@ describe("resetPinOlehAdmin berlingkup", () => {
     const r = await resetPinOlehAdmin(db, aktor([3]), 10);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.pin).toMatch(/^\d{4}$/);
-    expect(db.tulis.some((t) => t.tabel === "sigap_akun" && "pin_hash" in t.nilai)).toBe(true);
+    expect(db.tulis.some((t: { tabel: string; nilai: Baris }) => t.tabel === "sigap_akun" && "pin_hash" in t.nilai)).toBe(true);
     const audit = vi.mocked(akses.catatAudit).mock.calls.at(-1);
     expect(audit?.[2]).toBe("reset_pin_admin");
     expect(JSON.stringify(audit?.[3])).not.toMatch(/"pin"/);

@@ -48,6 +48,13 @@ const sesi = () => akses.buatSesi(7).sesi;
 const get = (url: string) => new Request(url, { headers: { Authorization: `Bearer ${sesi()}` } }) as never;
 const post = (url: string, body: unknown) => new Request(url, { method: "POST", headers: { Authorization: `Bearer ${sesi()}`, "content-type": "application/json" }, body: JSON.stringify(body) }) as never;
 
+/** Tipe kembalian rute (hasil inferensi union objek) bisa memuat undefined; di tes selalu ada respons. */
+async function jalan(p: Promise<Response | undefined> | Response | undefined): Promise<Response> {
+  const r = await p;
+  if (!r) throw new Error("rute tidak memberi respons");
+  return r;
+}
+
 const izin = (level: "lihat" | "kelola", kegiatan: number[], semua = false) => ({ "bencana.admin": { level, semua, kegiatan } });
 const pspKelola = izin("kelola", [1]);
 const spdtKelola = izin("kelola", [2]);
@@ -66,57 +73,57 @@ beforeEach(() => {
 describe("laporan-isi", () => {
   it("POST kegiatan di luar lingkup -> 403 dan tidak menyimpan", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: spdtKelola });
-    const r = await laporanRute.POST(post(URL_L, { kegiatan_id: 1, konfig: null }));
+    const r = await jalan(laporanRute.POST(post(URL_L, { kegiatan_id: 1, konfig: null })));
     expect(r.status).toBe(403);
     expect(laporanLib.simpanLaporan).not.toHaveBeenCalled();
   });
   it("POST kegiatan dalam lingkup -> 200 dan menyimpan", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: spdtKelola });
-    const r = await laporanRute.POST(post(URL_L, { kegiatan_id: 2, konfig: null }));
+    const r = await jalan(laporanRute.POST(post(URL_L, { kegiatan_id: 2, konfig: null })));
     expect(r.status).toBe(200);
     expect(laporanLib.simpanLaporan).toHaveBeenCalledTimes(1);
   });
   it("lingkup semua boleh kegiatan mana pun", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: semuaKelola });
-    expect((await laporanRute.POST(post(URL_L, { kegiatan_id: 2, konfig: null }))).status).toBe(200);
+    expect((await jalan(laporanRute.POST(post(URL_L, { kegiatan_id: 2, konfig: null })))).status).toBe(200);
   });
   it("GET hanya memuat kegiatan dalam lingkup", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: spdtKelola });
-    const j = await (await laporanRute.GET(get(URL_L))).json();
+    const j = await (await jalan(laporanRute.GET(get(URL_L)))).json();
     expect(j.kegiatan.map((k: { id: number }) => k.id)).toEqual([2]);
     expect(Object.keys(j.konfig)).toEqual(["2"]);
   });
   it("tanpa sesi -> 401", async () => {
-    expect((await laporanRute.GET(new Request(URL_L) as never)).status).toBe(401);
+    expect((await jalan(laporanRute.GET(new Request(URL_L) as never))).status).toBe(401);
   });
 });
 
 describe("konfig lembar pendataan", () => {
   it("pengelola PSP tidak dapat mengubah kegiatan lain (2) -> 403", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: pspKelola });
-    const r = await konfigRute.POST(post(URL_K, { kegiatan_id: 2, konfig: null }));
+    const r = await jalan(konfigRute.POST(post(URL_K, { kegiatan_id: 2, konfig: null })));
     expect(r.status).toBe(403);
     expect(konfigLib.simpanKonfig).not.toHaveBeenCalled();
   });
   it("pengelola PSP dapat mengubah kegiatan 1", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: pspKelola });
-    expect((await konfigRute.POST(post(URL_K, { kegiatan_id: 1, konfig: null }))).status).toBe(200);
+    expect((await jalan(konfigRute.POST(post(URL_K, { kegiatan_id: 1, konfig: null })))).status).toBe(200);
   });
   it("pengelola SPDT (tanpa lingkup PSP) ditolak sejak gerbang -> 403", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: spdtKelola });
-    expect((await konfigRute.POST(post(URL_K, { kegiatan_id: 2, konfig: null }))).status).toBe(403);
-    expect((await konfigRute.GET(get(URL_K))).status).toBe(403);
+    expect((await jalan(konfigRute.POST(post(URL_K, { kegiatan_id: 2, konfig: null })))).status).toBe(403);
+    expect((await jalan(konfigRute.GET(get(URL_K)))).status).toBe(403);
   });
   it("GET pengelola PSP hanya memuat kegiatan dalam lingkupnya", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: pspKelola });
-    const j = await (await konfigRute.GET(get(URL_K))).json();
+    const j = await (await jalan(konfigRute.GET(get(URL_K)))).json();
     expect(j.kegiatan.map((k: { id: number }) => k.id)).toEqual([1]);
     expect(Object.keys(j.konfig)).toEqual(["1"]);
   });
   it("mode masuk sebagai tetap ditolak untuk tulis", async () => {
     izinAkunMock.mockResolvedValue({ peran: [], izin: semuaKelola });
     const req = new Request(URL_K, { method: "POST", headers: { Authorization: `Bearer ${akses.buatSesi(7, 99).sesi}`, "content-type": "application/json" }, body: JSON.stringify({ kegiatan_id: 1, konfig: null }) }) as never;
-    expect((await konfigRute.POST(req)).status).toBe(403);
+    expect((await jalan(konfigRute.POST(req))).status).toBe(403);
   });
 });
 
