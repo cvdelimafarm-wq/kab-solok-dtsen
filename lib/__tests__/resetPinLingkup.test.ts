@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 process.env.SUPABASE_SERVICE_ROLE_KEY = "kunci-uji";
 
 vi.mock("@/lib/undangan", () => ({ cekPin: vi.fn(() => false), hashPin: vi.fn(() => ({ hash: "h", salt: "s" })), normNama: (n: string) => n.toLowerCase() }));
-vi.mock("@/lib/sigapMasukNama", () => ({ PIN_AWAL: "1303" }));
+vi.mock("@/lib/sigapMasukNama", () => ({ PIN_AWAL: "1303", kunciPin: (id: number) => `sigap_pin:id:${id}` }));
 vi.mock("@/lib/sigapAkses", () => ({ KEGIATAN_PSP: 1, catatAudit: vi.fn(async () => undefined) }));
 
 import { akunTerlindungi, resetPinOlehAdmin } from "@/lib/sigapPin";

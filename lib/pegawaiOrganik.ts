@@ -24,7 +24,7 @@ export type ProfilPegawai = {
   kantor_kecamatan: string | null;
 };
 
-export type AkunOrganik = { id: number; nama: string; nip: string | null; aktif: boolean; alamat_kecamatan: string | null; alamat_nagari?: string | null };
+export type AkunOrganik = { id: number; nama: string; nip: string | null; aktif: boolean; alamat_kecamatan: string | null; alamat_nagari?: string | null; magang?: boolean | null };
 
 export type BarisPegawai = {
   no: number;
@@ -33,6 +33,8 @@ export type BarisPegawai = {
   nama: string;
   dalam_daftar: boolean;
   akun_aktif: boolean | null;
+  /** Penanda pegawai magang dari akun (sigap_akun.magang). */
+  magang: boolean;
   domisili_kecamatan: string | null;
   domisili_nagari: string | null;
   nip_lama: string | null;
@@ -146,6 +148,7 @@ export function bentukDaftarPegawai(profil: ProfilPegawai[], akun: AkunOrganik[]
         nama: p.nama_lengkap,
         dalam_daftar: true,
         akun_aktif: a ? a.aktif : null,
+        magang: a?.magang === true,
         domisili_kecamatan: kapitalWilayah(p.domisili_kecamatan) ?? kapitalWilayah(a?.alamat_kecamatan),
         domisili_nagari: kapitalWilayah(p.domisili_nagari) ?? kapitalWilayah(a?.alamat_nagari),
         nip_lama: idNip(p.nip_lama),
@@ -167,7 +170,7 @@ export function bentukDaftarPegawai(profil: ProfilPegawai[], akun: AkunOrganik[]
   // Akun organik yang tidak ada di daftar kepegawaian ditaruh di bawah, ditandai
   for (const a of akun.filter((x) => !terpakai.has(x.id)).sort((x, y) => x.nama.localeCompare(y.nama, "id"))) {
     baris.push({
-      no: 0, profil_id: null, akun_id: a.id, nama: a.nama, dalam_daftar: false, akun_aktif: a.aktif,
+      no: 0, profil_id: null, akun_id: a.id, nama: a.nama, dalam_daftar: false, akun_aktif: a.aktif, magang: a.magang === true,
       domisili_kecamatan: kapitalWilayah(a.alamat_kecamatan), domisili_nagari: kapitalWilayah(a.alamat_nagari),
       nip_lama: idNip(a.nip), nip_baru: null, jabatan: null, status: null, jenis_kelamin: null, tanggal_lahir: null, lahir_iso: null, usia: null,
       tmt_teks: null, tmt_iso: null, masa_kerja: null, email: null, kantor_kecamatan: null,

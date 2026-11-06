@@ -41,7 +41,7 @@ const dasar = (): Record<string, Baris[]> => ({
   sigap_akun: [{ id: 1, nama: "Ani", aktif: true }, { id: 2, nama: "Budi", aktif: true }, { id: 3, nama: "Citra", aktif: false }],
   sigap_peran: [{ id: 2, kode: "pj_kegiatan" }],
   sigap_akun_peran: [{ id: 10, akun_id: 2, peran_id: 2, kegiatan_id: 7, diberi_oleh: "iqbal" }],
-  sigap_kegiatan_pj: [
+  sigap_kegiatan_penanggung_jawab: [
     { kegiatan_id: 7, jabatan: "pj", akun_id: null, peran_diberikan_id: null },
     { kegiatan_id: 7, jabatan: "wakil_pj", akun_id: null, peran_diberikan_id: null },
   ],
@@ -52,11 +52,11 @@ describe("bacaSlotPj", () => {
     const t = dasar();
     const a = await bacaSlotPj(buatDb(t), 7);
     expect(a).toEqual({ tersedia: true, slot: [{ jabatan: "pj", akun_id: null, nama: null }, { jabatan: "wakil_pj", akun_id: null, nama: null }] });
-    t.sigap_kegiatan_pj[1].akun_id = 1;
+    t.sigap_kegiatan_penanggung_jawab[1].akun_id = 1;
     expect((await bacaSlotPj(buatDb(t), 7)).slot[1]).toEqual({ jabatan: "wakil_pj", akun_id: 1, nama: "Ani" });
   });
   it("tabel belum ada: tidak galat, dua slot kosong, tersedia=false", async () => {
-    const r = await bacaSlotPj(buatDb(dasar(), ["sigap_kegiatan_pj"]), 7);
+    const r = await bacaSlotPj(buatDb(dasar(), ["sigap_kegiatan_penanggung_jawab"]), 7);
     expect(r.tersedia).toBe(false);
     expect(r.slot).toHaveLength(2);
   });
@@ -74,7 +74,7 @@ describe("aturSlotPj", () => {
     expect(r).toEqual({ ok: true, berubah: true, peranDiberi: true, peranDicabut: false });
     const peran = t.sigap_akun_peran.find((x) => x.akun_id === 1)!;
     expect(peran).toMatchObject({ peran_id: 2, kegiatan_id: 7 });
-    expect(t.sigap_kegiatan_pj.find((x) => x.jabatan === "wakil_pj")).toMatchObject({ akun_id: 1, peran_diberikan_id: peran.id, diubah_oleh: "Iqbal (#354)" });
+    expect(t.sigap_kegiatan_penanggung_jawab.find((x) => x.jabatan === "wakil_pj")).toMatchObject({ akun_id: 1, peran_diberikan_id: peran.id, diubah_oleh: "Iqbal (#354)" });
   });
   it("mengganti pemegang mencabut peran buatan slot dan memberi peran ke pemegang baru", async () => {
     const t = dasar();
@@ -85,7 +85,7 @@ describe("aturSlotPj", () => {
     expect(t.sigap_akun_peran.some((x) => x.akun_id === 1)).toBe(false);
     // akun 2 sudah punya peran itu sebelum slot (id 10): tidak dibuat ganda dan tidak ditandai milik slot
     expect(t.sigap_akun_peran.filter((x) => x.akun_id === 2)).toHaveLength(1);
-    expect(t.sigap_kegiatan_pj.find((x) => x.jabatan === "wakil_pj")).toMatchObject({ akun_id: 2, peran_diberikan_id: null });
+    expect(t.sigap_kegiatan_penanggung_jawab.find((x) => x.jabatan === "wakil_pj")).toMatchObject({ akun_id: 2, peran_diberikan_id: null });
   });
   it("mengosongkan slot mencabut peran buatan slot, tetapi tidak peran lama yang bukan buatan slot", async () => {
     const t = dasar();
@@ -93,7 +93,7 @@ describe("aturSlotPj", () => {
     await aturSlotPj(db, { kegiatanId: 7, jabatan: "wakil_pj", akunId: 1, oleh: "x" });
     await aturSlotPj(db, { kegiatanId: 7, jabatan: "wakil_pj", akunId: null, oleh: "x" });
     expect(t.sigap_akun_peran.some((x) => x.akun_id === 1)).toBe(false);
-    expect(t.sigap_kegiatan_pj.find((x) => x.jabatan === "wakil_pj")).toMatchObject({ akun_id: null, peran_diberikan_id: null });
+    expect(t.sigap_kegiatan_penanggung_jawab.find((x) => x.jabatan === "wakil_pj")).toMatchObject({ akun_id: null, peran_diberikan_id: null });
     await aturSlotPj(db, { kegiatanId: 7, jabatan: "pj", akunId: 2, oleh: "x" }); // peran lama id 10 dipakai ulang
     await aturSlotPj(db, { kegiatanId: 7, jabatan: "pj", akunId: null, oleh: "x" });
     expect(t.sigap_akun_peran.some((x) => x.id === 10)).toBe(true);
@@ -112,7 +112,7 @@ describe("aturSlotPj", () => {
     expect(await aturSlotPj(db, { kegiatanId: 7, jabatan: "wakil_pj", akunId: 3, oleh: "x" })).toMatchObject({ ok: false, status: 404 });
     expect(await aturSlotPj(db, { kegiatanId: 7, jabatan: "wakil_pj", akunId: 99, oleh: "x" })).toMatchObject({ ok: false, status: 404 });
     expect(await aturSlotPj(db, { kegiatanId: 8, jabatan: "pj", akunId: 1, oleh: "x" })).toMatchObject({ ok: false, status: 404 });
-    expect(await aturSlotPj(buatDb(dasar(), ["sigap_kegiatan_pj"]), { kegiatanId: 7, jabatan: "pj", akunId: 1, oleh: "x" })).toMatchObject({ ok: false, status: 409 });
-    expect(t.sigap_kegiatan_pj.find((x) => x.jabatan === "wakil_pj")!.akun_id).toBeNull();
+    expect(await aturSlotPj(buatDb(dasar(), ["sigap_kegiatan_penanggung_jawab"]), { kegiatanId: 7, jabatan: "pj", akunId: 1, oleh: "x" })).toMatchObject({ ok: false, status: 409 });
+    expect(t.sigap_kegiatan_penanggung_jawab.find((x) => x.jabatan === "wakil_pj")!.akun_id).toBeNull();
   });
 });

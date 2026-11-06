@@ -12,7 +12,7 @@
 
 import crypto from "crypto";
 import { cekPin, hashPin, normNama } from "@/lib/undangan";
-import { PIN_AWAL } from "@/lib/sigapMasukNama";
+import { PIN_AWAL, kunciPin } from "@/lib/sigapMasukNama";
 import { catatAudit } from "@/lib/sigapAkses";
 import type { Db } from "@/lib/sigap";
 import { PERAN_PIN_TERLINDUNGI, periksaSasaranReset, type LingkupKegiatan, type SasaranReset } from "@/lib/aturanLingkup";
@@ -149,7 +149,8 @@ export async function resetPinOlehAdmin(
   const { error } = await db.from("sigap_akun").update({ pin_hash: hash, pin_salt: salt, pin_diubah_at: new Date().toISOString(), pin_sementara_sampai: sampai, pin_bawaan: false }).eq("id", akunId);
   if (error) return { ok: false, error: error.message, status: 500 };
   // buka kunci percobaan salah (jika sedang terkunci) supaya PIN sementara langsung bisa dipakai
-  await db.from("bencana_undangan_percobaan").delete().eq("kunci", `sigap_pin:${normNama(String(a.nama ?? ""))}`);
+  await db.from("bencana_undangan_percobaan").delete().eq("kunci", kunciPin(akunId));
+  await db.from("bencana_undangan_percobaan").delete().eq("kunci", `sigap_pin:${normNama(String(a.nama ?? ""))}`); // kunci lama berbasis nama (sebelum 6 Nov 2026)
   await catatAudit(db, aktor.akunId, "reset_pin_admin", { akun_id: akunId, nama: a.nama, oleh: aktor.nama, sampai }); // PIN tidak ikut dicatat
   // (tahap 3) nomor HP kini di sigap_akun.no_hp (diisi dari daftar lama dan master mitra oleh skema-sql/20261106e)
   const hp: string | null = (a.no_hp as string | null)?.trim() || null;

@@ -3,12 +3,18 @@
 // (8 Okt 2026) Login SIGAP/Portal: pencarian & pencocokan nama yang longgar, PIN awal 1303, dan pesan galat yang jelas.
 // Fungsi MURNI (tanpa database/React) dipakai bersama server & klien.
 
+/**
+ * (6 Nov 2026) Kunci penghitung PIN salah / kunci 30 menit: per AKUN (id), bukan per nama, agar dua akun bernama sama
+ * (mis. Desi Ratna Sari 136 & 781) tidak saling mengunci. Kunci lama berbasis nama (`sigap_pin:<nama>`) tetap dibuka saat reset PIN agar kunci yang terlanjur ada sebelum perubahan ini ikut bersih.
+ */
+export const kunciPin = (akunId: number): string => `sigap_pin:id:${akunId}`;
+
 /** PIN awal bersama yang dulu dipasang untuk akun pegawai organik. Wajib diganti. */
 export const PIN_AWAL = "1303";
 export const MIN_HURUF_CARI = 3;
 export const MAKS_SARAN = 8;
 
-export type AkunNama = { id: number; nama: string; jenis?: string | null };
+export type AkunNama = { id: number; nama: string; jenis?: string | null; alamat_kecamatan?: string | null; magang?: boolean | null };
 export type Saran = { id: number; nama: string; ket: string };
 
 /** Sama dengan normNama di lib/undangan (diulang agar modul ini murni): huruf kecil, tanpa tanda baca, spasi tunggal. */
@@ -25,8 +31,46 @@ export function intiNama(s: string): string {
   return normNamaCari(String(s ?? "").split(",")[0]);
 }
 
-export function ketAkun(a: { jenis?: string | null }): string {
+export function ketAkun(a: { jenis?: string | null; magang?: boolean | null }): string {
+  if (a.magang === true) return "Magang";
   return a.jenis === "organik" ? "Pegawai" : "Mitra";
+}
+
+/** "KUBUNG" / "kubung" -> "Kubung" (hanya untuk tampilan saran). */
+function kapitalKecamatan(s: string | null | undefined): string {
+  const t = String(s ?? "").trim();
+  return t.toLowerCase().replace(/(^|[\s-])([a-z])/g, (_, a: string, b: string) => a + b.toUpperCase());
+}
+
+/**
+ * (6 Nov 2026) Id akun yang namanya kembar dengan akun lain (nama tanpa gelar sama). Hanya akun-akun ini yang diberi
+ * keterangan kecamatan pada saran login; nama akun itu sendiri TIDAK berubah (SPJ, surat tugas, dll tetap memakai nama asli).
+ */
+export function idNamaKembar(daftar: AkunNama[]): Set<number> {
+  const perNama = new Map<string, number[]>();
+  for (const a of daftar) {
+    const k = intiNama(a.nama);
+    if (!k) continue;
+    const l = perNama.get(k);
+    if (l) l.push(a.id);
+    else perNama.set(k, [a.id]);
+  }
+  const hasil = new Set<number>();
+  for (const l of perNama.values()) if (l.length > 1) for (const id of l) hasil.add(id);
+  return hasil;
+}
+
+/** Keterangan saran: "Mitra", atau "Mitra · Kubung" bila namanya kembar dan kecamatannya diketahui. */
+export function ketSaran(a: AkunNama, kembar: ReadonlySet<number>): string {
+  const dasar = ketAkun(a);
+  const kec = kembar.has(a.id) ? kapitalKecamatan(a.alamat_kecamatan) : "";
+  return kec ? `${dasar} · ${kec}` : dasar;
+}
+
+/** Ubah daftar akun menjadi saran; keterangan kembar dihitung dari daftar PENUH (bukan hanya dari kandidat). */
+export function jadikanSaran(daftarPenuh: AkunNama[], pilihan: AkunNama[], maks = MAKS_SARAN): Saran[] {
+  const kembar = idNamaKembar(daftarPenuh);
+  return pilihan.slice(0, maks).map((a) => ({ id: a.id, nama: a.nama, ket: ketSaran(a, kembar) }));
 }
 
 function skor(inti: string, k: string, tokenK: string[]): number | null {
@@ -56,9 +100,7 @@ export function cariSemua(daftar: AkunNama[], q: string): AkunNama[] {
 
 /** Saran untuk kolom nama (maks 8). */
 export function cariNama(daftar: AkunNama[], q: string, maks = MAKS_SARAN): Saran[] {
-  return cariSemua(daftar, q)
-    .slice(0, maks)
-    .map((a) => ({ id: a.id, nama: a.nama, ket: ketAkun(a) }));
+  return jadikanSaran(daftar, cariSemua(daftar, q), maks);
 }
 
 export type HasilCocok =

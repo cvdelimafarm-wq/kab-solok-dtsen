@@ -20,6 +20,8 @@ export type AkunPengguna = {
   nik: string | null;
   nip: string | null;
   alamat_kecamatan: string | null;
+  /** (6 Nov 2026) Penanda pegawai magang (sigap_akun.magang): hanya penanda kategori, tidak mengubah hak/penugasan. */
+  magang?: boolean;
   /** Nagari/desa tempat tinggal (dari data pendaftaran Mitra/petugas bila ada). */
   alamat_nagari?: string | null;
   /** Data pendaftaran Mitra (hanya jenis mitra): nomor HP, email, tanggal lahir (yyyy-mm-dd), dan penilaian Mitra SE2026 (1-5). */

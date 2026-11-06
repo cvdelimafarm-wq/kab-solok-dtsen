@@ -306,6 +306,7 @@ export default function Pengguna() {
                         </span>
                         <span>{a.nama}</span>
                       </button>
+                      {a.magang === true && <span className="ml-1.5"><Chip w="navy">Magang</Chip></span>}
                       {!a.aktif && <span className="ml-1.5 text-[11px] font-bold text-[#B42329]">nonaktif</span>}
                     </td>
                     <td className={`${TD} whitespace-nowrap`}>{kapitalWilayah(a.alamat_kecamatan) ?? "–"}</td>

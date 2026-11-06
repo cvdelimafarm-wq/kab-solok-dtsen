@@ -44,7 +44,7 @@ import { bacaTiketReset, buatTiketReset, masihPinAwal, simpanPinBaru } from "@/l
 import { nilaiKolomLupa, nipValid, normNip, pesanDataKurang, putusanLupa, type KolomLupa } from "@/lib/sigapLupaPin";
 import { bolehMasukPortal } from "@/lib/portal/server";
 import { catatAktivitas, ringkasPerangkat } from "@/lib/sigapLog";
-import { PIN_AWAL, alasanPinDitolak, cariNama, cocokkanNama, ketAkun, pesanGalatMasuk, type AkunNama, type Saran } from "@/lib/sigapMasukNama";
+import { PIN_AWAL, alasanPinDitolak, cariNama, cocokkanNama, jadikanSaran, kunciPin, pesanGalatMasuk, type AkunNama, type Saran } from "@/lib/sigapMasukNama";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,7 +101,9 @@ async function daftarNama(db: Db, umurMaksMs = 60_000): Promise<AkunNama[]> {
   if (cacheDaftar && Date.now() - cacheDaftar.at < umurMaksMs) return cacheDaftar.daftar;
   const semua: AkunNama[] = [];
   for (let i = 0; i < 10000; i += 1000) {
-    const { data } = await db.from("sigap_akun").select("id, nama, jenis").eq("aktif", true).order("id").range(i, i + 999);
+    // (6 Nov 2026) + alamat_kecamatan & magang (keterangan saran). Kolom magang baru ada setelah SQL 20261106i: bila belum, ulangi tanpa kolom itu.
+    let { data, error } = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan, magang").eq("aktif", true).order("id").range(i, i + 999);
+    if (error) ({ data } = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan").eq("aktif", true).order("id").range(i, i + 999));
     semua.push(...((data ?? []) as AkunNama[]));
     if (!data || data.length < 1000) break;
   }
@@ -127,7 +129,7 @@ function ipPeminta(req: NextRequest): string {
 }
 
 const BATAS_SARAN_GALAT = 8;
-const sebagaiSaran = (l: AkunNama[]): Saran[] => l.slice(0, BATAS_SARAN_GALAT).map((a) => ({ id: a.id, nama: a.nama, ket: ketAkun(a) }));
+const sebagaiSaran = (daftarPenuh: AkunNama[], l: AkunNama[]): Saran[] => jadikanSaran(daftarPenuh, l, BATAS_SARAN_GALAT);
 
 const PESAN_BELUM_DITUGASKAN = "Akun Anda belum punya tugas atau peran aktif di aplikasi mana pun. Hubungi admin anggaran / PJ kegiatan.";
 
@@ -187,7 +189,7 @@ export async function POST(req: NextRequest) {
           hasil = cocokkanNama(daftar, nama);
         }
         if (hasil.jenis === "kosong") return galat("nama_tidak_ditemukan"); // tidak dihitung sebagai PIN salah
-        if (hasil.jenis === "ambigu") return galat("nama_ambigu", { jumlah: hasil.kandidat.length }, { saran: sebagaiSaran(hasil.kandidat) });
+        if (hasil.jenis === "ambigu") return galat("nama_ambigu", { jumlah: hasil.kandidat.length }, { saran: sebagaiSaran(daftar, hasil.kandidat) });
         dipilih = hasil.akun;
       }
       const { data: akunRow } = await db.from("sigap_akun").select(KOLOM_AKUN).eq("id", dipilih.id).eq("aktif", true).maybeSingle();
@@ -195,7 +197,7 @@ export async function POST(req: NextRequest) {
       const akun = akunRow as AkunRow;
 
       // 2. Kunci percobaan salah per akun (kunci = nama akun sebenarnya, sama dgn yang dibuka admin saat Reset PIN).
-      const kunci = `sigap_pin:${normNama(akun.nama)}`;
+      const kunci = kunciPin(akun.id); // per akun (id): dua akun bernama sama tidak saling mengunci
       const kondisi = await cekKunci(db, kunci);
       if (kondisi.terkunci) return galat("terkunci", { nama: akun.nama, sampai: kondisi.sampai }, { terkunci_sampai: kondisi.sampai }, 429);
 
@@ -357,7 +359,8 @@ export async function POST(req: NextRequest) {
       if (a.pin_diubah_at && new Date(a.pin_diubah_at as string).getTime() >= t.terbit) return NextResponse.json({ error: "Tautan reset ini sudah dipakai. Ulangi verifikasi data bila perlu." }, { status: 410 });
       const err = await simpanPinBaru(db, a.id as number, pin);
       if (err) return NextResponse.json({ error: err }, { status: 500 });
-      await resetGagal(db, `sigap_pin:${normNama(String(a.nama ?? ""))}`); // PIN baru -> kunci percobaan salah dibuka
+      await resetGagal(db, kunciPin(a.id as number)); // PIN baru -> kunci percobaan salah dibuka
+      await resetGagal(db, `sigap_pin:${normNama(String(a.nama ?? ""))}`); // + kunci lama berbasis nama (sebelum 6 Nov 2026)
       await catatAudit(db, a.id as number, "reset_pin_mandiri", { nama: a.nama });
       await db.from("sigap_akun").update({ terakhir_masuk_at: new Date().toISOString() }).eq("id", a.id);
       await catatAktivitas(db, a.id as number, { sesiBaru: true, cara: "reset_pin", halaman: "masuk", perangkat: ringkasPerangkat(req.headers.get("user-agent")) }).catch(() => {});

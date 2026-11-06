@@ -270,6 +270,7 @@ export default function DaftarPegawai({ baris, ringkasan, memuat, bolehKelola, n
                     </button>
                     {b.dalam_daftar && b.akun_id === null && <span className="ml-1.5"><Chip w="wait">Belum punya akun</Chip></span>}
                     {!b.dalam_daftar && <span className="ml-1.5"><Chip w="mut">Di luar daftar</Chip></span>}
+                    {b.magang && <span className="ml-1.5"><Chip w="navy">Magang</Chip></span>}
                     {b.akun_aktif === false && <span className="ml-1.5 text-[11px] font-bold text-[#B42329]">nonaktif</span>}
                   </td>
                   <td className={`${TD} whitespace-nowrap`}>{dash(b.domisili_kecamatan)}</td>

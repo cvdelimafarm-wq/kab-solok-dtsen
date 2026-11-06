@@ -18,7 +18,7 @@ export const jabatanSah = (v: unknown): v is JabatanPj => v === "pj" || v === "w
 /** Dua slot (PJ, Wakil PJ) kegiatan itu; kosong bila belum diisi. tersedia=false bila tabelnya belum dibuat. */
 export async function bacaSlotPj(db: Db, kegiatanId: number): Promise<{ tersedia: boolean; slot: SlotPj[] }> {
   const kosong: SlotPj[] = JABATAN_PJ.map((jabatan) => ({ jabatan, akun_id: null, nama: null }));
-  const { data, error } = await db.from("sigap_kegiatan_pj").select("jabatan, akun_id").eq("kegiatan_id", kegiatanId);
+  const { data, error } = await db.from("sigap_kegiatan_penanggung_jawab").select("jabatan, akun_id").eq("kegiatan_id", kegiatanId);
   if (error) return { tersedia: false, slot: kosong };
   const baris = (data ?? []) as { jabatan: string; akun_id: number | null }[];
   const ids = baris.map((b) => b.akun_id).filter((x): x is number => typeof x === "number");
@@ -43,7 +43,7 @@ export type HasilSlot = { ok: true; berubah: boolean; peranDiberi: boolean; pera
  * Aturan: satu akun tidak boleh mengisi PJ dan Wakil PJ sekaligus pada kegiatan yang sama; akun harus aktif.
  */
 export async function aturSlotPj(db: Db, p: { kegiatanId: number; jabatan: JabatanPj; akunId: number | null; oleh: string }): Promise<HasilSlot> {
-  const { data: slotRows, error: eSlot } = await db.from("sigap_kegiatan_pj").select("jabatan, akun_id, peran_diberikan_id").eq("kegiatan_id", p.kegiatanId);
+  const { data: slotRows, error: eSlot } = await db.from("sigap_kegiatan_penanggung_jawab").select("jabatan, akun_id, peran_diberikan_id").eq("kegiatan_id", p.kegiatanId);
   if (eSlot) return { ok: false, error: "Tabel slot PJ belum dibuat (jalankan SQL 20261106h).", status: 409 };
   const baris = (slotRows ?? []) as { jabatan: string; akun_id: number | null; peran_diberikan_id: number | null }[];
   const lama = baris.find((b) => b.jabatan === p.jabatan);
@@ -79,7 +79,7 @@ export async function aturSlotPj(db: Db, p: { kegiatanId: number; jabatan: Jabat
   }
 
   const { error: eUbah } = await db
-    .from("sigap_kegiatan_pj")
+    .from("sigap_kegiatan_penanggung_jawab")
     .update({ akun_id: p.akunId, peran_diberikan_id: diberiId, diubah_oleh: p.oleh, diubah_at: new Date().toISOString() })
     .eq("kegiatan_id", p.kegiatanId)
     .eq("jabatan", p.jabatan);

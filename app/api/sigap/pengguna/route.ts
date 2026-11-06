@@ -57,9 +57,12 @@ type BarisAkun = {
   verif_jarak_m: number | null;
   terakhir_masuk_at: string | null;
   aktif: boolean;
+  magang?: boolean | null;
 };
 
 const KOLOM = "id, nama, jenis, nik, nip, alamat_kecamatan, mitra_id, petugas_bencana_id, domisili_lat, domisili_lng, domisili_sumber, verif_at, verif_jarak_m, terakhir_masuk_at, aktif";
+// (6 Nov 2026) + penanda magang; kolom baru ada setelah SQL 20261106i -- sebelum itu daftar tetap dibaca dengan KOLOM lama.
+const KOLOM_MAGANG = `${KOLOM}, magang`;
 
 export async function GET(req: NextRequest) {
   const db = supabaseAdmin();
@@ -76,7 +79,8 @@ export async function GET(req: NextRequest) {
     // Akun per jenis (maks ±800; dibaca per halaman 1000 agar aman bila bertambah)
     const akun: BarisAkun[] = [];
     for (let dari = 0; dari < 5000; dari += 1000) {
-      const { data, error } = await db.from("sigap_akun").select(KOLOM).eq("jenis", jenis).order("nama").range(dari, dari + 999);
+      let { data, error } = await db.from("sigap_akun").select(KOLOM_MAGANG).eq("jenis", jenis).order("nama").range(dari, dari + 999);
+      if (error) ({ data, error } = await db.from("sigap_akun").select(KOLOM).eq("jenis", jenis).order("nama").range(dari, dari + 999));
       if (error) return galat("Gagal membaca akun.", 500);
       akun.push(...((data ?? []) as BarisAkun[]));
       if ((data ?? []).length < 1000) break;
@@ -107,6 +111,7 @@ export async function GET(req: NextRequest) {
       nik: samarkanId(a.nik),
       nip: samarkanId(a.nip),
       alamat_kecamatan: a.alamat_kecamatan,
+      magang: a.magang === true,
       alamat_nagari: rincian.get(a.id)?.nagari ?? null,
       // data pendaftaran hanya untuk Mitra (halaman ini butuh izin akses.kelola)
       ...(jenis === "mitra"

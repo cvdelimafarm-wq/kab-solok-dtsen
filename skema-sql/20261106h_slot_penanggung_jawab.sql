@@ -43,7 +43,7 @@ where s.kegiatan_id = 2 and s.jabatan = 'wakil_pj' and s.akun_id is null
   and exists (select 1 from public.sigap_akun a where a.id = 73 and a.nama ilike 'Arini%')
   and exists (select 1 from public.sigap_akun_peran ap join public.sigap_peran p on p.id = ap.peran_id where ap.akun_id = 73 and ap.kegiatan_id = 2 and p.kode = 'pj_kegiatan');
 
--- Verifikasi (diharapkan: slot 10, kosong 8, kegiatan_aktif 5; kegiatan 2 terisi Mailani dan Arini): tiap kegiatan aktif punya 2 slot, semua kosong.
+-- Verifikasi (diharapkan: slot 10, kosong 8, kegiatan_aktif 5; kegiatan 2 terisi Mailani dan Arini):
 select count(*) as slot, count(*) filter (where akun_id is null) as kosong,
        (select count(*) from public.sigap_kegiatan where aktif) as kegiatan_aktif
 from public.sigap_kegiatan_penanggung_jawab;
