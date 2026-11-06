@@ -133,6 +133,7 @@ export function TabelJadwalTahap({ baris, mati, bukaAwal = [] }: { baris: BarisT
           {r.perkEfektif && !r.perkSendiri && <span className="text-[11.5px] font-semibold text-[#8A6200]">ikut tahap sebelumnya</span>}
         </div>
       ),
+      kelasTd: "min-w-[124px]",
     },
     { id: "acuan", judul: "Dihitung dari", jenis: "pilih", nilai: (r) => r.acuan, sel: (r) => <span className="text-[#44546F]">{r.acuan}</span>, kelasTd: "min-w-[120px]" },
     {

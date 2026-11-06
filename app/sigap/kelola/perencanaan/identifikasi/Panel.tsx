@@ -200,7 +200,7 @@ function ModalPerubahan({ mode, namaVersi: nv, beda, dampak, alasan, dirty, nPer
       <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="h-modal-perubahan" className="flex max-h-[92vh] w-full max-w-[760px] flex-col gap-3 overflow-y-auto rounded-t-xl border border-[#DCE3EE] bg-white p-4 shadow-xl sm:rounded-xl">
         <h2 id="h-modal-perubahan" className="m-0 text-[16px] font-bold text-[#0F2A52]">{kirim ? "Kirim revisi untuk persetujuan?" : `Perubahan dibanding ${nv}`}</h2>
         {kirim && <p className="m-0 text-[13px] text-[#44546F]">Periksa perubahan di bawah ini. Bila sudah benar, pilih Oke untuk mengirim revisi ke PPK, Tata Usaha, dan KPA.{dirty ? " Isian yang belum tersimpan ikut disimpan sebagai draf lebih dulu." : ""}</p>}
-        <h3 className="m-0 text-[13px] font-bold text-[#0F2A52]">Perubahan dibanding {nv}</h3>
+        {kirim && <h3 className="m-0 text-[13px] font-bold text-[#0F2A52]">Perubahan dibanding {nv}</h3>}
         {ada ? <TabelPerubahan beda={beda} /> : <p className="m-0 text-[12.5px] text-[#44546F]">Perubahan tidak memengaruhi tanggal maupun isian yang ditampilkan (mis. pengaturan tahap yang sedang tidak aktif).</p>}
         {alasan.trim() !== "" && <p className="m-0 text-[12.5px] text-[#1B2B4B]"><strong>Alasan revisi:</strong> {alasan.trim()}</p>}
         {dampak && <p className="m-0 text-[12.5px] text-[#44546F]">{dampak}</p>}

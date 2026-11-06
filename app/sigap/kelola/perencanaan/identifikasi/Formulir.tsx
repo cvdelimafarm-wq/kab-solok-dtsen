@@ -230,13 +230,13 @@ function JadwalPeriode({ f, ubah, tahun, mati, lst, pa }: Pick<PropsFormulir, "f
                   <td className={`${td} whitespace-nowrap font-semibold text-[#0F2A52]`}>{tglIndo(w.mulai)}</td>
                   <td className={`${td} whitespace-nowrap font-semibold text-[#0F2A52]`}>{tglIndo(w.selesai)}</td>
                   <td className={td}>{jumlahHariAntara(w.mulai, w.selesai) ?? "—"}</td>
-                  <td className={`${td} min-w-[220px]`}>
+                  <td className={`${td} min-w-[300px]`}>
                     {!e ? <span className="text-[#44546F]">Mengikuti pola</span> : (
                       <div className="flex flex-col gap-1.5">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <strong className="text-[#8A5A00]">Jadwal khusus</strong>
-                          <PerkKecil perk={!!e.perk} mati={mati} nama={`Jadwal khusus ${P}`} onPilih={(v) => setE({ perk: v })} />
-                          {!mati && <button type="button" className={tombolKecil} onClick={() => ubah((g) => { delete g.kecuali[P]; })}>Kembali ke pola</button>}
+                          <strong className="whitespace-nowrap text-[#8A5A00]">Jadwal khusus</strong>
+                          <div className="w-[120px] shrink-0"><PerkKecil perk={!!e.perk} mati={mati} nama={`Jadwal khusus ${P}`} onPilih={(v) => setE({ perk: v })} /></div>
+                          {!mati && <button type="button" className={`${tombolKecil} whitespace-nowrap`} onClick={() => ubah((g) => { delete g.kecuali[P]; })}>Kembali ke pola</button>}
                         </div>
                         <input className={kolom} value={e.alasan} maxLength={200} disabled={mati} placeholder={ALASAN_KHUSUS} onChange={(ev) => setE({ alasan: ev.target.value })} aria-label={`Alasan jadwal khusus ${P}`} />
                       </div>
