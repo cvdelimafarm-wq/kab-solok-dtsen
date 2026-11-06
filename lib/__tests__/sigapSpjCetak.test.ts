@@ -147,10 +147,10 @@ describe("petaTim", () => {
       { akun_id: 5, peran: "korwil", nama: "Kor" },
       { akun_id: 6, peran: "ppl", nama: "Tanpa Petugas" },
     ];
-    const akun = [{ id: 1, petugas_bencana_id: 10 }, { id: 2, petugas_bencana_id: 20 }, { id: 3, petugas_bencana_id: 30 }, { id: 4, petugas_bencana_id: 40 }, { id: 5, petugas_bencana_id: 50 }, { id: 6, petugas_bencana_id: null }];
-    const petugas = [{ id: 10, atasan_id: null }, { id: 20, atasan_id: 10 }, { id: 30, atasan_id: null }, { id: 40, atasan_id: 99 }, { id: 50, atasan_id: null }];
-    const akunAtasan = [{ id: 1, nama: "Budi", petugas_bencana_id: 10 }];
-    const m = petaTim(pen, akun, petugas, akunAtasan);
+    // atasan lewat sigap_penugasan.atasan_akun_id: akun 99 tidak punya nama (atasan tak ber-akun), akun 3 & 5 tanpa atasan
+    const atasanDari = new Map<number, number | null>([[1, null], [2, 1], [3, null], [4, 99], [5, null]]);
+    const namaAkun = new Map<number, string>([[1, "Budi"]]);
+    const m = petaTim(pen, atasanDari, namaAkun);
     expect(m.get(1)).toEqual({ id: 1, nama: "Budi" });
     expect(m.get(2)).toEqual({ id: 1, nama: "Budi" });
     expect(m.has(3)).toBe(false);
