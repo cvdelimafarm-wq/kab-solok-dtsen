@@ -16,6 +16,7 @@ import {
   undanganDariKegiatan,
   type InfoUndangan,
   bersihkanJawaban,
+  jawabanSoalLain,
   alasanTakBisaUlang,
   bisaUlang,
   hasilBolehTampil,
@@ -133,22 +134,45 @@ export async function muatTes(db: Db, kegiatanId: number, jenis: JenisTes): Prom
   return (lama as unknown as TesBaris | null) ?? null;
 }
 
-export async function muatSoal(db: Db, tesId: number): Promise<SoalLengkap[]> {
-  const { data } = await db.from("sigap_tes_soal").select("nomor, teks, opsi, kunci, bobot").eq("tes_id", tesId).order("nomor");
-  return ((data ?? []) as Record<string, unknown>[]).map((x) => ({
+const KOLOM_SOAL = "nomor, teks, opsi, kunci, bobot";
+
+function rapikanSoal(baris: Record<string, unknown>[]): (SoalLengkap & { aktif: boolean })[] {
+  return baris.map((x) => ({
     nomor: x.nomor as number,
     teks: x.teks as string,
     opsi: (x.opsi as SoalLengkap["opsi"]) ?? [],
     kunci: x.kunci as string,
     bobot: Number(x.bobot),
+    aktif: x.aktif !== false,
   }));
+}
+
+/**
+ * (6 Nov 2026) SEMUA soal sebuah tes beserta penanda `aktif` (soal bermasalah dinonaktifkan dari tab Kendala, SQL 20261106a).
+ * Kolom `aktif` belum ada (SQL belum dijalankan) -> dibaca tanpa kolom itu dan semua soal dianggap aktif.
+ */
+export async function muatSemuaSoal(db: Db, tesId: number): Promise<(SoalLengkap & { aktif: boolean })[]> {
+  const q = (kolom: string) => db.from("sigap_tes_soal").select(kolom).eq("tes_id", tesId).order("nomor");
+  const { data, error } = await q(`${KOLOM_SOAL}, aktif`);
+  if (!error) return rapikanSoal((data ?? []) as unknown as Record<string, unknown>[]);
+  const { data: lama } = await q(KOLOM_SOAL);
+  return rapikanSoal((lama ?? []) as unknown as Record<string, unknown>[]);
+}
+
+/** Soal yang berlaku (aktif) -- dipakai peserta, penilaian, dan semua pemantauan. */
+export async function muatSoal(db: Db, tesId: number): Promise<SoalLengkap[]> {
+  return (await muatSemuaSoal(db, tesId)).filter((s) => s.aktif).map(({ aktif: _aktif, ...soal }) => (void _aktif, soal));
 }
 
 export async function jumlahSoal(db: Db, tesIds: number[]): Promise<Map<number, number>> {
   const peta = new Map<number, number>();
   if (tesIds.length === 0) return peta;
-  const { data } = await db.from("sigap_tes_soal").select("tes_id").in("tes_id", tesIds).limit(5000);
-  for (const r of data ?? []) peta.set(r.tes_id as number, (peta.get(r.tes_id as number) ?? 0) + 1);
+  const baru = await db.from("sigap_tes_soal").select("tes_id, aktif").in("tes_id", tesIds).limit(5000);
+  const baris = (baru.error ? (await db.from("sigap_tes_soal").select("tes_id").in("tes_id", tesIds).limit(5000)).data : baru.data) ?? [];
+  for (const r of baris as { tes_id: number; aktif?: boolean }[]) {
+    if (r.aktif === false) continue;
+    peta.set(r.tes_id, (peta.get(r.tes_id) ?? 0) + 1);
+  }
   return peta;
 }
 
@@ -167,7 +191,8 @@ export const KOLOM_SESI_PUBLIK = KOLOM_SESI;
  */
 export async function finalisasiSesi(db: Db, sesi: SesiBaris, soal: SoalLengkap[], selesaiAt: Date): Promise<SesiBaris> {
   if (sesi.selesai_at) return sesi;
-  const jawaban = bersihkanJawaban(sesi.jawaban, soal);
+  // (6 Nov 2026) jawaban untuk soal yang dinonaktifkan tetap disimpan (nilai hanya dari soal aktif) supaya pengaktifan kembali tidak kehilangan jawaban
+  const jawaban = { ...jawabanSoalLain(sesi.jawaban, soal), ...bersihkanJawaban(sesi.jawaban, soal) };
   const h = hitungSkor(soal, jawaban);
   const dasar = { selesai_at: selesaiAt.toISOString(), jawaban, skor: h.skor, benar: h.benar, total: h.total, diubah_at: new Date().toISOString() };
   const tulis = (isi: Record<string, unknown>) => db.from("sigap_tes_sesi").update(isi).eq("id", sesi.id).is("selesai_at", null).select(KOLOM_SESI).maybeSingle();

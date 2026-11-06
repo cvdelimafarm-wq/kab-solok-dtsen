@@ -15,7 +15,7 @@
 import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
 import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { NextRequest, NextResponse } from "next/server";
-import { TOLERANSI_DETIK, bersihkanJawaban, hitungBatas, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
+import { TOLERANSI_DETIK, bersihkanJawaban, hitungBatas, jawabanSoalLain, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
 import { muatAturan } from "@/lib/sigapAturanDb";
 import { hitungTahapan, kunciUntuk, ringkasIzin, tesDenganIzin, type KodeTahap } from "@/lib/sigapTahapan";
 import { izinBerlakuPerTahap, muatIzin, muatTahapanBatch } from "@/lib/sigapTahapanDb";
@@ -125,7 +125,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         return NextResponse.json({ ...(await susunKeadaan(db, tes, akun.id, sekarang)), error: "Waktu pengerjaan sudah habis. Jawaban yang tersimpan dinilai otomatis." }, { status: 409 });
       }
       if (body?.jawaban !== undefined) {
-        const bersih = bersihkanJawaban(body.jawaban, soal);
+        // (6 Nov 2026) jawaban untuk soal yang dinonaktifkan panitia tetap dipertahankan (tidak ikut nilai) agar bisa dipulihkan bila soal diaktifkan kembali
+        const bersih = { ...jawabanSoalLain(sesi.jawaban, soal), ...bersihkanJawaban(body.jawaban, soal) };
         const { data, error } = await db
           .from("sigap_tes_sesi")
           .update({ jawaban: bersih, diubah_at: sekarang.toISOString() })

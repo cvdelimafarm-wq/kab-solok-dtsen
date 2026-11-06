@@ -164,8 +164,6 @@ export default function KendalaKelola() {
         )}
       </Kartu>
 
-      <p className="px-1 text-[12px] text-[#6B7A90]">Kendala lain (absen, tes, pindah kelas) akan ditambahkan di sini.</p>
-
       {sasaran && d && (
         <ModalTangani
           sasaran={sasaran}

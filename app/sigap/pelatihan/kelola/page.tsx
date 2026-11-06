@@ -18,6 +18,7 @@ import Administrasi from "./administrasi";
 import PersiapanGabung from "./persiapanGabung"; // (2 Nov 2026) tab Persiapan: Pengaturan (tampilan peserta, ketentuan, absen, aturan nilai) + Instrumen (unggah kuesioner, pedoman, PPT)
 import TimPesertaKelola from "./hierarki"; // (2 Nov 2026) tab Tim & Peserta: hierarki + kelas
 import KendalaKelola from "./kendala"; // (3 Nov 2026) tab Kendala: petugas menolak / mundur -> ganti, kosongkan, atau alihkan
+import KoreksiKelola from "./koreksi"; // (6 Nov 2026) tab Kendala: kendala tes, soal bermasalah, pindah kelas / atasan, tambah peserta mendadak
 import HariKerjaKelola from "./hariKerja"; // (2 Nov 2026) tab Hari Kerja: matriks peserta x tanggal, buatkan / lepas / pindahkan dari kegiatan lain
 import { KomunikasiKelola, KuisRapatKelola } from "./grup"; // (2 Nov 2026) tab gabungan: Kuis & Rapat, Notifikasi (+ Pengumuman)
 import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard (tampil bila kegiatan memakai Vanguard)
@@ -237,7 +238,12 @@ export default function KelolaPelatihan() {
       )}
       {ringkas && tab === "persiapan" && <PersiapanGabung key={kegId ?? 0} />}
       {ringkas && tab === "tim" && <TimPesertaKelola key={kegId ?? 0} />}
-      {ringkas && tab === "kendala" && <KendalaKelola key={kegId ?? 0} />}
+      {ringkas && tab === "kendala" && (
+        <>
+          <KendalaKelola key={kegId ?? 0} />
+          <KoreksiKelola key={`k${kegId ?? 0}`} />
+        </>
+      )}
       {ringkas && tab === "harikerja" && <HariKerjaKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuis" && <KuisRapatKelola key={kegId ?? 0} kegiatanId={kegId} bisaKelola={ringkas.boleh_kelola} />}
       {ringkas && tab === "notifikasi" && <KomunikasiKelola key={kegId ?? 0} />}

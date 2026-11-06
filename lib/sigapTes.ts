@@ -229,6 +229,19 @@ export function bersihkanJawaban(input: unknown, soal: { nomor: number; opsi: Op
   return out;
 }
 
+/** Jawaban berbentuk sah (nomor: huruf A-E) untuk nomor yang TIDAK ada di daftar soal berlaku, yaitu soal yang dinonaktifkan. */
+export function jawabanSoalLain(input: unknown, soal: readonly { nomor: number }[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!input || typeof input !== "object") return out;
+  const ada = new Set(soal.map((s) => String(s.nomor)));
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (ada.has(k) || !/^\d{1,3}$/.test(k) || typeof v !== "string") continue;
+    const kode = v.trim().toUpperCase();
+    if (/^[A-E]$/.test(kode)) out[k] = kode;
+  }
+  return out;
+}
+
 export type RincianJawab = { nomor: number; jawab: string | null; kunci: string; benar: boolean; bobot: number };
 export type HasilSkor = { benar: number; total: number; skor: number; rincian: RincianJawab[] };
 
