@@ -6,8 +6,9 @@
 // Tiap tab mengambil datanya sendiri dan baru dimuat saat tab dibuka (hooks di app/sigap/ro/useKeu.ts, logika di lib/keu/ro.ts).
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { angka, persen, ringkasRo, rupiah, STATUS_RAB, urlBaca, type KomponenAnggaran } from "@/lib/keu/ro";
+import { useMemo, useState, type ReactNode } from "react";
+import { angka, persen, ringkasRo, rupiah, urlBaca } from "@/lib/keu/ro";
+import { arahGap, susunPohon, teksVolume, type NodeAkun, type SelItem, type Struktur, type Total } from "@/lib/keu/pokTata";
 import type { WarnaChip } from "@/lib/keu/revisi";
 import { Chip, Galat, judulKartu, kartu, kisi, Kosong, Kpi, Memuat, Potong, tombolKecil } from "../../keu-ui";
 import { useAnggaranRo, useBacaKeu } from "../useKeu";
@@ -82,59 +83,154 @@ export function TabRingkasan({ kode }: { kode: string }) {
 }
 
 // ---------------------------------------------------------------- Anggaran
-function TabelAkun({ item }: { item: KomponenAnggaran["akun"][number]["item"] }) {
+// (7 Nov 2026, permintaan Iqbal) Tata letak seperti POK: RO > Komponen > Sub komponen > Akun > Item, ditambah kolom Realisasi, Sisa kebutuhan, dan Gap.
+// Rumus ada di lib/keu/pokTata.ts: Sisa kebutuhan = RAB - Realisasi (tidak kurang dari 0); Gap = (Pagu - Realisasi) - Sisa kebutuhan.
+type KolomAngka = { pok: ReactNode; real: ReactNode; rab: ReactNode; sisa: ReactNode; gap: ReactNode };
+const sel = "whitespace-nowrap px-2.5 py-1.5 text-right tabular-nums";
+const teksGap = (g: number | null) => {
+  const arah = arahGap(g);
+  if (arah === "belum") return <span className="text-[#8A97AD]">-</span>;
+  const kelas = arah === "kurang" ? "font-bold text-[#B42318]" : arah === "lebih" ? "font-bold text-[#1B7A3E]" : "text-[#44546F]";
+  return <span className={kelas}>{g !== null && g > 0 ? "+" : ""}{angka(g)}</span>;
+};
+const angkaAtauStrip = (n: number | null) => (n === null ? <span className="text-[#8A97AD]">-</span> : angka(n));
+const dariTotal = (t: Total): KolomAngka => ({ pok: angka(t.pok), real: angka(t.realisasi), rab: t.nBerRab === 0 ? <span className="text-[#8A97AD]">-</span> : angka(t.rab), sisa: angkaAtauStrip(t.sisa), gap: teksGap(t.gap) });
+
+function BarisPok({ kelas, kiri, vol, harga, k, kelasTd = "" }: { kelas: string; kiri: ReactNode; vol?: ReactNode; harga?: ReactNode; k: KolomAngka; kelasTd?: string }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-[#DCE3EE] bg-white">
-      <table className="w-full min-w-[640px] text-left text-[12.5px]">
-        <thead className="bg-[#EEF3FB] text-[#44546F]">
-          <tr><th className="px-2.5 py-2">Uraian item</th><th className="px-2.5 py-2">Volume</th><th className="px-2.5 py-2 text-right">POK</th><th className="px-2.5 py-2 text-right">Realisasi</th><th className="px-2.5 py-2 text-right">RAB</th><th className="px-2.5 py-2">Status RAB</th></tr>
-        </thead>
-        <tbody>
-          {item.map((i) => (
-            <tr key={i.detail_id} className="border-t border-[#EEF2F7] align-top">
-              <td className="break-words px-2.5 py-2 font-semibold text-[#0F2A52]">{i.nomor_item ? `${i.nomor_item}. ` : ""}{i.uraian}</td>
-              <td className="whitespace-nowrap px-2.5 py-2 text-[#5B6B84]">{angka(i.volume)} {i.satuan}</td>
-              <td className="px-2.5 py-2 text-right font-semibold text-[#0F2A52]">{angka(i.pok)}</td>
-              <td className="px-2.5 py-2 text-right font-semibold text-[#0F2A52]">{angka(i.realisasi)}</td>
-              <td className="px-2.5 py-2 text-right font-semibold text-[#0F2A52]">{i.rab === null ? "-" : angka(i.rab)}</td>
-              <td className="px-2.5 py-2 text-[#44546F]">{i.statusRab ? (STATUS_RAB[i.statusRab] ?? i.statusRab) : "-"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <tr className={`${kelas} align-top`}>
+      <td className={`px-2.5 py-1.5 ${kelasTd}`}>{kiri}</td>
+      <td className="whitespace-nowrap px-2.5 py-1.5 text-right text-[#44546F]">{vol}</td>
+      <td className={`${sel} text-[#44546F]`}>{harga}</td>
+      <td className={sel}>{k.pok}</td><td className={sel}>{k.real}</td><td className={sel}>{k.rab}</td><td className={sel}>{k.sisa}</td><td className={sel}>{k.gap}</td>
+    </tr>
+  );
+}
+
+function BarisItem({ i }: { i: SelItem }) {
+  const rab = i.sisa === null ? <span className="text-[#8A97AD]">-</span> : angka(i.selesai ? i.realisasi : i.rab);
+  return (
+    <BarisPok
+      kelas="border-t border-[#EEF2F7]" kelasTd="pl-9 text-[#1B2B4B]"
+      kiri={<span className="break-words">- {i.nomor_item ? `${i.nomor_item}. ` : ""}{i.uraian}{i.selesai && <span className="ml-1.5 rounded-full bg-[#EEF2F7] px-1.5 text-[11px] text-[#44546F]">selesai</span>}</span>}
+      vol={`${teksVolume(i.volume)} ${i.satuan}`} harga={angka(i.harga)}
+      k={{ pok: angka(i.pok), real: angka(i.realisasi), rab, sisa: angkaAtauStrip(i.sisa), gap: teksGap(i.gap) }}
+    />
+  );
+}
+
+function BarisAkun({ a, buka, ubah }: { a: NodeAkun; buka: boolean; ubah: () => void }) {
+  return (
+    <>
+      <BarisPok
+        kelas="border-t border-[#DCE3EE] bg-[#F4F7FB] font-semibold text-[#0F2A52]" kelasTd="pl-6"
+        kiri={(
+          <button type="button" aria-expanded={buka} onClick={ubah} className="flex min-h-[32px] w-full items-start gap-1.5 text-left">
+            <span aria-hidden className="mt-[1px] w-3 shrink-0 text-[#5B6B84]">{buka ? "▾" : "▸"}</span>
+            <span><span className="font-mono">{a.kode}</span> <span className="underline decoration-[#C5D0E0] underline-offset-2">{a.nama || "Akun"}</span><span className="ml-1.5 font-normal text-[#5B6B84]">({a.item.length} item)</span></span>
+          </button>
+        )}
+        k={dariTotal(a.total)}
+      />
+      {buka && a.item.map((i) => <BarisItem key={i.detail_id} i={i} />)}
+    </>
   );
 }
 
 export function TabAnggaran({ kode }: { kode: string }) {
   const ang = useAnggaranRo(kode);
+  const struktur = useBacaKeu<Struktur & { akun_kode: string }>(urlBaca("keu_v_pok_struktur", { ro_kode: kode }, { batas: 5000 }));
+  const akun = useBacaKeu<{ kode: string; nama: string }>(urlBaca("keu_master_akun", {}, { batas: 3000, kolom: ["kode", "nama"] }));
+  const ro = useBacaKeu<{ kode: string; nama: string }>(urlBaca("keu_ro", { kode }, { batas: 1, kolom: ["kode", "nama"] }));
+  const [tutup, setTutup] = useState<Set<string>>(new Set());
+  const namaAkun = useMemo(() => new Map((akun.baris ?? []).map((a) => [a.kode.slice(0, 6), a.nama] as const)), [akun.baris]);
+  // struktur belum tersedia (SQL 20261107a belum dijalankan) = galat baca: tampilan memakai nama komponen baku dan satu sub komponen
+  const pohon = useMemo(
+    () => (ang.anggaran ? susunPohon(ang.anggaran, struktur.baris, namaAkun, { kode, nama: ro.baris?.[0]?.nama ?? "" }) : null),
+    [ang.anggaran, struktur.baris, namaAkun, kode, ro.baris],
+  );
+  const kunciAkun = (k: string, s: string, a: string) => `${k}|${s}|${a}`;
+  const semuaKunci = useMemo(() => (pohon ? pohon.komponen.flatMap((k) => k.sub.flatMap((s) => s.akun.map((a) => kunciAkun(k.kode, s.kode, a.kode)))) : []), [pohon]);
+
   if (ang.galat) return <Galat pesan={ang.galat} />;
-  if (!ang.anggaran) return <Memuat />;
+  if (!ang.anggaran || !pohon) return <Memuat />;
   if (ang.anggaran.length === 0) return <Kosong teks="RO ini belum punya item pada POK yang berlaku." />;
+  const t = pohon.total;
+  const belumRab = t.nItem - t.nBerRab;
   return (
     <div className="flex flex-col gap-3.5">
       <div className={`${kartu} flex flex-col gap-1`}>
-        <h2 className={judulKartu}>Anggaran: POK, realisasi, dan RAB</h2>
+        <h2 className={judulKartu}>Anggaran: POK, realisasi, kebutuhan, dan gap</h2>
         <p className="text-[12.5px] text-[#5B6B84]">POK berlaku dibaca dari sistem, realisasi dari unggahan bendahara{ang.sampaiTanggal ? ` (sampai ${ang.sampaiTanggal})` : ""}, RAB dari ketua tim.</p>
       </div>
+      <div className={kisi}>
+        <Kpi label="Pagu POK" nilai={rupiah(t.pok)} sub={`${angka(t.nItem)} butir`} />
+        <Kpi label="Realisasi" nilai={rupiah(t.realisasi)} sub={`${persen(t.realisasi, t.pok)} dari pagu`} />
+        <Kpi label="Sisa kebutuhan" nilai={t.sisa === null ? "-" : rupiah(t.sisa)} sub={belumRab > 0 ? `${angka(belumRab)} butir belum ber-RAB` : "menurut RAB"} />
+        <Kpi label="Gap" nilai={t.gap === null ? "-" : `${t.gap > 0 ? "+" : ""}${rupiah(t.gap)}`} sub={t.gap === null ? "terhitung bila semua butir ber-RAB" : t.gap < 0 ? "kebutuhan melebihi sisa pagu" : "sisa pagu mencukupi"} warna={t.gap === null ? undefined : t.gap < 0 ? "mr" : "hj"} />
+      </div>
       {ang.terpotong && <Potong />}
-      {ang.anggaran.map((k) => (
-        <section key={k.komponen} className={`${kartu} flex flex-col gap-2`}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className={judulKartu}>Komponen {k.komponen}</h2>
-            <p className="text-[14px] font-bold text-[#1F5FD1]">{rupiah(k.pok)}</p>
+      <div className={`${kartu} flex flex-col gap-2 !p-3`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="m-0 text-[12px] text-[#5B6B84]">
+            Sisa kebutuhan = RAB dikurangi realisasi. Gap = sisa pagu dikurangi sisa kebutuhan (positif: pagu masih lebih; negatif: kurang). Butir yang belum ber-RAB ditandai “-”.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className={tombolKecil} onClick={() => setTutup(new Set())}>Buka semua akun</button>
+            <button type="button" className={tombolKecil} onClick={() => setTutup(new Set(semuaKunci))}>Tutup semua akun</button>
           </div>
-          {k.akun.map((a) => (
-            <details key={a.akun} className="rounded-lg border border-[#E8EDF5] bg-[#F9FBFE] px-3 py-1">
-              <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center justify-between gap-2 text-[13px] font-semibold text-[#0F2A52]">
-                <span><span className="font-mono">{a.akun}</span> · {a.item.length} item</span>
-                <span className="text-[12.5px] font-normal text-[#44546F]">POK {rupiah(a.pok)} · realisasi {rupiah(a.realisasi)} ({persen(a.realisasi, a.pok)}) · RAB {rupiah(a.rab)}</span>
-              </summary>
-              <div className="pb-2.5"><TabelAkun item={a.item} /></div>
-            </details>
-          ))}
-        </section>
-      ))}
+        </div>
+        <div className="overflow-x-auto rounded-lg border border-[#DCE3EE] bg-white">
+          <table aria-label="POK dengan realisasi, sisa kebutuhan, dan gap" className="w-full min-w-[980px] border-collapse text-left text-[12.5px]">
+            <thead className="bg-[#EEF3FB] text-[11.5px] text-[#44546F]">
+              <tr>
+                <th className="px-2.5 py-2">Kode / Uraian</th><th className="px-2.5 py-2 text-right">Volume</th><th className="px-2.5 py-2 text-right">Harga satuan</th>
+                <th className="px-2.5 py-2 text-right">Pagu POK</th><th className="px-2.5 py-2 text-right">Realisasi</th><th className="px-2.5 py-2 text-right">RAB</th>
+                <th className="px-2.5 py-2 text-right">Sisa kebutuhan</th><th className="px-2.5 py-2 text-right">Gap</th>
+              </tr>
+            </thead>
+            <tbody>
+              <BarisPok
+                kelas="bg-[#E3EEFF] font-bold text-[#0F2A52]"
+                kiri={<span><span className="font-mono">{pohon.roKode}</span> {pohon.roNama.toUpperCase()}{belumRab > 0 && <span className="ml-2 rounded-full bg-[#FFF3D6] px-2 text-[11px] font-semibold text-[#8A6200]">{belumRab} butir belum ber-RAB</span>}</span>}
+                k={dariTotal(pohon.total)}
+              />
+              {pohon.komponen.map((k) => (
+                <KomponenBaris key={k.kode} k={k} tutup={tutup} setTutup={setTutup} kunciAkun={kunciAkun} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function KomponenBaris({ k, tutup, setTutup, kunciAkun }: {
+  k: import("@/lib/keu/pokTata").NodeKomponen; tutup: Set<string>; setTutup: (s: Set<string>) => void; kunciAkun: (k: string, s: string, a: string) => string;
+}) {
+  const ubah = (kunci: string) => { const baru = new Set(tutup); if (baru.has(kunci)) baru.delete(kunci); else baru.add(kunci); setTutup(baru); };
+  return (
+    <>
+      <BarisPok kelas="border-t-2 border-[#C5D0E0] bg-[#EEF3FB] font-bold text-[#0F2A52]" kiri={<span><span className="font-mono">{k.kode}</span> {k.nama.toUpperCase()}</span>} kelasTd="pl-4" k={dariTotal(k.total)} />
+      {k.sub.map((s) => (
+        <FragmenSub key={s.kode} s={s} k={k} tutup={tutup} ubah={ubah} kunciAkun={kunciAkun} />
+      ))}
+    </>
+  );
+}
+
+function FragmenSub({ s, k, tutup, ubah, kunciAkun }: {
+  s: import("@/lib/keu/pokTata").NodeSub; k: import("@/lib/keu/pokTata").NodeKomponen; tutup: Set<string>; ubah: (kunci: string) => void;
+  kunciAkun: (k: string, s: string, a: string) => string;
+}) {
+  return (
+    <>
+      <BarisPok kelas="border-t border-[#E2E8F2] italic text-[#44546F]" kelasTd="pl-5" kiri={<span><span className="font-mono not-italic">{s.kode}</span> {s.nama}</span>} k={dariTotal(s.total)} />
+      {s.akun.map((a) => {
+        const kunci = kunciAkun(k.kode, s.kode, a.kode);
+        return <BarisAkun key={kunci} a={a} buka={!tutup.has(kunci)} ubah={() => ubah(kunci)} />;
+      })}
+    </>
   );
 }

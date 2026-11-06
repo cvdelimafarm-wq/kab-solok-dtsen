@@ -50,7 +50,22 @@ function Panel({ bahan }: { bahan: BahanKeluaran }) {
 
   if (k.belumTersedia) return <Catatan>Fitur keluaran belum aktif di basis data (berkas SQL 20261028h_keu_keluaran belum dijalankan).</Catatan>;
   if (!k.siap) return <Memuat tinggi="h-48" />;
-  if (!k.rab) return <Kosong teks="RO ini belum punya RAB, jadi keluaran belum dapat disusun." />;
+  if (!k.rab) {
+    const ro = bahan.ident.ro_kode;
+    return (
+      <section className={`${kartu} flex flex-col gap-2.5`} aria-label="RAB belum ada">
+        <h2 className="m-0 text-[15px] font-bold text-[#0F2A52]">Keluaran belum dapat disusun: RO {ro} belum punya RAB</h2>
+        <p className="m-0 text-[13px] leading-snug text-[#44546F]">
+          Keluaran RAB (kebutuhan dana, rencana pembayaran, permintaan pengadaan) dibentuk dari RAB milik RO ini. RAB belum disusun, jadi tidak ada yang bisa dihitung. Perbaikannya ada di ruang kerja RO: buka tab RAB, tekan <strong>Susun RAB</strong>
+          (RAB v1 disalin dari POK), lalu kembali ke halaman ini.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/sigap/ro/${ro}?tab=rab`} className="rounded-md border border-[#1F5FD1] bg-[#E3EEFF] px-3 py-2 text-[13px] font-semibold text-[#1F5FD1] hover:bg-[#D3E4FF]">Susun RAB untuk RO {ro} →</Link>
+          <Link href={`/sigap/ro/${ro}?tab=anggaran`} className="rounded-md border border-[#DCE3EE] bg-white px-3 py-2 text-[13px] font-semibold text-[#1B2B4B] hover:bg-[#F4F7FB]">Lihat POK dan realisasi RO ini</Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -108,7 +123,12 @@ function Panel({ bahan }: { bahan: BahanKeluaran }) {
               </KartuBagian>
             );
           })}
-          {isi.n === 0 && <Catatan>Belum ada rincian RAB yang berasal dari survei ini.</Catatan>}
+          {isi.n === 0 && (
+            <Catatan>
+              Belum ada rincian RAB yang berasal dari survei ini. Di tab RAB RO {bahan.ident.ro_kode}, hubungkan rincian biaya survei ini ke RAB (tombol RAB = Item atau Rinci pada kartu survei), lalu kembali ke halaman ini.{" "}
+              <Link href={`/sigap/ro/${bahan.ident.ro_kode}?tab=rab`} className="font-semibold text-[#1F5FD1] underline">Buka tab RAB</Link>
+            </Catatan>
+          )}
         </>
       )}
       <KartuDokumenCetak identId={bahan.ident.id} k={konteks} tanggal={tanggal} siap={k.dokSiap} />
