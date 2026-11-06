@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabaseServer";
 import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, KEGIATAN_PSP, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 import { gabungAtasan } from "@/lib/atasanPenugasan";
+import { aturSlotPj, bacaSlotPj, jabatanSah } from "@/lib/slotPj";
 import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 import { akunTerlindungi, resetPinOlehAdmin } from "@/lib/sigapPin";
 import { lingkupGabungan, periksaBeriPeran, periksaKelolaMatriks, periksaLingkupPeran, periksaUbahIzin } from "@/lib/aturanLingkup";
@@ -321,7 +322,10 @@ export async function GET(req: NextRequest) {
             /* kolom belum ada */
           }
         }
-        return NextResponse.json({ kegiatan: kegOut, tarif: tarif ?? [], boleh_kelola: perlu(menu, "kelola") });
+        // (6 Nov 2026) Slot PJ dan Wakil PJ kegiatan; yang boleh mengisi = pengelola akses berlingkup kegiatan ini (sama dengan memberi peran).
+        const pj = await bacaSlotPj(db, kegiatanId);
+        const bolehAturPj = pj.tersedia && !periksaLingkupPeran({ adminAplikasi: boleh(s.izin, "portal.kelola", "kelola"), izin: s.izin, kegiatanId });
+        return NextResponse.json({ kegiatan: kegOut, tarif: tarif ?? [], boleh_kelola: perlu(menu, "kelola"), penanggung_jawab: pj.slot, pj_tersedia: pj.tersedia, boleh_atur_pj: bolehAturPj });
       }
 
       const { kegiatan, baris, peranOpsi } = await dataPenugasan(db, kegiatanId);
@@ -731,6 +735,31 @@ async function proses(req: NextRequest) {
       const r = await resetPinOlehAdmin(db, { akunId: s.akunId, nama: s.nama, adminAplikasi, lingkup: lingkupReset }, Number(body?.akun_id));
       if (!r.ok) return galat(r.error, r.status);
       return NextResponse.json({ ok: true, pin: r.pin, nama: r.nama, sampai: r.sampai, hp: r.hp });
+    }
+
+    // ---------------- Slot PJ / Wakil PJ kegiatan (6 Nov 2026) ----------------
+    // Mengisi slot = memberi peran pj_kegiatan pada kegiatan itu, jadi syaratnya sama dengan beri_peran: izin Kelola Peran & Akses dalam lingkup kegiatan,
+    // tidak untuk diri sendiri, dan peran yang memuat hak tertinggi hanya oleh Admin Aplikasi.
+    if (aksi === "atur_pj") {
+      if (!boleh(s.izin, "akses.kelola", "kelola")) return galat("Tidak punya izin Kelola Peran & Akses.", 403);
+      const kegiatanId = Number(body?.kegiatan_id);
+      const jabatan = body?.jabatan;
+      if (!kegiatanId || !jabatanSah(jabatan)) return galat("Kegiatan atau jabatan tidak valid.");
+      const akunId = body?.akun_id == null || body?.akun_id === "" ? null : Number(body.akun_id);
+      if (akunId !== null && !Number.isInteger(akunId)) return galat("Akun tidak valid.");
+      const adminAplikasi = boleh(s.izin, "portal.kelola", "kelola");
+      const tolakLingkup = periksaLingkupPeran({ adminAplikasi, izin: s.izin, kegiatanId });
+      if (tolakLingkup) return galat(tolakLingkup.error, tolakLingkup.status);
+      if (akunId !== null) {
+        const { data: peranPj } = await db.from("sigap_peran").select("id").eq("kode", "pj_kegiatan").maybeSingle();
+        const { data: izPeran } = peranPj ? await db.from("sigap_peran_izin").select("menu_kode").eq("peran_id", (peranPj as { id: number }).id) : { data: [] };
+        const tolakPeran = periksaBeriPeran({ adminAplikasi, aktorId: s.akunId, akunId, menuPeran: ((izPeran ?? []) as { menu_kode: string }[]).map((x) => x.menu_kode) });
+        if (tolakPeran) return galat(tolakPeran.error, tolakPeran.status);
+      }
+      const r = await aturSlotPj(db, { kegiatanId, jabatan, akunId, oleh });
+      if (!r.ok) return galat(r.error, r.status);
+      await audit({ kegiatan_id: kegiatanId, jabatan, akun_id: akunId, peran_diberi: r.peranDiberi, peran_dicabut: r.peranDicabut });
+      return NextResponse.json({ ok: true });
     }
 
     // ---------------- Kelola Peran & Akses ----------------

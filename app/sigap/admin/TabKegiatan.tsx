@@ -33,7 +33,8 @@ type Kegiatan = {
   target_selesai_tersedia?: boolean;
 };
 type Tarif = { id: number; peran: string; uraian_detail: string | null; tarif: number; label_jabatan: string | null; maks_hari_default: number | null };
-type Data = { kegiatan: Kegiatan | null; tarif: Tarif[]; boleh_kelola: boolean };
+type SlotPj = { jabatan: "pj" | "wakil_pj"; akun_id: number | null; nama: string | null };
+type Data = { kegiatan: Kegiatan | null; tarif: Tarif[]; boleh_kelola: boolean; penanggung_jawab?: SlotPj[]; pj_tersedia?: boolean; boleh_atur_pj?: boolean };
 
 export default function TabKegiatan({
   kegiatanId,
@@ -83,7 +84,10 @@ export default function TabKegiatan({
           onBatal={onBatalBaru}
         />
         {kegiatanId ? (
-          <TabelTarif kegiatanId={kegiatanId} tarif={data.tarif} kelola={data.boleh_kelola} onBerubah={muat} />
+          <div className="space-y-3">
+            <TabelTarif kegiatanId={kegiatanId} tarif={data.tarif} kelola={data.boleh_kelola} onBerubah={muat} />
+            {data.pj_tersedia && <KartuPenanggungJawab kegiatanId={kegiatanId} slot={data.penanggung_jawab ?? []} boleh={!!data.boleh_atur_pj} onBerubah={muat} />}
+          </div>
         ) : (
           <Kartu judul="Peran, tarif & maks hari">
             <p className="text-[12.5px] text-[#7B8794]">Simpan data kegiatan terlebih dahulu, lalu atur peran &amp; tarifnya di sini.</p>
@@ -91,6 +95,107 @@ export default function TabKegiatan({
         )}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------- Penanggung jawab (PJ) dan Wakil PJ
+// (6 Nov 2026) Dua slot per kegiatan; boleh kosong dan diisi belakangan. Mengisi slot memberi peran PJ Kegiatan pada kegiatan ini (wakil = hak sama dengan PJ);
+// mengosongkan atau mengganti mencabut peran yang dibuat slot itu. Peran yang diberikan lewat Kelola Peran & Akses tidak disentuh.
+const NAMA_SLOT: Record<SlotPj["jabatan"], string> = { pj: "Penanggung Jawab (PJ)", wakil_pj: "Wakil PJ" };
+type AkunCari = { id: number; nama: string; jenis: string; alamat_kecamatan: string | null };
+
+function KartuPenanggungJawab({ kegiatanId, slot, boleh, onBerubah }: { kegiatanId: number; slot: SlotPj[]; boleh: boolean; onBerubah: () => void | Promise<void> }) {
+  const [ubah, setUbah] = useState<SlotPj["jabatan"] | null>(null);
+  const [q, setQ] = useState("");
+  const [hasil, setHasil] = useState<AkunCari[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
+
+  useEffect(() => {
+    const kata = q.trim();
+    if (!ubah || kata.length < 2) {
+      setHasil([]);
+      return;
+    }
+    let batal = false;
+    const t = setTimeout(async () => {
+      try {
+        const d = await ambil<{ akun: AkunCari[] }>("cari_akun", { q: kata });
+        if (!batal) setHasil(d.akun);
+      } catch (e) {
+        if (!batal && !(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+      }
+    }, 300);
+    return () => {
+      batal = true;
+      clearTimeout(t);
+    };
+  }, [q, ubah]);
+
+  async function simpan(jabatan: SlotPj["jabatan"], akunId: number | null) {
+    setBusy(true);
+    setPesan(null);
+    try {
+      await aksi("atur_pj", { kegiatan_id: kegiatanId, jabatan, akun_id: akunId });
+      setUbah(null);
+      setQ("");
+      setHasil([]);
+      setPesan({ jenis: "ok", teks: akunId === null ? `${NAMA_SLOT[jabatan]} dikosongkan.` : `${NAMA_SLOT[jabatan]} diisi.` });
+      await onBerubah();
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Kartu judul="Penanggung jawab" ket="Slot boleh dikosongkan dan diisi belakangan. Pengisi mendapat peran PJ Kegiatan pada kegiatan ini.">
+      <div className="space-y-2" data-testid="kartu-pj">
+        {pesan && <Pesan jenis={pesan.jenis} onTutup={() => setPesan(null)}>{pesan.teks}</Pesan>}
+        {slot.map((x) => (
+          <div key={x.jabatan} className="rounded-lg border border-[#DDE6F3] p-2.5" data-testid={`slot-${x.jabatan}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12px] font-semibold text-[#5B6B84]">{NAMA_SLOT[x.jabatan]}</span>
+              {x.akun_id !== null ? <Chip w="ok">{x.nama ?? `Akun #${x.akun_id}`}</Chip> : <Chip w="mut">Belum diisi</Chip>}
+              {boleh && ubah !== x.jabatan && (
+                <span className="ml-auto flex gap-1.5">
+                  <button type="button" className={BTN_O} onClick={() => { setUbah(x.jabatan); setQ(""); setPesan(null); }} disabled={busy}>
+                    {x.akun_id === null ? "Isi nama" : "Ganti"}
+                  </button>
+                  {x.akun_id !== null && (
+                    <button type="button" className={BTN_O} onClick={() => simpan(x.jabatan, null)} disabled={busy}>
+                      Kosongkan
+                    </button>
+                  )}
+                </span>
+              )}
+            </div>
+            {boleh && ubah === x.jabatan && (
+              <div className="mt-2 space-y-1.5">
+                <input className={INPUT} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nama akun (min. 2 huruf)" autoFocus />
+                {hasil.length > 0 && (
+                  <ul className="max-h-48 overflow-auto rounded-lg border border-[#DDE6F3]">
+                    {hasil.map((a) => (
+                      <li key={a.id}>
+                        <button type="button" className="flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-[13px] hover:bg-[#F3F7FD]" onClick={() => simpan(x.jabatan, a.id)} disabled={busy}>
+                          <span>{a.nama}</span>
+                          <span className="text-[11.5px] text-[#7B8794]">{a.alamat_kecamatan ?? a.jenis}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button type="button" className={BTN_O} onClick={() => { setUbah(null); setQ(""); }} disabled={busy}>
+                  Batal
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        {!boleh && <p className="text-[12px] text-[#7B8794]">Hanya pengelola akses untuk kegiatan ini yang dapat mengisi slot.</p>}
+      </div>
+    </Kartu>
   );
 }
 
