@@ -31,9 +31,10 @@ import {
 } from "@/lib/keu/rabPerSurvei";
 import { adaBarisStatus, analisisRevisi, CATATAN_JENIS_REVISI, dataStatusBaru, dataStatusUbah, LABEL_STATUS_SURVEI, NAMA_PEMICU, ringkasPemicu, statusDari, type BarisStatusSurvei, type ItemRabLengkap } from "@/lib/keu/rabStatus";
 import { periksaHariBayar, type PeriodeJadwal } from "@/lib/keu/rabSurvei";
+import { infoTahap, itemBelumTerkaitSurvei, kelompokkanTahap, KET_TAHAP, NAMA_TAHAP, ringkasBarisSurvei, tahapRincian, teksMingguCair, teksSelesai, type Tahap } from "@/lib/keu/rabTahap";
 import { rupiah, urlBaca } from "@/lib/keu/ro";
 import { jendelaCair, labelSumber, periksaCair, periksaHarga, type JendelaCair } from "@/lib/keu/usulanRab";
-import { Chip, Galat, judulKartu, kartu, kolom, label, Memuat, tombol } from "../../keu-ui";
+import { Chip, Galat, judulKartu, kartu, kolom, label, Memuat, tombol, tombolKecil } from "../../keu-ui";
 import { tulisKeuKlien, useBacaKeu, useKirim, type HasilAksi } from "../useKeu";
 import SelectCari from "@/app/components/SelectCari";
 
@@ -77,6 +78,13 @@ const TOPIK: Record<KelompokRincian, { garis: string; latar: string; ket: string
   Honor: { garis: "#7A4FBF", latar: "#F3EEFB", ket: "Honor instruktur (per JP) dan honor petugas lapangan. Honor petugas: harga satuan diisi sendiri (tarif di SPKL)." },
   Rapat: { garis: "#C9780A", latar: "#FFF4E3", ket: "Konsumsi rapat persiapan, pelaksanaan, dan evaluasi. Jumlah peserta rapat diisi sendiri." },
   "Lain-lain": { garis: "#5B6B84", latar: "#F1F4F9", ket: "Biaya lain dari identifikasi, mis. pulsa peserta pelatihan." },
+};
+
+/** Warna tiap tahap kegiatan (Bagian B dikelompokkan per tahap; jenis belanja menjadi sub-kelompok di dalamnya). */
+const WARNA_TAHAP: Record<Tahap, { garis: string; latar: string }> = {
+  Pelatihan: { garis: "#1F5FD1", latar: "#F4F8FF" },
+  Pendataan: { garis: "#0E8A6D", latar: "#F2FBF8" },
+  "Lain-lain": { garis: "#5B6B84", latar: "#F6F8FB" },
 };
 
 const subJudul = "text-[11px] font-bold uppercase tracking-[0.04em] text-[#5B6B84]";
@@ -650,6 +658,13 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const siapSemua = baris.filter((x) => x.keadaan === "siap");
   const butuhKeputusan = baris.filter((x) => x.keadaan === "butuh_item" || x.keadaan === "cek_dobel");
   const kelompokAda = KELOMPOK_RINCIAN.filter((k) => rincian.some((r) => r.kelompok === k));
+  // ---- tahapan kegiatan (7 Nov 2026): pengelompokan Bagian B dan saran pencairan per tahap
+  const namaKelas = bahan.isi.kelas.map((k) => k.nama || (k.sesi === "briefing" ? "Briefing" : "Pelatihan"));
+  const tahapAda = kelompokkanTahap(baris, (x) => tahapRincian(x.rc.r, namaKelas));
+  const infoPerTahap = new Map<Tahap, ReturnType<typeof infoTahap>>(
+    tahapAda.map((g) => [g.tahap, infoTahap(g.isi.map((x) => x.rc.selesai), new Date().getMonth() + 1, jendela.hari, libur)] as const),
+  );
+  const samakanCair = (daftar: typeof baris, c: { bulan: number; minggu: number }) => { for (const x of daftar) ubahBaris(x.rc.r.kunci, { bulan_mulai: c.bulan, minggu: c.minggu }); };
   const alur = langkahAlur({ lanjutanAda: b.lanjutan_ada, lanjutanVer: b.lanjutan_ver, lanjutanStatus: b.lanjutan_status, jumlah: ringkas.jumlah, sudah: ringkas.sudah, siap: status === "siap", berubah: berubahSemua.length });
   const adaPengaturan = kolHari.length > 0 || (periodeSah.length > 1 && kelompokAda.length > 0);
 
@@ -730,39 +745,65 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
         </Bagian>
       )}
 
-      <Bagian huruf="B" judul="Rincian per jenis belanja" ket="Tiap jenis belanja punya warna sendiri. Periksa angka, jadwal cair, dan item tujuan tiap rincian; klik «?» pada Volume untuk melihat asal angkanya." garis="#0F2A52">
-        {KELOMPOK_RINCIAN.map((k) => {
-          const isi = baris.filter((x) => x.rc.r.kelompok === k);
-          if (isi.length === 0) return null;
-          const w = TOPIK[k];
+      <Bagian huruf="B" judul="Rincian per tahapan kegiatan" ket="Rincian disusun ke bawah menurut tahapan: pelatihan, lalu pendataan. Tiap tahap menunjukkan kapan pekerjaannya selesai (dari jadwal identifikasi) dan saran minggu pencairan, yaitu satu minggu sesudahnya. Klik «?» pada Volume untuk melihat asal angkanya." garis="#0F2A52">
+        {tahapAda.map((g) => {
+          const w = WARNA_TAHAP[g.tahap];
+          const info = infoPerTahap.get(g.tahap)!;
+          const belumDisusun = g.isi.filter((x) => x.keadaan !== "sudah");
           return (
-            <div key={k} className="space-y-2 rounded-xl border p-2.5" style={{ borderColor: w.garis, background: w.latar }}>
-              <div className="flex items-start gap-2">
-                <span aria-hidden className="mt-1 h-3 w-3 flex-none rounded-full" style={{ background: w.garis }} />
-                <div className="min-w-0">
-                  <p className="text-[14px] font-bold leading-snug text-[#0F2A52]">{k} <span className="font-normal text-[#5B6B84]">({isi.length} rincian)</span></p>
-                  <p className="text-[12px] text-[#44546F]">{w.ket}</p>
-                </div>
+            <div key={g.tahap} className="space-y-2.5 rounded-xl border-2 p-3" style={{ borderColor: w.garis, background: w.latar }}>
+              <div className="space-y-1.5">
+                <p className="text-[15px] font-bold leading-snug text-[#0F2A52]">{NAMA_TAHAP[g.tahap]} <span className="font-normal text-[#5B6B84]">({g.isi.length} rincian)</span></p>
+                <p className="text-[12px] text-[#44546F]">{KET_TAHAP[g.tahap]}</p>
+                <dl className="grid gap-x-4 gap-y-1 rounded-lg bg-white/80 px-3 py-2 text-[12.5px] sm:grid-cols-2">
+                  <div><dt className="inline text-[#5B6B84]">Pekerjaan selesai: </dt><dd className="inline font-semibold text-[#0F2A52]">{teksSelesai(info.selesai)}</dd></div>
+                  <div><dt className="inline text-[#5B6B84]">Saran pencairan (selesai + 1 minggu): </dt><dd className="inline font-semibold text-[#0F2A52]">{teksMingguCair(info.cair)}</dd></div>
+                </dl>
+                {info.tanpaTanggal > 0 && (
+                  <p className="text-[12px] text-[#7A5A00]">
+                    {info.tanpaTanggal} rincian tahap ini belum punya tanggal selesai di jadwal identifikasi, jadi jadwal cairnya perlu dipilih sendiri. Lengkapi jadwal pada{" "}
+                    <Link href={`/sigap/kelola/perencanaan/identifikasi/${b.ident_id}/lanjutan`} className="font-semibold underline">identifikasi lanjutan</Link>.
+                  </p>
+                )}
+                {props.editable && info.cair && belumDisusun.length > 0 && (
+                  <button type="button" className={tombolKecil} onClick={() => samakanCair(belumDisusun, info.cair!)}>
+                    Samakan jadwal cair {belumDisusun.length} rincian ke {teksMingguCair(info.cair)}
+                  </button>
+                )}
               </div>
-              {k === "Honor" ? (
-                <div className="space-y-3">
-                  {SUB_HONOR.map((sg) => {
-                    const rs2 = isi.filter((x) => subHonor(x.rc.r.uraian) === sg.kode);
-                    if (rs2.length === 0 && !sg.selalu) return null;
-                    return (
-                      <div key={sg.kode} className="space-y-2 rounded-lg border border-[#DCCFF0] bg-white/60 p-2">
-                        <p className="text-[13px] font-bold text-[#4B2E83]">{sg.nama} <span className="font-normal text-[#5B6B84]">({rs2.length} rincian)</span></p>
-                        {rs2.length > 0 ? <ul className="space-y-2.5">{rs2.map(barisSurvei)}</ul> : <p className="text-[12px] text-[#6B7A93]">{sg.kosong}</p>}
+              {KELOMPOK_RINCIAN.map((k) => {
+                const isi = g.isi.filter((x) => x.rc.r.kelompok === k);
+                if (isi.length === 0) return null;
+                const t = TOPIK[k];
+                return (
+                  <div key={k} className="space-y-2 rounded-lg border bg-white/70 p-2.5" style={{ borderColor: t.garis }}>
+                    <div className="flex items-start gap-2">
+                      <span aria-hidden className="mt-1 h-2.5 w-2.5 flex-none rounded-full" style={{ background: t.garis }} />
+                      <p className="text-[13.5px] font-bold leading-snug text-[#0F2A52]">{k} <span className="font-normal text-[#5B6B84]">({isi.length})</span></p>
+                    </div>
+                    {k === "Honor" ? (
+                      <div className="space-y-3">
+                        {SUB_HONOR.map((sg) => {
+                          const rs2 = isi.filter((x) => subHonor(x.rc.r.uraian) === sg.kode);
+                          if (rs2.length === 0) return null;
+                          return (
+                            <div key={sg.kode} className="space-y-2 rounded-lg border border-[#DCCFF0] bg-white/60 p-2">
+                              <p className="text-[13px] font-bold text-[#4B2E83]">{sg.nama} <span className="font-normal text-[#5B6B84]">({rs2.length} rincian)</span></p>
+                              <ul className="space-y-2.5">{rs2.map(barisSurvei)}</ul>
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <ul className="space-y-2.5">{isi.map(barisSurvei)}</ul>
-              )}
+                    ) : (
+                      <ul className="space-y-2.5">{isi.map(barisSurvei)}</ul>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
+        {tahapAda.length === 0 && <p className="text-[12.5px] text-[#5B6B84]">Identifikasi ini belum menghasilkan rincian biaya. Lengkapi dulu identifikasi lanjutan.</p>}
       </Bagian>
 
       <Bagian huruf="C" judul="Susun RAB dan status" ket="Satu tombol menyusun semua rincian yang sudah lengkap ke RAB. Setelah itu nyatakan survei ini Siap diajukan." garis="#0F2A52">
@@ -869,6 +910,31 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   );
 }
 
+// ------------------------------------------------------------ item POK yang belum tercakup survei mana pun
+function BelumTerkaitSurvei({ peta }: { peta: PemetaanItem[] }) {
+  const daftar = useMemo(() => itemBelumTerkaitSurvei(peta), [peta]);
+  if (daftar.length === 0) return null;
+  const total = daftar.reduce((t, p) => t + (Number(p.pok.pok) || 0), 0);
+  return (
+    <details className="rounded-xl border border-[#DCE3EE] bg-[#F9FAFC] p-3">
+      <summary className="cursor-pointer text-[13.5px] font-bold text-[#0F2A52]">
+        Belum terkait survei: {daftar.length} butir POK, pagu {rupiah(total)}
+      </summary>
+      <p className="mt-2 text-[12.5px] text-[#44546F]">
+        Butir ini belum diisi dari identifikasi survei mana pun (belum ada baris RAB bertanda identifikasi). Isi lewat tampilan «RAB standar» bila memang di luar survei, atau tambahkan kebutuhannya pada identifikasi survei yang sesuai.
+      </p>
+      <ul className="mt-2 max-h-72 divide-y divide-[#E6EBF3] overflow-y-auto rounded-lg border border-[#E6EBF3] bg-white text-[12.5px]">
+        {daftar.map((p) => (
+          <li key={p.pok.detail_id} className="flex flex-wrap items-baseline justify-between gap-x-3 px-3 py-1.5">
+            <span className="min-w-0 break-words text-[#0F2A52]">{p.pok.nomor_item ? `${p.pok.nomor_item}. ` : ""}{p.pok.uraian} <span className="text-[#6B7A93]">· akun {p.pok.akun}</span></span>
+            <span className="whitespace-nowrap font-semibold tabular-nums text-[#0F2A52]">{rupiah(Number(p.pok.pok) || 0)}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 // ------------------------------------------------------------ pembungkus: pilih identifikasi dan baca bahan
 export function RabPerSurvei(props: PropsRabSurvei) {
   const acuan = useBacaKeu<BarisAcuan>(urlBaca("keu_v_ident_acuan", { ro_kode: props.kode }, { urut: "-tahun", batas: 20 }));
@@ -892,11 +958,24 @@ export function RabPerSurvei(props: PropsRabSurvei) {
     <section className={`${kartu} space-y-3`}>
       <h2 className={judulKartu}>RAB per survei</h2>
       {daftarIdent.length > 1 && (
-        <div>
-          <label className={label} htmlFor="rps-ident">Identifikasi survei</label>
-          <SelectCari id="rps-ident" className={kolom} value={b.ident_id} onChange={(e) => setPilih(Number(e.target.value))}>
-            {daftarIdent.map((x) => <option key={x.ident_id} value={x.ident_id}>{x.nama} ({x.tahun})</option>)}
-          </SelectCari>
+        <div role="tablist" aria-label="Pilih survei" className="grid gap-2 sm:grid-cols-2">
+          {daftarIdent.map((x) => {
+            const aktif = x.ident_id === b.ident_id;
+            const rg = ringkasBarisSurvei(x.ident_id, props.barisRab);
+            const st = statusDari(statusSurvei.baris ?? [], x.ident_id);
+            return (
+              <button
+                key={x.ident_id} type="button" role="tab" aria-selected={aktif} onClick={() => setPilih(x.ident_id)}
+                className={`rounded-xl border-2 p-3 text-left transition ${aktif ? "border-[#0F2A52] bg-[#EEF3FB]" : "border-[#DCE3EE] bg-white hover:border-[#9FB3D3]"}`}
+              >
+                <span className="block text-[14px] font-bold leading-snug text-[#0F2A52]">{x.nama} <span className="font-normal text-[#5B6B84]">({x.tahun})</span></span>
+                <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <Chip warna={st === "siap" ? "hijau" : "abu"}>{LABEL_STATUS_SURVEI[st]}</Chip>
+                  <span className="text-[12px] text-[#44546F]">{rg.n === 0 ? "belum ada baris RAB" : `${rg.n} baris RAB · ${rupiah(rg.jumlah)}`}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
       {daftarIdent.length === 1 && <p className="text-[13px] font-semibold text-[#0F2A52]">{b.nama} ({b.tahun})</p>}
@@ -909,6 +988,7 @@ export function RabPerSurvei(props: PropsRabSurvei) {
           itemBaru={itemBaru.baris ?? []} muatItemBaru={itemBaru.muat} namaIdent={namaIdent} statusRows={statusSurvei.baris ?? []} muatStatus={statusSurvei.muat}
         />
       )}
+      <BelumTerkaitSurvei peta={props.peta} />
     </section>
   );
 }

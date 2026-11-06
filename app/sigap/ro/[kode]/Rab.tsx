@@ -295,7 +295,7 @@ export function TabRab({ kode }: { kode: string }) {
   const sahTerbaru = useMemo(() => rab.riwayatRab.filter((r) => r.status === "disetujui").sort((a, b) => Number(b.nomor) - Number(a.nomor))[0] ?? null, [rab.riwayatRab]);
   const susun = useKirim(rab.muatSemua);
   const [alasanVersi, setAlasanVersi] = useState("");
-  const [tampil, setTampil] = useState<"standar" | "survei">("standar");
+  const [tampil, setTampil] = useState<"standar" | "survei">("survei");
 
   const galat = rab.galat ?? ang.galat;
   if (galat) return <Galat pesan={galat} />;
@@ -349,8 +349,8 @@ export function TabRab({ kode }: { kode: string }) {
         <>
           {yatim.length > 0 && <p className="rounded-lg bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-bold text-[#8A6200]">{yatim.length} item RAB tidak lagi cocok dengan item POK berlaku (POK berubah). Hubungi PPK untuk pemadanan.</p>}
           <div role="group" aria-label="Tampilan RAB" className="flex flex-wrap gap-2">
-            <button type="button" aria-pressed={tampil === "standar"} onClick={() => setTampil("standar")} className={`${tombol} ${tampil === "standar" ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#44546F]"}`}>RAB standar</button>
             <button type="button" aria-pressed={tampil === "survei"} onClick={() => setTampil("survei")} className={`${tombol} ${tampil === "survei" ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#44546F]"}`}>RAB per survei</button>
+            <button type="button" aria-pressed={tampil === "standar"} onClick={() => setTampil("standar")} className={`${tombol} ${tampil === "standar" ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#44546F]"}`}>RAB standar</button>
           </div>
           {tampil === "survei" ? (
             <RabPerSurvei kode={kode} rabId={ctx.rabId} editable={editable} peta={peta} itemRab={rab.itemRab} barisRab={rab.barisRab} muat={rab.muatSemua} />
