@@ -221,6 +221,14 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
 }) {
   const [info, setInfo] = useState<string | null>(null);
   useEffect(() => { if (mati) setInfo(null); }, [mati]);
+  // setelah "+ Petugas": gulir ke baris baru (paling bawah) dan arahkan kursor ke kolom namanya
+  const [fokusNo, setFokusNo] = useState<number | null>(null);
+  useEffect(() => {
+    if (fokusNo === null || isi.petugas.length < fokusNo) return;
+    const el = document.querySelector<HTMLInputElement>(`input[aria-label="Nama petugas ${fokusNo}"]`);
+    if (el) { el.scrollIntoView({ block: "center", behavior: "smooth" }); el.focus({ preventScroll: true }); }
+    setFokusNo(null);
+  }, [fokusNo, isi.petugas.length]);
   const j = jumlahPetugas(isi);
   const daftarUntuk = (p: Petugas): readonly CalonNama[] => (p.status === "Mitra" ? mitra : organik) ?? [];
   const bernama = isi.petugas.filter((p) => !slotKosong(p));
@@ -331,11 +339,17 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
         <button type="button" className={tombolKecil} disabled={mati} onClick={() => ubah((g) => { lengkapiKerangka(g); })}>Buat baris sesuai jumlah per peran</button>
         <button type="button" className={tombolKecil} disabled={mati || bisaOtomatis === 0} onClick={() => ubah((g) => { for (const p of g.petugas) { if (slotKosong(p) || p.akun !== undefined) continue; const a = cariAkunUnik(daftarUntuk(p), p.nama); if (a !== null) p.akun = a; } })}>Tautkan otomatis nama yang cocok ({bisaOtomatis})</button>
         <ImporPetugas isi={isi} ubah={ubah} mati={mati} organik={organik} mitra={mitra} onSelesai={setInfo} />
-        <button type="button" className={tombolKecil} disabled={mati || isi.petugas.length >= 3000} onClick={() => ubah((g) => { g.petugas.push({ id: idBaru("p", g.petugas.map((p) => p.id)), nama: "", menyusul: true, peran: "", status: "Organik", sumber: "", baru: false, jabatan: [] }); })}>+ Petugas</button>
       </div>
       <TabelSaring
         label="Daftar petugas" kols={kols} data={data} kunci={(r) => r.p.id} kosong="Belum ada petugas."
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button" className={tombolKecil} disabled={mati || isi.petugas.length >= 3000}
+          onClick={() => { setFokusNo(isi.petugas.length + 1); ubah((g) => { g.petugas.push({ id: idBaru("p", g.petugas.map((p) => p.id)), nama: "", menyusul: true, peran: "", status: "Organik", sumber: "", baru: false, jabatan: [] }); }); }}
+        >+ Petugas</button>
+        <span className="text-[12px] text-[#5B6B84]">Baris baru ditambahkan di bagian bawah tabel.</span>
+      </div>
     </Bagian>
   );
 }
