@@ -11,6 +11,7 @@ import { aktorDariHeader, boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
 import { GalatKonfig } from "@/lib/portal/lembarKonfig";
 import { dataAdminLaporan, simpanLaporan } from "@/lib/portal/laporanIsiKonfig";
+import { bolehKelolaKegiatan, saringPerKegiatan } from "@/lib/aturanLingkup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,14 +26,15 @@ async function siapkan(req: NextRequest, tulis: boolean) {
   if (tulis && aktorDariHeader(req.headers)) return { err: galat('Mode "masuk sebagai" hanya untuk melihat tampilan. Kembali ke akun Anda untuk mengubah pengaturan.', 403) } as const;
   const { izin } = await izinAkun(db, akun.id);
   if (!boleh(izin, "bencana.admin", tulis ? "kelola" : "lihat")) return { err: galat("Tidak punya akses admin pendataan.", 403) } as const;
-  return { db, akun, bisaKelola: boleh(izin, "bencana.admin", "kelola") } as const;
+  return { db, akun, izin, bisaKelola: boleh(izin, "bencana.admin", "kelola") } as const;
 }
 
 export async function GET(req: NextRequest) {
   try {
     const p = await siapkan(req, false);
     if ("err" in p) return p.err;
-    return NextResponse.json({ boleh_kelola: p.bisaKelola, ...(await dataAdminLaporan(p.db)) });
+    // (6 Nov 2026) hanya kegiatan dalam lingkup izin bencana.admin pemegang (mis. Pengelola SPDT NTP tidak melihat/mengubah kegiatan PSP)
+    return NextResponse.json({ boleh_kelola: p.bisaKelola, ...saringPerKegiatan(await dataAdminLaporan(p.db), p.izin, "bencana.admin") });
   } catch (e) {
     return galatServer("[api/portal/pendataan/laporan-isi GET]", e);
   }
@@ -45,6 +47,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as { kegiatan_id?: unknown; konfig?: unknown } | null;
     const kid = Number(body?.kegiatan_id);
     if (!body || !Number.isInteger(kid) || kid <= 0 || !("konfig" in body)) return galat("Permintaan tidak valid.");
+    if (!bolehKelolaKegiatan(p.izin, "bencana.admin", kid)) return galat("Anda tidak mengelola kegiatan ini.", 403);
     const hasil = await simpanLaporan(p.db, kid, body.konfig, p.akun.nama);
     await catatAudit(p.db, p.akun.id, body.konfig === null ? "laporan_isi_bawaan" : "laporan_isi_simpan", { kegiatan_id: kid, konfig: body.konfig });
     return NextResponse.json({ ok: true, ...hasil });

@@ -5,6 +5,7 @@
 // (5 Okt 2026) Tab 🎭 Peran & Izin -- matriks menu × peran dikelompokkan per portal (mockup layar 6).
 // Tiap sel select '–' / 'Lihat' / 'Kelola', disimpan langsung per perubahan (aksi simpan_izin) dgn
 // indikator per sel. Form ＋ Peran baru / ubah peran (aksi buat_peran). -- permintaan user.
+// (6 Nov 2026) Perubahan sel kini minta konfirmasi dulu (bilah di atas matriks): izin menentukan siapa boleh apa, jadi tidak tersimpan hanya karena salah pilih.
 
 import { useState } from "react";
 import { aksi, pesanGalat, SesiBerakhir } from "../admin/api";
@@ -17,7 +18,10 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
   const [status, setStatus] = useState<Record<string, StatusSel>>({});
   const [galat, setGalat] = useState<string | null>(null);
   const [formPeran, setFormPeran] = useState<Peran | "baru" | null>(null);
+  // perubahan yang menunggu konfirmasi (belum dikirim ke server)
+  const [menunggu, setMenunggu] = useState<{ p: Peran; menu: string; namaMenu: string; dari: "lihat" | "kelola" | null; ke: "lihat" | "kelola" | null } | null>(null);
   const kelola = data.boleh_kelola;
+  const namaLevel = (x: "lihat" | "kelola" | null) => (x === "kelola" ? "Kelola" : x === "lihat" ? "Lihat" : "tanpa akses");
   const grup = kelompokPortal(data.menu);
   const level = (peranId: number, menu: string) => data.izin.find((i) => i.peran_id === peranId && i.menu_kode === menu)?.level ?? null;
 
@@ -49,9 +53,30 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
   return (
     <div className="space-y-3">
       {galat && <Pesan onTutup={() => setGalat(null)}>{galat}</Pesan>}
+      {menunggu && (
+        <div role="alertdialog" aria-label="Konfirmasi perubahan izin" className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+          <span className="min-w-0 flex-1">
+            Ubah izin <b>{menunggu.namaMenu}</b> untuk peran <b>{menunggu.p.nama}</b> dari <b>{namaLevel(menunggu.dari)}</b> menjadi <b>{namaLevel(menunggu.ke)}</b>? Berlaku untuk semua akun pemegang peran ini.
+          </span>
+          <button
+            type="button"
+            className={BTN}
+            onClick={() => {
+              const m = menunggu;
+              setMenunggu(null);
+              void ubahIzin(m.p, m.menu, m.ke);
+            }}
+          >
+            Ya, simpan
+          </button>
+          <button type="button" className={BTN_O} onClick={() => setMenunggu(null)}>
+            Batal
+          </button>
+        </div>
+      )}
       <Kartu
         judul="Matriks izin per peran"
-        ket="“Kelola” sudah termasuk “Lihat”. Perubahan langsung tersimpan."
+        ket="“Kelola” sudah termasuk “Lihat”. Setiap perubahan diminta konfirmasi dulu sebelum tersimpan."
         kanan={
           kelola ? (
             <button type="button" className={BTN_O} onClick={() => setFormPeran(formPeran === "baru" ? null : "baru")}>
@@ -125,7 +150,7 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
                           <span className="inline-flex items-center gap-1">
                             <select
                               value={lv ?? ""}
-                              onChange={(e) => ubahIzin(p, m.kode, (e.target.value || null) as "lihat" | "kelola" | null)}
+                              onChange={(e) => setMenunggu({ p, menu: m.kode, namaMenu: m.nama, dari: lv, ke: (e.target.value || null) as "lihat" | "kelola" | null })}
                               disabled={st === "simpan"}
                               aria-label={`${m.nama} untuk ${p.nama}`}
                               className={`${INPUT} py-1 text-[12px] font-bold ${lv === "kelola" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : lv === "lihat" ? "border-sky-200 bg-sky-50 text-sky-800" : "text-slate-400"}`}

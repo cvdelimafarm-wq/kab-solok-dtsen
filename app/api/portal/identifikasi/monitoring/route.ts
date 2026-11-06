@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
-import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { bolehPsp, izinAkun } from "@/lib/sigapAkses";
 import { monitoringIdentifikasi } from "@/lib/portal/identifikasi";
 
 export const runtime = "nodejs";
@@ -18,7 +18,8 @@ export async function GET(req: NextRequest) {
   if (!akun) return NextResponse.json({ error: "Sesi berakhir. Silakan masuk kembali." }, { status: 401 });
   try {
     const { izin } = await izinAkun(db, akun.id);
-    if (!boleh(izin, "bencana.admin", "lihat")) return NextResponse.json({ error: "Anda tidak punya akses ke monitoring ini." }, { status: 403 });
+    // (6 Nov 2026) data identifikasi SLS = data PSP: hanya pemegang bencana.admin yang lingkupnya mencakup PSP (kegiatan 1 atau semua)
+    if (!bolehPsp(izin, "lihat")) return NextResponse.json({ error: "Anda tidak punya akses ke monitoring ini." }, { status: 403 });
     const m = await monitoringIdentifikasi(db);
     return NextResponse.json({ sekarang: new Date().toISOString(), ...m });
   } catch (err) {

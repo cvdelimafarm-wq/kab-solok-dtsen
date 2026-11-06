@@ -7,13 +7,15 @@
 //     TIDAK dipakai untuk reset, supaya tautan yang bocor tidak bisa dipakai membajak PIN.
 //  2. ADMIN "Reset PIN": admin menekan tombol, server membuat PIN SEMENTARA 4 digit (tampil sekali ke admin, disimpan
 //     hanya sebagai hash). Berlaku 24 jam; saat dipakai masuk, petugas WAJIB mengganti dengan PIN sendiri.
-//     Akun admin (Admin Aplikasi / Admin Anggaran) hanya boleh direset Admin Aplikasi (cegah naik hak akses).
+//     Akun admin (Admin Aplikasi / Admin Anggaran) dan pemegang izin `kelola` hanya boleh direset Admin Aplikasi (cegah naik hak akses);
+//     admin lain hanya boleh mereset akun yang bertugas di kegiatan yang dikelolanya (aturan: lib/aturanLingkup.ts).
 
 import crypto from "crypto";
 import { cekPin, hashPin, normNama } from "@/lib/undangan";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
 import { catatAudit } from "@/lib/sigapAkses";
 import type { Db } from "@/lib/sigap";
+import { PERAN_PIN_TERLINDUNGI, periksaSasaranReset, type LingkupKegiatan, type SasaranReset } from "@/lib/aturanLingkup";
 
 const TIKET_MENIT = 10;
 export const PIN_SEMENTARA_JAM = 24;
@@ -79,28 +81,64 @@ export async function masihPinAwal(db: Db, akunId: number): Promise<boolean> {
   return cocok;
 }
 
-const PERAN_ADMIN = ["admin_aplikasi", "admin_anggaran"];
+/**
+ * (6 Nov 2026) Memuat data sasaran untuk `periksaSasaranReset`: peran, apakah memegang izin `kelola`, dan kegiatan penugasan aktifnya.
+ * Satu akun = beberapa kueri kecil; dipakai juga `akunTerlindungi` untuk banyak akun sekaligus.
+ */
+export async function muatSasaranReset(db: Db, akunId: number, aktif: boolean): Promise<SasaranReset> {
+  const [{ data: ap }, { data: pen }] = await Promise.all([
+    db.from("sigap_akun_peran").select("peran_id").eq("akun_id", akunId),
+    db.from("sigap_penugasan").select("kegiatan_id").eq("akun_id", akunId).eq("aktif", true),
+  ]);
+  const ids = Array.from(new Set((ap ?? []).map((x) => x.peran_id as number)));
+  let peranKode: string[] = [];
+  let punyaIzinKelola = false;
+  if (ids.length) {
+    const [{ data: pr }, { data: iz }] = await Promise.all([
+      db.from("sigap_peran").select("kode").in("id", ids),
+      db.from("sigap_peran_izin").select("peran_id").in("peran_id", ids).eq("level", "kelola").limit(1),
+    ]);
+    peranKode = (pr ?? []).map((p) => p.kode as string);
+    punyaIzinKelola = (iz ?? []).length > 0;
+  }
+  return { aktif, peranKode, punyaIzinKelola, kegiatanPenugasan: Array.from(new Set((pen ?? []).map((x) => Number(x.kegiatan_id)))) };
+}
 
-/** Reset PIN oleh admin -> PIN sementara. `adminAplikasi` = aktor punya izin portal.kelola (kelola). */
+/** Subset `akunIds` yang terlindungi (peran admin atau memegang izin `kelola`). Dipakai pencarian akun agar pengelola tak mudah dijadikan sasaran. */
+export async function akunTerlindungi(db: Db, akunIds: number[]): Promise<Set<number>> {
+  const hasil = new Set<number>();
+  if (!akunIds.length) return hasil;
+  const { data: ap } = await db.from("sigap_akun_peran").select("akun_id, peran_id").in("akun_id", akunIds);
+  const peranIds = Array.from(new Set((ap ?? []).map((x) => x.peran_id as number)));
+  if (!peranIds.length) return hasil;
+  const [{ data: pr }, { data: iz }] = await Promise.all([
+    db.from("sigap_peran").select("id, kode").in("id", peranIds),
+    db.from("sigap_peran_izin").select("peran_id").in("peran_id", peranIds).eq("level", "kelola"),
+  ]);
+  const peranTerlindungi = new Set<number>();
+  for (const p of pr ?? []) if (PERAN_PIN_TERLINDUNGI.includes(p.kode as string)) peranTerlindungi.add(p.id as number);
+  for (const i of iz ?? []) peranTerlindungi.add(i.peran_id as number);
+  for (const x of ap ?? []) if (peranTerlindungi.has(x.peran_id as number)) hasil.add(x.akun_id as number);
+  return hasil;
+}
+
+/**
+ * Reset PIN oleh admin -> PIN sementara. `adminAplikasi` = aktor punya izin portal.kelola (kelola).
+ * (6 Nov 2026) `lingkup` = kegiatan yang boleh dikelola aktor ("semua" atau daftar id). Tanpa `lingkup` dianggap kosong (menolak),
+ * jadi pemanggil lama yang belum diperbarui gagal dengan aman, bukan terbuka.
+ */
 export async function resetPinOlehAdmin(
   db: Db,
-  aktor: { akunId: number; nama: string; adminAplikasi: boolean },
+  aktor: { akunId: number; nama: string; adminAplikasi: boolean; lingkup?: LingkupKegiatan },
   akunId: number
 ): Promise<{ ok: true; pin: string; nama: string; sampai: string; hp: string | null } | { ok: false; error: string; status: number }> {
   if (!Number.isInteger(akunId) || akunId <= 0) return { ok: false, error: "Akun tidak valid.", status: 400 };
   if (akunId === aktor.akunId) return { ok: false, error: "Untuk PIN Anda sendiri, pakai \"Lupa PIN?\" di halaman masuk.", status: 400 };
   const { data: a } = await db.from("sigap_akun").select("id, nama, aktif, petugas_bencana_id").eq("id", akunId).maybeSingle();
   if (!a) return { ok: false, error: "Akun tidak ditemukan.", status: 404 };
-  if (!a.aktif) return { ok: false, error: "Akun ini tidak aktif.", status: 409 };
-  if (!aktor.adminAplikasi) {
-    const { data: ap } = await db.from("sigap_akun_peran").select("peran_id").eq("akun_id", akunId);
-    const ids = (ap ?? []).map((x) => x.peran_id as number);
-    if (ids.length) {
-      const { data: pr } = await db.from("sigap_peran").select("kode").in("id", ids);
-      if ((pr ?? []).some((p) => PERAN_ADMIN.includes(p.kode as string)))
-        return { ok: false, error: "PIN akun admin hanya dapat direset oleh Admin Aplikasi.", status: 403 };
-    }
-  }
+  const sasaran = await muatSasaranReset(db, akunId, !!a.aktif);
+  const galat = periksaSasaranReset({ adminAplikasi: aktor.adminAplikasi, lingkup: aktor.lingkup ?? [] }, sasaran);
+  if (galat) return { ok: false, error: galat.error, status: galat.status };
   const pin = buatPinSementara();
   const { hash, salt } = hashPin(pin);
   const sampai = new Date(Date.now() + PIN_SEMENTARA_JAM * 3_600_000).toISOString();

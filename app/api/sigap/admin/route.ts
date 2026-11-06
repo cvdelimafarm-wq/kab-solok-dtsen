@@ -20,7 +20,8 @@ import { createClient } from "@/lib/supabaseServer";
 import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
-import { resetPinOlehAdmin } from "@/lib/sigapPin";
+import { akunTerlindungi, resetPinOlehAdmin } from "@/lib/sigapPin";
+import { lingkupGabungan, periksaBeriPeran, periksaUbahIzin } from "@/lib/aturanLingkup";
 import { buangMemo } from "@/lib/portal/memoSingkat";
 import { AWALAN_MEMO_PENUGASAN } from "@/lib/portal/penugasanMemo";
 import { AWALAN_MEMO_TIM } from "@/lib/portal/pendataan";
@@ -220,8 +221,15 @@ export async function GET(req: NextRequest) {
       if (!(boleh(s.izin, "translok.penugasan", "kelola") || boleh(s.izin, "akses.kelola", "kelola"))) return galat("Tidak punya izin.", 403);
       const q = (sp.get("q") ?? "").trim();
       if (q.length < 2) return NextResponse.json({ akun: [] });
-      const { data } = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan").eq("aktif", true).ilike("nama", `%${q.replace(/[%_]/g, "")}%`).order("nama").limit(20);
-      return NextResponse.json({ akun: data ?? [] });
+      const { data } = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan").eq("aktif", true).ilike("nama", `%${q.replace(/[%_]/g, "")}%`).order("nama").limit(60);
+      let akun = (data ?? []) as { id: number }[];
+      // (6 Nov 2026) Pengelola kegiatan (tanpa izin Kelola Peran & Akses) tidak melihat akun admin/pengelola di hasil cari: mereka bukan sasaran sah reset PIN
+      // maupun penugasan. Pemegang akses.kelola/portal.kelola melihat semua karena memang mengelola akun.
+      if (!(boleh(s.izin, "akses.kelola", "kelola") || boleh(s.izin, "portal.kelola", "kelola"))) {
+        const lindung = await akunTerlindungi(db, akun.map((x) => x.id));
+        akun = akun.filter((x) => !lindung.has(x.id));
+      }
+      return NextResponse.json({ akun: akun.slice(0, 20) });
     }
 
     // (27 Okt 2026) Rincian satu hari kerja satu petugas untuk jendela "Rincian hari" di tab Monitoring: laporan harian + foto dokumentasi
@@ -720,7 +728,9 @@ async function proses(req: NextRequest) {
     // ---------------- (7 Okt 2026) Reset PIN -> PIN sementara (tampil sekali) ----------------
     if (aksi === "reset_pin") {
       if (!(boleh(s.izin, "akses.kelola", "kelola") || boleh(s.izin, "translok.penugasan", "kelola") || boleh(s.izin, "portal.kelola", "kelola"))) return galat("Tidak punya izin mereset PIN.", 403);
-      const r = await resetPinOlehAdmin(db, { akunId: s.akunId, nama: s.nama, adminAplikasi: boleh(s.izin, "portal.kelola", "kelola") }, Number(body?.akun_id));
+      const adminAplikasi = boleh(s.izin, "portal.kelola", "kelola");
+      const lingkupReset = adminAplikasi ? "semua" : lingkupGabungan(s.izin, ["akses.kelola", "translok.penugasan"], "kelola");
+      const r = await resetPinOlehAdmin(db, { akunId: s.akunId, nama: s.nama, adminAplikasi, lingkup: lingkupReset }, Number(body?.akun_id));
       if (!r.ok) return galat(r.error, r.status);
       return NextResponse.json({ ok: true, pin: r.pin, nama: r.nama, sampai: r.sampai, hp: r.hp });
     }
@@ -754,6 +764,9 @@ async function proses(req: NextRequest) {
         const { data: p } = await db.from("sigap_peran").select("kode").eq("id", peranId).maybeSingle();
         if (!p) return galat("Peran tidak ditemukan.", 404);
         if (PERAN_KHUSUS_ADMIN_APLIKASI.includes(p.kode as string) && !boleh(s.izin, "portal.kelola", "kelola")) return galat("Izin peran admin aplikasi hanya dapat diubah Admin Aplikasi.", 403);
+        // (6 Nov 2026) Cegah naik hak sendiri: tidak boleh mengubah izin peran yang dipegang sendiri, dan menu hak tertinggi hanya Admin Aplikasi.
+        const tolakIzin = periksaUbahIzin({ adminAplikasi: boleh(s.izin, "portal.kelola", "kelola"), peranDipegang: s.peran.map((x) => x.peran_id), peranId, menu });
+        if (tolakIzin) return galat(tolakIzin.error, tolakIzin.status);
         // Pengaman: admin anggaran harus tetap bisa mengelola akses (agar sistem tidak terkunci).
         if (p.kode === "admin_anggaran" && menu === "akses.kelola" && level !== "kelola") return galat("Izin Kelola Akses untuk Admin Anggaran tidak bisa dicabut.");
         if (level) {
@@ -775,6 +788,10 @@ async function proses(req: NextRequest) {
         if (!p) return galat("Peran tidak ditemukan.", 404);
         if (PERAN_KHUSUS_ADMIN_APLIKASI.includes(p.kode as string) && !boleh(s.izin, "portal.kelola", "kelola")) return galat("Peran admin aplikasi hanya dapat diberikan Admin Aplikasi.", 403);
         if (p.butuh_lingkup && !kegiatanId) return galat("Peran ini perlu dipilih kegiatannya.");
+        // (6 Nov 2026) Tidak boleh memberi peran ke diri sendiri, dan peran yang memuat hak tertinggi hanya diberikan Admin Aplikasi.
+        const { data: izPeran } = await db.from("sigap_peran_izin").select("menu_kode").eq("peran_id", peranId);
+        const tolakPeran = periksaBeriPeran({ adminAplikasi: boleh(s.izin, "portal.kelola", "kelola"), aktorId: s.akunId, akunId, menuPeran: (izPeran ?? []).map((x) => x.menu_kode as string) });
+        if (tolakPeran) return galat(tolakPeran.error, tolakPeran.status);
         const { error } = await db.from("sigap_akun_peran").insert({ akun_id: akunId, peran_id: peranId, kegiatan_id: kegiatanId, diberi_oleh: oleh });
         if (error) return galat(error.message.includes("duplicate") ? "Akun sudah punya peran ini." : error.message, 400);
         await audit({ akun_id: akunId, peran: p.kode, kegiatan_id: kegiatanId });
