@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { fetchBencana } from "./fetchBencana";
 
 // ------------------------------------------------------------------------
 // (4 Okt 2026) Kartu admin "Undangan Konfirmasi" di tab Alokasi Petugas.
@@ -167,7 +168,7 @@ export default function UndanganAdminCard({
 
   const muat = useCallback(async () => {
     try {
-      const res = await fetch("/api/bencana/alokasi/undangan", { cache: "no-store" });
+      const res = await fetchBencana("/api/bencana/alokasi/undangan", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal memuat data undangan.");
       setRows(json.data ?? []);
@@ -183,7 +184,7 @@ export default function UndanganAdminCard({
   }, [muat]);
 
   async function kirim(body: Record<string, unknown>): Promise<boolean> {
-    const res = await fetch("/api/bencana/alokasi/undangan", {
+    const res = await fetchBencana("/api/bencana/alokasi/undangan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -249,7 +250,7 @@ export default function UndanganAdminCard({
     setError(null);
     setInfo(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/undangan", {
+      const res = await fetchBencana("/api/bencana/alokasi/undangan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ aksi: "buat_tawaran_jauh", petugas_ids: Array.from(dipilih) }),

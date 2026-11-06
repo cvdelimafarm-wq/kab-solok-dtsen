@@ -13,7 +13,7 @@
 //   tim?:     [{ ppl_id, pml_id }],                // opsional: atasan tiap PPL
 //   timpa:    boolean,                              // false = HANYA isi yg masih kosong
 //   simulasi?: boolean,                             // true = pratinjau saja, tidak menulis apa pun
-//   pin?: string                                    // wajib utk timpa=true & simulasi=false
+//   konfirmasi?: string                             // wajib "TIMPA" utk timpa=true & simulasi=false
 // }
 //
 // Aturan mode:
@@ -21,13 +21,14 @@
 //                    PPL yg SUDAH terisi tidak diubah. Hanya yg kosong yg diisi.
 //   timpa = true  -> Sub SLS yg ada di file diganti sesuai file (baris PPL lama utk
 //                    Sub SLS itu dihapus); atasan PPL diganti sesuai file. Sub SLS
-//                    yg TIDAK ada di file tidak disentuh. Aksi ini digerbangi PIN
-//                    yg sama dgn "Reset Semua Plotting".
+//                    yg TIDAK ada di file tidak disentuh. Aksi ini digerbangi sesi admin
+//                    + kata konfirmasi (bukan PIN lagi).
 // Sub SLS dgn >1 baris di file = dipecah ke beberapa PPL, porsi_kk (jumlah KK
 // langsung per PPL) WAJIB diisi (> 0) utk semua barisnya.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 import { hitungJarakJalanMassal, haversineKm } from "@/lib/jarakJalan";
 import { rpcSemua } from "@/lib/supabaseRpc";
 
@@ -35,8 +36,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Sama dgn PIN_RESET di reset-semua/route.ts (cuma extra friction, bukan login).
-const PIN_TIMPA = "1234";
+// (6 Nov 2026) PIN statis dihentikan (audit K04a-A1): penjaga sebenarnya = sesi + izin kelola PSP + jejak audit. Kata ini hanya pencegah salah klik.
+const KATA_TIMPA = "TIMPA";
 
 function supabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -86,6 +87,8 @@ function angka(v: unknown): number | null {
 }
 
 export async function POST(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
@@ -95,8 +98,8 @@ export async function POST(req: NextRequest) {
   const timpa = body?.timpa === true;
   const simulasi = body?.simulasi === true;
   if (timpa && !simulasi) {
-    const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
-    if (pin !== PIN_TIMPA) return NextResponse.json({ error: "PIN salah." }, { status: 403 });
+    const konfirmasi = typeof body?.konfirmasi === "string" ? body.konfirmasi.trim().toUpperCase() : "";
+    if (konfirmasi !== KATA_TIMPA) return NextResponse.json({ error: `Ketik ${KATA_TIMPA} untuk mengonfirmasi.` }, { status: 400 });
   }
 
   const plotMentah: unknown[] = Array.isArray(body?.plotting) ? body.plotting : [];

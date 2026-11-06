@@ -24,6 +24,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,8 @@ function supabaseAdmin() {
 }
 
 export async function GET(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const db = supabaseAdmin();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
 

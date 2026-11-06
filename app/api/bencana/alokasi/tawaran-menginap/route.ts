@@ -21,12 +21,13 @@
 //      -> buat 1 tawaran baru + kandidat sekaligus (token di-generate
 //         otomatis per kandidat oleh default kolom di database).
 //
-// Publik ADMIN-ONLY secara konvensi (tanpa login, spt endpoint lain di app
+// ADMIN-ONLY: kini wajib sesi SIGAP + izin PSP (dulu hanya konvensi, tanpa login, spt endpoint lain di app
 // ini) -- link PUBLIK yg dibagikan ke kandidat ada di
 // app/api/bencana/menginap/[token]/route.ts, BUKAN di sini.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,9 @@ function supabaseAdmin() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
@@ -98,6 +101,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });

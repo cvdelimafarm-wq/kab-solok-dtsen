@@ -39,6 +39,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 import { hitungJarakJalanMassal, haversineKm } from "@/lib/jarakJalan";
 import { rpcSemua } from "@/lib/supabaseRpc";
 
@@ -53,6 +54,8 @@ function supabaseAdmin() {
 }
 
 export async function POST(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });

@@ -29,11 +29,11 @@
 // FE utk MENGECUALIKAN mitra ybs dari popover "Saran" Tier 1/2 & fitur
 // "Auto Plot" di Langkah 4 (tetap bisa diplot manual lewat dropdown).
 //
-// Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya di
-// aplikasi ini (tidak ada sistem login sama sekali di /bencana).
+// (6 Nov 2026) Wajib sesi SIGAP + izin PSP (lib/gerbangRute.ts); dulu publik tanpa login.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 import { rpcSemua } from "@/lib/supabaseRpc";
 
 export const runtime = "nodejs";
@@ -47,6 +47,8 @@ function supabaseAdmin() {
 }
 
 export async function GET(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });

@@ -14,10 +14,11 @@
 //      -> tombol "Centang Semua" / "Lepas Semua" -- berlaku utk seluruh
 //         calon, atau hanya satu kecamatan kalau parameter kecamatan diisi.
 //
-// Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
+// (6 Nov 2026) Wajib sesi SIGAP + izin PSP (lib/gerbangRute.ts); dulu publik tanpa login.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,9 @@ function supabaseAdmin() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
@@ -40,6 +43,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });

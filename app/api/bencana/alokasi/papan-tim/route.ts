@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 import { hitungJarakJalanMassal, haversineKm } from "@/lib/jarakJalan";
 import { rpcSemua } from "@/lib/supabaseRpc";
 
@@ -57,7 +58,9 @@ type Petugas = {
   lokasi_status: string | null;
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const db = supabaseAdmin();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
   try {
@@ -163,6 +166,8 @@ type PerubahanPpl = { petugas_id: number; atasan_id: number | null };
 type PerubahanSub = { idsubsls: string; pml_id: number | null; ppl_id: number | null; mode_kerja: "private" | "keroyok" };
 
 export async function POST(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const db = supabaseAdmin();
   if (!db) return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
   const body = await req.json().catch(() => null);

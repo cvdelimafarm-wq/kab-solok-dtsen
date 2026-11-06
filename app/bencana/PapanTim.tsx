@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { fetchBencana } from "./fetchBencana";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) Langkah 5 "Papan Tim" (keroyokan) -- permintaan user, mockup disetujui:
@@ -58,7 +59,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
 
   const muat = useCallback(async () => {
     try {
-      const res = await fetch("/api/bencana/alokasi/papan-tim", { cache: "no-store" });
+      const res = await fetchBencana("/api/bencana/alokasi/papan-tim", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal memuat Papan Tim.");
       setData(json as DataPapan);
@@ -185,7 +186,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
     setError(null);
     setInfo(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/papan-tim", {
+      const res = await fetchBencana("/api/bencana/alokasi/papan-tim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(perubahan),

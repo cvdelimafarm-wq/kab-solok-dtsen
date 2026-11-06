@@ -18,13 +18,14 @@
 //   3) tier3 -- Nagari yang sama TAPI TIDAK/BELUM berstatus Diterima di
 //      kegiatan lain (fallback, mitra lokal yang belum tentu aktif).
 //
-// Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
+// (6 Nov 2026) Tetap terbuka untuk umum (dipakai form Identifikasi), tetapi nomor telepon disamarkan kecuali bagi pemegang izin PSP.
 // alamat_kecamatan di bencana_mitra formatnya tidak seragam (ada yg
 // berawalan kode "(130) X Koto Singkarak", ada yg polos) sehingga
 // dicocokkan dgn menghilangkan awalan kode + disamakan huruf besar/kecil.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { pemegangIzinPsp, samarkanTelp } from "@/lib/gerbangRute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,10 +99,13 @@ export async function GET(req: NextRequest) {
       (m) => !idTier1.has(m.id) && bersihkanKecamatan(m.alamat_kecamatan) === kecamatanBersih
     );
 
+    // (6 Nov 2026) Nomor telepon hanya utuh bagi pemegang izin PSP; umum melihat nomor yang disamarkan (audit K04a-A1).
+    const utuh = await pemegangIzinPsp(req);
+    const aman = (l: MitraCalon[]) => (utuh ? l : l.map((m) => ({ ...m, no_telp: samarkanTelp(m.no_telp) })));
     return NextResponse.json({
-      tier1,
-      tier2,
-      tier3,
+      tier1: aman(tier1),
+      tier2: aman(tier2),
+      tier3: aman(tier3),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Terjadi kesalahan tak terduga";

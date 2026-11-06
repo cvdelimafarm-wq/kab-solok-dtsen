@@ -17,10 +17,11 @@
 // indikator_dampak_kk pada laporan itu), supaya ada opsi cepat mengisi
 // kolom KK Terdampak selain data asli (rata-jorong) atau ketik manual.
 //
-// Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
+// (6 Nov 2026) Wajib sesi SIGAP + izin PSP (lib/gerbangRute.ts); dulu publik tanpa login.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,6 +34,8 @@ function supabaseAdmin() {
 }
 
 export async function GET(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });

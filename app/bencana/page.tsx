@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { haversineKm } from "@/lib/jarakJalan";
 import UndanganAdminCard from "./UndanganAdminCard";
+// (6 Nov 2026) rute admin /api/bencana/** kini wajib sesi SIGAP + izin PSP (lib/gerbangRute.ts): kirim sesi lewat pembungkus ini.
+import { fetchBencana, sesiBencana } from "./fetchBencana";
 // (5 Okt 2026) Langkah 5 "Papan Tim" (keroyokan, drag & drop).
 import PapanTim from "./PapanTim";
 import ReportKonfirmasiWilayah from "./ReportKonfirmasiWilayah";
@@ -1121,7 +1123,7 @@ function IkonSumberKkTerdampak({
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/bencana/alokasi/beban/sumber?idsubsls=${encodeURIComponent(idsubsls)}`);
+        const res = await fetchBencana(`/api/bencana/alokasi/beban/sumber?idsubsls=${encodeURIComponent(idsubsls)}`);
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "Gagal memuat sumber data KK terdampak.");
         setData(json);
@@ -1272,7 +1274,7 @@ function IkonRekomendasiMitra({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
+      const res = await fetchBencana(
         `/api/bencana/rekomendasi-mitra?iddesa=${encodeURIComponent(iddesa)}&kecamatan=${encodeURIComponent(
           kecamatan
         )}`
@@ -2984,7 +2986,7 @@ function PengaturanBebanSection() {
   async function muat() {
     setLoadError(null);
     try {
-      const res = await fetch("/api/bencana/pengaturan-beban");
+      const res = await fetchBencana("/api/bencana/pengaturan-beban");
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal memuat pengaturan beban.");
       const data: PengaturanBebanRow[] = json.data ?? [];
@@ -3040,7 +3042,7 @@ function PengaturanBebanSection() {
         if (!Number.isFinite(nilai) || nilai <= 0) {
           throw new Error(`Nilai "${r.label}" harus berupa angka lebih besar dari 0.`);
         }
-        const res = await fetch("/api/bencana/pengaturan-beban", {
+        const res = await fetchBencana("/api/bencana/pengaturan-beban", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ kunci: r.kunci, nilai }),
@@ -3322,7 +3324,7 @@ function MasterPetugasSection() {
     (async () => {
       setLoadError(null);
       try {
-        const res = await fetch("/api/bencana/master-petugas");
+        const res = await fetchBencana("/api/bencana/master-petugas");
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || "Gagal memuat data master petugas.");
         setRows(json.data ?? []);
@@ -3938,7 +3940,7 @@ function KegiatanPetugasSection() {
   async function muatUlang() {
     setLoadError(null);
     try {
-      const res = await fetch("/api/bencana/kegiatan-petugas");
+      const res = await fetchBencana("/api/bencana/kegiatan-petugas");
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal memuat data kegiatan petugas.");
       setRows(json.data ?? []);
@@ -3974,7 +3976,7 @@ function KegiatanPetugasSection() {
     setBusy((prev) => new Set(prev).add(kunci));
     tandaiError(kunci, null);
     try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
+      const res = await fetchBencana("/api/bencana/kegiatan-petugas", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: id, status_kepegawaian: status }),
@@ -4001,7 +4003,7 @@ function KegiatanPetugasSection() {
     setBusy((prev) => new Set(prev).add(kunci));
     tandaiError(kunci, null);
     try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
+      const res = await fetchBencana("/api/bencana/kegiatan-petugas", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: id, pendaftaran_bencana_konfirmasi: nilai }),
@@ -4028,7 +4030,7 @@ function KegiatanPetugasSection() {
     setBusy((prev) => new Set(prev).add(kunci));
     tandaiError(kunci, null);
     try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
+      const res = await fetchBencana("/api/bencana/kegiatan-petugas", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: id, rekomendasi_pml: nilai }),
@@ -4053,7 +4055,7 @@ function KegiatanPetugasSection() {
     setBusy((prev) => new Set(prev).add(kunci));
     tandaiError(kunci, null);
     try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
+      const res = await fetchBencana("/api/bencana/kegiatan-petugas", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: id, red_flag_kinerja: nilai }),
@@ -4089,7 +4091,7 @@ function KegiatanPetugasSection() {
     setBusy((prev) => new Set(prev).add(kunci));
     tandaiError(kunci, null);
     try {
-      const res = await fetch("/api/bencana/kegiatan-petugas", {
+      const res = await fetchBencana("/api/bencana/kegiatan-petugas", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: id, kegiatan, aktif }),
@@ -5101,7 +5103,7 @@ function AlokasiPetugasSection() {
     setTimBusy(pmlId);
     setTimPesan(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/reassign", {
+      const res = await fetchBencana("/api/bencana/alokasi/reassign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -5152,9 +5154,8 @@ function AlokasiPetugasSection() {
     null
   );
   // (3 Okt 2026) "Reset Semua Plotting": hapus SELURUH plotting PPL (termasuk
-  // Sub SLS yg sudah dipecah) sekali jalan -- aksi destruktif, digerbangi PIN
-  // statis (app ini tidak punya sistem login sama sekali) supaya tidak
-  // kepencet tidak sengaja.
+  // Sub SLS yg sudah dipecah) sekali jalan -- aksi destruktif. (6 Nov 2026) PIN statis
+  // diganti sesi SIGAP + kata konfirmasi "RESET" supaya tidak kepencet tidak sengaja.
   const [modalReset, setModalReset] = useState(false);
   const [resetKecamatan, setResetKecamatan] = useState(""); // "" = semua kecamatan
   const [resetNagari, setResetNagari] = useState(""); // "" = semua nagari di kecamatan terpilih
@@ -5275,7 +5276,7 @@ function AlokasiPetugasSection() {
   }
 
   async function muatBeban() {
-    const res = await fetch("/api/bencana/alokasi/beban", { cache: "no-store" });
+    const res = await fetchBencana("/api/bencana/alokasi/beban", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat kertas kerja beban.");
     setBebanRows(json.data ?? []);
@@ -5288,7 +5289,7 @@ function AlokasiPetugasSection() {
   // x jumlah_hari_kerja. Nilai pembagi ini admin-configurable (menu "Kelola
   // Perkiraan Beban Tugas"), jadi diambil dari server, BUKAN di-hardcode.
   async function muatPengaturanBeban() {
-    const res = await fetch("/api/bencana/pengaturan-beban", { cache: "no-store" });
+    const res = await fetchBencana("/api/bencana/pengaturan-beban", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat pengaturan beban.");
     const rows = (json.data ?? []) as { kunci: string; nilai: number }[];
@@ -5298,7 +5299,7 @@ function AlokasiPetugasSection() {
   }
 
   async function muatKontak() {
-    const res = await fetch("/api/bencana/alokasi/kontak-mitra", { cache: "no-store" });
+    const res = await fetchBencana("/api/bencana/alokasi/kontak-mitra", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat daftar mitra perlu dihubungi.");
     setKontakRows(json.data ?? []);
@@ -5308,7 +5309,7 @@ function AlokasiPetugasSection() {
     setKontakBusyId(id);
     setKontakError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/kontak-mitra", {
+      const res = await fetchBencana("/api/bencana/alokasi/kontak-mitra", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: id, status, catatan }),
@@ -5329,7 +5330,7 @@ function AlokasiPetugasSection() {
   }
 
   async function muatSampel() {
-    const res = await fetch("/api/bencana/alokasi/sampel", { cache: "no-store" });
+    const res = await fetchBencana("/api/bencana/alokasi/sampel", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat daftar calon wilayah sampel.");
     setCalonSampel(json.data ?? []);
@@ -5346,7 +5347,7 @@ function AlokasiPetugasSection() {
   // mencegah Next.js men-cache di sisi server -- tidak mencegah BROWSER
   // meng-cache response fetch() ini sendiri.
   async function muatData(hariKerja: number) {
-    const res = await fetch(`/api/bencana/alokasi?hari_kerja=${hariKerja}`, { cache: "no-store" });
+    const res = await fetchBencana(`/api/bencana/alokasi?hari_kerja=${hariKerja}`, { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat data alokasi.");
     setKertasKerja(json.kertas_kerja ?? []);
@@ -5360,7 +5361,7 @@ function AlokasiPetugasSection() {
   }
 
   async function muatTawaranMenginap() {
-    const res = await fetch("/api/bencana/alokasi/tawaran-menginap", { cache: "no-store" });
+    const res = await fetchBencana("/api/bencana/alokasi/tawaran-menginap", { cache: "no-store" });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || "Gagal memuat daftar tawaran menginap.");
     setTawaranList(json.data ?? []);
@@ -5405,7 +5406,7 @@ function AlokasiPetugasSection() {
     setPecahBusy(true);
     setPecahError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/pecah", {
+      const res = await fetchBencana("/api/bencana/alokasi/pecah", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idsubsls, pembagian }),
@@ -5425,7 +5426,7 @@ function AlokasiPetugasSection() {
     setGabungBusyId(idsubsls);
     setGabungInfo(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/pecah", {
+      const res = await fetchBencana("/api/bencana/alokasi/pecah", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idsubsls, gabung_kembali: true }),
@@ -5452,10 +5453,10 @@ function AlokasiPetugasSection() {
     setResetBusy(true);
     setResetError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/reset-semua", {
+      const res = await fetchBencana("/api/bencana/alokasi/reset-semua", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: resetPin, kecamatan: resetKecamatan || null, nagari: resetNagari || null }),
+        body: JSON.stringify({ konfirmasi: resetPin, kecamatan: resetKecamatan || null, nagari: resetNagari || null }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal mereset plotting.");
@@ -5597,10 +5598,10 @@ function AlokasiPetugasSection() {
     setImporBusy(true);
     setImporError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/impor", {
+      const res = await fetchBencana("/api/bencana/alokasi/impor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plotting: file.plotting, tim: file.tim, timpa, simulasi, pin: imporPin }),
+        body: JSON.stringify({ plotting: file.plotting, tim: file.tim, timpa, simulasi, konfirmasi: imporPin }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Gagal memproses impor.");
@@ -5626,7 +5627,7 @@ function AlokasiPetugasSection() {
     setSampelBusyId(idsubsls);
     setSampelError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/sampel", {
+      const res = await fetchBencana("/api/bencana/alokasi/sampel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idsubsls, termasuk_sampel: checked }),
@@ -5646,7 +5647,7 @@ function AlokasiPetugasSection() {
     setSampelBulkBusy(true);
     setSampelError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/sampel", {
+      const res = await fetchBencana("/api/bencana/alokasi/sampel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idsubsls: daftar.map((r) => r.idsubsls), termasuk_sampel: checked }),
@@ -5745,7 +5746,7 @@ function AlokasiPetugasSection() {
             : !pplVal && !pmlVal
             ? { idsubsls: r.idsubsls, aksi: "lepas_tim" }
             : { idsubsls: r.idsubsls, pml_id: pmlVal, ppl_id: pplVal, mode_kerja: efektifMode(r) };
-        const res = await fetch("/api/bencana/alokasi/reassign", {
+        const res = await fetchBencana("/api/bencana/alokasi/reassign", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -5839,7 +5840,7 @@ function AlokasiPetugasSection() {
         const totalOverride = draftTotal === r.kk_total_asli ? null : draftTotal;
         const terdampakOverride = draftTerdampak === r.kk_terdampak_asli ? null : draftTerdampak;
 
-        const res = await fetch("/api/bencana/alokasi/beban", {
+        const res = await fetchBencana("/api/bencana/alokasi/beban", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -5870,7 +5871,7 @@ function AlokasiPetugasSection() {
     setBebanSimpanBusy(true);
     setBebanError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/beban", {
+      const res = await fetchBencana("/api/bencana/alokasi/beban", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reset_semua: true }),
@@ -5889,7 +5890,7 @@ function AlokasiPetugasSection() {
     setTimBusyId(petugasId);
     setTimError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/susunan-tim", {
+      const res = await fetchBencana("/api/bencana/alokasi/susunan-tim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: petugasId, peran, atasan_id: atasanId }),
@@ -5909,7 +5910,7 @@ function AlokasiPetugasSection() {
     setTimBusyId(petugasId);
     setTimError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/susunan-tim", {
+      const res = await fetchBencana("/api/bencana/alokasi/susunan-tim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: petugasId, peran: "ppl", atasan_id: pmlId, non_plot: true }),
@@ -5929,7 +5930,7 @@ function AlokasiPetugasSection() {
     setTimBusyId(petugasId);
     setTimError(null);
     try {
-      const res = await fetch("/api/bencana/alokasi/susunan-tim", {
+      const res = await fetchBencana("/api/bencana/alokasi/susunan-tim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ petugas_id: petugasId, lepas: true }),
@@ -6737,7 +6738,7 @@ function AlokasiPetugasSection() {
     }
     setTawaranSimpanBusy(true);
     try {
-      const res = await fetch("/api/bencana/alokasi/tawaran-menginap", {
+      const res = await fetchBencana("/api/bencana/alokasi/tawaran-menginap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -9471,7 +9472,7 @@ function AlokasiPetugasSection() {
                 setResetNagari("");
                 setModalReset(true);
               }}
-              title="Hapus SELURUH plotting PPL (termasuk yg sudah dipecah) -- butuh PIN"
+              title="Hapus SELURUH plotting PPL (termasuk yg sudah dipecah) -- butuh ketik RESET"
               className="rounded-md border border-rust-200 bg-rust-50 px-3 py-1.5 text-xs font-medium text-rust-700 transition hover:bg-rust-100"
             >
               🗑️ Reset Semua Plotting
@@ -9546,13 +9547,12 @@ function AlokasiPetugasSection() {
 
                   {imporTimpa && (
                     <>
-                      <label className="mt-3 block text-xs font-medium text-ink/70">PIN (wajib untuk Timpa)</label>
+                      <label className="mt-3 block text-xs font-medium text-ink/70">Ketik TIMPA untuk konfirmasi (wajib untuk Timpa)</label>
                       <input
-                        type="password"
-                        inputMode="numeric"
+                        type="text"
                         value={imporPin}
                         onChange={(e) => setImporPin(e.target.value)}
-                        placeholder="PIN"
+                        placeholder="TIMPA"
                         className="mt-1 w-full rounded border border-line px-2 py-1.5 text-sm"
                       />
                     </>
@@ -9627,7 +9627,7 @@ function AlokasiPetugasSection() {
                       !imporFile ||
                       !imporPratinjau ||
                       imporBusy ||
-                      (imporTimpa && !imporPin) ||
+                      (imporTimpa && imporPin.trim().toUpperCase() !== "TIMPA") ||
                       (imporPratinjau.ringkasan.sub_sls_baru + imporPratinjau.ringkasan.sub_sls_ditimpa + imporPratinjau.ringkasan.atasan_diset + imporPratinjau.ringkasan.pml_baru === 0)
                     }
                     onClick={() => imporFile && jalankanImpor(imporFile, imporTimpa, false)}
@@ -9691,17 +9691,16 @@ function AlokasiPetugasSection() {
                   : "Akan mereset: SELURUH Sub SLS di SEMUA kecamatan."}
               </p>
 
-              <label className="mt-3 block text-xs font-medium text-ink/70">PIN</label>
+              <label className="mt-3 block text-xs font-medium text-ink/70">Ketik RESET untuk konfirmasi</label>
               <input
-                type="password"
-                inputMode="numeric"
+                type="text"
                 value={resetPin}
                 onChange={(e) => setResetPin(e.target.value)}
-                placeholder="PIN"
+                placeholder="RESET"
                 autoFocus
                 className="mt-1 w-full rounded border border-line px-2 py-1.5 text-sm"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && resetPin && !resetBusy) handleResetSemuaPlotting();
+                  if (e.key === "Enter" && resetPin.trim().toUpperCase() === "RESET" && !resetBusy) handleResetSemuaPlotting();
                 }}
               />
               {resetError && <div className="mt-2 rounded-md bg-rust-50 px-3 py-2 text-xs text-rust-700">{resetError}</div>}
@@ -9716,7 +9715,7 @@ function AlokasiPetugasSection() {
                 </button>
                 <button
                   type="button"
-                  disabled={!resetPin || resetBusy}
+                  disabled={resetPin.trim().toUpperCase() !== "RESET" || resetBusy}
                   onClick={handleResetSemuaPlotting}
                   className="rounded-md bg-rust-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rust-700 disabled:opacity-40"
                 >
@@ -10784,6 +10783,15 @@ export default function BencanaPage() {
     "identifikasi" | "monitoring" | "alokasi" | "master" | "kegiatan-petugas" | "pengaturan"
   >("alokasi");
 
+  // (6 Nov 2026) Tab pengelola (Alokasi, Master, Kegiatan Petugas, Perkiraan Beban) hanya untuk yang bersesi SIGAP; mitra tanpa sesi
+  // langsung ke tab Identifikasi. Pemeriksaan izin sebenarnya ada di server (lib/gerbangRute.ts).
+  const [adaSesi, setAdaSesi] = useState(false);
+  useEffect(() => {
+    const ada = sesiBencana() !== null;
+    setAdaSesi(ada);
+    if (!ada) setTab((t) => (t === "identifikasi" || t === "monitoring" ? t : "identifikasi"));
+  }, []);
+
   const [wilayah, setWilayah] = useState<KecamatanItem[]>([]);
   const [mitraList, setMitraList] = useState<MitraItem[]>([]);
   const [magangList, setMagangList] = useState<PegawaiMagangItem[]>([]);
@@ -10822,7 +10830,7 @@ export default function BencanaPage() {
       try {
         const [wRes, mRes, pmRes] = await Promise.all([
           fetch("/api/bencana/wilayah"),
-          fetch("/api/bencana/mitra"),
+          fetchBencana("/api/bencana/mitra"),
           fetch("/api/bencana/pegawai-magang"),
         ]);
         const wJson = await wRes.json();
@@ -11293,51 +11301,68 @@ export default function BencanaPage() {
         >
           Monitoring Hasil Identifikasi
         </button>
-        <button
-          type="button"
-          onClick={() => setTab("alokasi")}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-            tab === "alokasi"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
-          }`}
-        >
-          Alokasi Petugas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("master")}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-            tab === "master"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
-          }`}
-        >
-          Master Petugas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("kegiatan-petugas")}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-            tab === "kegiatan-petugas"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
-          }`}
-        >
-          Kegiatan Petugas
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("pengaturan")}
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
-            tab === "pengaturan"
-              ? "bg-white text-blue-950 shadow-sm"
-              : "text-blue-400 hover:text-blue-600"
-          }`}
-        >
-          Kelola Perkiraan Beban
-        </button>
+        {adaSesi && (
+          <button
+            type="button"
+            onClick={() => setTab("alokasi")}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+              tab === "alokasi"
+                ? "bg-white text-blue-950 shadow-sm"
+                : "text-blue-400 hover:text-blue-600"
+            }`}
+          >
+            Alokasi Petugas
+          </button>
+        )}
+        {adaSesi && (
+          <button
+            type="button"
+            onClick={() => setTab("master")}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+              tab === "master"
+                ? "bg-white text-blue-950 shadow-sm"
+                : "text-blue-400 hover:text-blue-600"
+            }`}
+          >
+            Master Petugas
+          </button>
+        )}
+        {adaSesi && (
+          <button
+            type="button"
+            onClick={() => setTab("kegiatan-petugas")}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+              tab === "kegiatan-petugas"
+                ? "bg-white text-blue-950 shadow-sm"
+                : "text-blue-400 hover:text-blue-600"
+            }`}
+          >
+            Kegiatan Petugas
+          </button>
+        )}
+        {adaSesi && (
+          <button
+            type="button"
+            onClick={() => setTab("pengaturan")}
+            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition ${
+              tab === "pengaturan"
+                ? "bg-white text-blue-950 shadow-sm"
+                : "text-blue-400 hover:text-blue-600"
+            }`}
+          >
+            Kelola Perkiraan Beban
+          </button>
+        )}
       </div>
+      {!adaSesi && (
+        <p className="mt-2 text-xs text-ink/60">
+          Pengelola:{" "}
+          <a href="/?lanjut=%2Fbencana" className="font-medium text-blue-600 underline">
+            masuk SIGAP
+          </a>{" "}
+          untuk membuka tab Alokasi Petugas dan tab pengelola lainnya.
+        </p>
+      )}
 
       {tab === "alokasi" ? (
         <AlokasiPetugasSection />

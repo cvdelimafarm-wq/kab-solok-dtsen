@@ -12,24 +12,25 @@
 // "gabung_kembali" -- jadi PPL yg masih punya plot di Kecamatan lain TIDAK
 // ikut dilepas perannya walau sebagian plotnya kena reset).
 //
-// Sengaja TIDAK ada sistem login di app ini (lihat komentar endpoint
-// bencana_* lain) -- jadi aksi destruktif ini digerbangi PIN statis (bukan
-// autentikasi sungguhan, cuma extra friction spy tidak ketidaksengajaan
-// klik) yg DIVALIDASI DI SINI JUGA (bukan cuma di UI) supaya tidak bisa
-// dipanggil langsung lewat API tanpa PIN.
+// (6 Nov 2026) Rute ini kini WAJIB sesi SIGAP + izin kelola PSP (lib/gerbangRute.ts) dan tiap pemanggilan dicatat ke sigap_audit.
+// PIN statis lama dihapus; yang tersisa hanya kata konfirmasi "RESET" yang DIVALIDASI DI SINI JUGA supaya pemanggilan langsung lewat API
+// tidak terjadi tanpa disengaja.
 //
-// POST { pin: string, kecamatan?: string | null, nagari?: string | null }
+// POST { konfirmasi: "RESET", kecamatan?: string | null, nagari?: string | null }
 //   kecamatan & nagari kosong/null = SEMUA wilayah. nagari diisi tanpa
 //   kecamatan diisi -> nagari diabaikan (nagari hanya valid sbg penyempit
 //   DI DALAM kecamatan yg dipilih, konsisten dgn dropdown FE yg berjenjang).
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const PIN_RESET = "1234";
+// (6 Nov 2026) PIN statis dihentikan (audit K04a-A1). Penjaga sebenarnya = sesi + izin kelola PSP (gerbangBencanaAdmin) + jejak audit.
+// Kata konfirmasi di bawah hanya pencegah salah klik, BUKAN kredensial.
+const KATA_KONFIRMASI = "RESET";
 
 function supabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -39,15 +40,17 @@ function supabaseAdmin() {
 }
 
 export async function POST(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
   }
 
   const body = await req.json().catch(() => null);
-  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
-  if (pin !== PIN_RESET) {
-    return NextResponse.json({ error: "PIN salah." }, { status: 403 });
+  const konfirmasi = typeof body?.konfirmasi === "string" ? body.konfirmasi.trim().toUpperCase() : "";
+  if (konfirmasi !== KATA_KONFIRMASI) {
+    return NextResponse.json({ error: `Ketik ${KATA_KONFIRMASI} untuk mengonfirmasi.` }, { status: 400 });
   }
   const kecamatan = typeof body?.kecamatan === "string" && body.kecamatan.trim() ? body.kecamatan.trim() : null;
   const nagari = kecamatan && typeof body?.nagari === "string" && body.nagari.trim() ? body.nagari.trim() : null;

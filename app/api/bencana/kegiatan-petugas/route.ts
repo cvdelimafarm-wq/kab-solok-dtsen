@@ -23,10 +23,11 @@
 //   "Auto Plot" di Langkah 4 (tetap bisa diplot manual lewat dropdown).
 //   Ditampilkan read-only di Master Petugas.
 //
-// Publik, tanpa login -- konsisten dgn pola endpoint bencana_* lainnya.
+// (6 Nov 2026) Wajib sesi SIGAP + izin PSP (lib/gerbangRute.ts); dulu publik tanpa login.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
+import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,7 +51,9 @@ function supabaseAdmin() {
   return createClient(supabaseUrl, serviceRoleKey);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
@@ -134,6 +137,8 @@ export async function GET() {
 // (tidak menerima field lain) -- endpoint generik utk bencana_petugas belum
 // ada di manapun sebelum ini.
 export async function PATCH(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });
@@ -196,6 +201,8 @@ export async function PATCH(req: NextRequest) {
 // baris itu. `kegiatan` divalidasi ketat terhadap KEGIATAN_LAIN_VALID supaya
 // tidak ada nilai nyasar yang tidak dikenal UI manapun.
 export async function PUT(req: NextRequest) {
+  const gerbang = await gerbangBencanaAdmin(req);
+  if (!gerbang.ok) return gerbang.res;
   const supabase = supabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ error: "SUPABASE_SERVICE_ROLE_KEY belum diset." }, { status: 500 });

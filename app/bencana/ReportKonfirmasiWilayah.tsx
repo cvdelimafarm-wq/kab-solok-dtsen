@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { fetchBencana } from "./fetchBencana";
 
 // ------------------------------------------------------------------------
 // (4 Okt 2026) Kartu "Report Konfirmasi Petugas per Wilayah" -- BAGIAN ATAS tab
@@ -90,7 +91,7 @@ export default function ReportKonfirmasiWilayah() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/bencana/alokasi/report-konfirmasi?hari_kerja=${hari}`, { cache: "no-store" });
+      const res = await fetchBencana(`/api/bencana/alokasi/report-konfirmasi?hari_kerja=${hari}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || json?.error) throw new Error((json?.error as string) ?? "Gagal memuat report.");
       setData(json as Respons);
