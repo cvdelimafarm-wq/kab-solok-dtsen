@@ -301,7 +301,7 @@ function PetugasSatu({ p, i, ubah, mati, semua, calonOrg, calonMit }: { p: Petug
         <Isian judul={`Nama petugas ${i + 1}`}>
           <PilihNama
             ariaLabel={`Nama petugas ${i + 1}`} nilai={p.menyusul ? "" : p.nama} akun={p.akun ?? null} mati={mati || p.menyusul} placeholder={p.menyusul ? "(nama menyusul)" : undefined}
-            calon={p.status === "Mitra" ? calonMit : calonOrg} terpakai={namaTerpakaiPeran(semua, p)} onPilih={(n, akun) => set((x) => { x.nama = n; if (akun !== undefined) x.akun = akun; else delete x.akun; })}
+            calon={p.status === "Mitra" ? calonMit : calonOrg} calonLain={p.status === "Mitra" ? calonOrg : calonMit} labelLain={p.status === "Mitra" ? "Organik" : "Mitra"} terpakai={namaTerpakaiPeran(semua, p)} onPilih={(n, akun) => set((x) => { x.nama = n; if (akun !== undefined) x.akun = akun; else delete x.akun; })}
           />
         </Isian>
         <Isian judul="Peran">

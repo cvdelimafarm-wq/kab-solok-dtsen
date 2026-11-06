@@ -25,6 +25,7 @@ import {
 } from "@/lib/keu/selisihLanjutan";
 import { idBaru } from "@/lib/keu/lanjutan";
 import PilihNama from "../../PilihNama";
+import ImporPetugas from "./ImporPetugas";
 import { Bagian, Cat } from "../../Kontrol";
 import { KelasSatu, lengkapiKerangka, type Ubah } from "./Isian";
 import { TabelSaring, type Kol } from "../../TabelSaring";
@@ -249,7 +250,7 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
       sel: ({ p, i }) => (
         <PilihNama
           ariaLabel={`Nama petugas ${i + 1}`} nilai={p.nama} akun={p.akun ?? null} mati={mati} placeholder="(nama menyusul)"
-          calon={p.status === "Mitra" ? (mitra ?? null) : (organik ?? null)} terpakai={namaTerpakaiPeran(isi.petugas, p)}
+          calon={p.status === "Mitra" ? (mitra ?? null) : (organik ?? null)} calonLain={p.status === "Mitra" ? (organik ?? null) : (mitra ?? null)} labelLain={p.status === "Mitra" ? "Organik" : "Mitra"} terpakai={namaTerpakaiPeran(isi.petugas, p)}
           onPilih={(n, akun) => {
             if (n.trim() === "") { if (!slotKosong(p)) hapusNm(p); return; }
             if (terkunci(p) && n !== p.nama) { setInfo(`Nama ${p.nama} tidak dapat diganti: surat tugas atau SPK-nya sudah terbit.`); return; }
@@ -329,6 +330,7 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
       <div className="flex flex-wrap gap-2">
         <button type="button" className={tombolKecil} disabled={mati} onClick={() => ubah((g) => { lengkapiKerangka(g); })}>Buat baris sesuai jumlah per peran</button>
         <button type="button" className={tombolKecil} disabled={mati || bisaOtomatis === 0} onClick={() => ubah((g) => { for (const p of g.petugas) { if (slotKosong(p) || p.akun !== undefined) continue; const a = cariAkunUnik(daftarUntuk(p), p.nama); if (a !== null) p.akun = a; } })}>Tautkan otomatis nama yang cocok ({bisaOtomatis})</button>
+        <ImporPetugas isi={isi} ubah={ubah} mati={mati} organik={organik} mitra={mitra} onSelesai={setInfo} />
         <button type="button" className={tombolKecil} disabled={mati || isi.petugas.length >= 3000} onClick={() => ubah((g) => { g.petugas.push({ id: idBaru("p", g.petugas.map((p) => p.id)), nama: "", menyusul: true, peran: "", status: "Organik", sumber: "", baru: false, jabatan: [] }); })}>+ Petugas</button>
       </div>
       <TabelSaring

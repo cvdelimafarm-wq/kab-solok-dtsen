@@ -7,28 +7,56 @@
 // dan bisa langsung diketik ulang; ✕ mengosongkan. Tanpa daftar (belum termuat, atau SQL belum dijalankan) = kolom ketik bebas seperti semula.
 // Logika saring dan cek di lib/keu/pilihNama.ts. Hanya tampilan.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { kolom, tombolKecil } from "@/app/sigap/keu-ui";
 import { adaDiDaftar, saringCalon, sudahTerpakai, type CalonNama } from "@/lib/keu/pilihNama";
 
 const pangkas = (s: string): string => s.replace(/\s+/g, " ").trim();
 const MAKS_TAMPIL = 40;
 
-export default function PilihNama({ nilai, akun, onPilih, calon, terpakai, mati, ariaLabel, placeholder }: {
-  nilai: string; akun?: number | null; onPilih: (nama: string, akun?: number) => void; calon: readonly CalonNama[] | null; terpakai?: ReadonlySet<string>; mati: boolean; ariaLabel: string; placeholder?: string;
+type Letak = { left: number; width: number; top?: number; bottom?: number; maks: number };
+
+export default function PilihNama({ nilai, akun, onPilih, calon, calonLain, labelLain, terpakai, mati, ariaLabel, placeholder }: {
+  nilai: string; akun?: number | null; onPilih: (nama: string, akun?: number) => void; calon: readonly CalonNama[] | null;
+  /** daftar lain (mis. mitra bila baris berstatus Organik): hanya untuk petunjuk saat tak ada yang cocok */
+  calonLain?: readonly CalonNama[] | null; labelLain?: string;
+  terpakai?: ReadonlySet<string>; mati: boolean; ariaLabel: string; placeholder?: string;
 }) {
   const [kata, setKata] = useState("");
   const [buka, setBuka] = useState(false);
   const [aktif, setAktif] = useState(-1); // saran yang disorot dengan panah atas/bawah
   const kotak = useRef<HTMLDivElement>(null);
+  const daftarEl = useRef<HTMLUListElement>(null);
+  const [letak, setLetak] = useState<Letak | null>(null);
   const punya = !!calon && calon.length > 0;
   const hasil = useMemo(() => saringCalon(calon ?? [], kata, MAKS_TAMPIL), [calon, kata]);
   useEffect(() => {
     if (!buka) return;
-    const tutup = (e: PointerEvent) => { if (!kotak.current?.contains(e.target as Node)) setBuka(false); };
+    const tutup = (e: PointerEvent) => { const t = e.target as Node; if (!kotak.current?.contains(t) && !daftarEl.current?.contains(t)) setBuka(false); };
     document.addEventListener("pointerdown", tutup);
     return () => document.removeEventListener("pointerdown", tutup);
   }, [buka]);
+
+  // Daftar saran digambar di luar tabel (portal) agar tidak terpotong oleh pembungkus tabel yang bisa digulir; dibuka ke atas bila ruang di bawah sempit.
+  useLayoutEffect(() => {
+    if (!buka) { setLetak(null); return; }
+    const hitung = () => {
+      const el = kotak.current; if (!el) return;
+      const r = el.getBoundingClientRect();
+      const tinggi = window.innerHeight;
+      const bawah = tinggi - r.bottom - 8; const atas = r.top - 8;
+      const ke_atas = bawah < 200 && atas > bawah;
+      const lebar = Math.max(r.width, 260);
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - lebar - 8));
+      setLetak(ke_atas
+        ? { left, width: lebar, bottom: tinggi - r.top + 4, maks: Math.min(256, atas) }
+        : { left, width: lebar, top: r.bottom + 4, maks: Math.min(256, Math.max(120, bawah)) });
+    };
+    hitung();
+    window.addEventListener("resize", hitung); window.addEventListener("scroll", hitung, true);
+    return () => { window.removeEventListener("resize", hitung); window.removeEventListener("scroll", hitung, true); };
+  }, [buka, kata]);
 
   // tanpa daftar: ketik bebas seperti semula
   if (!punya) {
@@ -36,6 +64,7 @@ export default function PilihNama({ nilai, akun, onPilih, calon, terpakai, mati,
   }
 
   const bersih = pangkas(kata);
+  const lainCocok = bersih !== "" && calonLain ? saringCalon(calonLain, bersih, 5).length : 0;
   const bisaNamaLain = bersih !== "" && !adaDiDaftar(calon, bersih);
   const pilih = (nama: string, idAkun?: number) => { onPilih(nama, idAkun); setKata(""); setBuka(false); setAktif(-1); };
   const dapatDipilih = (c: CalonNama) => !(terpakai && sudahTerpakai(terpakai, c.nama));
@@ -70,8 +99,9 @@ export default function PilihNama({ nilai, akun, onPilih, calon, terpakai, mati,
             ? <p className="m-0 mt-0.5 text-[11.5px] text-[#8A6200]">Belum tertaut ke akun. Pilih ulang dari daftar, atau gunakan tombol &ldquo;Tautkan otomatis&rdquo;.</p>
             : <p className="m-0 mt-0.5 text-[11.5px] text-[#5B6B84]">Nama di luar daftar (tidak tertaut ke akun).</p>
       )}
-      {buka && !mati && (
-        <ul role="listbox" className="absolute left-0 right-0 z-30 mt-1 max-h-64 min-w-[260px] list-none overflow-y-auto rounded-lg border border-[#DCE3EE] bg-white p-1 shadow-lg">
+      {buka && !mati && letak && typeof document !== "undefined" && createPortal(
+        <ul ref={daftarEl} role="listbox" style={{ position: "fixed", left: letak.left, width: letak.width, top: letak.top, bottom: letak.bottom, maxHeight: letak.maks, zIndex: 1000 }}
+          className="m-0 list-none overflow-y-auto rounded-lg border border-[#DCE3EE] bg-white p-1 shadow-lg">
           {hasil.map((c, n) => {
             const pakai = !dapatDipilih(c);
             return (
@@ -85,6 +115,7 @@ export default function PilihNama({ nilai, akun, onPilih, calon, terpakai, mati,
             );
           })}
           {hasil.length === 0 && <li className="px-2 py-2 text-[12.5px] text-[#5B6B84]">Tidak ada yang cocok{bersih ? ` dengan “${bersih}”` : ""}.</li>}
+          {hasil.length === 0 && lainCocok > 0 && <li className="px-2 py-1.5 text-[12.5px] font-semibold text-[#8A6200]">Ada {lainCocok} nama yang cocok di daftar {labelLain ?? "lain"}. Ubah kolom Status baris ini lebih dulu.</li>}
           {bersih === "" && calon.length > hasil.length && <li className="px-2 py-1.5 text-[11.5px] text-[#5B6B84]">Menampilkan {hasil.length} dari {calon.length}. Ketik untuk mencari.</li>}
           {bisaNamaLain && (
             <li role="option" aria-selected={aktif === hasil.length}>
@@ -94,7 +125,8 @@ export default function PilihNama({ nilai, akun, onPilih, calon, terpakai, mati,
               </button>
             </li>
           )}
-        </ul>
+        </ul>,
+        document.body,
       )}
     </div>
   );
