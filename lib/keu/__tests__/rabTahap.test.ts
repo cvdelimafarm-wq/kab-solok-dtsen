@@ -70,3 +70,20 @@ describe("survei dan item", () => {
     expect(ringkasBarisSurvei(7, [{ ident_id: 7, jumlah: "1000" }, { ident_id: 8, jumlah: 5 }, { ident_id: 7, jumlah: 250 }, { jumlah: 9 }])).toEqual({ n: 2, jumlah: 1250 });
   });
 });
+
+import { alokasiHari, totalAlokasi } from "../rabPerSurvei";
+describe("alokasi hari translok", () => {
+  const k = { kunci: "a", orang: 15, batas: 21, tarif: 50000 };
+  it("maksimal = petugas x batas hari x tarif", () => {
+    expect(alokasiHari(k, 0)).toEqual({ maksOrangHari: 315, isiOrangHari: 0, maksRupiah: 15750000, isiRupiah: 0 });
+    expect(alokasiHari(k, 10)).toMatchObject({ isiOrangHari: 150, isiRupiah: 7500000 });
+  });
+  it("tanpa tarif atau petugas: rupiah null", () => {
+    expect(alokasiHari({ ...k, tarif: null }, 5)).toMatchObject({ maksOrangHari: 315, maksRupiah: null, isiRupiah: null });
+    expect(alokasiHari({ ...k, orang: null }, 5)).toEqual({ maksOrangHari: null, isiOrangHari: null, maksRupiah: null, isiRupiah: null });
+  });
+  it("total menjumlahkan yang bertarif dan menghitung yang tidak", () => {
+    const t = totalAlokasi([k, { kunci: "b", orang: 2, batas: 10, tarif: null }, { kunci: "c", orang: 1, batas: 3, tarif: 100 }], { a: 1, b: 9, c: null });
+    expect(t).toEqual({ maksRupiah: 15750000 + 300, isiRupiah: 750000, kolomTanpaTarif: 1 });
+  });
+});

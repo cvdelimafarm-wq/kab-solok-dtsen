@@ -73,7 +73,7 @@ export function rincianCampuran(rincian: BarisRincian[], periode: PeriodeJadwal[
 // ---------------------------------------------------------------------------------------------------------------------
 // Isian hari dibayar
 // ---------------------------------------------------------------------------------------------------------------------
-export type KolomHari = { kunci: string; uraian: string; akun: string; periode: string; penginapan: boolean; maks: number; batas: number; orang: number | null; mulai: string; selesai: string };
+export type KolomHari = { kunci: string; uraian: string; akun: string; periode: string; penginapan: boolean; maks: number; batas: number; orang: number | null; mulai: string; selesai: string; tarif: number | null };
 
 /**
  * Satu kolom isian untuk tiap rincian translok/penginapan x periode; `maks` = jumlah hari KALENDER pendataan (29 Okt 2026: translok dibayar per hari kalender,
@@ -86,10 +86,35 @@ export function kolomHari(rincian: BarisRincian[], periode: PeriodeJadwal[], _li
     const penginapan = b.uraian.startsWith("Penginapan");
     for (const p of periode) {
       const maks = hariJadwal(p.mulai, p.selesai);
-      hasil.push({ kunci: `${b.akun}|${b.uraian}|${p.periode}`, uraian: b.uraian, akun: b.akun, periode: p.periode, penginapan, maks, batas: penginapan ? Math.max(maks - 1, 0) : maks, orang: b.volume, mulai: p.mulai, selesai: p.selesai });
+      hasil.push({ kunci: `${b.akun}|${b.uraian}|${p.periode}`, uraian: b.uraian, akun: b.akun, periode: p.periode, penginapan, maks, batas: penginapan ? Math.max(maks - 1, 0) : maks, orang: b.volume, mulai: p.mulai, selesai: p.selesai, tarif: b.tarif });
     }
   }
   return hasil;
+}
+
+/**
+ * (7 Nov 2026) Alokasi satu kolom hari: batas atas (maksimal) dan yang sudah diisi, dalam orang-hari (atau orang-malam) dan rupiah.
+ * Rupiah hanya dihitung bila jumlah petugas dan tarif diketahui; selain itu null (tarif belum ada, mis. translok lebih dari 8 jam atau penginapan).
+ */
+export type AlokasiHari = { maksOrangHari: number | null; isiOrangHari: number | null; maksRupiah: number | null; isiRupiah: number | null };
+export function alokasiHari(k: Pick<KolomHari, "orang" | "batas" | "tarif">, hari: number | null): AlokasiHari {
+  const orang = k.orang !== null && k.orang > 0 ? k.orang : null;
+  const maksOrangHari = orang === null ? null : orang * k.batas;
+  const isiOrangHari = orang === null || hari === null ? null : orang * hari;
+  const rp = (oh: number | null): number | null => (oh === null || k.tarif === null ? null : oh * k.tarif);
+  return { maksOrangHari, isiOrangHari, maksRupiah: rp(maksOrangHari), isiRupiah: rp(isiOrangHari) };
+}
+
+export type TotalAlokasi = { maksRupiah: number; isiRupiah: number; kolomTanpaTarif: number };
+/** Jumlahkan alokasi seluruh kolom yang tarifnya diketahui; kolom tanpa tarif atau tanpa jumlah petugas dihitung terpisah. */
+export function totalAlokasi(kolom: Pick<KolomHari, "kunci" | "orang" | "batas" | "tarif">[], hari: Record<string, number | null>): TotalAlokasi {
+  let maksRupiah = 0; let isiRupiah = 0; let kolomTanpaTarif = 0;
+  for (const k of kolom) {
+    const a = alokasiHari(k, hari[k.kunci] ?? null);
+    if (a.maksRupiah === null) { kolomTanpaTarif += 1; continue; }
+    maksRupiah += a.maksRupiah; isiRupiah += a.isiRupiah ?? 0;
+  }
+  return { maksRupiah, isiRupiah, kolomTanpaTarif };
 }
 
 /** Teks isian hari -> bilangan bulat 0..365; kosong atau tidak sah -> null (belum diisi). */

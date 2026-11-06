@@ -31,6 +31,7 @@ import {
 } from "@/lib/keu/rabPerSurvei";
 import { adaBarisStatus, analisisRevisi, CATATAN_JENIS_REVISI, dataStatusBaru, dataStatusUbah, LABEL_STATUS_SURVEI, NAMA_PEMICU, ringkasPemicu, statusDari, type BarisStatusSurvei, type ItemRabLengkap } from "@/lib/keu/rabStatus";
 import { periksaHariBayar, type PeriodeJadwal } from "@/lib/keu/rabSurvei";
+import { alokasiHari, totalAlokasi } from "@/lib/keu/rabPerSurvei";
 import { infoTahap, itemBelumTerkaitSurvei, kelompokkanTahap, KET_TAHAP, NAMA_TAHAP, ringkasBarisSurvei, tahapRincian, teksMingguCair, teksSelesai, type Tahap } from "@/lib/keu/rabTahap";
 import { rupiah, urlBaca } from "@/lib/keu/ro";
 import { jendelaCair, labelSumber, periksaCair, periksaHarga, type JendelaCair } from "@/lib/keu/usulanRab";
@@ -83,7 +84,7 @@ const TOPIK: Record<KelompokRincian, { garis: string; latar: string; ket: string
 /** Warna tiap tahap kegiatan (Bagian B dikelompokkan per tahap; jenis belanja menjadi sub-kelompok di dalamnya). */
 const WARNA_TAHAP: Record<Tahap, { garis: string; latar: string }> = {
   Pelatihan: { garis: "#1F5FD1", latar: "#F4F8FF" },
-  Pendataan: { garis: "#0E8A6D", latar: "#F2FBF8" },
+  Pendataan: { garis: "#0B7A60", latar: "#F2FBF8" },
   "Lain-lain": { garis: "#5B6B84", latar: "#F6F8FB" },
 };
 
@@ -110,63 +111,17 @@ function PenunjukAlur({ langkah, kode, identId }: { langkah: ReturnType<typeof l
   const tautan = (t: "identifikasi" | "lanjutan" | null): string | null =>
     t === "identifikasi" ? `/sigap/kelola/perencanaan/identifikasi/${identId}` : t === "lanjutan" ? `/sigap/kelola/perencanaan/identifikasi/${identId}/lanjutan` : null;
   const warna = { selesai: "#0E8A6D", berjalan: "#1F5FD1", menunggu: "#8A97AD" } as const;
-  const teks = { selesai: "Selesai", berjalan: "Sedang berjalan", menunggu: "Menunggu" } as const;
+  const teks = { selesai: "selesai", berjalan: "berjalan", menunggu: "menunggu" } as const;
   return (
-    <section aria-label={`Alur penyusunan RAB survei (RO ${kode})`} className="space-y-2 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] p-3.5">
-      <p className={subJudul}>Alur penyusunan RAB survei</p>
-      <ol className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))]">
-        {langkah.map((l) => {
-          const href = tautan(l.tautan);
-          return (
-            <li key={l.no} className="space-y-1 rounded-lg border border-[#DCE3EE] bg-white p-2.5" style={{ borderTopColor: warna[l.keadaan], borderTopWidth: 4 }}>
-              <div className="flex items-center gap-2">
-                <span aria-hidden className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[12px] font-bold text-white" style={{ background: warna[l.keadaan] }}>{l.no}</span>
-                <p className="min-w-0 text-[13px] font-bold leading-snug text-[#0F2A52]">{l.judul}</p>
-              </div>
-              <p className="text-[11.5px] font-semibold" style={{ color: warna[l.keadaan] }}>{teks[l.keadaan]}</p>
-              <p className="text-[12px] leading-relaxed text-[#44546F]">{l.ket}</p>
-              {href && <Link href={href} className="inline-block text-[12.5px] font-semibold text-[#1F5FD1] underline">{l.no === 1 ? "Buka identifikasi awal →" : "Buka identifikasi lanjutan →"}</Link>}
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
-
-function TombolTanya({ buka, setBuka, idPanel }: { buka: boolean; setBuka: (b: boolean) => void; idPanel: string }) {
-  return (
-    <button
-      type="button" aria-expanded={buka} aria-controls={idPanel} aria-label="Dari mana angka ini?" title="Dari mana angka ini?" onClick={() => setBuka(!buka)}
-      className={`inline-flex h-7 w-7 flex-none items-center justify-center rounded-full border text-[13px] font-bold ${buka ? "border-[#1F5FD1] bg-[#1F5FD1] text-white" : "border-[#1F5FD1] bg-white text-[#1F5FD1]"}`}
-    >?</button>
-  );
-}
-
-function PanelJelas({ id, baris }: { id: string; baris: string[] }) {
-  return (
-    <div id={id} role="note" className="space-y-0.5 rounded-lg bg-[#EAF1FC] px-3 py-2 text-[12.5px] leading-relaxed text-[#1B2B4B]">
-      <p className="font-semibold">Dari mana angka ini?</p>
-      {baris.map((t) => <p key={t}>{t}</p>)}
-      <p className="text-[#5B6B84]">Angka ini saran dari identifikasi. Volume boleh Anda ubah; rincian yang berbeda dari saran ditandai «diubah dari identifikasi».</p>
-    </div>
-  );
-}
-
-/** Strip panduan di atas halaman: empat langkah di layar ini, langkah pertama yang belum selesai ditandai "sekarang". */
-function PanduanLangkah({ langkah }: { langkah: { judul: string; ket: string; selesai: boolean }[] }) {
-  const sekarang = langkah.findIndex((l) => !l.selesai);
-  return (
-    <ol aria-label="Langkah di halaman ini" className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr))]">
-      {langkah.map((l, i) => {
-        const warna = l.selesai ? "#0E8A6D" : i === sekarang ? "#1F5FD1" : "#8A97AD";
+    <ol aria-label={`Alur penyusunan RAB survei (RO ${kode})`} className="flex flex-wrap gap-2">
+      {langkah.map((l) => {
+        const href = tautan(l.tautan);
         return (
-          <li key={l.judul} className="flex items-start gap-2 rounded-lg border bg-white px-2.5 py-2" style={{ borderColor: i === sekarang ? "#1F5FD1" : "#DCE3EE" }} aria-current={i === sekarang ? "step" : undefined}>
-            <span aria-hidden className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[12px] font-bold text-white" style={{ background: warna }}>{l.selesai ? "✓" : i + 1}</span>
-            <div className="min-w-0">
-              <p className="text-[13px] font-bold leading-snug text-[#0F2A52]">{l.judul}{i === sekarang && <span className="ml-1.5 text-[11px] font-semibold text-[#1F5FD1]">sekarang</span>}</p>
-              <p className="text-[12px] leading-snug text-[#5B6B84]">{l.ket}</p>
-            </div>
+          <li key={l.no} title={l.ket} className="flex items-center gap-2 rounded-full border border-[#DCE3EE] bg-white py-1 pl-1 pr-3 text-[12.5px]">
+            <span aria-hidden className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[12px] font-bold text-white" style={{ background: warna[l.keadaan] }}>{l.keadaan === "selesai" ? "✓" : l.no}</span>
+            <span className="font-semibold text-[#0F2A52]">{l.judul}</span>
+            <span className="text-[#6B7A93]">· {teks[l.keadaan]}</span>
+            {href && <Link href={href} className="font-semibold text-[#1F5FD1] underline">Buka</Link>}
           </li>
         );
       })}
@@ -174,31 +129,56 @@ function PanduanLangkah({ langkah }: { langkah: { judul: string; ket: string; se
   );
 }
 
-/** Petunjuk satu kalimat di tiap rincian: apa yang perlu dilakukan berikutnya. */
-const BERIKUTNYA: Record<KeadaanRincian, string | null> = {
-  sudah: null,
-  siap: "Siap. Tekan Susun RAB di bagian C.",
-  isi_hari: "Berikutnya: isi alokasi hari di bagian A.",
-  belum_angka: "Berikutnya: isi volume dan harga satuan.",
-  butuh_item: "Berikutnya: pilih item tujuan.",
-  cek_dobel: "Berikutnya: pilih «Pakai baris ini» atau «Tetap tambah baris baru».",
-};
+function PanelJelas({ id, baris }: { id: string; baris: string[] }) {
+  return (
+    <div id={id} role="note" className="space-y-0.5 rounded-md bg-[#EAF1FC] px-3 py-1.5 text-[12.5px] leading-relaxed text-[#1B2B4B]">
+      <p className="font-semibold">Asal angka</p>
+      {baris.map((t) => <p key={t}>{t}</p>)}
+      <p className="text-[#5B6B84]">Saran dari identifikasi; boleh diubah.</p>
+    </div>
+  );
+}
 
-// ------------------------------------------------------------ satu rincian
+/** Empat langkah di layar ini; langkah pertama yang belum selesai ditandai "sekarang". */
+function PanduanLangkah({ langkah }: { langkah: { judul: string; ket: string; selesai: boolean }[] }) {
+  const sekarang = langkah.findIndex((l) => !l.selesai);
+  return (
+    <ol aria-label="Langkah di halaman ini" className="flex flex-wrap gap-2">
+      {langkah.map((l, i) => {
+        const warna = l.selesai ? "#0E8A6D" : i === sekarang ? "#1F5FD1" : "#8A97AD";
+        return (
+          <li key={l.judul} title={l.ket} aria-current={i === sekarang ? "step" : undefined}
+            className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[13px]" style={{ borderColor: i === sekarang ? "#1F5FD1" : "#DCE3EE", background: i === sekarang ? "#EEF4FF" : "#fff" }}>
+            <span aria-hidden className="flex h-5 w-5 flex-none items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: warna }}>{l.selesai ? "✓" : i + 1}</span>
+            <span className="font-semibold text-[#0F2A52]">{l.judul}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// ------------------------------------------------------------ satu rincian (satu baris tabel)
 type PropsBaris = {
   rc: RencanaRincian; terpasang: Terpasang | undefined; ubah: Ubah; setUbah: (u: Ubah) => void; pilihan: PilihanTujuan; isian: IsianBaris; keadaan: KeadaanRincian;
   editable: boolean; peta: PemetaanItem[]; itemBaru: ItemBaruRow[]; jendela: JendelaCair; sibuk: boolean; penjelasan: string[]; sudahAda: BarisRabRow[];
   perbarui: () => void; simpanTerpasang: (barisId: number, data: Record<string, unknown>) => Promise<boolean>;
 };
 
+/** Kolom tabel rincian; jumlah kolom dipakai baris tambahan (colSpan). */
+const KOLOM_RINCIAN = ["Rincian", "Volume", "Satuan", "Harga satuan (Rp)", "Jumlah", "Cair", "Masuk ke item", "Status"] as const;
+const inp = "h-9 w-full rounded-md border border-[#C5D0E2] bg-white px-2 text-[13px] text-[#0F2A52] focus:border-[#1F5FD1] focus:outline-none focus:ring-1 focus:ring-[#1F5FD1]";
+const sel = "!min-h-[36px] !px-2 !text-[13px]";
+const tombolMini = "rounded-md border border-[#C5D0E2] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#1F5FD1] disabled:opacity-50";
+const teksAngka = (v: number | string): string => String(Number(v)).replace(".", ",");
+
 function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang }: PropsBaris) {
   const id = (s: string) => `rps-${rc.r.kunci}-${s}`.replace(/[^\w-]/g, "_");
-  const [tanya, setTanya] = useState(false);
+  const [detail, setDetail] = useState(false);
   const [ubahJadwal, setUbahJadwal] = useState(false);
-  // (29 Okt 2026) ubah volume dan harga baris yang sudah di RAB langsung dari kartu
+  // (29 Okt 2026) ubah volume dan harga baris yang sudah di RAB langsung dari tabel
   const [edit, setEdit] = useState<{ volume: string; satuan: string; harga: string } | null>(null);
   const [galatEdit, setGalatEdit] = useState<string[]>([]);
-  const jml = jumlahBaris(isian);
   const tujuan = ubah.tujuan ?? pilihan.awal;
   const t = bacaTujuan(tujuan);
   const diubahSebelum = keadaan !== "sudah" && berbedaDariSaran(rc.saran, isian);
@@ -216,218 +196,191 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
   const g = keadaan === "sudah" ? null : periksaBaris(isian);
   const pesanDobel = sudahAda.length > 0 && keadaan !== "sudah";
   const jenisHari = rc.r.uraian.startsWith("Penginapan") ? "malam" : "hari";
+  const adaOpsiPok = pilihan.opsi.some((o) => o.jenis === "pok");
   // (29 Okt 2026) Jadwal cair otomatis = hari terakhir kegiatan + 1 minggu; pilihan manual hanya bila pengguna menekan Ubah, atau tanggal kegiatan belum lengkap.
   const jadwalManual = rc.selesai === null || ubahJadwal || ubah.bulan_mulai !== undefined || ubah.minggu !== undefined;
-  const berikut = BERIKUTNYA[keadaan];
+
+  // Isi sel: baris yang sudah di RAB (atau sedang diubah), baris yang bisa diisi, atau saran saja (tanpa hak ubah).
+  const bisaIsi = terpasang ? edit !== null : editable;
+  const nilai = terpasang
+    ? (edit ?? { volume: teksAngka(terpasang.baris.volume), satuan: terpasang.baris.satuan, harga: String(Math.round(Number(terpasang.baris.harga_satuan))) })
+    : { volume: isian.volume, satuan: isian.satuan, harga: isian.harga };
+  const ubahNilai = (u: Partial<{ volume: string; satuan: string; harga: string }>) => { if (terpasang) setEdit({ ...(edit ?? nilai), ...u }); else setUbah(u); };
+  const jml = terpasang && edit === null ? Number(terpasang.baris.jumlah) : jumlahBaris({ ...barisKosong(nilai.satuan), volume: nilai.volume, harga: nilai.harga });
+  const hargaTeks = nilai.harga !== "" && Number.isFinite(Number(nilai.harga)) ? rupiah(Number(nilai.harga)) : "–";
+
+  const adaBarisTambahan = detail || tampilNama || tawarNama || pesanDobel || peringatan.length > 0 || edit !== null || sink?.berubah === true
+    || (editable && !terpasang && !adaOpsiPok) || (g !== null && g.length > 0 && keadaan !== "isi_hari" && keadaan !== "siap");
+  const sel2 = "align-top border-b border-[#E6ECF5] px-2 py-2";
 
   return (
-    <li className="space-y-2.5 rounded-lg border border-[#DCE3EE] bg-white p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="min-w-0 break-words text-[13px] font-bold leading-snug text-[#0F2A52]">{rc.r.uraian}</p>
-        <div className="flex flex-wrap gap-1.5">
-          <Chip warna="abu">Akun {rc.r.akun}</Chip>
-          {rc.r.perk && <Chip warna="kuning">Perkiraan</Chip>}
-          <Chip warna={WARNA_KEADAAN[keadaan]}>{TEKS_KEADAAN[keadaan]}</Chip>
-          {(terpasang?.diubah || diubahSebelum) && <Chip warna="ungu">Diubah dari identifikasi</Chip>}
-        </div>
-      </div>
-      {rc.r.catatan && <p className="text-[12px] text-[#6B7A93]">{rc.r.catatan}</p>}
-      {rc.r.hari !== null && rc.r.kelompok === "Translok dan penginapan" && (
-        <p className="text-[12px] text-[#44546F]">Alokasi {rc.r.hari} {jenisHari} per petugas{rc.r.hari === 0 ? " (volume diisi sendiri, atau ubah alokasi di bagian A)" : ""}.</p>
-      )}
-      {berikut && keadaan !== "siap" && <p className="text-[12.5px] font-semibold text-[#1F5FD1]">{berikut}</p>}
-
-      {terpasang ? (
-        <div className="space-y-1.5 text-[12.5px] text-[#44546F]">
-          <p>
-            <span className="font-bold text-[#0F2A52]">{Number(terpasang.baris.volume)} {terpasang.baris.satuan} × {rupiah(terpasang.baris.harga_satuan)} = {rupiah(terpasang.baris.jumlah)}</span>
-            {" "}pada item «{namaTujuan}»{terpasang.itemRab.pok_kunci ? "" : " (item baru di RAB)"}.
-          </p>
-          <div className="flex items-center gap-2">
-            <TombolTanya buka={tanya} setBuka={setTanya} idPanel={id("jelas")} />
-            <span className="text-[12px] text-[#5B6B84]">Dari mana volume saran ini?</span>
+    <>
+      <tr className="hover:bg-[#FAFBFE]">
+        <td className={`${sel2} min-w-[220px]`}>
+          <p className="break-words text-[13px] font-semibold leading-snug text-[#0F2A52]">{rc.r.uraian}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[#6B7A93]">
+            <span>Akun {rc.r.akun}</span>
+            {rc.r.perk && <span className="font-semibold text-[#8A6200]">Perkiraan</span>}
+            <button type="button" aria-expanded={detail} aria-controls={id("detail")} onClick={() => setDetail(!detail)} className="font-semibold text-[#1F5FD1] underline">{detail ? "Tutup detail" : "Detail"}</button>
           </div>
-          {tanya && <PanelJelas id={id("jelas")} baris={penjelasan} />}
-          {terpasang.diubah && (
-            <p className="text-[#5B3A8C]">Saran identifikasi saat disalin: {terpasang.baris.ident_vol ?? "-"} × {terpasang.baris.ident_harga !== null && terpasang.baris.ident_harga !== undefined ? rupiah(terpasang.baris.ident_harga) : "-"}.</p>
-          )}
-          {editable ? (
-            edit === null ? (
-              <button type="button" disabled={sibuk} className={`${tombol} bg-white text-[#1F5FD1] ring-1 ring-[#C5D0E2]`}
-                onClick={() => { setGalatEdit([]); setEdit({ volume: String(Number(terpasang.baris.volume)).replace(".", ","), satuan: terpasang.baris.satuan, harga: String(Math.round(Number(terpasang.baris.harga_satuan))) }); }}>
-                Ubah volume dan harga
-              </button>
-            ) : (
-              <div className="space-y-2 rounded-lg border border-[#C5D0E2] bg-white p-2.5">
-                <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
-                  <div>
-                    <label className={label} htmlFor={id("ev")}>Volume</label>
-                    <input id={id("ev")} className={kolom} inputMode="decimal" value={edit.volume} onChange={(e) => setEdit({ ...edit, volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
-                  </div>
-                  <div>
-                    <label className={label} htmlFor={id("es")}>Satuan</label>
-                    <input id={id("es")} className={kolom} maxLength={20} value={edit.satuan} onChange={(e) => setEdit({ ...edit, satuan: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className={label} htmlFor={id("eh")}>Harga satuan (Rp)</label>
-                    <input id={id("eh")} className={kolom} inputMode="numeric" value={edit.harga} onChange={(e) => setEdit({ ...edit, harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
-                  </div>
-                  <div>
-                    <p className={label}>Jumlah</p>
-                    <p className="flex min-h-[40px] items-center rounded-md bg-[#F1F4F9] px-2.5 text-[14px] font-bold text-[#0F2A52]" aria-live="polite">{(() => { const j = jumlahBaris({ ...barisKosong(edit.satuan), volume: edit.volume, harga: edit.harga }); return j === null ? "–" : rupiah(j); })()}</p>
-                  </div>
-                </div>
-                {galatEdit.length > 0 && <ul role="alert" className="list-disc pl-5 text-[12.5px] font-semibold text-[#9B1C23]">{galatEdit.map((t) => <li key={t}>{t}</li>)}</ul>}
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" disabled={sibuk} className={`${tombol} bg-[#0F2A52] text-white`}
-                    onClick={async () => {
-                      const r = dataUbahTerpasang(terpasang.baris, edit);
-                      setGalatEdit(r.galat);
-                      if (!r.data) return;
-                      if (await simpanTerpasang(terpasang.baris.baris_id, r.data)) setEdit(null);
-                    }}>{sibuk ? "Menyimpan…" : "Simpan perubahan"}</button>
-                  <button type="button" disabled={sibuk} className={`${tombol} bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]`} onClick={() => { setEdit(null); setGalatEdit([]); }}>Batal</button>
-                </div>
-                <p className="text-[12px] text-[#5B6B84]">Menyimpan mengubah baris di RAB RO dan mengembalikan status survei ke Draf.</p>
-              </div>
-            )
+        </td>
+        <td className={`${sel2} w-[96px]`}>
+          {bisaIsi
+            ? <input aria-label={`Volume: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="decimal" value={nilai.volume} onChange={(e) => ubahNilai({ volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
+            : <p className="py-1.5 text-right tabular-nums">{nilai.volume || "–"}</p>}
+        </td>
+        <td className={`${sel2} w-[110px]`}>
+          {bisaIsi
+            ? <input aria-label={`Satuan: ${rc.r.uraian}`} className={inp} maxLength={20} value={nilai.satuan} onChange={(e) => ubahNilai({ satuan: e.target.value })} />
+            : <p className="py-1.5">{nilai.satuan || "–"}</p>}
+        </td>
+        <td className={`${sel2} w-[130px]`}>
+          {bisaIsi
+            ? <input aria-label={`Harga satuan: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="numeric" value={nilai.harga} onChange={(e) => ubahNilai({ harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
+            : <p className="py-1.5 text-right tabular-nums">{hargaTeks}</p>}
+        </td>
+        <td className={`${sel2} w-[120px] text-right`}>
+          <p className="py-1.5 font-bold tabular-nums text-[#0F2A52]" aria-live="polite">{jml === null || Number.isNaN(jml) ? "–" : rupiah(jml)}</p>
+        </td>
+        <td className={`${sel2} w-[150px]`}>
+          {terpasang ? (
+            <p className="py-1.5 text-[12.5px]">{NAMA_BULAN[Number(terpasang.baris.bulan_mulai) - 1] ?? "–"} · mgg {terpasang.baris.minggu}</p>
+          ) : !editable ? (
+            <p className="py-1.5 text-[12.5px]">{NAMA_BULAN[isian.bulan_mulai - 1]} · mgg {isian.minggu}</p>
+          ) : jadwalManual ? (
+            <div className="space-y-1">
+              <SelectCari id={id("b")} aria-label="Bulan cair" className={`${kolom} ${sel}`} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
+                {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
+              </SelectCari>
+              <SelectCari id={id("m")} aria-label="Minggu cair" className={`${kolom} ${sel}`} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
+                {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
+              </SelectCari>
+              {rc.selesai !== null && <button type="button" className="text-[12px] font-semibold text-[#1F5FD1] underline" onClick={() => { setUbah({ bulan_mulai: undefined, minggu: undefined }); setUbahJadwal(false); }}>Otomatis</button>}
+            </div>
           ) : (
-            <p className="text-[12px] text-[#6B7A93]">Volume tidak dapat diubah: RAB sedang diajukan atau sudah disahkan, atau Anda bukan ketua tim/admin RO.</p>
-          )}
-          {sink?.berubah && (
-            <div role="status" className="space-y-1.5 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
-              <p className="font-semibold">Identifikasi berubah sesudah rincian ini disusun ke RAB.</p>
-              <p>Saran sekarang: {sink.volume ? `volume ${rc.saran.volume || "-"}` : ""}{sink.volume && sink.harga ? ", " : ""}{sink.harga ? `harga ${rc.saran.harga ? rupiah(Number(rc.saran.harga)) : "-"}` : ""}.{terpasang.diubah ? " Rincian ini pernah Anda ubah: memperbarui akan menimpa angka yang berubah." : ""}</p>
-              {editable && <button type="button" disabled={sibuk} onClick={perbarui} className={`${tombol} bg-[#1F5FD1] text-white`}>{sibuk ? "Memperbarui…" : "Perbarui dari identifikasi"}</button>}
+            <div className="py-1" title={`Otomatis: akhir kegiatan ${rc.selesai} + 1 minggu`}>
+              <p className="text-[12.5px] font-semibold text-[#0F2A52]">{NAMA_BULAN[isian.bulan_mulai - 1]} · mgg {isian.minggu}</p>
+              <button type="button" className="text-[12px] font-semibold text-[#1F5FD1] underline" onClick={() => setUbahJadwal(true)}>Ubah</button>
             </div>
           )}
-        </div>
-      ) : !editable ? (
-        <div className="space-y-1.5">
-          <p className="text-[12.5px] text-[#44546F]">Saran: {rc.saran.volume || "-"} {rc.saran.satuan} × {rc.saran.harga ? rupiah(Number(rc.saran.harga)) : "-"}. Hanya ketua tim atau admin RO yang dapat menyusun RAB.</p>
-          <div className="flex items-center gap-2">
-            <TombolTanya buka={tanya} setBuka={setTanya} idPanel={id("jelas")} />
-            <span className="text-[12px] text-[#5B6B84]">Dari mana volume saran ini?</span>
-          </div>
-          {tanya && <PanelJelas id={id("jelas")} baris={penjelasan} />}
-        </div>
-      ) : (
-        <>
-          <div className="space-y-1.5">
-            <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
-              <div>
-                <div className="mb-1 flex items-center gap-1.5">
-                  <label className="block text-[11.5px] font-semibold text-[#5B6B84]" htmlFor={id("v")}>Volume</label>
-                  <TombolTanya buka={tanya} setBuka={setTanya} idPanel={id("jelas")} />
-                </div>
-                <input id={id("v")} className={kolom} inputMode="decimal" value={isian.volume} onChange={(e) => setUbah({ volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
-              </div>
-              <div>
-                <label className={`${label} mt-[2px]`} htmlFor={id("s")}>Satuan</label>
-                <input id={id("s")} className={kolom} maxLength={20} value={isian.satuan} onChange={(e) => setUbah({ satuan: e.target.value })} />
-              </div>
-              <div>
-                <label className={`${label} mt-[2px]`} htmlFor={id("h")}>Harga satuan (Rp)</label>
-                <input id={id("h")} className={kolom} inputMode="numeric" value={isian.harga} onChange={(e) => setUbah({ harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
-              </div>
-              <div>
-                <p className={`${label} mt-[2px]`}>Jumlah</p>
-                <p className="flex min-h-[40px] items-center rounded-md bg-[#F1F4F9] px-2.5 text-[14px] font-bold text-[#0F2A52]" aria-live="polite">{jml === null ? "–" : rupiah(jml)}</p>
-              </div>
-            </div>
-            {tanya && <PanelJelas id={id("jelas")} baris={penjelasan} />}
-            <p className="text-[12px] text-[#5B6B84]">{rc.batasHarga !== null ? `Harga maksimal ${rupiah(rc.batasHarga)} (kebijakan); harga lebih rendah boleh.` : "Tarif belum ada di lembar kebijakan: isi harga satuan sendiri."}</p>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
-            {jadwalManual ? (
-              <>
-                <div className="w-[150px]">
-                  <label className={label} htmlFor={id("b")}>Bulan cair</label>
-                  <SelectCari id={id("b")} className={kolom} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
-                    {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
-                  </SelectCari>
-                </div>
-                <div className="w-[120px]">
-                  <label className={label} htmlFor={id("m")}>Minggu cair</label>
-                  <SelectCari id={id("m")} className={kolom} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
-                    {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
-                  </SelectCari>
-                </div>
-                {rc.selesai !== null
-                  ? <button type="button" className={`${tombol} bg-white text-[#1F5FD1] ring-1 ring-[#C5D0E2]`} onClick={() => { setUbah({ bulan_mulai: undefined, minggu: undefined }); setUbahJadwal(false); }}>Kembali otomatis</button>
-                  : <p className="basis-full text-[12px] text-[#5B6B84]">Tanggal kegiatan belum lengkap pada identifikasi: pilih bulan dan minggu cair sendiri.</p>}
-              </>
-            ) : (
-              <p className="text-[13px] text-[#0F2A52]">
-                <span className="font-semibold">Cair: {NAMA_BULAN[isian.bulan_mulai - 1]}, minggu {isian.minggu}</span>
-                <span className="text-[#5B6B84]"> · otomatis dari akhir kegiatan {rc.selesai} + 1 minggu </span>
-                <button type="button" className="font-semibold text-[#1F5FD1] underline" onClick={() => setUbahJadwal(true)}>Ubah</button>
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <div>
-              <label className={label} htmlFor={id("i")}>Masuk ke item mana? (disarankan item POK)</label>
-              <SelectCari id={id("i")} className={kolom} value={tujuan} onChange={(e) => setUbah({ tujuan: e.target.value, dobel: undefined, pakaiId: undefined })}>
+        </td>
+        <td className={`${sel2} w-[262px]`}>
+          {terpasang ? (
+            <p className="break-words py-1.5 text-[12.5px]">{namaTujuan}{terpasang.itemRab.pok_kunci ? "" : <span className="text-[#6B7A93]"> (item baru)</span>}</p>
+          ) : !editable ? (
+            <p className="py-1.5 text-[12.5px] text-[#6B7A93]">–</p>
+          ) : (
+            <div className="w-[250px] max-w-full">
+              <SelectCari id={id("i")} aria-label={`Masuk ke item: ${rc.r.uraian}`} className={`${kolom} ${sel}`} value={tujuan} onChange={(e) => setUbah({ tujuan: e.target.value, dobel: undefined, pakaiId: undefined })}>
                 <option value="">Pilih item…</option>
                 {pilihan.opsi.map((o) => <option key={o.nilai} value={o.nilai}>{o.label}</option>)}
               </SelectCari>
-              <p className="mt-1 text-[12px] text-[#5B6B84]">{pilihan.hasil.pesan}</p>
             </div>
-            {tampilNama && (
-              <div>
-                <label className={label} htmlFor={id("n")}>Nama item baru di RAB</label>
-                <input id={id("n")} className={kolom} maxLength={200} value={ubah.nama ?? saranNama ?? ""} onChange={(e) => setUbah({ nama: e.target.value })} />
-                <p className="mt-1 text-[12px] text-[#5B6B84]">Saran nama = jenis belanja + nama kegiatan; ubah bila perlu. Item ini ikut RAB sebagai bahan revisi POK. Rincian lain dengan akun dan nama yang sama berbagi satu item.</p>
-              </div>
-            )}
-            {tawarNama && (
-              <label className="flex items-start gap-2 text-[12.5px] text-[#44546F]">
-                <input type="checkbox" className="mt-1" checked={ubah.ubahNama ?? false} onChange={(e) => setUbah({ ubahNama: e.target.checked })} />
-                <span>Saran perbaiki penamaan: ubah nama item pada RAB menjadi «{saranNama}». Item POK tidak berubah; perubahan nama ini tampil sebagai pemicu P-02 (redaksi berubah) di bagian Pemantauan, dan usulan semula-menjadinya disusun di tab Revisi (cek aturan).</span>
-              </label>
-            )}
-            {pesanDobel && (
-              <div role="group" aria-label="Baris yang sudah ada pada item ini" className="space-y-2 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
-                <p className="font-semibold">Item ini sudah berisi {sudahAda.length} baris RAB yang Anda buat sendiri.</p>
-                <ul className="space-y-1">
-                  {sudahAda.map((b) => (
-                    <li key={b.baris_id} className="flex flex-wrap items-center justify-between gap-2 break-words">
-                      <span>{b.ket || "(tanpa keterangan)"}: {Number(b.volume)} {b.satuan} × {rupiah(b.harga_satuan)} = {rupiah(b.jumlah)}</span>
-                      {editable && (
-                        <button
-                          type="button" disabled={sibuk} aria-pressed={ubah.dobel === "pakai" && ubah.pakaiId === b.baris_id}
-                          onClick={() => setUbah({ dobel: "pakai", pakaiId: b.baris_id })}
-                          className={`${tombol} ${ubah.dobel === "pakai" && ubah.pakaiId === b.baris_id ? "bg-[#1F5FD1] text-white" : "bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]"}`}
-                        >Pakai baris ini</button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button" disabled={sibuk} aria-pressed={ubah.dobel === "baru"} onClick={() => setUbah({ dobel: "baru", pakaiId: undefined })}
-                    className={`${tombol} ${ubah.dobel === "baru" ? "bg-[#1F5FD1] text-white" : "bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]"}`}
-                  >Tetap tambah baris baru</button>
-                  {ubah.dobel === "pakai" && <span>Baris yang dipilih akan diambil alih: keterangan, volume, harga, dan jadwalnya diganti dengan isian rincian ini.</span>}
-                  {ubah.dobel === "baru" && <span>Baris lama dibiarkan; jumlah item bertambah dengan baris baru.</span>}
-                  {ubah.dobel === undefined && <span>Pilih salah satu supaya tidak ada jumlah ganda.</span>}
-                </div>
-              </div>
+          )}
+        </td>
+        <td className={`${sel2} w-[150px]`}>
+          <div className="flex flex-col items-start gap-1.5">
+            <Chip warna={WARNA_KEADAAN[keadaan]}>{TEKS_KEADAAN[keadaan]}</Chip>
+            {(terpasang?.diubah || diubahSebelum) && <span className="text-[11.5px] font-semibold text-[#5B3A8C]">Diubah dari saran</span>}
+            {terpasang && editable && edit === null && (
+              <button type="button" disabled={sibuk} className={tombolMini}
+                onClick={() => { setGalatEdit([]); setEdit({ volume: teksAngka(terpasang.baris.volume), satuan: terpasang.baris.satuan, harga: String(Math.round(Number(terpasang.baris.harga_satuan))) }); }}>
+                Ubah angka
+              </button>
             )}
           </div>
+        </td>
+      </tr>
 
-          {peringatan.length > 0 && (
-            <ul className="space-y-1 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
-              {peringatan.map((x) => <li key={x}>{x}</li>)}
-            </ul>
-          )}
-          {g && g.length > 0 && keadaan !== "isi_hari" && <p className="text-[12px] text-[#6B7A93]">Belum bisa disusun ke RAB: {g.join(" ")}</p>}
-        </>
+      {adaBarisTambahan && (
+        <tr>
+          <td colSpan={KOLOM_RINCIAN.length} className="border-b border-[#E6ECF5] bg-[#F8FAFD] px-3 py-2">
+            <div id={id("detail")} className="space-y-2 text-[12.5px] text-[#44546F]">
+              {detail && (
+                <div className="space-y-1">
+                  {rc.r.catatan && <p>{rc.r.catatan}</p>}
+                  {rc.r.hari !== null && rc.r.kelompok === "Translok dan penginapan" && (
+                    <p>Alokasi {rc.r.hari} {jenisHari} per petugas{rc.r.hari === 0 ? ": isi volume sendiri atau ubah alokasi di Pengaturan hari." : "."}</p>
+                  )}
+                  <PanelJelas id={id("jelas")} baris={penjelasan} />
+                  <p>
+                    <span className="font-semibold">Pilihan item</span> berisi butir POK RO ini dengan akun {rc.r.akun} (yang belum «RAB = Item» atau selesai), item baru di RAB, dan opsi tambah item baru. {pilihan.hasil.pesan}
+                  </p>
+                  {rc.batasHarga !== null ? <p>Harga maksimal {rupiah(rc.batasHarga)} (kebijakan); lebih rendah boleh.</p> : <p>Tarif belum ada di kebijakan: isi harga sendiri.</p>}
+                  {terpasang?.diubah && <p className="text-[#5B3A8C]">Saran saat disalin: {terpasang.baris.ident_vol ?? "-"} × {terpasang.baris.ident_harga !== null && terpasang.baris.ident_harga !== undefined ? rupiah(terpasang.baris.ident_harga) : "-"}.</p>}
+                </div>
+              )}
+
+              {editable && !terpasang && !adaOpsiPok && (
+                <p className="rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-1.5 text-[#5C4300]">
+                  Tidak ada butir POK akun {rc.r.akun} di RO ini, jadi rincian ini masuk sebagai <span className="font-semibold">item baru di RAB</span> (bahan revisi POK).
+                </p>
+              )}
+              {tampilNama && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-[12px] font-semibold text-[#5B6B84]" htmlFor={id("n")}>Nama item baru</label>
+                  <input id={id("n")} className={`${inp} max-w-[520px] flex-1`} maxLength={200} value={ubah.nama ?? saranNama ?? ""} onChange={(e) => setUbah({ nama: e.target.value })} />
+                </div>
+              )}
+              {tawarNama && (
+                <label className="flex items-start gap-2">
+                  <input type="checkbox" className="mt-1" checked={ubah.ubahNama ?? false} onChange={(e) => setUbah({ ubahNama: e.target.checked })} />
+                  <span>Perbaiki nama item di RAB menjadi «{saranNama}» (item POK tidak berubah; tercatat sebagai pemicu P-02).</span>
+                </label>
+              )}
+              {pesanDobel && (
+                <div role="group" aria-label="Baris yang sudah ada pada item ini" className="space-y-1.5 rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[#5C4300]">
+                  <p className="font-semibold">Item ini sudah punya {sudahAda.length} baris RAB buatan Anda. Pilih satu agar tidak ganda:</p>
+                  <ul className="space-y-1">
+                    {sudahAda.map((b) => (
+                      <li key={b.baris_id} className="flex flex-wrap items-center justify-between gap-2 break-words">
+                        <span>{b.ket || "(tanpa keterangan)"}: {Number(b.volume)} {b.satuan} × {rupiah(b.harga_satuan)} = {rupiah(b.jumlah)}</span>
+                        {editable && (
+                          <button type="button" disabled={sibuk} aria-pressed={ubah.dobel === "pakai" && ubah.pakaiId === b.baris_id} onClick={() => setUbah({ dobel: "pakai", pakaiId: b.baris_id })}
+                            className={`rounded-md px-2.5 py-1 text-[12px] font-semibold ${ubah.dobel === "pakai" && ubah.pakaiId === b.baris_id ? "bg-[#1F5FD1] text-white" : "border border-[#C5D0E2] bg-white text-[#1B2B4B]"}`}>Pakai baris ini</button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" disabled={sibuk} aria-pressed={ubah.dobel === "baru"} onClick={() => setUbah({ dobel: "baru", pakaiId: undefined })}
+                    className={`rounded-md px-2.5 py-1 text-[12px] font-semibold ${ubah.dobel === "baru" ? "bg-[#1F5FD1] text-white" : "border border-[#C5D0E2] bg-white text-[#1B2B4B]"}`}>Tetap tambah baris baru</button>
+                </div>
+              )}
+              {peringatan.length > 0 && (
+                <ul className="space-y-0.5 rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-1.5 text-[#5C4300]">
+                  {peringatan.map((x) => <li key={x}>{x}</li>)}
+                </ul>
+              )}
+              {g && g.length > 0 && keadaan !== "isi_hari" && keadaan !== "siap" && <p className="text-[#6B7A93]">Belum bisa disusun: {g.join(" ")}</p>}
+
+              {edit !== null && terpasang && (
+                <div className="space-y-1.5">
+                  {galatEdit.length > 0 && <ul role="alert" className="list-disc pl-5 font-semibold text-[#9B1C23]">{galatEdit.map((x) => <li key={x}>{x}</li>)}</ul>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" disabled={sibuk} className={`${tombol} bg-[#0F2A52] text-white`}
+                      onClick={async () => {
+                        const r = dataUbahTerpasang(terpasang.baris, edit);
+                        setGalatEdit(r.galat);
+                        if (!r.data) return;
+                        if (await simpanTerpasang(terpasang.baris.baris_id, r.data)) setEdit(null);
+                      }}>{sibuk ? "Menyimpan…" : "Simpan"}</button>
+                    <button type="button" disabled={sibuk} className={`${tombol} bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]`} onClick={() => { setEdit(null); setGalatEdit([]); }}>Batal</button>
+                    <span>Menyimpan mengembalikan status survei ke Draf.</span>
+                  </div>
+                </div>
+              )}
+              {sink?.berubah && terpasang && (
+                <div role="status" className="space-y-1 rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[#5C4300]">
+                  <p className="font-semibold">Identifikasi berubah sejak rincian ini disusun.</p>
+                  <p>Saran sekarang: {sink.volume ? `volume ${rc.saran.volume || "-"}` : ""}{sink.volume && sink.harga ? ", " : ""}{sink.harga ? `harga ${rc.saran.harga ? rupiah(Number(rc.saran.harga)) : "-"}` : ""}.{terpasang.diubah ? " Memperbarui menimpa angka yang pernah Anda ubah." : ""}</p>
+                  {editable && <button type="button" disabled={sibuk} onClick={perbarui} className={`${tombol} bg-[#1F5FD1] text-white`}>{sibuk ? "Memperbarui…" : "Perbarui dari identifikasi"}</button>}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
       )}
-    </li>
+    </>
   );
 }
 
@@ -671,60 +624,102 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   return (
     <div className="space-y-4">
       <p className="text-[12.5px] text-[#44546F]">
-        Sumber: <span className="font-semibold text-[#0F2A52]">{sumber.panjang}</span>{lembar ? "; tarif dan jendela dari lembar kebijakan yang berlaku" : "; belum ada lembar kebijakan yang berlaku"}.
-        {b.lanjutan_status === "draf" && " Masih Draf: angka dapat berubah."}
+        Sumber: <span className="font-semibold text-[#0F2A52]">{sumber.panjang}</span>{lembar ? "" : " · belum ada lembar kebijakan"}{b.lanjutan_status === "draf" ? " · masih Draf, angka bisa berubah" : ""}
       </p>
 
       <PenunjukAlur langkah={alur} kode={props.kode} identId={b.ident_id} />
 
       <PanduanLangkah langkah={[
-        { judul: "Isi alokasi hari", ket: "Bagian A: berapa hari tiap petugas dibayar.", selesai: kolHari.length === 0 || kolHari.some((k) => (bacaHari(hariEfektif[k.kunci]) ?? 0) > 0) },
-        { judul: "Periksa rincian", ket: "Bagian B: angka, jadwal cair, item tujuan.", selesai: baris.length > 0 && baris.every((x) => x.keadaan === "sudah" || x.keadaan === "siap") },
-        { judul: "Susun RAB", ket: "Bagian C: satu tombol untuk semua rincian lengkap.", selesai: ringkas.jumlah > 0 && ringkas.sudah === ringkas.jumlah },
-        { judul: "Tandai Siap", ket: "Bagian C: nyatakan survei ini siap diajukan.", selesai: status === "siap" },
+        { judul: "Isi hari dibayar", ket: "Berapa hari tiap petugas dibayar (Pengaturan hari).", selesai: kolHari.length === 0 || kolHari.some((k) => (bacaHari(hariEfektif[k.kunci]) ?? 0) > 0) },
+        { judul: "Periksa rincian", ket: "Volume, harga, jadwal cair, dan item tujuan.", selesai: baris.length > 0 && baris.every((x) => x.keadaan === "sudah" || x.keadaan === "siap") },
+        { judul: "Susun RAB", ket: "Satu tombol untuk semua rincian yang lengkap.", selesai: ringkas.jumlah > 0 && ringkas.sudah === ringkas.jumlah },
+        { judul: "Tandai Siap", ket: "Nyatakan RAB survei ini siap diajukan.", selesai: status === "siap" },
       ]} />
-      <p className="text-[12px] text-[#5B6B84]">Tidak ada yang tertulis ke RAB RO (tab sebelah) sebelum Anda menekan <span className="font-semibold">Susun RAB</span>. Tarif kebijakan adalah batas tertinggi; harga lebih rendah boleh.</p>
+      <p className="text-[12px] text-[#5B6B84]">Belum ada yang masuk RAB RO sampai Anda menekan <span className="font-semibold">Susun RAB</span>.</p>
       {rs.length === 0 && <p className="text-[13px] text-[#6B7A93]">Identifikasi ini belum menghasilkan kebutuhan biaya.</p>}
 
       {adaPengaturan && (
-        <Bagian huruf="A" judul="Pengaturan hari dan pecah/gabung" ket="Isi dulu bagian ini; volume translok dan penginapan baru terhitung setelah alokasi hari lebih dari 0." garis="#1F5FD1">
-          {kolHari.length > 0 && (
-            <div className="space-y-2">
-              <p className={subJudul}>Alokasi hari dibayar per petugas</p>
-              <p className="text-[12.5px] leading-relaxed text-[#44546F]">
-                Berapa hari (atau malam) <span className="font-semibold">setiap petugas</span> dibayar, bukan lamanya pendataan. Dihitung <span className="font-semibold">hari kalender</span> (akhir pekan dan libur ikut); penginapan maksimal hari kalender dikurangi satu (cek aturan).
-                Isian <span className="font-semibold text-[#0E8A6D]">hijau</span> = ada alokasi, <span className="font-semibold text-[#9B1C23]">merah</span> = melebihi hari pendataan.
-              </p>
-              <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr))]">
-                {kolHari.map((k) => {
-                  const teks = hariTeks[k.kunci] ?? "0";
-                  const n = bacaHari(teks === "" ? "0" : teks);
-                  const salah = n === null ? null : periksaHariBayar(n, k.maks, k.penginapan);
-                  const ada = n !== null && n > 0;
-                  const warna = salah ? { garis: "#C62828", latar: "#FDECEC", teks: "#9B1C23" } : ada ? { garis: "#0E8A6D", latar: "#EAF8F4", teks: "#0B6B53" } : { garis: "#DCE3EE", latar: "#F8FAFD", teks: "#0F2A52" };
-                  const idIsi = `rps-h-${k.kunci}`.replace(/[^\w-]/g, "_");
-                  const satuanHari = k.penginapan ? "malam" : "hari";
-                  return (
-                    <div key={k.kunci} className="space-y-1.5 rounded-lg border p-2.5" style={{ borderColor: warna.garis, background: warna.latar }}>
-                      <label className="block text-[13px] font-bold leading-snug text-[#0F2A52]" htmlFor={idIsi}>{k.uraian} · {k.periode}</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          id={idIsi} className={`${kolom} !w-20 text-center font-bold`} style={{ borderColor: warna.garis, color: warna.teks, background: "#fff" }} inputMode="numeric" aria-invalid={salah ? true : undefined} aria-describedby={`${idIsi}-info`} value={teks}
-                          onFocus={(e) => e.currentTarget.select()}
-                          onChange={(e) => setHariTeks((a) => ({ ...a, [k.kunci]: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
-                        />
-                        <span className="text-[12.5px] text-[#44546F]">{satuanHari} per petugas (maks {k.batas})</span>
-                      </div>
-                      <p id={`${idIsi}-info`} className={`text-[12.5px] ${salah ? "font-semibold text-[#9B1C23]" : "text-[#44546F]"}`}>
-                        {salah ?? (n !== null ? ringkasHari(k.orang, n, k.penginapan) : "")}
-                      </p>
-                      <p className="text-[12px] text-[#6B7A93]">Pendataan {k.mulai} s.d. {k.selesai} = {k.maks} hari kalender.</p>
-                    </div>
-                  );
-                })}
+        <Bagian huruf="A" judul="Pengaturan hari" ket="Isi dulu: volume translok dan penginapan baru terhitung bila hari lebih dari 0." garis="#0F2A52">
+          {kolHari.length > 0 && (() => {
+            const hariAngka: Record<string, number | null> = Object.fromEntries(kolHari.map((k) => [k.kunci, bacaHari(hariEfektif[k.kunci])]));
+            const tot = totalAlokasi(kolHari, hariAngka);
+            const persenIsi = tot.maksRupiah > 0 ? Math.min(100, Math.round((tot.isiRupiah / tot.maksRupiah) * 100)) : 0;
+            const orangHariMaks = kolHari.reduce((t, k) => t + (alokasiHari(k, null).maksOrangHari ?? 0), 0);
+            const grupHari = [
+              { judul: "Translok (transport lokal)", isi: kolHari.filter((k) => !k.penginapan) },
+              { judul: "Penginapan", isi: kolHari.filter((k) => k.penginapan) },
+            ].filter((x) => x.isi.length > 0);
+            const kepala = ["Jenis dan periode", "Petugas", "Hari dibayar per petugas", "Maks hari", "Orang-hari terisi / maks", "Tarif per hari", "Anggaran terisi", "Anggaran maksimal", "Status"];
+            return (
+              <div className="space-y-3">
+                <div className="grid gap-3 rounded-xl border border-[#C5D1E6] bg-[#F4F8FF] p-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="space-y-1.5">
+                    <p className="text-[12px] font-bold uppercase tracking-wide text-[#44546F]">Alokasi maksimal transportasi dan penginapan</p>
+                    <p className="text-[22px] font-bold leading-none text-[#0F2A52]">{rupiah(tot.maksRupiah)}</p>
+                    <p className="text-[12.5px] text-[#44546F]">
+                      = petugas × hari kalender pendataan × tarif ({orangHariMaks.toLocaleString("id-ID")} orang-hari maksimal). Terisi {rupiah(tot.isiRupiah)} ({persenIsi}%).
+                    </p>
+                    {tot.kolomTanpaTarif > 0 && <p className="text-[12px] text-[#7A5A00]">{tot.kolomTanpaTarif} baris belum bisa dirupiahkan (tarif belum ada, mis. translok lebih dari 8 jam atau penginapan), jadi tidak masuk angka ini.</p>}
+                  </div>
+                  <div className="h-3 w-full min-w-[160px] overflow-hidden rounded-full bg-[#DCE5F3] sm:w-56" role="img" aria-label={`Terisi ${persenIsi} persen dari maksimal`}>
+                    <div className="h-full rounded-full bg-[#1F5FD1]" style={{ width: `${persenIsi}%` }} />
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-xl border border-[#CBD5E5]">
+                  <table className="w-full min-w-[1000px] border-collapse text-[13px]">
+                    <thead>
+                      <tr className="bg-[#EEF2F8] text-left text-[11.5px] font-bold uppercase tracking-wide text-[#44546F]">
+                        {kepala.map((h, i) => <th key={h} scope="col" className={`px-2 py-2 ${i >= 1 && i <= 7 && i !== 2 ? "text-right" : ""}`}>{h}</th>)}
+                      </tr>
+                    </thead>
+                    {grupHari.map((gh) => (
+                      <tbody key={gh.judul}>
+                        <tr><th colSpan={kepala.length} scope="colgroup" className="border-y border-[#D5DDEB] bg-[#F1F4F9] px-3 py-1.5 text-left text-[12.5px] font-bold text-[#0F2A52]" style={{ borderLeft: "6px solid #0B7A60" }}>{gh.judul}</th></tr>
+                        {gh.isi.map((k) => {
+                          const teks = hariTeks[k.kunci] ?? "0";
+                          const n = bacaHari(teks === "" ? "0" : teks);
+                          const salah = n === null ? null : periksaHariBayar(n, k.maks, k.penginapan);
+                          const ada = n !== null && n > 0;
+                          const al = alokasiHari(k, n);
+                          const idIsi = `rps-h-${k.kunci}`.replace(/[^\w-]/g, "_");
+                          const satuanHari = k.penginapan ? "malam" : "hari";
+                          const td = "border-b border-[#E6ECF5] px-2 py-2 align-top";
+                          return (
+                            <tr key={k.kunci} className="hover:bg-[#FAFBFE]">
+                              <td className={`${td} min-w-[220px]`}>
+                                <label className="block break-words font-semibold leading-snug text-[#0F2A52]" htmlFor={idIsi}>{k.uraian}</label>
+                                <p className="text-[11.5px] text-[#6B7A93]">{k.periode} · {k.mulai} s.d. {k.selesai} ({k.maks} hari kalender)</p>
+                              </td>
+                              <td className={`${td} text-right tabular-nums`}>{k.orang ?? "–"}</td>
+                              <td className={`${td} w-[150px]`}>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    id={idIsi} className={`${inp} !w-16 text-center font-bold`} style={salah ? { borderColor: "#C62828", color: "#9B1C23" } : undefined} inputMode="numeric"
+                                    aria-invalid={salah ? true : undefined} aria-describedby={`${idIsi}-info`} value={teks}
+                                    onFocus={(e) => e.currentTarget.select()}
+                                    onChange={(e) => setHariTeks((a) => ({ ...a, [k.kunci]: e.target.value.replace(/\D/g, "").slice(0, 3) }))}
+                                  />
+                                  <span className="text-[12px] text-[#5B6B84]">{satuanHari}</span>
+                                </div>
+                                <p id={`${idIsi}-info`} className="mt-1 text-[12px] font-semibold text-[#9B1C23]">{salah ?? ""}</p>
+                              </td>
+                              <td className={`${td} text-right tabular-nums`}>{k.batas}</td>
+                              <td className={`${td} text-right tabular-nums`}>{al.maksOrangHari === null ? "–" : `${(al.isiOrangHari ?? 0).toLocaleString("id-ID")} / ${al.maksOrangHari.toLocaleString("id-ID")}`}</td>
+                              <td className={`${td} text-right tabular-nums`}>{k.tarif === null ? "–" : rupiah(k.tarif)}</td>
+                              <td className={`${td} text-right tabular-nums`}>{al.isiRupiah === null ? "–" : rupiah(al.isiRupiah)}</td>
+                              <td className={`${td} text-right font-bold tabular-nums text-[#0F2A52]`}>{al.maksRupiah === null ? "–" : rupiah(al.maksRupiah)}</td>
+                              <td className={`${td} w-[130px]`}><Chip warna={salah ? "merah" : ada ? "hijau" : "abu"}>{salah ? "Melebihi maks" : ada ? "Terisi" : "Belum diisi"}</Chip></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    ))}
+                  </table>
+                </div>
+                <p className="text-[12px] text-[#5B6B84]">Maksimal = hari kalender pendataan (penginapan: dikurangi satu malam). Anggaran memakai tarif bila ada di kebijakan.</p>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {periodeSah.length > 1 && kelompokAda.length > 0 && (
             <div className="space-y-2">
@@ -739,74 +734,78 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                   </div>
                 ))}
               </div>
-              <p className="text-[12px] text-[#5B6B84]">Mengubah pilihan ini mengganti rincian yang ditawarkan; baris RAB yang sudah disusun tidak diubah atau dihapus.</p>
+              <p className="text-[12px] text-[#5B6B84]">Baris RAB yang sudah disusun tidak berubah.</p>
             </div>
           )}
         </Bagian>
       )}
 
-      <Bagian huruf="B" judul="Rincian per tahapan kegiatan" ket="Rincian disusun ke bawah menurut tahapan: pelatihan, lalu pendataan. Tiap tahap menunjukkan kapan pekerjaannya selesai (dari jadwal identifikasi) dan saran minggu pencairan, yaitu satu minggu sesudahnya. Klik «?» pada Volume untuk melihat asal angkanya." garis="#0F2A52">
-        {tahapAda.map((g) => {
+      <Bagian huruf="B" judul="Rincian biaya per tahapan" ket="Periksa angka, jadwal cair, dan item tujuan tiap baris. Klik «Detail» untuk asal angka." garis="#0F2A52">
+        {tahapAda.map((g, urutTahap) => {
           const w = WARNA_TAHAP[g.tahap];
           const info = infoPerTahap.get(g.tahap)!;
           const belumDisusun = g.isi.filter((x) => x.keadaan !== "sudah");
+          const jmlX = (x: typeof baris[number]): number => (x.ada ? Number(x.ada.baris.jumlah) || 0 : jumlahBaris(x.isian) ?? 0);
+          const totalTahap = g.isi.reduce((t, x) => t + jmlX(x), 0);
+          const grup = KELOMPOK_RINCIAN.flatMap((k) => {
+            const rk = g.isi.filter((x) => x.rc.r.kelompok === k);
+            if (rk.length === 0) return [];
+            if (k !== "Honor") return [{ kunci: k as string, judul: k as string, warna: TOPIK[k].garis, isi: rk }];
+            return SUB_HONOR.flatMap((sg) => {
+              const r2 = rk.filter((x) => subHonor(x.rc.r.uraian) === sg.kode);
+              return r2.length > 0 ? [{ kunci: `Honor-${sg.kode}`, judul: `Honor · ${sg.nama}`, warna: TOPIK.Honor.garis, isi: r2 }] : [];
+            });
+          });
           return (
-            <div key={g.tahap} className="space-y-2.5 rounded-xl border-2 p-3" style={{ borderColor: w.garis, background: w.latar }}>
-              <div className="space-y-1.5">
-                <p className="text-[15px] font-bold leading-snug text-[#0F2A52]">{NAMA_TAHAP[g.tahap]} <span className="font-normal text-[#5B6B84]">({g.isi.length} rincian)</span></p>
-                <p className="text-[12px] text-[#44546F]">{KET_TAHAP[g.tahap]}</p>
-                <dl className="grid gap-x-4 gap-y-1 rounded-lg bg-white/80 px-3 py-2 text-[12.5px] sm:grid-cols-2">
-                  <div><dt className="inline text-[#5B6B84]">Pekerjaan selesai: </dt><dd className="inline font-semibold text-[#0F2A52]">{teksSelesai(info.selesai)}</dd></div>
-                  <div><dt className="inline text-[#5B6B84]">Saran pencairan (selesai + 1 minggu): </dt><dd className="inline font-semibold text-[#0F2A52]">{teksMingguCair(info.cair)}</dd></div>
+            <section key={g.tahap} aria-label={NAMA_TAHAP[g.tahap]} className="overflow-hidden rounded-xl border-2 bg-white" style={{ borderColor: w.garis }}>
+              <header className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3.5 py-3 text-white" style={{ background: w.garis }}>
+                <span aria-hidden className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-white text-[16px] font-bold" style={{ color: w.garis }}>{urutTahap + 1}</span>
+                <div className="min-w-0 flex-1 basis-[200px]">
+                  <h4 className="text-[16px] font-bold leading-snug">{NAMA_TAHAP[g.tahap]}</h4>
+                  <p className="text-[12.5px] opacity-90">{g.isi.length} rincian · {rupiah(totalTahap)}</p>
+                </div>
+                <dl className="space-y-0.5 text-[12.5px] leading-snug">
+                  <div><dt className="inline opacity-85">Pekerjaan selesai: </dt><dd className="inline font-bold">{teksSelesai(info.selesai)}</dd></div>
+                  <div><dt className="inline opacity-85">Saran cair (+1 minggu): </dt><dd className="inline font-bold">{teksMingguCair(info.cair)}</dd></div>
                 </dl>
-                {info.tanpaTanggal > 0 && (
-                  <p className="text-[12px] text-[#7A5A00]">
-                    {info.tanpaTanggal} rincian tahap ini belum punya tanggal selesai di jadwal identifikasi, jadi jadwal cairnya perlu dipilih sendiri. Lengkapi jadwal pada{" "}
-                    <Link href={`/sigap/kelola/perencanaan/identifikasi/${b.ident_id}/lanjutan`} className="font-semibold underline">identifikasi lanjutan</Link>.
-                  </p>
-                )}
                 {props.editable && info.cair && belumDisusun.length > 0 && (
-                  <button type="button" className={tombolKecil} onClick={() => samakanCair(belumDisusun, info.cair!)}>
-                    Samakan jadwal cair {belumDisusun.length} rincian ke {teksMingguCair(info.cair)}
+                  <button type="button" className="rounded-md bg-white px-3 py-1.5 text-[12.5px] font-bold" style={{ color: w.garis }} onClick={() => samakanCair(belumDisusun, info.cair!)}>
+                    Samakan jadwal cair
                   </button>
                 )}
+              </header>
+              {info.tanpaTanggal > 0 && (
+                <p className="border-b border-[#F0DFA8] bg-[#FFF8E6] px-3.5 py-1.5 text-[12.5px] text-[#5C4300]">
+                  {info.tanpaTanggal} rincian belum punya tanggal selesai: pilih jadwal cair sendiri atau lengkapi di{" "}
+                  <Link href={`/sigap/kelola/perencanaan/identifikasi/${b.ident_id}/lanjutan`} className="font-semibold underline">identifikasi lanjutan</Link>.
+                </p>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1100px] border-collapse text-[13px]">
+                  <thead>
+                    <tr className="bg-[#EEF2F8] text-left text-[11.5px] font-bold uppercase tracking-wide text-[#44546F]">
+                      {KOLOM_RINCIAN.map((k, i) => <th key={k} scope="col" className={`px-2 py-2 ${i === 1 || i === 3 || i === 4 ? "text-right" : ""}`}>{k}</th>)}
+                    </tr>
+                  </thead>
+                  {grup.map((gr) => (
+                    <tbody key={gr.kunci}>
+                      <tr>
+                        <th colSpan={KOLOM_RINCIAN.length} scope="colgroup" className="border-y border-[#D5DDEB] bg-[#F1F4F9] px-3 py-1.5 text-left text-[12.5px] font-bold text-[#0F2A52]" style={{ borderLeft: `6px solid ${gr.warna}` }}>
+                          {gr.judul} <span className="font-normal text-[#5B6B84]">· {gr.isi.length} rincian · {rupiah(gr.isi.reduce((t, x) => t + jmlX(x), 0))}</span>
+                        </th>
+                      </tr>
+                      {gr.isi.map(barisSurvei)}
+                    </tbody>
+                  ))}
+                </table>
               </div>
-              {KELOMPOK_RINCIAN.map((k) => {
-                const isi = g.isi.filter((x) => x.rc.r.kelompok === k);
-                if (isi.length === 0) return null;
-                const t = TOPIK[k];
-                return (
-                  <div key={k} className="space-y-2 rounded-lg border bg-white/70 p-2.5" style={{ borderColor: t.garis }}>
-                    <div className="flex items-start gap-2">
-                      <span aria-hidden className="mt-1 h-2.5 w-2.5 flex-none rounded-full" style={{ background: t.garis }} />
-                      <p className="text-[13.5px] font-bold leading-snug text-[#0F2A52]">{k} <span className="font-normal text-[#5B6B84]">({isi.length})</span></p>
-                    </div>
-                    {k === "Honor" ? (
-                      <div className="space-y-3">
-                        {SUB_HONOR.map((sg) => {
-                          const rs2 = isi.filter((x) => subHonor(x.rc.r.uraian) === sg.kode);
-                          if (rs2.length === 0) return null;
-                          return (
-                            <div key={sg.kode} className="space-y-2 rounded-lg border border-[#DCCFF0] bg-white/60 p-2">
-                              <p className="text-[13px] font-bold text-[#4B2E83]">{sg.nama} <span className="font-normal text-[#5B6B84]">({rs2.length} rincian)</span></p>
-                              <ul className="space-y-2.5">{rs2.map(barisSurvei)}</ul>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <ul className="space-y-2.5">{isi.map(barisSurvei)}</ul>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            </section>
           );
         })}
-        {tahapAda.length === 0 && <p className="text-[12.5px] text-[#5B6B84]">Identifikasi ini belum menghasilkan rincian biaya. Lengkapi dulu identifikasi lanjutan.</p>}
+        {tahapAda.length === 0 && <p className="text-[12.5px] text-[#5B6B84]">Belum ada rincian biaya. Lengkapi dulu identifikasi lanjutan.</p>}
       </Bagian>
 
-      <Bagian huruf="C" judul="Susun RAB dan status" ket="Satu tombol menyusun semua rincian yang sudah lengkap ke RAB. Setelah itu nyatakan survei ini Siap diajukan." garis="#0F2A52">
+      <Bagian huruf="C" judul="Susun RAB dan status" ket="Susun semua rincian yang lengkap sekaligus, lalu tandai Siap." garis="#0F2A52">
         <p className="text-[12.5px] text-[#44546F]">
           {ringkas.jumlah} rincian: {ringkas.sudah} sudah di RAB ({rupiah(ringkas.totalSudah)}), {ringkas.siap} siap disusun ({rupiah(ringkas.totalSiap)}), {ringkas.butuh} butuh keputusan, {ringkas.isiHari} menunggu hari dibayar, {ringkas.belumAngka} menunggu volume atau harga.
         </p>
@@ -851,9 +850,9 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
           <Chip warna={status === "siap" ? "hijau" : "abu"}>{LABEL_STATUS_SURVEI[status]}</Chip>
           <p className="min-w-0 flex-1 basis-[220px] text-[12px] text-[#5B6B84]">
             {status === "siap"
-              ? "Gap memakai rincian RAB survei ini untuk kebutuhan biaya. Menambah, mengubah, atau menghapus rincian mengembalikan status ke Draf."
-              : "Selama Draf, Gap tetap memakai kebutuhan dari identifikasi. Nyatakan Siap bila RAB survei ini sudah lengkap."}
-            {!props.editable && " RAB sedang tidak dapat diubah (sudah diajukan atau disahkan), jadi status tidak dapat diganti."}
+              ? "Gap memakai RAB survei ini. Mengubah rincian mengembalikan ke Draf."
+              : "Selama Draf, Gap memakai kebutuhan dari identifikasi."}
+            {!props.editable && " RAB sedang dikunci (diajukan atau disahkan)."}
           </p>
           {props.editable && (status === "siap"
             ? <button type="button" disabled={mengirim} onClick={() => void ubahStatus("draf")} className={`${tombol} bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]`}>Kembalikan ke Draf</button>
@@ -864,17 +863,17 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
       </Bagian>
 
       {(batang.length > 0 || pemicu.length > 0 || yatim.length > 0) && (
-        <Bagian huruf="D" judul="Pantauan" ket="Hanya bacaan: batang item, pemicu revisi, dan baris yang tidak cocok lagi." garis="#5B6B84">
+        <Bagian huruf="D" judul="Pantauan" ket="Bacaan saja." garis="#5B6B84">
           {batang.length > 0 && (
             <div className="space-y-2">
-              <p className={subJudul}>Batang item: satu item diisi beberapa survei (dasar rupiah)</p>
+              <p className={subJudul}>Item yang diisi beberapa survei (rupiah)</p>
               <div className="grid items-start gap-3 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">
                 {batang.map((x) => x.kap ? (
                   <BatangItem key={x.kunci} judul={x.judul} akun={x.akun} satuan={x.satuan} kap={x.kap} sumbangan={x.sumbangan} dasar="rupiah" />
                 ) : (
                   <div key={x.kunci} className="space-y-1 rounded-xl border border-[#DCE3EE] bg-white p-3.5 text-[12.5px] text-[#44546F]">
                     <p className="text-[14px] font-bold text-[#0F2A52]">{x.judul}</p>
-                    <p>Item baru di RAB (akun {x.akun}): belum ada pagu POK, jadi tidak ada batas yang dibandingkan.</p>
+                    <p>Item baru di RAB (akun {x.akun}): belum ada pagu POK.</p>
                     <p>{x.sumbangan.map((s) => `${s.nama}: ${s.jumlah === null ? "harga belum ada" : rupiah(s.jumlah)}`).join("; ")}</p>
                   </div>
                 ))}
@@ -899,8 +898,8 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
 
           {yatim.length > 0 && (
             <div role="status" className="space-y-1 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
-              <p className="font-semibold">{yatim.length} baris RAB berasal dari identifikasi ini tetapi tidak cocok lagi dengan rincian yang ditawarkan sekarang.</p>
-              <p>Penyebabnya identifikasi diubah atau pilihan pecah/gabung berbeda dari saat disusun. Baris tidak dihapus otomatis; ubah atau hapus lewat tampilan RAB RO bila perlu.</p>
+              <p className="font-semibold">{yatim.length} baris RAB dari identifikasi ini tidak cocok lagi dengan rincian sekarang.</p>
+              <p>Identifikasi atau pilihan pecah/gabung berubah. Baris tidak dihapus otomatis; ubah lewat RAB standar bila perlu.</p>
               <ul className="list-disc pl-5">{yatim.map((y) => <li key={y.baris_id} className="break-words">{y.ket || y.ident_kunci}</li>)}</ul>
             </div>
           )}
