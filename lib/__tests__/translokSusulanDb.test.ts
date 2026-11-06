@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // kewenangan admin dan jejak audit dipalsukan: yang diuji di sini adalah rantai penyetuju dan alur menyetujui
 const admin = new Set<number>();
 vi.mock("@/lib/sigapAkses", () => ({
+  KEGIATAN_PSP: 1,
   izinAkun: async (_db: unknown, akunId: number) => ({ peran: [], izin: { admin: admin.has(akunId) } }),
   boleh: (izin: { admin?: boolean }) => !!izin.admin,
   catatAudit: async () => undefined,
@@ -82,7 +83,7 @@ const mundur = (n: number) => { const d = new Date(`${HARI_INI}T00:00:00Z`); d.s
 const DUA_HARI = mundur(2);
 const TIGA_HARI = mundur(3);
 
-// PPL=1, PML=2, Korwil=3, Supervisor=4, PJ=6, PPL lain=7. Rantai lewat bencana_petugas: PPL(11)->PML(12)->Korwil(13)
+// PPL=1, PML=2, Korwil=3, Supervisor=4, PJ=6, PPL lain=7. Rantai lewat sigap_penugasan.atasan_akun_id (PSP): PPL(1)->PML(2)->Korwil(3)
 function dasarTabel(): Tabel {
   return {
     sigap_akun: [
@@ -90,11 +91,15 @@ function dasarTabel(): Tabel {
       { id: 3, nama: "Deswaty", petugas_bencana_id: 13, token: "tk3" }, { id: 4, nama: "Sup", petugas_bencana_id: null, token: "tk4" },
       { id: 6, nama: "PJ Keg", petugas_bencana_id: null, token: "tk6" }, { id: 7, nama: "PPL Lain", petugas_bencana_id: 17, token: "tk7" },
     ],
-    bencana_petugas: [{ id: 11, atasan_id: 12 }, { id: 12, atasan_id: 13 }, { id: 13, atasan_id: null }, { id: 17, atasan_id: null }],
     sigap_tim: [],
     sigap_peran: [{ id: 100, kode: "supervisor_psp" }, { id: 101, kode: "pj_kegiatan" }],
     sigap_akun_peran: [{ akun_id: 4, peran_id: 100, kegiatan_id: null }, { akun_id: 6, peran_id: 101, kegiatan_id: 1 }],
-    sigap_penugasan: [{ id: 50, kegiatan_id: 1, akun_id: 1, peran: "ppl", aktif: true }, { id: 57, kegiatan_id: 1, akun_id: 7, peran: "ppl", aktif: true }],
+    sigap_penugasan: [
+      { id: 50, kegiatan_id: 1, akun_id: 1, peran: "ppl", aktif: true, atasan_akun_id: 2 },
+      { id: 51, kegiatan_id: 1, akun_id: 2, peran: "pml", aktif: true, atasan_akun_id: 3 },
+      { id: 52, kegiatan_id: 1, akun_id: 3, peran: "korwil", aktif: true, atasan_akun_id: null },
+      { id: 57, kegiatan_id: 1, akun_id: 7, peran: "ppl", aktif: true, atasan_akun_id: null },
+    ],
     sigap_hari_kerja: [],
     sigap_hari_kerja_riwayat: [],
     sigap_realisasi: [],
