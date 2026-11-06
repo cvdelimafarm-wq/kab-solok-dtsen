@@ -18,7 +18,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hariIniWib, kelompokTanggal, rentangTanggal, tanggalValid, type Db } from "@/lib/sigap";
-import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
+import { boleh, catatAudit, izinAkun, KEGIATAN_PSP, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
+import { gabungAtasan } from "@/lib/atasanPenugasan";
 import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 import { akunTerlindungi, resetPinOlehAdmin } from "@/lib/sigapPin";
 import { lingkupGabungan, periksaBeriPeran, periksaKelolaMatriks, periksaLingkupPeran, periksaUbahIzin } from "@/lib/aturanLingkup";
@@ -395,17 +396,17 @@ export async function GET(req: NextRequest) {
       }
 
       // verifikasi
-      // (28 Okt 2026) Unduh SPJ (tim administrasi): ?tim=1 menambah tim (PML & PPL-nya lewat bencana_petugas.atasan_id); baris selalu memuat
+      // (28 Okt 2026) Unduh SPJ (tim administrasi): ?tim=1 menambah tim (PML & PPL-nya lewat sigap_penugasan.atasan_akun_id); baris selalu memuat
       // akun_id, tarif, dan tanggal dibayar supaya rentang cetak & nilai kwitansi bisa dihitung di layar.
       let timAkun = new Map<number, { id: number; nama: string }>();
       if (sp.get("tim") === "1") {
         const ids = Array.from(new Set(aktif.map((b) => b.akun_id)));
-        const ak = ids.length ? await semuaBaris<{ id: number; petugas_bencana_id: number | null }>((a, z) => db.from("sigap_akun").select("id, petugas_bencana_id").in("id", ids).range(a, z)) : [];
-        const pIds = ak.map((x) => x.petugas_bencana_id).filter((x): x is number => !!x);
-        const bp = pIds.length ? await semuaBaris<{ id: number; atasan_id: number | null }>((a, z) => db.from("bencana_petugas").select("id, atasan_id").in("id", pIds).range(a, z)) : [];
-        const atIds = Array.from(new Set(bp.map((x) => x.atasan_id).filter((x): x is number => !!x)));
-        const atAkun = atIds.length ? await semuaBaris<{ id: number; nama: string; petugas_bencana_id: number | null }>((a, z) => db.from("sigap_akun").select("id, nama, petugas_bencana_id").in("petugas_bencana_id", atIds).range(a, z)) : [];
-        timAkun = petaTim(aktif.map((b) => ({ akun_id: b.akun_id, peran: b.peran, nama: b.nama })), ak, bp, atAkun);
+        const pen = ids.length ? await semuaBaris<{ akun_id: number; kegiatan_id: number; atasan_akun_id: number | null }>((a, z) => db.from("sigap_penugasan").select("akun_id, kegiatan_id, atasan_akun_id").in("akun_id", ids).in("kegiatan_id", [KEGIATAN_PSP, kegiatanId]).eq("aktif", true).range(a, z)) : [];
+        const atasanDari = gabungAtasan(pen.filter((x) => x.kegiatan_id === KEGIATAN_PSP), kegiatanId === KEGIATAN_PSP ? [] : pen.filter((x) => x.kegiatan_id === kegiatanId), []);
+        const atIds = Array.from(new Set(Array.from(atasanDari.values()).filter((x): x is number => x != null)));
+        const atAkun = atIds.length ? await semuaBaris<{ id: number; nama: string }>((a, z) => db.from("sigap_akun").select("id, nama").in("id", atIds).range(a, z)) : [];
+        const namaAkun = new Map<number, string>(atAkun.map((x) => [x.id, x.nama]));
+        timAkun = petaTim(aktif.map((b) => ({ akun_id: b.akun_id, peran: b.peran, nama: b.nama })), atasanDari, namaAkun);
       }
       const rows = aktif.map((b) => {
         const hk = st.hk.filter((h) => h.penugasan_id === b.id).map((h) => h.tanggal);

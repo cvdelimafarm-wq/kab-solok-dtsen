@@ -11,7 +11,7 @@ export type AkunTautan = { id: number; mitra_id: number | null; petugas_bencana_
 const bagi = <T,>(a: T[], n: number) => Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n));
 
 /**
- * Nilai kolom "SE2026" di sigap_penilaian_mitra per akun (SQL 20261031j). null = tabelnya belum ada (pakai nilai lama bencana_petugas).
+ * Nilai kolom "SE2026" di sigap_penilaian_mitra per akun (SQL 20261031j). null = tabelnya belum ada.
  */
 export async function nilaiSe2026(db: Db, akunIds: number[]): Promise<Map<number, number> | null> {
   const { data: k, error } = await db.from("sigap_penilaian_kolom").select("id").eq("kode", "SE2026").maybeSingle();
@@ -25,19 +25,20 @@ export async function nilaiSe2026(db: Db, akunIds: number[]): Promise<Map<number
   return hasil;
 }
 
-/** Rincian per akun. Gagal baca = kosong, daftar tetap tampil. Penilaian SE2026 diambil dari tabel penilaian bila ada, kalau belum ada dari bencana_petugas. */
+/** Rincian per akun. Gagal baca = kosong, daftar tetap tampil. Penilaian SE2026 dari sigap_penilaian_mitra (nilai lama di bencana_petugas tidak dibaca lagi). */
 export async function rincianPerAkun(db: Db, akun: AkunTautan[]): Promise<Map<number, RincianAkun>> {
   const hasil = new Map<number, RincianAkun>();
   const mitra = new Map<number, BarisBencanaMitra>();
-  const petugas = new Map<number, BarisBencanaPetugas>();
+  const akunPendaftar = new Map<number, BarisBencanaPetugas>();
   try {
     for (const g of bagi([...new Set(akun.map((a) => a.mitra_id).filter((x): x is number => typeof x === "number"))], 200)) {
       const { data } = await db.from("bencana_mitra").select("id, alamat_desa, no_telp, email, tanggal_lahir").in("id", g);
       for (const m of (data ?? []) as BarisBencanaMitra[]) mitra.set(m.id, m);
     }
-    for (const g of bagi([...new Set(akun.map((a) => a.petugas_bencana_id).filter((x): x is number => typeof x === "number"))], 200)) {
-      const { data } = await db.from("bencana_petugas").select("id, alamat_nagari, no_hp, nilai_kinerja, nilai_kinerja_sumber").in("id", g);
-      for (const m of (data ?? []) as BarisBencanaPetugas[]) petugas.set(m.id, m);
+    // (6 Nov 2026) Satu identitas petugas: nagari dan HP cadangan dibaca dari sigap_akun (bukan lagi bencana_petugas).
+    for (const g of bagi([...new Set(akun.map((a) => a.id))], 200)) {
+      const { data } = await db.from("sigap_akun").select("id, alamat_nagari, no_hp").in("id", g);
+      for (const m of (data ?? []) as { id: number; alamat_nagari: string | null; no_hp: string | null }[]) akunPendaftar.set(m.id, { id: m.id, alamat_nagari: m.alamat_nagari, no_hp: m.no_hp, nilai_kinerja: null, nilai_kinerja_sumber: null });
     }
   } catch {
     /* abaikan: kolom rincian kosong */
@@ -49,8 +50,8 @@ export async function rincianPerAkun(db: Db, akun: AkunTautan[]): Promise<Map<nu
     se = null;
   }
   for (const a of akun) {
-    const r = rincianAkun(a.mitra_id !== null ? mitra.get(a.mitra_id) : undefined, a.petugas_bencana_id !== null ? petugas.get(a.petugas_bencana_id) : undefined);
-    if (se) r.nilai_se2026 = se.get(a.id) ?? null; // tabel penilaian adalah sumber; bila ada, nilai lama bencana_petugas diabaikan
+    const r = rincianAkun(a.mitra_id !== null ? mitra.get(a.mitra_id) : undefined, akunPendaftar.get(a.id));
+    if (se) r.nilai_se2026 = se.get(a.id) ?? null; // tabel penilaian adalah satu-satunya sumber nilai
     hasil.set(a.id, r);
   }
   return hasil;

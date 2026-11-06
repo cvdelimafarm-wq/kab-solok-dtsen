@@ -81,9 +81,8 @@ export async function bacaPapan(db: Db, s: SeleksiLengkap): Promise<Papan> {
   const mitraIds = akun.map((a) => a.mitra_id).filter((x): x is number => typeof x === "number");
   const desa = new Map((await dalamPotongan<{ id: number; alamat_desa: string | null }>(mitraIds, (c) => db.from("bencana_mitra").select("id, alamat_desa").in("id", c))).map((m) => [m.id, m.alamat_desa]));
 
-  const petugasIds = akun.map((a) => a.petugas_bencana_id).filter((x): x is number => typeof x === "number");
-  const kinerja = new Map((await dalamPotongan<{ id: number; nilai_kinerja: number | null }>(petugasIds, (c) => db.from("bencana_petugas").select("id, nilai_kinerja").in("id", c))).map((p) => [p.id, p.nilai_kinerja]));
-  // (31 Okt 2026) Rekam jejak = rata-rata persis penilaian Mitra per kegiatan (tab Penilaian Mitra); belum ada tabelnya / belum dinilai -> nilai_kinerja lama.
+  // (6 Nov 2026) Rekam jejak = rata-rata persis penilaian Mitra per kegiatan (sigap_penilaian_mitra); nilai lama di bencana_petugas tidak dibaca lagi
+  // (semua 410 nilai lama sudah punya baris penilaian).
   const rataPenilaian = await rataPenilaianPerAkun(db, ids);
 
   const sesiTes = new Map<number, number | null>();
@@ -115,7 +114,7 @@ export async function bacaPapan(db: Db, s: SeleksiLengkap): Promise<Papan> {
     for (const v of variabel) {
       const n =
         v.sumber === "tes" ? sesiTes.get(p.akun_id) ?? null
-        : v.sumber === "rekam_jejak" ? nilaiRekamJejak(rataPenilaian?.get(p.akun_id) ?? (a?.petugas_bencana_id ? kinerja.get(a.petugas_bencana_id) : null))
+        : v.sumber === "rekam_jejak" ? nilaiRekamJejak(rataPenilaian?.get(p.akun_id) ?? null)
         : v.sumber === "jarak" ? nilaiJarak(kel.jarak_km, maksJarak)
         : manual.get(`${v.id}:${p.akun_id}`) ?? null;
       nilai.set(v.id, n);

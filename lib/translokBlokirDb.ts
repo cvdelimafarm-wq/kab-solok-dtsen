@@ -2,13 +2,14 @@
 //
 // (3 Nov 2026) Data & kewenangan blokir sementara translok. Tabel: sigap_translok_blokir (SQL 20261103a).
 // Kewenangan memblokir / menyetujui unblock untuk seorang petugas:
-//   - atasan bertingkat: bencana_petugas.atasan_id (PPL -> PML -> Korwil) dan sigap_tim.atasan_akun_id (per kegiatan)
+//   - atasan bertingkat: sigap_penugasan.atasan_akun_id (PPL -> PML -> Korwil; PSP lalu kegiatan itu) dan sigap_tim.atasan_akun_id (per kegiatan)
 //   - Supervisor kegiatan tsb (peran berkode "supervisor*", lingkup kegiatan itu atau semua)
 //   - admin dengan izin translok.penugasan = kelola untuk kegiatan itu
 // Semua pembacaan toleran bila tabel belum dibuat: dianggap tidak ada blokir (aplikasi lama tetap jalan sampai SQL dijalankan).
 
 import type { Db } from "@/lib/sigap";
-import { boleh, izinAkun } from "@/lib/sigapAkses";
+import { boleh, izinAkun, KEGIATAN_PSP } from "@/lib/sigapAkses";
+import { gabungAtasan } from "@/lib/atasanPenugasan";
 import { KOLOM_BLOKIR, memblokir, rantaiAtasan, turunanDari, type BarisBlokir } from "@/lib/translokBlokir";
 
 async function semuaHalaman<T>(ambil: (dari: number, sampai: number) => PromiseLike<{ data: T[] | null }>): Promise<T[]> {
@@ -35,23 +36,23 @@ export async function pesanBilaDiblokir(db: Db, kegiatanId: number, akunId: numb
   return b && memblokir(b.status) ? pesan : null;
 }
 
-/** Peta akun -> atasan langsungnya (akun), gabungan bencana_petugas dan sigap_tim kegiatan itu (sigap_tim menimpa). */
+/**
+ * Peta akun -> atasan langsungnya (akun) pada satu kegiatan: atasan penugasan PSP, ditimpa atasan penugasan kegiatan itu,
+ * ditimpa sigap_tim kegiatan itu (urutan di lib/atasanPenugasan.ts).
+ */
 export async function petaAtasanAkun(db: Db, kegiatanId: number): Promise<Map<number, number | null>> {
-  const [akun, bp, tim] = await Promise.all([
-    semuaHalaman<{ id: number; petugas_bencana_id: number | null }>((a, z) => db.from("sigap_akun").select("id, petugas_bencana_id").not("petugas_bencana_id", "is", null).order("id").range(a, z)),
-    semuaHalaman<{ id: number; atasan_id: number | null }>((a, z) => db.from("bencana_petugas").select("id, atasan_id").order("id").range(a, z)),
+  const idKegiatan = kegiatanId === KEGIATAN_PSP ? [KEGIATAN_PSP] : [KEGIATAN_PSP, kegiatanId];
+  const [pen, tim] = await Promise.all([
+    semuaHalaman<{ akun_id: number; kegiatan_id: number; atasan_akun_id: number | null }>((a, z) =>
+      db.from("sigap_penugasan").select("akun_id, kegiatan_id, atasan_akun_id").in("kegiatan_id", idKegiatan).eq("aktif", true).order("id").range(a, z)
+    ),
     semuaHalaman<{ akun_id: number; atasan_akun_id: number | null }>((a, z) => db.from("sigap_tim").select("akun_id, atasan_akun_id").eq("kegiatan_id", kegiatanId).order("akun_id").range(a, z)),
   ]);
-  const akunPerPb = new Map<number, number>();
-  for (const a of akun) if (a.petugas_bencana_id != null && !akunPerPb.has(a.petugas_bencana_id)) akunPerPb.set(a.petugas_bencana_id, a.id);
-  const atasanPb = new Map<number, number | null>(bp.map((x) => [x.id, x.atasan_id]));
-  const peta = new Map<number, number | null>();
-  for (const a of akun) {
-    const at = a.petugas_bencana_id != null ? atasanPb.get(a.petugas_bencana_id) : null;
-    peta.set(a.id, at != null ? akunPerPb.get(at) ?? null : null);
-  }
-  for (const t of tim) if (t.atasan_akun_id != null) peta.set(t.akun_id, t.atasan_akun_id);
-  return peta;
+  return gabungAtasan(
+    pen.filter((x) => x.kegiatan_id === KEGIATAN_PSP),
+    kegiatanId === KEGIATAN_PSP ? [] : pen.filter((x) => x.kegiatan_id === kegiatanId),
+    tim
+  );
 }
 
 /** Akun Supervisor kegiatan (peran berkode supervisor*, lingkup kegiatan itu atau semua). */

@@ -145,24 +145,22 @@ export function teksUrutan(urut: UrutCetak, filter: FilterPeran): string {
 }
 
 /**
- * Peta tim per akun dari data mentah: PML = timnya sendiri; PPL = PML atasannya (lewat bencana_petugas.atasan_id); peran lain / tanpa atasan = tidak ada.
- * `akun`: sigap_akun (id, petugas_bencana_id); `petugas`: bencana_petugas (id, atasan_id); `akunAtasan`: sigap_akun milik atasan (id, nama, petugas_bencana_id).
+ * Peta tim per akun dari data mentah: PML = timnya sendiri; PPL = PML atasannya; peran lain / tanpa atasan = tidak ada.
+ * `atasanDari`: akun -> akun atasannya (lib/atasanPenugasan.ts); `namaAkun`: id akun -> nama (cukup memuat para atasan).
  */
 export function petaTim(
   penugasan: { akun_id: number; peran: string; nama: string }[],
-  akun: { id: number; petugas_bencana_id: number | null }[],
-  petugas: { id: number; atasan_id: number | null }[],
-  akunAtasan: { id: number; nama: string; petugas_bencana_id: number | null }[]
+  atasanDari: ReadonlyMap<number, number | null | undefined>,
+  namaAkun: ReadonlyMap<number, string>
 ): Map<number, { id: number; nama: string }> {
   const hasil = new Map<number, { id: number; nama: string }>();
   for (const p of penugasan) {
     if (p.peran === "pml") {
       hasil.set(p.akun_id, { id: p.akun_id, nama: p.nama });
     } else if (p.peran === "ppl") {
-      const pb = akun.find((x) => x.id === p.akun_id)?.petugas_bencana_id;
-      const atasan = pb == null ? null : petugas.find((x) => x.id === pb)?.atasan_id;
-      const aa = atasan == null ? undefined : akunAtasan.find((x) => x.petugas_bencana_id === atasan);
-      if (aa) hasil.set(p.akun_id, { id: aa.id, nama: aa.nama });
+      const at = atasanDari.get(p.akun_id);
+      const nama = at == null ? undefined : namaAkun.get(at);
+      if (at != null && nama !== undefined) hasil.set(p.akun_id, { id: at, nama });
     }
   }
   return hasil;
