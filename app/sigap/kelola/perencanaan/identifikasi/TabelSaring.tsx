@@ -58,7 +58,7 @@ function ThSaring({ judul, id, jenis, pilihan, saring, setSaring, lekat }: {
   };
   const semua = Array.from(new Set([...pilihan, ...sekarang]));
   return (
-    <th ref={kotak} scope="col" className={`py-1.5 pr-1.5 text-left align-bottom font-bold ${lekat ? LEKAT : ""}`}>
+    <th ref={kotak} scope="col" className={`py-1.5 pr-2 text-left align-bottom font-bold ${lekat ? LEKAT : ""}`}>
       <button
         ref={tombol} type="button" aria-haspopup="dialog" aria-expanded={buka} aria-label={`Saring kolom ${judul}${aktif ? " (saringan aktif)" : ""}`}
         onClick={bukaKotak}
@@ -97,7 +97,7 @@ function ThSaring({ judul, id, jenis, pilihan, saring, setSaring, lekat }: {
 }
 
 /** Baris tabel; bila diberi onBuka, ikut terbuka saat loncat() menembakkan peristiwa "bukabaris" ke id barisnya. */
-function BarisTabel({ id, kelas, onBuka, children }: { id?: string; kelas: string; onBuka?: () => void; children: ReactNode }) {
+function BarisTabel({ id, kelas, onBuka, tengah, children }: { id?: string; kelas: string; onBuka?: () => void; tengah?: boolean; children: ReactNode }) {
   const ref = useRef<HTMLTableRowElement>(null);
   const bukaRef = useRef(onBuka);
   bukaRef.current = onBuka;
@@ -109,10 +109,10 @@ function BarisTabel({ id, kelas, onBuka, children }: { id?: string; kelas: strin
     el.addEventListener("bukabaris", h);
     return () => el.removeEventListener("bukabaris", h);
   }, [ada]);
-  return <tr ref={ref} id={id} className={`border-t border-[#EEF2F7] align-top ${kelas}`}>{children}</tr>;
+  return <tr ref={ref} id={id} className={`border-t border-[#EEF2F7] ${tengah ? "align-middle" : "align-top"} ${kelas}`}>{children}</tr>;
 }
 
-export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tidak ada baris.", idBaris, kelasBaris, matiBaris, bukaBaris }: {
+export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tidak ada baris.", idBaris, kelasBaris, matiBaris, bukaBaris, tengah }: {
   label: string; kols: Kol<T>[]; data: T[]; kunci: (r: T) => string; bawah?: (r: T) => ReactNode; kosong?: string;
   /** id elemen baris (untuk tautan loncat dari kartu lain) */
   idBaris?: (r: T) => string | undefined;
@@ -122,6 +122,8 @@ export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tida
   matiBaris?: (r: T) => boolean;
   /** dipanggil saat baris diminta terbuka lewat loncat() (peristiwa "bukabaris") */
   bukaBaris?: (r: T) => void;
+  /** isi tiap baris rata tengah secara vertikal (untuk baris berisi kotak isian tanggal/pilihan agar sejajar); bawaan rata atas */
+  tengah?: boolean;
 }) {
   const [saring, setSaring] = useState<NilaiSaring>({});
   const tampil = data.filter((r) => kols.every((k) => lolos(saring, k.id, k.nilai(r), k.jenis === "teks")));
@@ -149,8 +151,8 @@ export function TabelSaring<T>({ label, kols, data, kunci, bawah, kosong = "Tida
           <tbody>
             {tampil.map((r) => (
               <Fragment key={kunci(r)}>
-                <BarisTabel id={idBaris?.(r)} kelas={kelasBaris?.(r) ?? ""} onBuka={bukaBaris ? () => bukaBaris(r) : undefined}>
-                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-1.5 ${k.lekat ? (matiBaris?.(r) ? LEKAT_MATI : LEKAT) : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
+                <BarisTabel id={idBaris?.(r)} kelas={kelasBaris?.(r) ?? ""} onBuka={bukaBaris ? () => bukaBaris(r) : undefined} tengah={tengah}>
+                  {kols.map((k) => <td key={k.id} className={`py-1.5 pr-2 ${k.lekat ? (matiBaris?.(r) ? LEKAT_MATI : LEKAT) : ""} ${k.kelasTd ?? ""}`}>{k.sel(r)}</td>)}
                 </BarisTabel>
                 {bawah?.(r)}
               </Fragment>

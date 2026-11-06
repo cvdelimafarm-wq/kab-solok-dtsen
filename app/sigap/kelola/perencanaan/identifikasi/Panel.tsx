@@ -6,7 +6,7 @@
 // Hasil identifikasi, Kematangan (Fix/Perkiraan), Pembaruan periode H-15, Anggaran terhadap POK RO, serta turunan hilir (agenda Delego, evaluasi,
 // rekrutmen). Murni tampilan: aturan di lib/keu/identifikasi*.ts dan fungsi keu_ident_* basis data.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { angka } from "@/lib/keu/ro";
 import { Catatan, Chip, Galat, judulKartu, kartu, kolom, tombolBahaya, tombolKecil, tombolUtama } from "@/app/sigap/keu-ui";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/lib/keu/identifikasiHilir";
 import { kebutuhan, tujuanPesan } from "@/lib/keu/identifikasi";
 import { Cat, Poin, Tautan } from "./Kontrol";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 const NADA_LANGKAH = { abu: "border-[#DCE3EE] bg-white text-[#44546F]", hijau: "border-[#2E9E63] bg-[#E6F6EC] text-[#14653A]", kuning: "border-[#C98A00] bg-[#FFF4D6] text-[#8A6200]", merah: "border-[#B42329] bg-[#FDE8E8] text-[#B42329]", biru: "border-[#1F5FD1] bg-[#E3EEFF] text-[#1F5FD1]" } as const;
 const WAKTU = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" });
@@ -94,6 +95,7 @@ export function KartuPengesahan(p: {
 }) {
   const { row, tersedia } = p;
   const [catatan, setCatatan] = useState("");
+  const [modal, setModal] = useState<null | "lihat" | "kirim">(null);
   const st = labelStatus(row);
   const langkah = langkahTampil(row);
   const perluCatatan = tersedia.includes("kembalikan") || tersedia.includes("batal");
@@ -129,11 +131,14 @@ export function KartuPengesahan(p: {
           <textarea id="alasan-revisi" className={`${kolom} min-h-[72px] py-2`} value={p.alasan} maxLength={500} disabled={!tersedia.includes("simpan")} onChange={(e) => p.setAlasan(e.target.value)} />
         </div>
       )}
-      {revisi && (p.beda.jadwal.length > 0 || p.beda.lain.length > 0 || p.dampak !== "") && (
-        <div className="flex flex-col gap-2.5">
-          <h3 className="m-0 text-[13px] font-bold text-[#0F2A52]">Perubahan dibanding {namaVersi(row.ver).toLowerCase()}</h3>
-          {p.beda.jadwal.length > 0 || p.beda.lain.length > 0 ? <TabelPerubahan beda={p.beda} /> : <p className="m-0 text-[12.5px] text-[#44546F]">Perubahan tidak memengaruhi tanggal maupun isian yang ditampilkan (mis. pengaturan tahap yang sedang tidak aktif).</p>}
-          {p.dampak && <p className="m-0 text-[12.5px] text-[#44546F]">{p.dampak}</p>}
+      {revisi && (
+        <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-[#44546F]">
+          <span>
+            {p.beda.jadwal.length + p.beda.lain.length > 0
+              ? `Perubahan dibanding ${namaVersi(row.ver).toLowerCase()}: ${p.beda.jadwal.length} jadwal dan ${p.beda.lain.length} isian lain.`
+              : `Perubahan dibanding ${namaVersi(row.ver).toLowerCase()} tidak memengaruhi tanggal maupun isian yang ditampilkan.`}
+          </span>
+          <button type="button" className={tombolKecil} onClick={() => setModal("lihat")}>Lihat perubahan</button>
         </div>
       )}
       {p.syarat.length > 0 && tersedia.includes("kirim") && <Catatan>{p.syarat.map((s) => <span key={s} className="block">{s}</span>)}</Catatan>}
@@ -147,7 +152,7 @@ export function KartuPengesahan(p: {
       <div className="flex flex-wrap gap-2">
         {tersedia.includes("simpan") && <button type="button" className={tombolKecil} disabled={p.mengirim || !p.dirty} onClick={p.onSimpan}>{p.dirty ? "Simpan draf" : "Tersimpan"}</button>}
         {tersedia.includes("kirim") && (
-          <button type="button" className={tombolUtama} disabled={p.mengirim || p.syarat.length > 0} onClick={aksi("kirim")}>
+          <button type="button" className={tombolUtama} disabled={p.mengirim || p.syarat.length > 0} onClick={revisi ? () => setModal("kirim") : aksi("kirim")}>
             {revisi ? "Kirim revisi untuk persetujuan" : "Kirim untuk persetujuan"}{p.nPerk > 0 ? ` (${p.nPerk} butir perkiraan)` : ""}
           </button>
         )}
@@ -159,7 +164,53 @@ export function KartuPengesahan(p: {
         {tersedia.includes("batal_revisi") && <button type="button" className={tombolKecil} disabled={p.mengirim} onClick={aksi("batal_revisi")}>Batalkan revisi</button>}
         {tersedia.includes("batal") && <button type="button" className={tombolBahaya} disabled={p.mengirim || !catOk} onClick={aksi("batal")}>Batalkan survei</button>}
       </div>
+      {modal && (
+        <ModalPerubahan
+          mode={modal} namaVersi={namaVersi(row.ver).toLowerCase()} beda={p.beda} dampak={p.dampak} alasan={p.alasan} dirty={p.dirty} nPerk={p.nPerk} mengirim={p.mengirim}
+          onBatal={() => setModal(null)} onOke={() => { setModal(null); p.onAksi("kirim", ""); }}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * (6 Nov 2026) Dialog konfirmasi kirim revisi: menampilkan ringkasan perubahan (dua tabel), alasan revisi, dan dampaknya. "Oke, simpan dan kirim"
+ * menyimpan draf yang belum tersimpan lalu mengirim revisi (urutan yang sama dengan tombol kirim sebelumnya); "Batalkan" menutup dialog tanpa
+ * mengirim. Dibuka juga lewat "Lihat perubahan" (hanya baca, tombol Tutup). Escape, klik latar, dan Back HP menutup.
+ */
+function ModalPerubahan({ mode, namaVersi: nv, beda, dampak, alasan, dirty, nPerk, mengirim, onBatal, onOke }: {
+  mode: "lihat" | "kirim"; namaVersi: string; beda: TabelBeda; dampak: string; alasan: string; dirty: boolean; nPerk: number; mengirim: boolean;
+  onBatal: () => void; onOke: () => void;
+}) {
+  const panel = useRef<HTMLDivElement>(null);
+  const tutupRef = useRef(onBatal);
+  tutupRef.current = onBatal;
+  useTutupDenganBack(true, onBatal);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") tutupRef.current(); };
+    document.addEventListener("keydown", k);
+    panel.current?.focus();
+    return () => document.removeEventListener("keydown", k);
+  }, []);
+  const ada = beda.jadwal.length > 0 || beda.lain.length > 0;
+  const kirim = mode === "kirim";
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0E2A47]/45 p-0 sm:items-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onBatal(); }}>
+      <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="h-modal-perubahan" className="flex max-h-[92vh] w-full max-w-[760px] flex-col gap-3 overflow-y-auto rounded-t-xl border border-[#DCE3EE] bg-white p-4 shadow-xl sm:rounded-xl">
+        <h2 id="h-modal-perubahan" className="m-0 text-[16px] font-bold text-[#0F2A52]">{kirim ? "Kirim revisi untuk persetujuan?" : `Perubahan dibanding ${nv}`}</h2>
+        {kirim && <p className="m-0 text-[13px] text-[#44546F]">Periksa perubahan di bawah ini. Bila sudah benar, pilih Oke untuk mengirim revisi ke PPK, Tata Usaha, dan KPA.{dirty ? " Isian yang belum tersimpan ikut disimpan sebagai draf lebih dulu." : ""}</p>}
+        <h3 className="m-0 text-[13px] font-bold text-[#0F2A52]">Perubahan dibanding {nv}</h3>
+        {ada ? <TabelPerubahan beda={beda} /> : <p className="m-0 text-[12.5px] text-[#44546F]">Perubahan tidak memengaruhi tanggal maupun isian yang ditampilkan (mis. pengaturan tahap yang sedang tidak aktif).</p>}
+        {alasan.trim() !== "" && <p className="m-0 text-[12.5px] text-[#1B2B4B]"><strong>Alasan revisi:</strong> {alasan.trim()}</p>}
+        {dampak && <p className="m-0 text-[12.5px] text-[#44546F]">{dampak}</p>}
+        {kirim && nPerk > 0 && <p className="m-0 text-[12.5px] text-[#8A6200]">{nPerk} butir masih berstatus perkiraan.</p>}
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className={tombolKecil} onClick={onBatal}>{kirim ? "Batalkan" : "Tutup"}</button>
+          {kirim && <button type="button" className={tombolUtama} disabled={mengirim} onClick={onOke}>{dirty ? "Oke, simpan dan kirim" : "Oke, kirim"}</button>}
+        </div>
+      </div>
+    </div>
   );
 }
 
