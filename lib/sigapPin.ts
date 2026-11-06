@@ -102,9 +102,13 @@ export async function muatSasaranReset(db: Db, akunId: number, aktif: boolean, p
     punyaIzinKelola = (iz ?? []).length > 0;
   }
   const kegiatanPenugasan = new Set((pen ?? []).map((x) => Number(x.kegiatan_id)));
-  // (6 Nov 2026) Petugas Pendataan Pascabencana terdaftar lewat modul bencana (akun tertaut `petugas_bencana_id`), bukan lewat sigap_penugasan:
-  // pada data 6 Nov, 374 dari 470 akun petugas PSP tidak punya baris penugasan. Mereka tetap dihitung bertugas di kegiatan PSP.
-  if (petugasBencanaId) kegiatanPenugasan.add(KEGIATAN_PSP);
+  // (6 Nov 2026) Petugas PSP juga tercatat di modul bencana (`bencana_petugas.peran` = ppl/pml/korwil) dan selalu punya baris sigap_penugasan kegiatan 1 yang sama.
+  // KOREKSI sore 6 Nov: tabel `bencana_petugas` memuat seluruh roster mitra (456 aktif) -- hanya yang `peran`-nya terisi (96) benar-benar petugas PSP.
+  // Tautan `petugas_bencana_id` saja TIDAK berarti bertugas di PSP; yang berperan kosong tidak boleh direset pengelola PSP.
+  if (petugasBencanaId) {
+    const { data: bp } = await db.from("bencana_petugas").select("peran").eq("id", petugasBencanaId).maybeSingle();
+    if (bp?.peran) kegiatanPenugasan.add(KEGIATAN_PSP);
+  }
   return { aktif, peranKode, punyaIzinKelola, kegiatanPenugasan: Array.from(kegiatanPenugasan) };
 }
 

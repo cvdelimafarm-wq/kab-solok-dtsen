@@ -73,6 +73,16 @@ export function periksaUbahIzin(p: { adminAplikasi: boolean; peranDipegang: numb
   return null;
 }
 
+/**
+ * (6 Nov 2026, putusan Iqbal) Matriks izin per peran dan pembuatan/pengubahan peran berlaku untuk SEMUA kegiatan (satu peran dipakai banyak kegiatan),
+ * jadi hanya Admin Aplikasi (admin kantor) yang boleh. PJ kegiatan dan wakilnya cukup memberi/mencabut peran di kegiatannya sendiri (lihat periksaLingkupPeran).
+ * null = boleh.
+ */
+export function periksaKelolaMatriks(p: { adminAplikasi: boolean }): GalatAturan | null {
+  if (p.adminAplikasi) return null;
+  return { error: "Matriks izin dan pembuatan peran berlaku lintas kegiatan, jadi hanya Admin Aplikasi yang dapat mengubahnya. PJ kegiatan dan wakilnya dapat memberi atau mencabut peran di kegiatannya sendiri.", status: 403 };
+}
+
 /** Memberi peran kepada akun. `menuPeran` = kode menu yang dipegang peran itu. null = boleh. */
 export function periksaBeriPeran(p: { adminAplikasi: boolean; aktorId: number; akunId: number; menuPeran: string[] }): GalatAturan | null {
   if (p.adminAplikasi) return null;

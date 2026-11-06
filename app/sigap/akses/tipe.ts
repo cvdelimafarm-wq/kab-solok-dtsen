@@ -13,6 +13,8 @@ export type DataAkses = {
   akun_peran: AkunPeran[];
   kegiatan: { id: number; nama: string }[];
   boleh_kelola: boolean;
+  /** (6 Nov 2026) Hanya Admin Aplikasi: ubah matriks izin dan buat/ubah peran (lintas kegiatan). */
+  boleh_matriks?: boolean;
 };
 
 /** Ikon per portal (tampilan saja; portal baru otomatis tampil dgn ikon umum). */

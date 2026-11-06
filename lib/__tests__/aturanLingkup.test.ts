@@ -146,3 +146,14 @@ describe("periksaLingkupPeran (PJ kegiatan tidak mengurus peran di kegiatan lain
     expect(periksaLingkupPeran({ adminAplikasi: true, izin: {}, kegiatanId: null })).toBeNull();
   });
 });
+
+// (6 Nov 2026) putusan Iqbal: matriks izin dan buat peran hanya Admin Aplikasi
+import { periksaKelolaMatriks } from "@/lib/aturanLingkup";
+describe("periksaKelolaMatriks", () => {
+  it("Admin Aplikasi boleh", () => { expect(periksaKelolaMatriks({ adminAplikasi: true })).toBeNull(); });
+  it("selain Admin Aplikasi ditolak 403", () => {
+    const r = periksaKelolaMatriks({ adminAplikasi: false });
+    expect(r?.status).toBe(403);
+    expect(r?.error).toMatch(/Admin Aplikasi/);
+  });
+});

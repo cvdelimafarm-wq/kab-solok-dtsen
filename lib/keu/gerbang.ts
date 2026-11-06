@@ -9,10 +9,13 @@
 //   keu_tulis(p_akun, p_tabel, p_op, p_data, p_kunci) -- insert/update satu baris tabel keu_ (tanpa hapus)
 // p_akun SELALU diambil dari sesi bertanda tangan di server, tidak pernah dari masukan klien.
 //
-// Murni terhadap `Db` (hanya memakai `.rpc`) sehingga bisa diuji dengan Db palsu.
+// Murni terhadap `Db` sehingga bisa diuji dengan Db palsu. Pemanggilan fungsi dan penulisan memakai `.rpc`; hanya fungsi penugasan per kegiatan
+// (FUNGSI_PENUGASAN_KEGIATAN) juga membaca izin menu lewat `izinAkun` (6 Nov 2026).
 
 import type { Db } from "@/lib/sigap";
 import { petakanGalat, type GalatKeu } from "@/lib/keu/galat";
+import { izinAkun } from "@/lib/sigapAkses";
+import { bolehKelolaKegiatan } from "@/lib/aturanLingkup";
 
 export type HasilKeu<T = unknown> = { ok: true; data: T } | { ok: false; galat: GalatKeu };
 
@@ -91,6 +94,23 @@ export async function tulisKeu<T = Record<string, unknown>>(
   return { ok: true, data: hasil as T };
 }
 
+/**
+ * (6 Nov 2026, P3 audit Kelola K05b-A1) Fungsi yang menambah/menautkan penugasan ke SATU kegiatan SIGAP. Hak anggaran (`ident_susun` per RO) saja tidak cukup:
+ * pelakunya juga harus berwenang mengelola penugasan kegiatan itu menurut izin menu `translok.penugasan` (lingkup kegiatan), sama seperti di Kelola Translok.
+ * Nilai = nama argumen yang memuat id kegiatan.
+ */
+export const FUNGSI_PENUGASAN_KEGIATAN: Readonly<Record<string, string>> = {
+  keu_ident_kegiatan_tautkan: "p_kegiatan",
+  keu_usulan_terapkan: "p_kegiatan",
+};
+
+/**
+ * (6 Nov 2026, P3 K07-A1) Pernyataan sah revisi hanya lewat `keu_jadwal_langkah` (halaman Status revisi), yang memuat aturan DIPA di basis data.
+ * `keu_jadwal_aksi` dengan p_aksi "sah" melewati aturan itu, jadi ditolak di gerbang.
+ */
+export const PESAN_SAH_LEWAT_STATUS = "Pernyataan sah revisi hanya dapat dicatat lewat halaman Status revisi (menu Revisi > Status), supaya aturan pengajuan dan lampiran ikut diperiksa.";
+const adalahSahLangsung = (fungsi: string, args: Record<string, unknown>) => fungsi === "keu_jadwal_aksi" && String(args.p_aksi ?? "").trim().toLowerCase() === "sah";
+
 export type Sesi = { akunId: number; aktorId: number | null } | null;
 export type Balasan = { status: number; json: Record<string, unknown> };
 
@@ -103,6 +123,16 @@ export async function tanganiPanggil(db: Db, sesi: Sesi, body: unknown): Promise
   if (!p.ok) return { status: 400, json: { error: p.pesan } };
   if (sesi.aktorId !== null && !FUNGSI_BACA.includes(p.masukan.fungsi)) {
     return { status: 403, json: { error: "Mode masuk-sebagai hanya untuk melihat tampilan; tindakan ini tidak dijalankan." } };
+  }
+  if (adalahSahLangsung(p.masukan.fungsi, p.masukan.args)) return { status: 403, json: { error: PESAN_SAH_LEWAT_STATUS } };
+  const argKegiatan = FUNGSI_PENUGASAN_KEGIATAN[p.masukan.fungsi];
+  if (argKegiatan) {
+    const kid = Number(p.masukan.args[argKegiatan]);
+    if (!Number.isInteger(kid) || kid <= 0) return { status: 400, json: { error: "Kegiatan tidak valid." } };
+    const { izin } = await izinAkun(db, sesi.akunId);
+    if (!bolehKelolaKegiatan(izin, "translok.penugasan", kid)) {
+      return { status: 403, json: { error: "Menautkan kegiatan atau menerapkan penugasan memerlukan izin Kelola pada menu Penugasan (Transport Lokal) untuk kegiatan itu." } };
+    }
   }
   const h = await panggilKeu(db, sesi.akunId, p.masukan.fungsi, p.masukan.args);
   return h.ok ? { status: 200, json: { data: h.data } } : galatBalasan(h.galat);

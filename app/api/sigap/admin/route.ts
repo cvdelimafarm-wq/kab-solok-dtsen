@@ -21,7 +21,7 @@ import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hari
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 import { akunTerlindungi, resetPinOlehAdmin } from "@/lib/sigapPin";
-import { lingkupGabungan, periksaBeriPeran, periksaLingkupPeran, periksaUbahIzin } from "@/lib/aturanLingkup";
+import { lingkupGabungan, periksaBeriPeran, periksaKelolaMatriks, periksaLingkupPeran, periksaUbahIzin } from "@/lib/aturanLingkup";
 import { buangMemo } from "@/lib/portal/memoSingkat";
 import { AWALAN_MEMO_PENUGASAN } from "@/lib/portal/penugasanMemo";
 import { AWALAN_MEMO_TIM } from "@/lib/portal/pendataan";
@@ -510,6 +510,7 @@ export async function GET(req: NextRequest) {
         akun_peran: (ap ?? []).map((x) => ({ ...x, nama: (ak ?? []).find((a) => a.id === x.akun_id)?.nama ?? "?" })),
         kegiatan: keg ?? [],
         boleh_kelola: boleh(s.izin, "akses.kelola", "kelola"),
+        boleh_matriks: boleh(s.izin, "portal.kelola", "kelola"),
       });
     }
 
@@ -738,6 +739,12 @@ async function proses(req: NextRequest) {
     // ---------------- Kelola Peran & Akses ----------------
     if (["buat_peran", "simpan_izin", "beri_peran", "cabut_peran"].includes(aksi)) {
       if (!boleh(s.izin, "akses.kelola", "kelola")) return galat("Tidak punya izin Kelola Peran & Akses.", 403);
+
+      if (aksi === "buat_peran" || aksi === "simpan_izin") {
+        // (6 Nov 2026, putusan Iqbal) Peran dan matriks izin lintas kegiatan: hanya Admin Aplikasi.
+        const tolakMatriks = periksaKelolaMatriks({ adminAplikasi: boleh(s.izin, "portal.kelola", "kelola") });
+        if (tolakMatriks) return galat(tolakMatriks.error, tolakMatriks.status);
+      }
 
       if (aksi === "buat_peran") {
         const nama = String(body?.nama ?? "").trim();

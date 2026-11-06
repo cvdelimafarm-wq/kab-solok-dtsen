@@ -20,7 +20,8 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
   const [formPeran, setFormPeran] = useState<Peran | "baru" | null>(null);
   // perubahan yang menunggu konfirmasi (belum dikirim ke server)
   const [menunggu, setMenunggu] = useState<{ p: Peran; menu: string; namaMenu: string; dari: "lihat" | "kelola" | null; ke: "lihat" | "kelola" | null } | null>(null);
-  const kelola = data.boleh_kelola;
+  // (6 Nov 2026) Matriks dan peran lintas kegiatan: hanya Admin Aplikasi. Server lama tanpa bidang ini -> ikut boleh_kelola.
+  const kelola = data.boleh_matriks ?? data.boleh_kelola;
   const namaLevel = (x: "lihat" | "kelola" | null) => (x === "kelola" ? "Kelola" : x === "lihat" ? "Lihat" : "tanpa akses");
   const grup = kelompokPortal(data.menu);
   const level = (peranId: number, menu: string) => data.izin.find((i) => i.peran_id === peranId && i.menu_kode === menu)?.level ?? null;
@@ -76,7 +77,7 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
       )}
       <Kartu
         judul="Matriks izin per peran"
-        ket="“Kelola” sudah termasuk “Lihat”. Setiap perubahan diminta konfirmasi dulu sebelum tersimpan."
+        ket={kelola ? "“Kelola” sudah termasuk “Lihat”. Setiap perubahan diminta konfirmasi dulu sebelum tersimpan." : "“Kelola” sudah termasuk “Lihat”. Matriks ini berlaku lintas kegiatan, jadi hanya Admin Aplikasi yang dapat mengubahnya; PJ kegiatan dan wakilnya mengatur akses di kegiatannya lewat Beri peran."}
         kanan={
           kelola ? (
             <button type="button" className={BTN_O} onClick={() => setFormPeran(formPeran === "baru" ? null : "baru")}>

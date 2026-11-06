@@ -3,16 +3,17 @@
 // app/sigap/revisi/KartuJadwal.tsx
 //
 // (24 Okt 2026) Satu baris jadwal pada papan 11: chip jenis dan status, jendela usulan, hitungan usulan, tombol aksi PPK,
-// daftar usulan RO (dengan "Tidak ikut paket"), dan formulir pernyataan sah. Yang memutuskan tetap basis data.
+// daftar usulan RO (dengan "Tidak ikut paket"), dan tautan ke halaman Status untuk pernyataan sah. Yang memutuskan tetap basis data.
+// (6 Nov 2026) Formulir "Nyatakan sah" di kartu ini DIHAPUS: satu-satunya jalur pengesahan adalah /sigap/revisi/status (keu_jadwal_langkah) yang memuat aturan DIPA.
 
 import { useState } from "react";
 import {
-  aksiJadwalTersedia, argsJadwalAksi, labelNomorSah, LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, LABEL_STATUS_USULAN, periksaSah, petunjukSah,
+  aksiJadwalTersedia, argsJadwalAksi, LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, LABEL_STATUS_USULAN,
   SIAPA_USULAN, tglPanjang, tidakIkutPaket, WARNA_CHIP_JENIS, WARNA_CHIP_STATUS_JADWAL, WARNA_CHIP_STATUS_USULAN, type AksiJadwal,
 } from "@/lib/keu/revisi";
 import { angka, urlBaca } from "@/lib/keu/ro";
 import { useBacaKeu, useKirim } from "../ro/useKeu";
-import { caps, Catatan, Chip, Galat, kolom, label, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
+import { caps, Chip, Galat, kolom, label, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
 
 export type Jadwal = {
   jadwal_id: number; tahun: number; jenis: string; judul: string; buka: string; tutup: string; status: string;
@@ -80,22 +81,15 @@ export default function KartuJadwal({ j, sah, namaRo, terbuka, ubahTerbuka, bole
   bolehJadwal: boolean; bolehSahkan: boolean; sesudah: () => Promise<void>;
 }) {
   const { kirim, mengirim, galat, hapusGalat } = useKirim(sesudah);
-  const [dok, setDok] = useState<{ nomor: string; tanggal: string } | null>(null);
-  const [salah, setSalah] = useState<string[]>([]);
-  const aksi = bolehJadwal ? aksiJadwalTersedia(j.status, j.tutup, hariIni(), Boolean(j.ulang)) : [];
+  const semuaAksi = bolehJadwal ? aksiJadwalTersedia(j.status, j.tutup, hariIni(), Boolean(j.ulang)) : [];
+  // "sah" tidak lagi dikerjakan di kartu ini; tampil sebagai tautan ke halaman Status
+  const aksi = semuaAksi.filter((a) => a.aksi !== "sah");
+  const adaSah = semuaAksi.some((a) => a.aksi === "sah");
   const nUsulan = Number(j.n_usulan) || 0;
 
   const jalankan = async (a: AksiJadwal) => {
-    hapusGalat(); setSalah([]);
-    if (a === "sah") { setDok(dok ?? { nomor: "", tanggal: "" }); return; }
+    hapusGalat();
     await kirim("keu_jadwal_aksi", argsJadwalAksi(j.jadwal_id, a));
-  };
-  const kirimSah = async () => {
-    if (!dok) return;
-    const g = periksaSah(dok.nomor, dok.tanggal);
-    setSalah(g);
-    if (g.length) return;
-    if (await kirim("keu_jadwal_aksi", argsJadwalAksi(j.jadwal_id, "sah", dok))) setDok(null);
   };
 
   return (
@@ -121,29 +115,15 @@ export default function KartuJadwal({ j, sah, namaRo, terbuka, ubahTerbuka, bole
           </>
         )}
         <button type="button" className={tombolKecil} aria-expanded={terbuka} onClick={ubahTerbuka}>{terbuka ? "Sembunyikan usulan" : "Lihat usulan RO"}</button>
-        {!dok && aksi.map((a) => (
+        {aksi.map((a) => (
           <button key={a.aksi} type="button" disabled={mengirim} onClick={() => void jalankan(a.aksi)} className={a.berbahaya ? tombolBahaya : tombolUtama}>{a.label}</button>
         ))}
+        {adaSah && <a href={`/sigap/revisi/status?jadwal=${j.jadwal_id}`} className={`${tombolUtama} no-underline`}>Nyatakan sah di halaman Status</a>}
       </div>
       <Galat pesan={galat} />
 
       {terbuka && <UsulanRo jadwal={j} namaRo={namaRo} bolehSahkan={bolehSahkan} sesudah={sesudah} />}
 
-      {dok && (
-        <div className="flex flex-col gap-2 border-t border-[#E8EDF5] pt-2.5">
-          <div className={caps}>Pernyataan sah oleh PPK</div>
-          <div className="text-[12.5px] text-[#5B6B84]">{petunjukSah(j.jenis)}</div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div><label className={label} htmlFor={`dn-${j.jadwal_id}`}>{labelNomorSah(j.jenis)}</label><input id={`dn-${j.jadwal_id}`} className={kolom} maxLength={120} placeholder="mis. S-123/KW.03/2026" value={dok.nomor} onChange={(e) => setDok({ ...dok, nomor: e.target.value })} /></div>
-            <div><label className={label} htmlFor={`dt-${j.jadwal_id}`}>Tanggal dokumen</label><input id={`dt-${j.jadwal_id}`} type="date" className={kolom} value={dok.tanggal} onChange={(e) => setDok({ ...dok, tanggal: e.target.value })} /></div>
-          </div>
-          {salah.length > 0 && <Catatan>Sistem tidak menyimpulkan sah dari sendirinya; PPK mencatat dari dokumen resmi. {salah.join(" ")}</Catatan>}
-          <div className="flex gap-2">
-            <button type="button" disabled={mengirim} onClick={() => void kirimSah()} className={tombolUtama}>{mengirim ? "Menyimpan..." : "Nyatakan sah"}</button>
-            <button type="button" className={tombolKecil} onClick={() => { setDok(null); setSalah([]); }}>Batal</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
