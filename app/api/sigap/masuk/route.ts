@@ -102,10 +102,11 @@ async function daftarNama(db: Db, umurMaksMs = 60_000): Promise<AkunNama[]> {
   const semua: AkunNama[] = [];
   for (let i = 0; i < 10000; i += 1000) {
     // (6 Nov 2026) + alamat_kecamatan & magang (keterangan saran). Kolom magang baru ada setelah SQL 20261106i: bila belum, ulangi tanpa kolom itu.
-    let { data, error } = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan, magang").eq("aktif", true).order("id").range(i, i + 999);
-    if (error) ({ data } = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan").eq("aktif", true).order("id").range(i, i + 999));
-    semua.push(...((data ?? []) as AkunNama[]));
-    if (!data || data.length < 1000) break;
+    const r1 = await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan, magang").eq("aktif", true).order("id").range(i, i + 999);
+    let baris: unknown[] | null = r1.data;
+    if (r1.error) baris = (await db.from("sigap_akun").select("id, nama, jenis, alamat_kecamatan").eq("aktif", true).order("id").range(i, i + 999)).data;
+    semua.push(...((baris ?? []) as AkunNama[]));
+    if (!baris || baris.length < 1000) break;
   }
   cacheDaftar = { at: Date.now(), daftar: semua };
   return semua;

@@ -79,11 +79,17 @@ export async function GET(req: NextRequest) {
     // Akun per jenis (maks ±800; dibaca per halaman 1000 agar aman bila bertambah)
     const akun: BarisAkun[] = [];
     for (let dari = 0; dari < 5000; dari += 1000) {
-      let { data, error } = await db.from("sigap_akun").select(KOLOM_MAGANG).eq("jenis", jenis).order("nama").range(dari, dari + 999);
-      if (error) ({ data, error } = await db.from("sigap_akun").select(KOLOM).eq("jenis", jenis).order("nama").range(dari, dari + 999));
-      if (error) return galat("Gagal membaca akun.", 500);
-      akun.push(...((data ?? []) as BarisAkun[]));
-      if ((data ?? []).length < 1000) break;
+      const r1 = await db.from("sigap_akun").select(KOLOM_MAGANG).eq("jenis", jenis).order("nama").range(dari, dari + 999);
+      let baris: unknown[] | null = r1.data;
+      let adaGalat = !!r1.error;
+      if (r1.error) {
+        const r2 = await db.from("sigap_akun").select(KOLOM).eq("jenis", jenis).order("nama").range(dari, dari + 999);
+        baris = r2.data;
+        adaGalat = !!r2.error;
+      }
+      if (adaGalat) return galat("Gagal membaca akun.", 500);
+      akun.push(...((baris ?? []) as BarisAkun[]));
+      if ((baris ?? []).length < 1000) break;
     }
 
     // Pool hanya bermakna untuk Mitra
