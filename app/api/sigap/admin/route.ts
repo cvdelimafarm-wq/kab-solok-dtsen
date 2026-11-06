@@ -21,7 +21,7 @@ import { BUCKET_SIGAP, HK_AKTIF, aturanDari, hariLengkap, type AturanIsian, hari
 import { boleh, catatAudit, izinAkun, lingkup, sesiDariHeader, type PetaIzin } from "@/lib/sigapAkses";
 import { satuanLaporanTanggal } from "@/lib/realisasiOtomatis";
 import { akunTerlindungi, resetPinOlehAdmin } from "@/lib/sigapPin";
-import { lingkupGabungan, periksaBeriPeran, periksaUbahIzin } from "@/lib/aturanLingkup";
+import { lingkupGabungan, periksaBeriPeran, periksaLingkupPeran, periksaUbahIzin } from "@/lib/aturanLingkup";
 import { buangMemo } from "@/lib/portal/memoSingkat";
 import { AWALAN_MEMO_PENUGASAN } from "@/lib/portal/penugasanMemo";
 import { AWALAN_MEMO_TIM } from "@/lib/portal/pendataan";
@@ -789,6 +789,8 @@ async function proses(req: NextRequest) {
         if (PERAN_KHUSUS_ADMIN_APLIKASI.includes(p.kode as string) && !boleh(s.izin, "portal.kelola", "kelola")) return galat("Peran admin aplikasi hanya dapat diberikan Admin Aplikasi.", 403);
         if (p.butuh_lingkup && !kegiatanId) return galat("Peran ini perlu dipilih kegiatannya.");
         // (6 Nov 2026) Tidak boleh memberi peran ke diri sendiri, dan peran yang memuat hak tertinggi hanya diberikan Admin Aplikasi.
+        const tolakLingkup = periksaLingkupPeran({ adminAplikasi: boleh(s.izin, "portal.kelola", "kelola"), izin: s.izin, kegiatanId });
+        if (tolakLingkup) return galat(tolakLingkup.error, tolakLingkup.status);
         const { data: izPeran } = await db.from("sigap_peran_izin").select("menu_kode").eq("peran_id", peranId);
         const tolakPeran = periksaBeriPeran({ adminAplikasi: boleh(s.izin, "portal.kelola", "kelola"), aktorId: s.akunId, akunId, menuPeran: (izPeran ?? []).map((x) => x.menu_kode as string) });
         if (tolakPeran) return galat(tolakPeran.error, tolakPeran.status);
@@ -802,6 +804,8 @@ async function proses(req: NextRequest) {
         const id = Number(body?.akun_peran_id);
         const { data: x } = await db.from("sigap_akun_peran").select("id, akun_id, peran_id, kegiatan_id").eq("id", id).maybeSingle();
         if (!x) return galat("Data tidak ditemukan.", 404);
+        const tolakCabut = periksaLingkupPeran({ adminAplikasi: boleh(s.izin, "portal.kelola", "kelola"), izin: s.izin, kegiatanId: (x.kegiatan_id as number | null) ?? null });
+        if (tolakCabut) return galat(tolakCabut.error, tolakCabut.status);
         const { data: p } = await db.from("sigap_peran").select("kode").eq("id", x.peran_id).maybeSingle();
         if (PERAN_KHUSUS_ADMIN_APLIKASI.includes((p?.kode as string) ?? "") && !boleh(s.izin, "portal.kelola", "kelola")) return galat("Peran admin aplikasi hanya dapat dicabut Admin Aplikasi.", 403);
         if (p?.kode === "admin_aplikasi") {

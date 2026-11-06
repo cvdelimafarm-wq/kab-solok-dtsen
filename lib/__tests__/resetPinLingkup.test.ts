@@ -6,7 +6,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY = "kunci-uji";
 
 vi.mock("@/lib/undangan", () => ({ cekPin: vi.fn(() => false), hashPin: vi.fn(() => ({ hash: "h", salt: "s" })), normNama: (n: string) => n.toLowerCase() }));
 vi.mock("@/lib/sigapMasukNama", () => ({ PIN_AWAL: "1303" }));
-vi.mock("@/lib/sigapAkses", () => ({ catatAudit: vi.fn(async () => undefined) }));
+vi.mock("@/lib/sigapAkses", () => ({ KEGIATAN_PSP: 1, catatAudit: vi.fn(async () => undefined) }));
 
 import { akunTerlindungi, resetPinOlehAdmin } from "@/lib/sigapPin";
 import * as akses from "@/lib/sigapAkses";
@@ -50,6 +50,7 @@ const tabelDasar = (): Tabel => ({
     { id: 12, nama: "Pengelola Lain", aktif: true, petugas_bencana_id: null },
     { id: 13, nama: "Admin Anggaran", aktif: true, petugas_bencana_id: null },
     { id: 14, nama: "Nonaktif", aktif: false, petugas_bencana_id: null },
+    { id: 15, nama: "Petugas PSP", aktif: true, petugas_bencana_id: 77 },
   ],
   sigap_penugasan: [
     { akun_id: 10, kegiatan_id: 3, aktif: true },
@@ -118,6 +119,21 @@ describe("resetPinOlehAdmin berlingkup", () => {
     const r = await resetPinOlehAdmin(db, { akunId: 1, nama: "Lama", adminAplikasi: false }, 10);
     expect(!r.ok && r.status).toBe(403);
     expect(db.tulis.length).toBe(0);
+  });
+});
+
+describe("petugas PSP yang terdaftar lewat modul bencana (tanpa baris sigap_penugasan)", () => {
+  it("dapat direset pengelola PSP (kegiatan 1)", async () => {
+    const db = dbTiruan(tabelDasar());
+    expect((await resetPinOlehAdmin(db, aktor([1]), 15)).ok).toBe(true);
+  });
+  it("tidak dapat direset pengelola kegiatan lain (3 atau 2)", async () => {
+    for (const l of [[3], [2]]) {
+      const db = dbTiruan(tabelDasar());
+      const r = await resetPinOlehAdmin(db, aktor(l), 15);
+      expect(!r.ok && r.status).toBe(403);
+      expect(db.tulis.length).toBe(0);
+    }
   });
 });
 

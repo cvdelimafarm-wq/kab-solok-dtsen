@@ -2,7 +2,7 @@
 // (6 Nov 2026) Uji aturan murni paket P2 audit Kelola: reset PIN berlingkup, cegah naik hak, saring per kegiatan.
 import { describe, expect, it } from "vitest";
 import type { PetaIzin } from "@/lib/sigapAkses";
-import { bolehKelolaKegiatan, lingkupGabungan, periksaBeriPeran, periksaSasaranReset, periksaUbahIzin, saringPerKegiatan } from "@/lib/aturanLingkup";
+import { bolehKelolaKegiatan, lingkupGabungan, periksaBeriPeran, periksaLingkupPeran, periksaSasaranReset, periksaUbahIzin, saringPerKegiatan } from "@/lib/aturanLingkup";
 
 const izin = (o: Record<string, { level: "lihat" | "kelola"; semua?: boolean; kegiatan?: number[] }>): PetaIzin =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { level: v.level, semua: v.semua ?? false, kegiatan: v.kegiatan ?? [] }]));
@@ -125,5 +125,24 @@ describe("bolehKelolaKegiatan & saringPerKegiatan", () => {
     const r = saringPerKegiatan(data, {}, "bencana.admin");
     expect(r.kegiatan).toEqual([]);
     expect(r.konfig).toEqual({});
+  });
+});
+
+describe("periksaLingkupPeran (PJ kegiatan tidak mengurus peran di kegiatan lain)", () => {
+  const pj2 = izin({ "akses.kelola": { level: "kelola", kegiatan: [2] } });
+  const semua = izin({ "akses.kelola": { level: "kelola", semua: true } });
+  it("PJ kegiatan 2 boleh pada kegiatan 2, ditolak pada kegiatan 1 (pengelola PSP)", () => {
+    expect(periksaLingkupPeran({ adminAplikasi: false, izin: pj2, kegiatanId: 2 })).toBeNull();
+    expect(periksaLingkupPeran({ adminAplikasi: false, izin: pj2, kegiatanId: 1 })?.status).toBe(403);
+  });
+  it("peran tanpa kegiatan hanya oleh pengelola akses berlingkup semua", () => {
+    expect(periksaLingkupPeran({ adminAplikasi: false, izin: pj2, kegiatanId: null })?.status).toBe(403);
+    expect(periksaLingkupPeran({ adminAplikasi: false, izin: semua, kegiatanId: null })).toBeNull();
+    expect(periksaLingkupPeran({ adminAplikasi: false, izin: semua, kegiatanId: 99 })).toBeNull();
+  });
+  it("tanpa izin akses.kelola atau hanya lihat ditolak; Admin Aplikasi bebas", () => {
+    expect(periksaLingkupPeran({ adminAplikasi: false, izin: {}, kegiatanId: 2 })?.status).toBe(403);
+    expect(periksaLingkupPeran({ adminAplikasi: false, izin: izin({ "akses.kelola": { level: "lihat", semua: true } }), kegiatanId: 2 })?.status).toBe(403);
+    expect(periksaLingkupPeran({ adminAplikasi: true, izin: {}, kegiatanId: null })).toBeNull();
   });
 });

@@ -13,7 +13,7 @@
 import crypto from "crypto";
 import { cekPin, hashPin, normNama } from "@/lib/undangan";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
-import { catatAudit } from "@/lib/sigapAkses";
+import { KEGIATAN_PSP, catatAudit } from "@/lib/sigapAkses";
 import type { Db } from "@/lib/sigap";
 import { PERAN_PIN_TERLINDUNGI, periksaSasaranReset, type LingkupKegiatan, type SasaranReset } from "@/lib/aturanLingkup";
 
@@ -85,7 +85,7 @@ export async function masihPinAwal(db: Db, akunId: number): Promise<boolean> {
  * (6 Nov 2026) Memuat data sasaran untuk `periksaSasaranReset`: peran, apakah memegang izin `kelola`, dan kegiatan penugasan aktifnya.
  * Satu akun = beberapa kueri kecil; dipakai juga `akunTerlindungi` untuk banyak akun sekaligus.
  */
-export async function muatSasaranReset(db: Db, akunId: number, aktif: boolean): Promise<SasaranReset> {
+export async function muatSasaranReset(db: Db, akunId: number, aktif: boolean, petugasBencanaId: number | null = null): Promise<SasaranReset> {
   const [{ data: ap }, { data: pen }] = await Promise.all([
     db.from("sigap_akun_peran").select("peran_id").eq("akun_id", akunId),
     db.from("sigap_penugasan").select("kegiatan_id").eq("akun_id", akunId).eq("aktif", true),
@@ -101,7 +101,11 @@ export async function muatSasaranReset(db: Db, akunId: number, aktif: boolean): 
     peranKode = (pr ?? []).map((p) => p.kode as string);
     punyaIzinKelola = (iz ?? []).length > 0;
   }
-  return { aktif, peranKode, punyaIzinKelola, kegiatanPenugasan: Array.from(new Set((pen ?? []).map((x) => Number(x.kegiatan_id)))) };
+  const kegiatanPenugasan = new Set((pen ?? []).map((x) => Number(x.kegiatan_id)));
+  // (6 Nov 2026) Petugas Pendataan Pascabencana terdaftar lewat modul bencana (akun tertaut `petugas_bencana_id`), bukan lewat sigap_penugasan:
+  // pada data 6 Nov, 374 dari 470 akun petugas PSP tidak punya baris penugasan. Mereka tetap dihitung bertugas di kegiatan PSP.
+  if (petugasBencanaId) kegiatanPenugasan.add(KEGIATAN_PSP);
+  return { aktif, peranKode, punyaIzinKelola, kegiatanPenugasan: Array.from(kegiatanPenugasan) };
 }
 
 /** Subset `akunIds` yang terlindungi (peran admin atau memegang izin `kelola`). Dipakai pencarian akun agar pengelola tak mudah dijadikan sasaran. */
@@ -136,7 +140,7 @@ export async function resetPinOlehAdmin(
   if (akunId === aktor.akunId) return { ok: false, error: "Untuk PIN Anda sendiri, pakai \"Lupa PIN?\" di halaman masuk.", status: 400 };
   const { data: a } = await db.from("sigap_akun").select("id, nama, aktif, petugas_bencana_id").eq("id", akunId).maybeSingle();
   if (!a) return { ok: false, error: "Akun tidak ditemukan.", status: 404 };
-  const sasaran = await muatSasaranReset(db, akunId, !!a.aktif);
+  const sasaran = await muatSasaranReset(db, akunId, !!a.aktif, (a.petugas_bencana_id as number | null) ?? null);
   const galat = periksaSasaranReset({ adminAplikasi: aktor.adminAplikasi, lingkup: aktor.lingkup ?? [] }, sasaran);
   if (galat) return { ok: false, error: galat.error, status: galat.status };
   const pin = buatPinSementara();

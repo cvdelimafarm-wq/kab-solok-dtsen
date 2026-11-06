@@ -81,6 +81,21 @@ export function periksaBeriPeran(p: { adminAplikasi: boolean; aktorId: number; a
   return null;
 }
 
+/**
+ * Memberi atau mencabut peran pada kegiatan `kegiatanId` (null = peran berlaku untuk semua kegiatan). Pemegang `akses.kelola` berlingkup hanya boleh
+ * mengurus peran pada kegiatan dalam lingkupnya; peran tanpa kegiatan hanya oleh pengelola akses berlingkup semua. null = boleh.
+ * (Celah yang ditemukan saat uji produksi P2: PJ kegiatan 2 dapat memberi `pengelola_psp` kegiatan 1.)
+ */
+export function periksaLingkupPeran(p: { adminAplikasi: boolean; izin: PetaIzin; kegiatanId: number | null }): GalatAturan | null {
+  if (p.adminAplikasi) return null;
+  const x = p.izin["akses.kelola"];
+  if (!x || x.level !== "kelola") return { error: "Tidak punya izin Kelola Peran & Akses.", status: 403 };
+  if (x.semua) return null;
+  if (p.kegiatanId == null) return { error: "Peran tanpa kegiatan (berlaku untuk semua kegiatan) hanya dapat diurus pengelola akses yang berlingkup semua kegiatan.", status: 403 };
+  if (!x.kegiatan.includes(p.kegiatanId)) return { error: "Kegiatan ini di luar lingkup Anda.", status: 403 };
+  return null;
+}
+
 // ---------------------------------------------------------------- 3. Saring per kegiatan
 
 /** Boleh `kelola` pada kegiatan `kegiatanId` lewat menu `menu`? (lingkup izin ikut dihitung) */
