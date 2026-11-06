@@ -50,14 +50,17 @@ const tabelDasar = (): Tabel => ({
     { id: 12, nama: "Pengelola Lain", aktif: true, petugas_bencana_id: null },
     { id: 13, nama: "Admin Anggaran", aktif: true, petugas_bencana_id: null },
     { id: 14, nama: "Nonaktif", aktif: false, petugas_bencana_id: null },
-    { id: 15, nama: "Petugas PSP", aktif: true, petugas_bencana_id: 77 },
-    { id: 16, nama: "Roster tanpa peran PSP", aktif: true, petugas_bencana_id: 78 },
+    { id: 15, nama: "Petugas PSP", aktif: true, petugas_bencana_id: 77, no_hp: "0811" },
+    { id: 16, nama: "Roster tanpa penugasan PSP", aktif: true, petugas_bencana_id: 78, no_hp: null },
+    { id: 17, nama: "Pegawai supervisor PSP", aktif: true, petugas_bencana_id: null, no_hp: "  " },
   ],
   bencana_petugas: [
     { id: 77, peran: "ppl", no_hp: "081" },
     { id: 78, peran: null, no_hp: "082" },
   ],
   sigap_penugasan: [
+    { akun_id: 15, kegiatan_id: 1, aktif: true },
+    { akun_id: 17, kegiatan_id: 1, aktif: true },
     { akun_id: 10, kegiatan_id: 3, aktif: true },
     { akun_id: 11, kegiatan_id: 5, aktif: true },
     { akun_id: 12, kegiatan_id: 3, aktif: true },
@@ -127,17 +130,19 @@ describe("resetPinOlehAdmin berlingkup", () => {
   });
 });
 
-describe("petugas PSP yang terdaftar lewat modul bencana (tanpa baris sigap_penugasan)", () => {
-  it("roster bencana TANPA peran PSP tidak dihitung bertugas di PSP: pengelola PSP ditolak, Admin Aplikasi boleh", async () => {
+describe("petugas PSP = penugasan kegiatan 1 yang aktif (tahap 3: daftar petugas lama tidak dibaca)", () => {
+  it("roster bencana TANPA penugasan PSP tidak dihitung bertugas di PSP: pengelola PSP ditolak, Admin Aplikasi boleh", async () => {
     const db = dbTiruan(tabelDasar());
     const r = await resetPinOlehAdmin(db, aktor([1]), 16);
     expect(!r.ok && r.status).toBe(403);
     expect(db.tulis.length).toBe(0);
     expect((await resetPinOlehAdmin(dbTiruan(tabelDasar()), aktor("semua", true), 16)).ok).toBe(true);
   });
-  it("dapat direset pengelola PSP (kegiatan 1)", async () => {
-    const db = dbTiruan(tabelDasar());
-    expect((await resetPinOlehAdmin(db, aktor([1]), 15)).ok).toBe(true);
+  it("dapat direset pengelola PSP (kegiatan 1), termasuk pegawai tanpa tautan roster", async () => {
+    for (const id of [15, 17]) {
+      const db = dbTiruan(tabelDasar());
+      expect((await resetPinOlehAdmin(db, aktor([1]), id)).ok).toBe(true);
+    }
   });
   it("tidak dapat direset pengelola kegiatan lain (3 atau 2)", async () => {
     for (const l of [[3], [2]]) {
@@ -146,6 +151,14 @@ describe("petugas PSP yang terdaftar lewat modul bencana (tanpa baris sigap_penu
       expect(!r.ok && r.status).toBe(403);
       expect(db.tulis.length).toBe(0);
     }
+  });
+  it("nomor HP dibaca dari sigap_akun.no_hp; kosong atau spasi menjadi null", async () => {
+    const a = await resetPinOlehAdmin(dbTiruan(tabelDasar()), aktor("semua", true), 15);
+    expect(a.ok && a.hp).toBe("0811");
+    const b = await resetPinOlehAdmin(dbTiruan(tabelDasar()), aktor("semua", true), 16);
+    expect(b.ok && b.hp).toBe(null);
+    const c = await resetPinOlehAdmin(dbTiruan(tabelDasar()), aktor("semua", true), 17);
+    expect(c.ok && c.hp).toBe(null);
   });
 });
 

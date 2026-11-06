@@ -153,7 +153,7 @@ export async function GET(req: NextRequest) {
     if (bagian === "akses") {
       const bisaKelola = boleh(izin, "pelatihan.kelola", "kelola", kegiatanId);
       const { data: ak2 } = akunIds.length
-        ? await db.from("sigap_akun").select("id, jenis, alamat_kecamatan, akun_dibuat_at, terakhir_masuk_at, petugas_bencana_id").in("id", akunIds).limit(2000)
+        ? await db.from("sigap_akun").select("id, jenis, alamat_kecamatan, akun_dibuat_at, terakhir_masuk_at, petugas_bencana_id, no_hp").in("id", akunIds).limit(2000)
         : { data: [] as Record<string, unknown>[] };
       const { data: lg } = await db.from("sigap_pelatihan_langkah").select("akun_id, kode, at").eq("kegiatan_id", kegiatanId).limit(20000);
       const aksesAt = new Map<number, string>();
@@ -165,11 +165,9 @@ export async function GET(req: NextRequest) {
       // kontak hanya untuk pengelola (data pribadi)
       const hp = new Map<number, string>();
       if (bisaKelola) {
-        const pbIds = (ak2 ?? []).map((a) => a.petugas_bencana_id as number | null).filter((x): x is number => !!x);
-        const { data: pb } = pbIds.length ? await db.from("bencana_petugas").select("id, no_hp").in("id", pbIds).limit(2000) : { data: [] as Record<string, unknown>[] };
-        const noHp = new Map((pb ?? []).map((x) => [x.id as number, (x.no_hp as string | null) ?? ""]));
+        // (6 Nov 2026, tahap 3) nomor HP dari sigap_akun.no_hp, bukan lagi daftar petugas lama
         for (const a of ak2 ?? []) {
-          const v = noHp.get(a.petugas_bencana_id as number);
+          const v = ((a.no_hp as string | null) ?? "").trim();
           if (v) hp.set(a.id as number, v);
         }
       }

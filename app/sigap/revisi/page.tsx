@@ -19,7 +19,7 @@ import BagianTambahan, { type Tambahan } from "./Tambahan";
 import { caps, Catatan, Chip, Galat, HalamanKeu, kartu, kolom, label, Tenang, tombolAktif, tombolKecil, tombolUtama } from "../keu-ui";
 
 type Tenggat = { kode: string; nama: string; tanggal: string; sisa_hari: number | string | null };
-type PokVersi = { id: number; nomor_pok: string; tanggal_efektif: string | null };
+type PokVersi = { id: number; nomor_pok: string | null; tanggal_efektif: string | null };
 type JadwalCatatan = { id: number; ulang: string; catatan: string };
 
 const NAMA_BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -28,7 +28,7 @@ const SIKLUS: { no: string; judul: string; isi: string }[] = [
   { no: "J2", judul: "Dibuka", isi: "Ketua tim dan admin RO mengajukan usulan; persetujuan berjalan per RO." },
   { no: "J3", judul: "Dikumpulkan", isi: "Jendela ditutup. Hanya usulan berstatus Disetujui yang ikut paket." },
   { no: "J4", judul: "Diterapkan", isi: "Paket menjadi kertas kerja satker. Jalur DJPb dan DJA dilanjutkan ke surat usulan." },
-  { no: "J5", judul: "Sah", isi: "PPK menekan Sahkan setelah revisi disahkan di SPAN, dengan melampirkan PDF POK resmi. Pagu tiap akun per RO dicek terhadap kertas kerja (peringatan saja); setelah Sah, kertas kerja terkunci." },
+  { no: "J5", judul: "Sah", isi: "PPK menyatakan sah lewat halaman Status setelah revisi disahkan di SPAN, dengan melampirkan PDF POK resmi. Pagu tiap akun per RO dicek terhadap kertas kerja (peringatan saja); setelah Sah, kertas kerja terkunci." },
 ];
 
 export default function HalamanRevisi() {
@@ -83,7 +83,7 @@ export default function HalamanRevisi() {
   return (
     <HalamanKeu jejak={[{ t: "SIGAP", href: "/sigap" }, { t: "Perencanaan", href: "/sigap/ro" }, { t: "Revisi anggaran" }, { t: "Jadwal dan pengesahan" }]} judul="Jadwal revisi dan pengesahan oleh PPK">
         <Tenang>
-          PPK menentukan <b>kapan</b> kertas kerja revisi dibuka dan <b>jenisnya</b> (POK, DIPA jalur DJPb, DIPA jalur DJA, atau Administrasi). Untuk Revisi POK tersedia jadwal bawaan tiap tanggal 10; PPK dapat merealisasikan atau melewatinya. Usulan hanya dapat diajukan selama jendela terbuka. Setelah diterapkan, <b>PPK menyatakan revisi sah</b> dan status POK sistem ikut terbarui. Tenggat Pasal 175 hanya menjadi pengingat, tidak mengunci tombol.
+          PPK menentukan <b>kapan</b> kertas kerja revisi dibuka dan <b>jenisnya</b> (POK, DIPA jalur DJPb, DIPA jalur DJA, atau Administrasi). Untuk Revisi POK tersedia jadwal bawaan tiap tanggal 10; PPK dapat merealisasikan atau melewatinya. Usulan hanya dapat diajukan selama jendela terbuka. Setelah diterapkan, <b>PPK menyatakan revisi sah di halaman Status</b> dan status POK sistem ikut terbarui. Tenggat Pasal 175 hanya menjadi pengingat, tidak mengunci tombol.
         </Tenang>
         <div className="flex flex-wrap gap-2">
           <Link href="/sigap/revisi/kertas" className={`${tombolUtama} inline-flex items-center no-underline`}>Buka Kertas kerja revisi (matriks per KRO)</Link>

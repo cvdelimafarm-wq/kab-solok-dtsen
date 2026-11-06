@@ -13,7 +13,7 @@
 import crypto from "crypto";
 import { cekPin, hashPin, normNama } from "@/lib/undangan";
 import { PIN_AWAL } from "@/lib/sigapMasukNama";
-import { KEGIATAN_PSP, catatAudit } from "@/lib/sigapAkses";
+import { catatAudit } from "@/lib/sigapAkses";
 import type { Db } from "@/lib/sigap";
 import { PERAN_PIN_TERLINDUNGI, periksaSasaranReset, type LingkupKegiatan, type SasaranReset } from "@/lib/aturanLingkup";
 
@@ -102,13 +102,9 @@ export async function muatSasaranReset(db: Db, akunId: number, aktif: boolean, p
     punyaIzinKelola = (iz ?? []).length > 0;
   }
   const kegiatanPenugasan = new Set((pen ?? []).map((x) => Number(x.kegiatan_id)));
-  // (6 Nov 2026) Petugas PSP juga tercatat di modul bencana (`bencana_petugas.peran` = ppl/pml/korwil) dan selalu punya baris sigap_penugasan kegiatan 1 yang sama.
-  // KOREKSI sore 6 Nov: tabel `bencana_petugas` memuat seluruh roster mitra (456 aktif) -- hanya yang `peran`-nya terisi (96) benar-benar petugas PSP.
-  // Tautan `petugas_bencana_id` saja TIDAK berarti bertugas di PSP; yang berperan kosong tidak boleh direset pengelola PSP.
-  if (petugasBencanaId) {
-    const { data: bp } = await db.from("bencana_petugas").select("peran").eq("id", petugasBencanaId).maybeSingle();
-    if (bp?.peran) kegiatanPenugasan.add(KEGIATAN_PSP);
-  }
+  // (6 Nov 2026, tahap 3) "Petugas PSP" = penugasan kegiatan 1 yang aktif (sudah ikut terhitung di atas). Daftar petugas lama
+  // (`bencana_petugas`, 456 mitra aktif) tidak lagi dibaca di sini: tautan `petugas_bencana_id` tidak berarti bertugas di PSP.
+  void petugasBencanaId; // parameter dipertahankan agar pemanggil lama tidak berubah
   return { aktif, peranKode, punyaIzinKelola, kegiatanPenugasan: Array.from(kegiatanPenugasan) };
 }
 
@@ -142,7 +138,7 @@ export async function resetPinOlehAdmin(
 ): Promise<{ ok: true; pin: string; nama: string; sampai: string; hp: string | null } | { ok: false; error: string; status: number }> {
   if (!Number.isInteger(akunId) || akunId <= 0) return { ok: false, error: "Akun tidak valid.", status: 400 };
   if (akunId === aktor.akunId) return { ok: false, error: "Untuk PIN Anda sendiri, pakai \"Lupa PIN?\" di halaman masuk.", status: 400 };
-  const { data: a } = await db.from("sigap_akun").select("id, nama, aktif, petugas_bencana_id").eq("id", akunId).maybeSingle();
+  const { data: a } = await db.from("sigap_akun").select("id, nama, aktif, petugas_bencana_id, no_hp").eq("id", akunId).maybeSingle();
   if (!a) return { ok: false, error: "Akun tidak ditemukan.", status: 404 };
   const sasaran = await muatSasaranReset(db, akunId, !!a.aktif, (a.petugas_bencana_id as number | null) ?? null);
   const galat = periksaSasaranReset({ adminAplikasi: aktor.adminAplikasi, lingkup: aktor.lingkup ?? [] }, sasaran);
@@ -155,10 +151,7 @@ export async function resetPinOlehAdmin(
   // buka kunci percobaan salah (jika sedang terkunci) supaya PIN sementara langsung bisa dipakai
   await db.from("bencana_undangan_percobaan").delete().eq("kunci", `sigap_pin:${normNama(String(a.nama ?? ""))}`);
   await catatAudit(db, aktor.akunId, "reset_pin_admin", { akun_id: akunId, nama: a.nama, oleh: aktor.nama, sampai }); // PIN tidak ikut dicatat
-  let hp: string | null = null;
-  if (a.petugas_bencana_id) {
-    const { data: bp } = await db.from("bencana_petugas").select("no_hp").eq("id", a.petugas_bencana_id).maybeSingle();
-    hp = (bp?.no_hp as string | null) ?? null;
-  }
+  // (tahap 3) nomor HP kini di sigap_akun.no_hp (diisi dari daftar lama dan master mitra oleh skema-sql/20261106e)
+  const hp: string | null = (a.no_hp as string | null)?.trim() || null;
   return { ok: true, pin, nama: a.nama as string, sampai, hp };
 }

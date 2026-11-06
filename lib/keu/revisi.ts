@@ -172,14 +172,15 @@ export const petunjukSah = (jenis: string): string =>
 
 /** Kartu "POK sistem yang berlaku" dan riwayat versi, dari catatan sah (keu_revisi_sah) dan POK berlaku (keu_pok_versi). */
 export type CatatanSah = { jadwal_id: number; versi_sistem: number | string; nomor_dokumen: string; tanggal_dokumen: string };
-export type PokDasar = { nomor_pok: string; tanggal_efektif: string | null } | null;
+export type PokDasar = { nomor_pok: string | null; tanggal_efektif: string | null } | null;
 export function ringkasPok(sah: CatatanSah[], judulJadwal: Map<number, string>, dasar: PokDasar): { label: string; ket: string; riwayat: { label: string; ket: string }[] } {
   const urut = [...sah].sort((a, b) => Number(b.versi_sistem) - Number(a.versi_sistem));
   const riwayat = urut.map((s) => ({
     label: `Versi ${Number(s.versi_sistem)}: ${judulJadwal.get(s.jadwal_id) ?? "jadwal revisi"}`,
     ket: `Sah pada ${tglPanjang(s.tanggal_dokumen)}, dasar ${s.nomor_dokumen}.`,
   }));
-  const ketDasar = dasar ? `${dasar.nomor_pok}${dasar.tanggal_efektif ? `, efektif ${tglPanjang(dasar.tanggal_efektif)}` : ""}.` : "Belum ada POK dasar di sistem.";
+  const bagianDasar = dasar ? [dasar.nomor_pok?.trim() || "", dasar.tanggal_efektif ? `efektif ${tglPanjang(dasar.tanggal_efektif)}` : ""].filter(Boolean) : [];
+  const ketDasar = dasar ? (bagianDasar.length ? `${bagianDasar.join(", ")}.` : "Nomor dan tanggal belum tercatat.") : "Belum ada POK dasar di sistem.";
   riwayat.push({ label: "POK dasar sistem", ket: ketDasar });
   return urut.length ? { label: `Versi ${Number(urut[0].versi_sistem)}`, ket: `${judulJadwal.get(urut[0].jadwal_id) ?? "jadwal revisi"}, sah ${tglPanjang(urut[0].tanggal_dokumen)}`, riwayat } : { label: "POK dasar", ket: ketDasar.replace(/\.$/, "") + "; belum ada revisi sah", riwayat };
 }

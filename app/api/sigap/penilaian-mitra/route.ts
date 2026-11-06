@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabaseServer";
 import type { Db } from "@/lib/sigap";
 import { aktorDariHeader, boleh, catatAudit, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { rincianPerAkun } from "@/lib/portal/rincianAkun";
+import { penandaPerAkun } from "@/lib/penandaKinerja";
 import { cocokkanMitra, periksaBanyak, periksaKolomBaru, periksaNilai, uraiTempel, type NilaiMitra } from "@/lib/penilaianMitra";
 
 export const runtime = "nodejs";
@@ -83,14 +84,10 @@ export async function GET(req: NextRequest) {
 
     const rincian = await rincianPerAkun(db, akun.baris);
 
-    // Penanda dari data Bencana (hanya tampil; diubah di halaman Bencana): red flag kinerja dan rekomendasi PML.
-    const penanda = new Map<number, { red_flag: boolean; rekomendasi_pml: boolean }>();
+    // (6 Nov 2026, tahap 3) Penanda red flag dan rekomendasi PML dari sigap_penilaian_flag, digabung lintas kegiatan (hanya tampil; tidak memblokir apa pun).
+    let penanda = new Map<number, { red_flag: boolean; rekomendasi_pml: boolean }>();
     try {
-      const idPetugas = [...new Set(akun.baris.map((a) => a.petugas_bencana_id).filter((x): x is number => typeof x === "number"))];
-      for (let i = 0; i < idPetugas.length; i += 200) {
-        const { data } = await db.from("bencana_petugas").select("id, red_flag_kinerja, rekomendasi_pml").in("id", idPetugas.slice(i, i + 200));
-        for (const r of (data ?? []) as { id: number; red_flag_kinerja: boolean | null; rekomendasi_pml: boolean | null }[]) penanda.set(r.id, { red_flag: r.red_flag_kinerja === true, rekomendasi_pml: r.rekomendasi_pml === true });
-      }
+      penanda = await penandaPerAkun(db, akun.baris.map((a) => a.id));
     } catch {
       /* abaikan: penanda kosong */
     }
@@ -109,8 +106,8 @@ export async function GET(req: NextRequest) {
         kecamatan: a.alamat_kecamatan,
         nagari: rincian.get(a.id)?.nagari ?? null,
         aktif: a.aktif,
-        red_flag: a.petugas_bencana_id !== null ? penanda.get(a.petugas_bencana_id)?.red_flag === true : false,
-        rekomendasi_pml: a.petugas_bencana_id !== null ? penanda.get(a.petugas_bencana_id)?.rekomendasi_pml === true : false,
+        red_flag: penanda.get(a.id)?.red_flag === true,
+        rekomendasi_pml: penanda.get(a.id)?.rekomendasi_pml === true,
         nilai: perAkun.get(a.id) ?? {},
       })),
       kegiatan_tersedia: kegiatanTersedia,

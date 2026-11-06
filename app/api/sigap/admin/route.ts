@@ -341,21 +341,17 @@ export async function GET(req: NextRequest) {
           terlewat = 0,
           belumPilih = 0;
         // (6 Okt 2026) No HP petugas utk tombol "Ingatkan" (buka WhatsApp dgn pesan siap kirim; tidak dikirim
-        // otomatis -- keputusan user). Sumber: bencana_petugas.no_hp, cadangan bencana_mitra.no_telp.
+        // otomatis -- keputusan user). Sumber: sigap_akun.no_hp (tahap 3, 6 Nov 2026), cadangan bencana_mitra.no_telp.
         const hpAkun = new Map<number, string>();
         {
           const ids = Array.from(new Set(aktif.map((b) => b.akun_id)));
           const ak = ids.length
-            ? await semuaBaris<{ id: number; mitra_id: number | null; petugas_bencana_id: number | null }>((a, z) => db.from("sigap_akun").select("id, mitra_id, petugas_bencana_id").in("id", ids).range(a, z))
+            ? await semuaBaris<{ id: number; mitra_id: number | null; no_hp: string | null }>((a, z) => db.from("sigap_akun").select("id, mitra_id, no_hp").in("id", ids).range(a, z))
             : [];
-          const pIds = ak.map((x) => x.petugas_bencana_id).filter((x): x is number => !!x);
           const mIds = ak.map((x) => x.mitra_id).filter((x): x is number => !!x);
-          const [pb, mb] = await Promise.all([
-            pIds.length ? semuaBaris<{ id: number; no_hp: string | null }>((a, z) => db.from("bencana_petugas").select("id, no_hp").in("id", pIds).range(a, z)) : Promise.resolve([]),
-            mIds.length ? semuaBaris<{ id: number; no_telp: string | null }>((a, z) => db.from("bencana_mitra").select("id, no_telp").in("id", mIds).range(a, z)) : Promise.resolve([]),
-          ]);
+          const mb = mIds.length ? await semuaBaris<{ id: number; no_telp: string | null }>((a, z) => db.from("bencana_mitra").select("id, no_telp").in("id", mIds).range(a, z)) : [];
           for (const x of ak) {
-            const hp = pb.find((p) => p.id === x.petugas_bencana_id)?.no_hp || mb.find((m) => m.id === x.mitra_id)?.no_telp || "";
+            const hp = x.no_hp || mb.find((m) => m.id === x.mitra_id)?.no_telp || "";
             if (hp && String(hp).replace(/\D/g, "").length >= 9) hpAkun.set(x.id, String(hp));
           }
         }

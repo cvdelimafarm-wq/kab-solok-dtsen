@@ -418,16 +418,16 @@ export async function POST(req: NextRequest) {
         akun.push(...((data ?? []) as typeof akun));
         if (!data || data.length < 1000) break;
       }
-      const peranBencana = new Map<number, string>();
-      for (let i = 0; i < 5000; i += 1000) {
-        const { data } = await db.from("bencana_petugas").select("id, peran").order("id").range(i, i + 999);
-        for (const r of (data ?? []) as { id: number; peran: string | null }[]) if (r.peran) peranBencana.set(r.id, r.peran);
-        if (!data || data.length < 1000) break;
+      // (6 Nov 2026, tahap 3) Peran PSP dibaca dari penugasan kegiatan 1 yang aktif, bukan dari daftar petugas lama.
+      const peranPsp = new Map<number, string>();
+      {
+        const { data } = await db.from("sigap_penugasan").select("akun_id, peran").eq("kegiatan_id", 1).eq("aktif", true).limit(5000);
+        for (const r of (data ?? []) as { akun_id: number; peran: string | null }[]) if (r.peran) peranPsp.set(r.akun_id, r.peran);
       }
       const { data: pel } = await db.from("sigap_penugasan").select("akun_id").eq("kegiatan_id", 3).eq("aktif", true);
       const peserta = new Set(((pel ?? []) as { akun_id: number }[]).map((r) => r.akun_id));
       const daftar = akun
-        .map((a) => ({ id: a.id, nama: a.nama, jenis: a.jenis, peran: a.petugas_bencana_id ? (peranBencana.get(a.petugas_bencana_id) ?? null) : null, peserta: peserta.has(a.id) }))
+        .map((a) => ({ id: a.id, nama: a.nama, jenis: a.jenis, peran: peranPsp.get(a.id) ?? null, peserta: peserta.has(a.id) }))
         .sort((x, y) => x.nama.localeCompare(y.nama, "id"));
       return NextResponse.json({ ok: true, akun: daftar });
     }

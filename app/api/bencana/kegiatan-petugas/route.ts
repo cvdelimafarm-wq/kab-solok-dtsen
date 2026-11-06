@@ -28,6 +28,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import { gerbangBencanaAdmin } from "@/lib/gerbangRute";
+import { salinDariRosterLama } from "@/lib/penandaKinerja";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -191,6 +192,11 @@ export async function PATCH(req: NextRequest) {
 
   const { error } = await supabase.from("bencana_petugas").update(update).eq("id", body.petugas_id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // (6 Nov 2026, tahap 3) Tulis ganda: penanda kinerja dan konfirmasi pendaftaran disalin ke tabel identitas baru
+  // (sigap_penilaian_flag, sigap_penugasan) sampai modul bencana ini dibuang setelah 20 Nov. Idempoten, aman diulang.
+  const salin = await salinDariRosterLama(supabase, body.petugas_id);
+  if (!salin.ok) return NextResponse.json({ error: `Tersimpan di daftar lama, tetapi gagal disalin ke data baru: ${salin.error}. Ulangi perubahan yang sama.` }, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }
