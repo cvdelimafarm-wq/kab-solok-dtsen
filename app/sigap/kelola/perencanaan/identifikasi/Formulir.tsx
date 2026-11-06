@@ -110,7 +110,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
   const setPerkDasar = (v: boolean) => ubah((g) => {
     if (adaKe) { const e = g.kecuali[pa]; if (e?.on) e.perk = v; else g.jend.perk = v; } else g.tunggal.perk = v;
   });
-  const acuanDasar = !adaKe ? "Jadwal tunggal" : eIni ? "Jadwal khusus periode ini" : pa === first ? (banyak ? "Pola, berlaku untuk semua periode" : "Pola jendela periode") : `Mengikuti pola ${first}`;
+  const acuanDasar = !adaKe ? "Jadwal tunggal" : eIni ? "Jadwal khusus" : pa === first ? (banyak ? "Pola semua periode" : "Pola periode") : `Ikut pola ${first}`;
   const rinciPeriode = adaKe && (banyak || adaKecuali) ? <JadwalPeriode f={f} ubah={ubah} tahun={tahun} mati={mati} lst={lst} pa={pa} /> : undefined;
 
   // (5 Nov 2026) Jadwal tahap sebagai tabel: tiap tahap satu baris. (6 Nov 2026) Tanggal mulai dan selesai diisi langsung di baris.
@@ -127,7 +127,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
       mulai: jp.pendataan?.mulai, selesai: jp.pendataan?.selesai, perkEfektif: !!jp.pendataan?.perk, perkSendiri: perkDasar, onPerk: setPerkDasar,
       onMulai: (d) => aturDasar("mulai", d), onSelesai: (d) => aturDasar("selesai", d),
       catatan: banyak ? `Daftar jadwal tiap periode. Tanggal yang diisi pada ${first} berlaku untuk semua periode; mengubah periode lain menjadikannya jadwal khusus.` : undefined,
-      isi: rinciPeriode,
+      isi: rinciPeriode, labelIsi: "Per periode",
     });
   }
   barisTahap.push({
@@ -138,7 +138,7 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
     onSelesai: (d) => (pend ? aturRel("pengolahan", "selesai", d) : aturDasar("selesai", d)),
     aksi: pend && !relSudahSama(f.rel.pengolahan) && !mati ? <button type="button" className={tombolKecil} onClick={() => setRel("pengolahan", relSamaDenganAcuan())}>Samakan dengan pendataan</button> : undefined,
     catatan: !pend && banyak ? `Daftar jadwal tiap periode. Tanggal yang diisi pada ${first} berlaku untuk semua periode; mengubah periode lain menjadikannya jadwal khusus.` : undefined,
-    isi: pend ? undefined : rinciPeriode,
+    isi: pend ? undefined : rinciPeriode, labelIsi: "Per periode",
   });
   barisTahap.push({
     id: "tahap-pasca", no: pend ? 4 : 2, nama: "Pasca pengolahan", acuan: "Pengolahan", aktif: true,

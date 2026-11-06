@@ -101,6 +101,8 @@ export type BarisTahap = {
   onMulai?: (tgl: string) => void; onSelesai?: (tgl: string) => void; aksi?: ReactNode;
   /** rincian tambahan yang dibuka lewat tombol Ubah/Lihat (mis. jadwal tiap periode); tanpa ini baris tidak punya tombol Ubah */
   isi?: ReactNode;
+  /** tulisan tombol pembuka `isi` (bawaan "Ubah") */
+  labelIsi?: string;
 };
 
 const SelTgl = ({ r, sisi, mati }: { r: BarisTahap; sisi: "mulai" | "selesai"; mati: boolean }) => {
@@ -115,7 +117,7 @@ export function TabelJadwalTahap({ baris, mati, bukaAwal = [] }: { baris: BarisT
   const { terbuka, buka, alih } = useBuka(bukaAwal);
   const kols: Kol<BarisTahap>[] = [
     { id: "no", judul: "No", jenis: "pilih", nilai: (r) => String(r.no), sel: (r) => r.no },
-    { id: "tahap", judul: "Tahap", jenis: "teks", nilai: (r) => r.nama, sel: (r) => <strong className="text-[#0F2A52]">{r.nama}</strong>, kelasTd: "min-w-[120px]" },
+    { id: "tahap", judul: "Tahap", jenis: "teks", nilai: (r) => r.nama, sel: (r) => <strong className="text-[#0F2A52]">{r.nama}</strong>, kelasTd: "min-w-[150px]" },
     {
       id: "ada", judul: "Ada", jenis: "pilih", nilai: (r) => (r.aktif ? "Ya" : "Tidak"),
       sel: (r) => (r.bolehTiada ? <KotakCentang aktif={r.aktif} mati={mati} onUbah={() => r.onAda?.()} nama={`Ada ${r.nama.toLowerCase()}`} /> : <span className="text-[#44546F]">Wajib</span>),
@@ -138,14 +140,14 @@ export function TabelJadwalTahap({ baris, mati, bukaAwal = [] }: { baris: BarisT
       sel: (r) => !r.aktif || (!r.isi && !r.aksi) ? <Strip /> : (
         <div className="flex flex-wrap items-center gap-1.5">
           {r.aksi}
-          {r.isi && <button type="button" aria-expanded={terbuka.has(r.id)} aria-controls={terbuka.has(r.id) ? `isi-${r.id}` : undefined} className={tombolKecil} onClick={() => alih(r.id)}>{terbuka.has(r.id) ? "Tutup" : mati ? "Lihat" : "Ubah"}</button>}
+          {r.isi && <button type="button" aria-expanded={terbuka.has(r.id)} aria-controls={terbuka.has(r.id) ? `isi-${r.id}` : undefined} className={tombolKecil} onClick={() => alih(r.id)}>{terbuka.has(r.id) ? "Tutup" : r.labelIsi ?? (mati ? "Lihat" : "Ubah")}</button>}
         </div>
       ),
     },
   ];
   return (
     <TabelSaring
-      label="Jadwal tahap kegiatan" kols={kols} data={baris} kunci={(r) => r.id}
+      label="Jadwal tahap kegiatan" kols={kols} data={baris} kunci={(r) => r.id} tengah
       idBaris={(r) => r.id} kelasBaris={(r) => (r.aktif ? "" : KELAS_MATI)} matiBaris={(r) => !r.aktif} bukaBaris={(r) => { if (r.aktif) buka(r.id); }}
       bawah={(r) => !r.aktif || !r.isi || !terbuka.has(r.id) ? null : (
         <BarisIsi lebar={kols.length}>
