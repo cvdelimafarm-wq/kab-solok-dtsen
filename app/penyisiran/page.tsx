@@ -106,6 +106,7 @@ import ManajemenTargetTab from "./manajemen-target";
 import MasterPetugasTab from "./master-petugas";
 import AdministrasiSpjTab from "./administrasi-spj";
 import PerencanaanLapanganTab from "./perencanaan-lapangan";
+import SelectCari from "@/app/components/SelectCari";
 
 // "identifikasi" (Identifikasi PPL), "tetangga" (Identifikasi
 // Tetangga/Lainnya), & "monitoring" (Monitoring Identifikasi PPL) SENGAJA
@@ -1085,7 +1086,7 @@ function FloatBarDitandaiPml() {
           LEBIH DARI 1 PPL (kalau cuma 1, langsung dipakai tanpa perlu
           dipilih, lihat pplTerpilih default di muatRingkasan). */}
       {pplDiawasi.length > 1 && (
-        <select
+        <SelectCari
           value={pplTerpilih ?? ""}
           onChange={(e) => setPplTerpilih(Number(e.target.value))}
           className="rounded-md border border-red-300 bg-white px-2 py-1 text-[11px] text-navy-900"
@@ -1095,7 +1096,7 @@ function FloatBarDitandaiPml() {
               {p.nama}
             </option>
           ))}
-        </select>
+        </SelectCari>
       )}
 
       {pplDiawasi.length === 0 ? (

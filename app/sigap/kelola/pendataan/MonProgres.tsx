@@ -12,6 +12,7 @@ import { bacaSesi } from "@/app/portal/sesi";
 import { muatData, ubahCache, useData } from "@/app/portal/dataBersama";
 import { berhasil, persen, saringPpl, saringTim, type DataMonitoringPendataan, type Hitung3 } from "@/lib/pendataanMonitor";
 import { Kartu, Kpi, Persen, fmt, fmt1, jam, sel, td, tdAngka, th } from "./monUi";
+import SelectCari from "@/app/components/SelectCari";
 
 const PATH = "/api/portal/pendataan/monitoring";
 type Rekap = "ppl" | "pml" | "tim";
@@ -107,14 +108,14 @@ export default function MonProgres() {
           </div>
           <label className="flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">
             Tim (PML)
-            <select value={pml ?? ""} onChange={(e) => setPml(e.target.value ? Number(e.target.value) : null)} className={`${sel} w-full min-h-[44px] font-normal normal-case tracking-normal sm:min-h-[40px] sm:min-w-[170px]`}>
+            <SelectCari value={pml ?? ""} onChange={(e) => setPml(e.target.value ? Number(e.target.value) : null)} className={`${sel} w-full min-h-[44px] font-normal normal-case tracking-normal sm:min-h-[40px] sm:min-w-[170px]`}>
               <option value="">Semua tim</option>
               {(data?.tim ?? []).map((t) => (
                 <option key={t.pml_id} value={t.pml_id}>
                   {t.pml_nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <label className="flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">
             Cari nama
@@ -122,11 +123,11 @@ export default function MonProgres() {
           </label>
           <label className="flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">
             Urutkan
-            <select value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className={`${sel} w-full min-h-[44px] font-normal normal-case tracking-normal sm:min-h-[40px] sm:min-w-[160px]`}>
+            <SelectCari value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className={`${sel} w-full min-h-[44px] font-normal normal-case tracking-normal sm:min-h-[40px] sm:min-w-[160px]`}>
               <option value="bawaan">Tim lalu nama</option>
               <option value="rendah">Capaian terendah</option>
               <option value="tinggi">Capaian tertinggi</option>
-            </select>
+            </SelectCari>
           </label>
           <div className="col-span-2 grid grid-cols-2 gap-2.5 sm:contents">
             <button type="button" onClick={() => void unduh()} disabled={!data} className="min-h-[44px] rounded-[10px] bg-[#E4ECFA] px-4 text-[13px] font-extrabold text-[#0F2A52] disabled:opacity-50 sm:min-h-[40px]">

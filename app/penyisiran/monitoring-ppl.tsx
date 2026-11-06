@@ -24,6 +24,7 @@
 // datanya).
 
 import { useCallback, useEffect, useState } from "react";
+import SelectCari from "@/app/components/SelectCari";
 
 const TOKEN_KEY = "penyisiran-token";
 
@@ -254,14 +255,14 @@ function MonitoringPanel({ token, onSessionExpired }: { token: string; onSession
           placeholder="Cari nama PPL..."
           className="min-w-[160px] flex-1 rounded-md border border-line px-2 py-1.5 text-xs"
         />
-        <select
+        <SelectCari
           value={urutan}
           onChange={(e) => setUrutan(e.target.value as "belum" | "nama")}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
         >
           <option value="belum">Urutkan: Sisa terbanyak</option>
           <option value="nama">Urutkan: Nama (A-Z)</option>
-        </select>
+        </SelectCari>
       </div>
 
       <div className="text-xs text-ink/50">

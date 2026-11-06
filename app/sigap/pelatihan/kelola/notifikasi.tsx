@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH, type PesertaPush, type RiwayatPush, type StatusTesPush } from "@/lib/sigapPushUtil";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_API = "/api/sigap/pelatihan/admin/push";
 
@@ -156,11 +157,11 @@ export default function NotifikasiKelola() {
             </label>
             <label className="block text-[12px] font-semibold text-[#55657D]">
               Saat diketuk, buka
-              <select className={`${INPUT} mt-1 w-full`} value={url} onChange={(e) => setUrl(e.target.value)}>
+              <SelectCari className={`${INPUT} mt-1 w-full`} value={url} onChange={(e) => setUrl(e.target.value)}>
                 {TUJUAN.map((t) => (
                   <option key={t.url} value={t.url}>{t.label}</option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             <div>
               <p className="mb-1 text-[12px] font-semibold text-[#55657D]">Pratinjau di HP</p>
@@ -180,11 +181,11 @@ export default function NotifikasiKelola() {
         <Kartu judul="Penerima" ket={`hari ini ${d.hari}`}>
           <label className="block text-[12px] font-semibold text-[#55657D]">
             Sasaran cepat
-            <select className={`${INPUT} mt-1 w-full`} value={sasaran} onChange={(e) => pilihSasaran(e.target.value as Sasaran)}>
+            <SelectCari className={`${INPUT} mt-1 w-full`} value={sasaran} onChange={(e) => pilihSasaran(e.target.value as Sasaran)}>
               {OPSI_SASARAN.map((o) => (
                 <option key={o.k} value={o.k}>{o.label}</option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <p className="mt-1.5 text-[12px] text-[#7B8794]">Centang atau hapus centang pada tabel untuk menyesuaikan. Peserta yang belum mengaktifkan notifikasi di HP-nya tidak akan menerima.</p>
 

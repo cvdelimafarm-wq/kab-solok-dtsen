@@ -12,6 +12,7 @@ import Bingkai from "../../kontrak/Bingkai";
 import PemilihSurvei, { namaSurvei } from "../pendataan/PemilihSurvei";
 import { KEGIATAN_PENDATAAN, bacaKegiatanPendataan, urlKegiatanPendataan } from "@/lib/sigapPendataanTab";
 import { LABEL_STATUS, labelPenyebab, petaBarisAnomali, templatAnomali, type HasilPetaAnomali, type RingkasTemuan, type StatusTemuan } from "@/lib/sigapAnomali";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_API = "/api/sigap/anomali";
 
@@ -175,18 +176,18 @@ function KartuImpor({ kegiatanId, nama, setelahImpor }: { kegiatanId: number; na
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1B2B4B]">
           Sumber
-          <select className={INPUT} value={sumber} onChange={(e) => setSumber(e.target.value)}>
+          <SelectCari className={INPUT} value={sumber} onChange={(e) => setSumber(e.target.value)}>
             <option value="lain">Lainnya</option>
             <option value="pantau">PANTAU</option>
             <option value="vsen26m">VSEN26.M</option>
-          </select>
+          </SelectCari>
         </label>
         <label className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1B2B4B]">
           Tahap
-          <select className={INPUT} value={fase} onChange={(e) => setFase(e.target.value)}>
+          <SelectCari className={INPUT} value={fase} onChange={(e) => setFase(e.target.value)}>
             <option value="pra_pelatihan">Pra pelatihan (anomali lama)</option>
             <option value="pemeriksaan">Pemeriksaan (survei berjalan)</option>
-          </select>
+          </SelectCari>
         </label>
         <label className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#1B2B4B]">
           Periode bawaan
@@ -301,14 +302,14 @@ function BarisCocok({ kegiatanId, d, akun, setelah }: { kegiatanId: number; d: P
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <input className={`${INPUT} w-[160px]`} value={cari} placeholder="Cari akun…" onChange={(e) => setCari(e.target.value)} aria-label={`Cari akun untuk ${d.nama_asal}`} />
-        <select className={`${INPUT} min-w-[200px]`} value={pilih} onChange={(e) => setPilih(e.target.value === "" ? "" : Number(e.target.value))} aria-label={`Pilih akun untuk ${d.nama_asal}`} disabled={!akun}>
+        <SelectCari className={`${INPUT} min-w-[200px]`} value={pilih} onChange={(e) => setPilih(e.target.value === "" ? "" : Number(e.target.value))} aria-label={`Pilih akun untuk ${d.nama_asal}`} disabled={!akun}>
           <option value="">{akun ? "Pilih akun…" : "Memuat akun…"}</option>
           {opsi.map((a) => (
             <option key={a.id} value={a.id}>
               {a.nama} (#{a.id})
             </option>
           ))}
-        </select>
+        </SelectCari>
         <button type="button" className={BTN_G} disabled={sibuk || pilih === ""} onClick={() => pilih !== "" && void cocokkan(pilih)}>
           {sibuk ? "Menyimpan…" : "Cocokkan"}
         </button>
@@ -359,14 +360,14 @@ function KartuRekap({ temuan }: { temuan: Temuan[] }) {
             {l.label}
           </button>
         ))}
-        <select className={`${INPUT} ml-auto`} value={status} onChange={(e) => setStatus(e.target.value as typeof status)} aria-label="Filter status">
+        <SelectCari className={`${INPUT} ml-auto`} value={status} onChange={(e) => setStatus(e.target.value as typeof status)} aria-label="Filter status">
           <option value="semua">Semua status</option>
           {(Object.keys(LABEL_STATUS) as StatusTemuan[]).map((s) => (
             <option key={s} value={s}>
               {LABEL_STATUS[s]}
             </option>
           ))}
-        </select>
+        </SelectCari>
         <input className={`${INPUT} w-[160px]`} value={cari} placeholder="Cari…" onChange={(e) => setCari(e.target.value)} aria-label="Cari temuan" />
       </div>
       {t.length === 0 ? (

@@ -32,6 +32,7 @@ import { Pergerakan } from "@/app/sigap/kelola/pendataan/BatangQc";
 import { rentangTerakhir } from "@/lib/sigapQcRentang";
 import { IsiRincianQc } from "@/app/portal/qc/RincianQc";
 import { BarisSaring, IsiSoal, KartuSaring, LembarBawah, MatriksQc } from "@/app/portal/qc/QcBersama";
+import SelectCari from "@/app/components/SelectCari";
 
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const HARI = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
@@ -305,26 +306,26 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
           {lihat === "petugas" && (
             <>
               <div className="flex gap-1.5">
-                <select aria-label="Peran" value={f.peran} onChange={(e) => setF({ ...f, peran: e.target.value as SaringPetugas["peran"] })} className={SELECT}>
+                <SelectCari aria-label="Peran" value={f.peran} onChange={(e) => setF({ ...f, peran: e.target.value as SaringPetugas["peran"] })} className={SELECT}>
                   <option value="semua">PML &amp; PPL</option>
                   <option value="pml">Hanya PML</option>
                   <option value="ppl">Hanya PPL</option>
-                </select>
-                <select aria-label="Tim PML" value={f.pml === "semua" ? "" : String(f.pml)} onChange={(e) => setF({ ...f, pml: e.target.value ? Number(e.target.value) : "semua" })} className={SELECT}>
+                </SelectCari>
+                <SelectCari aria-label="Tim PML" value={f.pml === "semua" ? "" : String(f.pml)} onChange={(e) => setF({ ...f, pml: e.target.value ? Number(e.target.value) : "semua" })} className={SELECT}>
                   <option value="">Semua tim</option>
                   {daftarPml.map(([id, nama]) => (
                     <option key={id} value={id}>
                       {judulKata(nama)}
                     </option>
                   ))}
-                </select>
-                <select aria-label="Status" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value as SaringPetugas["status"] })} className={SELECT}>
+                </SelectCari>
+                <SelectCari aria-label="Status" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value as SaringPetugas["status"] })} className={SELECT}>
                   {STATUS_OPSI.map(([v, t]) => (
                     <option key={v} value={v}>
                       {t}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </div>
               <div className="flex items-center gap-1.5">
                 <input type="search" aria-label="Cari nama" value={f.cari} onChange={(e) => setF({ ...f, cari: e.target.value })} placeholder="Cari nama…" className={`${SELECT} placeholder:font-normal placeholder:text-[#8A97AB]`} />

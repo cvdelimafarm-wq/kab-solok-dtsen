@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectCari from "@/app/components/SelectCari";
 
 // ============================================================================
 // Tab "Monitoring Penyelesaian Anomali" — rekap per NKS: berapa sampel (RT)
@@ -459,7 +460,7 @@ export default function MonitoringAnomaliTab() {
           placeholder="Cari NKS, jorong, atau nama PPL..."
           className="min-w-[200px] flex-1 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs sm:text-sm"
         />
-        <select
+        <SelectCari
           value={filterPpl}
           onChange={(e) => {
             setFilterPpl(e.target.value);
@@ -473,7 +474,7 @@ export default function MonitoringAnomaliTab() {
               {p}
             </option>
           ))}
-        </select>
+        </SelectCari>
         {(filterStatus !== "semua" || filterPpl || search) && (
           <button
             onClick={resetFilter}

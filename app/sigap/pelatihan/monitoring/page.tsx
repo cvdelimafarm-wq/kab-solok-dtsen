@@ -19,6 +19,7 @@ import { useDataPel } from "../dataPel";
 import { LABEL_PERAN_PELATIHAN, type PeranPelatihan } from "@/lib/hierarkiPelatihan";
 import { LABEL_KELULUSAN, type StatusKelulusan } from "@/lib/sigapAturanTes";
 import { hitungPerStatus, keteranganPantau, saringBaris, statusUntuk, variabelTersedia, type BankBaris, type KodeVariabel, type VgBaris } from "@/lib/monitoringVariabel";
+import SelectCari from "@/app/components/SelectCari";
 
 type Tes = { status: "belum" | "mengerjakan" | "selesai"; skor: number | null };
 type Kunci = { tahap: "pretest" | "posttest"; oleh_label: string; pesan: string };
@@ -252,14 +253,14 @@ export default function HalamanMonitoring() {
             ) : (
               <>
                 <label htmlFor="pantau-variabel" className="mb-1 block text-[12px] font-bold text-[#5B6B84]">Pantau menurut</label>
-                <select
+                <SelectCari
                   id="pantau-variabel"
                   value={variabelAktif}
                   onChange={(e) => { setVariabel(e.target.value as KodeVariabel); setStatusPantau(null); }}
                   className="mb-2 min-h-[44px] w-full rounded-xl border border-[#CBD6E6] bg-white px-3 text-[14px] font-semibold text-[#0F2A52]"
                 >
                   {pilihan.map((p) => <option key={p.kode} value={p.kode}>{p.label}</option>)}
-                </select>
+                </SelectCari>
                 <input
                   type="search"
                   value={cari}

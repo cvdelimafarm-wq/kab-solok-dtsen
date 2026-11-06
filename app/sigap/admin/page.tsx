@@ -29,6 +29,7 @@ import TabMonitoring from "./TabMonitoring";
 import TabPenugasan from "./TabPenugasan";
 import TabKegiatan from "./TabKegiatan";
 import TabVerifikasi from "./TabVerifikasi";
+import SelectCari from "@/app/components/SelectCari";
 import DaftarKegiatan from "../kelola/DaftarKegiatan"; // (10 Okt 2026) halaman awal = daftar kegiatan per kegiatan induk
 
 type Tab = KodeTabAdmin;
@@ -219,7 +220,7 @@ export default function AdminTransportLokal() {
           {!daftar && r.kegiatan.length > 0 && (
             <label className="flex items-center gap-2">
               <span className="sr-only">Pilih kegiatan</span>
-              <select
+              <SelectCari
                 value={kegId ?? ""}
                 onChange={(e) => {
                   setKegBaru(false);
@@ -233,7 +234,7 @@ export default function AdminTransportLokal() {
                     {k.aktif ? "" : " (selesai)"}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
           )}
           {keg && !kegBaru && <span className="text-[12.5px] text-blue-100">Periode {rentangPendek(keg.tanggal_mulai, keg.tanggal_selesai)} · {tglPanjang(r.hari_ini)}</span>}

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ambil, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import { BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "../admin/ui";
 import { ikonPortal, kelompokPortal, type DataAkses } from "./tipe";
+import SelectCari from "@/app/components/SelectCari";
 
 export function DaftarPortal({ data }: { data: DataAkses }) {
   const grup = kelompokPortal(data.menu);
@@ -130,14 +131,14 @@ export function Riwayat() {
         ket="200 aksi terakhir"
         kanan={
           <div className="flex flex-wrap items-center gap-2">
-            <select value={fAksi} onChange={(e) => setFAksi(e.target.value)} className={INPUT} aria-label="Filter aksi">
+            <SelectCari value={fAksi} onChange={(e) => setFAksi(e.target.value)} className={INPUT} aria-label="Filter aksi">
               <option value="">Semua aksi</option>
               {daftarAksi.map((a) => (
                 <option key={a} value={a}>
                   {LABEL_AKSI[a] ?? a}
                 </option>
               ))}
-            </select>
+            </SelectCari>
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama / detail…" className={`${INPUT} w-44`} />
             <button type="button" className={BTN_O} onClick={() => muat()}>
               Muat ulang

@@ -15,6 +15,7 @@ import { BTN, BTN_O, BTN_R, BTN_T, Chip, INPUT, Kartu, Memuat, Pesan } from "../
 import { HASIL_KK, type HasilKk } from "@/lib/pendataan";
 import { BATAS, BENTUK_HASIL, KONFIG_BAWAAN, LABEL_BENTUK, contohUpdating, galatKonfig, lencanaHasil, rapikanKonfig, salinBawaan, samaDenganBawaan, type BentukHasil, type KonfigHasil, type KonfigLembar, type KonfigRadar } from "@/lib/lembarKonfig";
 import { IkonHasil } from "../../pendataan/PetaKk";
+import SelectCari from "@/app/components/SelectCari";
 
 const API = "/api/portal/pendataan/konfig";
 
@@ -159,13 +160,13 @@ function KartuHasil({ h, k, draf, ubah, boleh }: { h: HasilKk; k: KonfigHasil; d
         <Warna label="Warna bilah progres" nilai={k.warna} onUbah={(v) => ubah({ warna: v })} />
         <label className="block">
           <span className={LABEL}>Bentuk penanda di peta</span>
-          <select value={k.bentuk} onChange={(e) => ubah({ bentuk: e.target.value as BentukHasil })} className={`${INPUT} mt-0.5 w-full`}>
+          <SelectCari value={k.bentuk} onChange={(e) => ubah({ bentuk: e.target.value as BentukHasil })} className={`${INPUT} mt-0.5 w-full`}>
             {BENTUK_HASIL.map((b) => (
               <option key={b} value={b}>
                 {LABEL_BENTUK[b]}
               </option>
             ))}
-          </select>
+          </SelectCari>
           <span className="text-[11px] text-[#8A96A8]">Warna titik di peta tetap warna PPL; yang membedakan hasil adalah bentuknya.</span>
         </label>
         <Warna label="Latar lencana" nilai={k.pil_latar} onUbah={(v) => ubah({ pil_latar: v })} />
@@ -257,14 +258,14 @@ export default function PengaturanLembar() {
           <div className="flex flex-wrap items-end gap-3">
             <label className="block min-w-[220px]">
               <span className={LABEL}>Kegiatan</span>
-              <select value={kid} onChange={(e) => setKid(Number(e.target.value))} className={`${INPUT} mt-0.5 w-full`}>
+              <SelectCari value={kid} onChange={(e) => setKid(Number(e.target.value))} className={`${INPUT} mt-0.5 w-full`}>
                 {d.kegiatan.map((k) => (
                   <option key={k.id} value={k.id}>
                     {k.nama}
                     {k.tersimpan ? " · diatur khusus" : ""}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             {bolehKelola && (
               <div className="flex flex-wrap gap-2">
@@ -330,10 +331,10 @@ export default function PengaturanLembar() {
                 <Angka label="Jeda pembaruan" nilai={draf.radar.jeda_detik} onUbah={(n) => ubahRadar({ jeda_detik: n })} min={BATAS.jeda[0]} maks={BATAS.jeda[1]} satuan="detik" />
                 <label className="block">
                   <span className={LABEL}>Tampilan awal</span>
-                  <select value={draf.radar.tampilan_awal} onChange={(e) => ubahRadar({ tampilan_awal: e.target.value === "rincian" ? "rincian" : "radar" })} className={`${INPUT} mt-0.5 w-full`}>
+                  <SelectCari value={draf.radar.tampilan_awal} onChange={(e) => ubahRadar({ tampilan_awal: e.target.value === "rincian" ? "rincian" : "radar" })} className={`${INPUT} mt-0.5 w-full`}>
                     <option value="radar">Radar (animasi)</option>
                     <option value="rincian">Rincian (angka)</option>
-                  </select>
+                  </SelectCari>
                 </label>
               </div>
               <p className="text-[11.5px] text-[#6B7A90]">

@@ -10,6 +10,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ambil, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import ResetPin from "../admin/ResetPin";
 import { BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Baris = {
   akun_id: number;
@@ -110,12 +111,12 @@ export default function LogLogin() {
         ket={`${ringkas.total} akun aktif dalam ${hari} hari · ${ringkas.hariIni} dalam 24 jam · ${ringkas.online} sedang online`}
         kanan={
           <div className="flex flex-wrap items-center gap-2">
-            <select value={hari} onChange={(e) => setHari(Number(e.target.value))} className={INPUT} aria-label="Rentang">
+            <SelectCari value={hari} onChange={(e) => setHari(Number(e.target.value))} className={INPUT} aria-label="Rentang">
               <option value={1}>24 jam terakhir</option>
               <option value={7}>7 hari</option>
               <option value={30}>30 hari</option>
               <option value={90}>90 hari</option>
-            </select>
+            </SelectCari>
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama…" className={`${INPUT} w-44`} />
             <button type="button" className={BTN_O} onClick={() => muat()}>
               Muat ulang

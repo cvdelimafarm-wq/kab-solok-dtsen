@@ -14,6 +14,7 @@ import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH } from "@/lib/sigapPushUtil";
 import { HARI_MODAL_SIARAN } from "@/lib/siaranPetugas";
 import type { JenisPengumuman } from "@/lib/sigapPengumuman";
 import { bakukanMarkup } from "@/lib/teksKaya";
+import SelectCari from "@/app/components/SelectCari";
 
 type Riwayat = { waktu: string; judul: string; oleh: string | null; akun: number; terkirim: number; modal: boolean; sudah_konfirmasi: number };
 type Ringkas = { push_siap: boolean; penerima: number; berlangganan: number; riwayat: Riwayat[]; boleh_kirim: boolean };
@@ -249,14 +250,14 @@ export default function Siaran({ kegiatanId = 1, namaKegiatan = "Pendataan Pasca
       <div className="mt-3 flex items-end gap-2">
         <label className="block min-w-0 flex-1 text-[12px] font-bold text-[#55657D]">
           Templat siaran
-          <select value={templat} onChange={(e) => pakaiTemplat(Number(e.target.value))} className={`${kolom} min-h-[44px]`}>
+          <SelectCari value={templat} onChange={(e) => pakaiTemplat(Number(e.target.value))} className={`${kolom} min-h-[44px]`}>
             {templat === SIARAN_BARU && <option value={SIARAN_BARU}>{kosong.nama}</option>}
             {daftarTemplat.map((t, i) => (
               <option key={t.nama} value={i}>
                 {t.nama}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </label>
         <button type="button" onClick={tambahSiaran} disabled={templat === SIARAN_BARU && !sudahDiubah()} className="min-h-[44px] shrink-0 rounded-[12px] bg-[#1F5FD1] px-3.5 text-[13.5px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8] disabled:bg-[#A9BCD8]">
           + Tambah siaran
@@ -305,11 +306,11 @@ export default function Siaran({ kegiatanId = 1, namaKegiatan = "Pendataan Pasca
             </label>
             <label className="block text-[12px] font-bold text-[#55657D]">
               Jenis
-              <select value={jenis} onChange={(e) => setJenis(e.target.value as JenisPengumuman)} className={`${kolom} min-h-[42px]`}>
+              <SelectCari value={jenis} onChange={(e) => setJenis(e.target.value as JenisPengumuman)} className={`${kolom} min-h-[42px]`}>
                 <option value="info">Info</option>
                 <option value="perhatian">Perhatian</option>
                 <option value="penting">Penting</option>
-              </select>
+              </SelectCari>
             </label>
           </div>
           {/* (21 Okt 2026) Editor visual bergaya Word; yang tersimpan tetap teks berpenanda yang sama (lib/teksKaya.ts) */}

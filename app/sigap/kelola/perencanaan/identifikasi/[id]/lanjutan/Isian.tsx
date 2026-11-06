@@ -18,14 +18,15 @@ import { adaDiDaftar, cariAkunUnik, namaTerpakaiPeran, terpakaiLain, type CalonN
 import { PILIHAN_LAINNYA, terapkanPilihan } from "@/lib/keu/pilihInstruktur";
 import PilihNama from "../../PilihNama";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl } from "../../Kontrol";
+import SelectCari from "@/app/components/SelectCari";
 
 export type Ubah = (fn: (g: IsiLanjutan) => void) => void;
 type Props = { isi: IsiLanjutan; ubah: Ubah; mati: boolean };
 
 const opsiKolom = (v: string, set: (s: string) => void, mati: boolean, nama: string, opsi: readonly string[], kosong = "(belum dipilih)", tampil?: (o: string) => string) => (
-  <select aria-label={nama} className={kolom} value={v} disabled={mati} onChange={(e) => set(e.target.value)}>
+  <SelectCari aria-label={nama} className={kolom} value={v} disabled={mati} onChange={(e) => set(e.target.value)}>
     {opsi.map((o) => <option key={o || "kosong"} value={o}>{o === "" ? kosong : tampil ? tampil(o) : o}</option>)}
-  </select>
+  </SelectCari>
 );
 
 /** Judul kecil di atas satu kolom isian baris (agar tiap kolom jelas artinya dan tingginya sejajar). */
@@ -295,19 +296,19 @@ function PetugasSatu({ p, i, ubah, mati, semua, calonOrg, calonMit }: { p: Petug
           />
         </Isian>
         <Isian judul="Peran">
-          <select aria-label={`Peran petugas ${i + 1}`} className={kolom} disabled={mati} value={p.peran} onChange={(e) => set((x) => { x.peran = e.target.value as Petugas["peran"]; })}>
+          <SelectCari aria-label={`Peran petugas ${i + 1}`} className={kolom} disabled={mati} value={p.peran} onChange={(e) => set((x) => { x.peran = e.target.value as Petugas["peran"]; })}>
             <option value="">(belum dipilih)</option>
             {KODE_PERAN.map((k) => <option key={k} value={k}>{NAMA_PERAN[k]}</option>)}
-          </select>
+          </SelectCari>
         </Isian>
         <Isian judul="Status">
           <Pilihan nama={`Status petugas ${i + 1}`} nilai={p.status} opsi={["Organik", "Mitra"] as const} mati={mati} onPilih={(v) => set((x) => { if (x.status !== v) delete x.akun; x.status = v; x.sumber = v === "Mitra" ? (x.sumber || "kepka") : ""; })} />
         </Isian>
         {p.status === "Mitra" && (
           <Isian judul="Sumber mitra">
-            <select aria-label={`Sumber mitra ${i + 1}`} className={kolom} disabled={mati} value={p.sumber} onChange={(e) => set((x) => { x.sumber = e.target.value as Petugas["sumber"]; })}>
+            <SelectCari aria-label={`Sumber mitra ${i + 1}`} className={kolom} disabled={mati} value={p.sumber} onChange={(e) => set((x) => { x.sumber = e.target.value as Petugas["sumber"]; })}>
               {(["kepka", "seleksi"] as const).map((s) => <option key={s} value={s}>{NAMA_SUMBER[s]}</option>)}
-            </select>
+            </SelectCari>
           </Isian>
         )}
       </div>

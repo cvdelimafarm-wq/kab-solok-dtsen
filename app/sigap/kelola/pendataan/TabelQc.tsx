@@ -35,6 +35,7 @@ import {
 import { Chip, INPUT } from "../../admin/ui";
 import { Pergerakan, SelNilai, warnaNilai } from "./BatangQc";
 import { judulKata } from "@/lib/spdtNtp";
+import SelectCari from "@/app/components/SelectCari";
 
 const SARING: { id: StatusSaring; label: string }[] = [
   { id: "semua", label: "Semua" },
@@ -195,12 +196,12 @@ export default function TabelQc({
         <div className="flex flex-col gap-1.5">
           <input type="search" value={filter.nama} onChange={(e) => setFilter((f) => ({ ...f, nama: e.target.value }))} placeholder="Cari nama" className={`${INPUT} !min-h-[40px] text-[13px]`} aria-label="Cari nama" />
           <div className="flex gap-1.5">
-            <select value={filter.peran} onChange={(e) => setFilter((f) => ({ ...f, peran: e.target.value as FilterKolom["peran"] }))} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Filter peran">
+            <SelectCari value={filter.peran} onChange={(e) => setFilter((f) => ({ ...f, peran: e.target.value as FilterKolom["peran"] }))} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Filter peran">
               <option value="">PML &amp; PPL</option>
               <option value="PML">Hanya PML</option>
               <option value="PPL">Hanya PPL</option>
-            </select>
-            <select value={filter.pml} onChange={(e) => setFilter((f) => ({ ...f, pml: e.target.value }))} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Filter tim PML">
+            </SelectCari>
+            <SelectCari value={filter.pml} onChange={(e) => setFilter((f) => ({ ...f, pml: e.target.value }))} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Filter tim PML">
               <option value="">Semua tim</option>
               <option value="-">(tanpa PML)</option>
               {pmlList.map((n) => (
@@ -208,15 +209,15 @@ export default function TabelQc({
                   {judulKata(n)}
                 </option>
               ))}
-            </select>
-            <select value={urutHp} onChange={(e) => aturUrutHp(e.target.value)} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Urutkan">
+            </SelectCari>
+            <SelectCari value={urutHp} onChange={(e) => aturUrutHp(e.target.value)} className={`${SEL} !min-h-[40px] flex-1`} aria-label="Urutkan">
               <option value="">Urut: bawaan</option>
               <option value="nama:asc">Nama A–Z</option>
               <option value="percobaan:desc">Percobaan terbanyak</option>
               <option value="percobaan:asc">Percobaan tersedikit</option>
               <option value="p1:asc">Nilai awal terendah</option>
               <option value="p1:desc">Nilai awal tertinggi</option>
-            </select>
+            </SelectCari>
           </div>
         </div>
         <ul className="mt-2 divide-y divide-[#E3E8EE] overflow-hidden rounded-lg border border-[#E3E8EE]">
@@ -300,14 +301,14 @@ export default function TabelQc({
                 <input type="search" value={filter.nama} onChange={(e) => setFilter((f) => ({ ...f, nama: e.target.value }))} placeholder="Cari nama" className={`${INPUT} !min-h-[34px] !py-1 text-[12px] font-normal normal-case`} aria-label="Filter nama" />
               </th>
               <th className="px-1.5 py-1.5">
-                <select value={filter.peran} onChange={(e) => setFilter((f) => ({ ...f, peran: e.target.value as FilterKolom["peran"] }))} className={SEL} aria-label="Filter peran">
+                <SelectCari value={filter.peran} onChange={(e) => setFilter((f) => ({ ...f, peran: e.target.value as FilterKolom["peran"] }))} className={SEL} aria-label="Filter peran">
                   <option value="">Semua</option>
                   <option value="PML">PML</option>
                   <option value="PPL">PPL</option>
-                </select>
+                </SelectCari>
               </th>
               <th className="px-1.5 py-1.5">
-                <select value={filter.pml} onChange={(e) => setFilter((f) => ({ ...f, pml: e.target.value }))} className={SEL} aria-label="Filter nama PML">
+                <SelectCari value={filter.pml} onChange={(e) => setFilter((f) => ({ ...f, pml: e.target.value }))} className={SEL} aria-label="Filter nama PML">
                   <option value="">Semua</option>
                   <option value="-">(tanpa PML)</option>
                   {pmlList.map((n) => (
@@ -315,27 +316,27 @@ export default function TabelQc({
                       {n}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </th>
               <th className="px-1.5 py-1.5">
-                <select value={filter.percobaan} onChange={(e) => setFilter((f) => ({ ...f, percobaan: e.target.value }))} className={SEL} aria-label="Filter jumlah percobaan">
+                <SelectCari value={filter.percobaan} onChange={(e) => setFilter((f) => ({ ...f, percobaan: e.target.value }))} className={SEL} aria-label="Filter jumlah percobaan">
                   <option value="">Semua</option>
                   {percobaanList.map((n) => (
                     <option key={n} value={String(n)}>
                       {n === 0 ? "0 (belum)" : n}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </th>
               {Array.from({ length: kolom }, (_, i) => (
                 <th key={i} className={`px-1 py-1.5 ${i === 0 ? "border-l border-[#E3E8EE]" : ""}`}>
-                  <select value={filter.nilai[i] ?? "semua"} onChange={(e) => aturNilai(i, e.target.value as FilterNilai)} className={`${SEL} min-w-[64px]`} aria-label={`Filter nilai P${i + 1}`}>
+                  <SelectCari value={filter.nilai[i] ?? "semua"} onChange={(e) => aturNilai(i, e.target.value as FilterNilai)} className={`${SEL} min-w-[64px]`} aria-label={`Filter nilai P${i + 1}`}>
                     <option value="semua">Semua</option>
                     <option value="terisi">Terisi</option>
                     <option value="kosong">Kosong</option>
                     <option value="lulus">Lulus</option>
                     <option value="belum_lulus">Belum lulus</option>
-                  </select>
+                  </SelectCari>
                 </th>
               ))}
             </tr>

@@ -9,6 +9,7 @@ import { BTN, BTN_O, INPUT } from "../../admin/ui";
 import { KANAL, SIFAT, JENIS_TAUTAN } from "@/lib/pedia/umum";
 import { ambilP } from "../api";
 import { SesiBerakhir } from "../../admin/api";
+import SelectCari from "@/app/components/SelectCari";
 
 export type Referensi = {
   kategori: { id: number; kode: string; nama: string; induk_id: number | null; aktif: boolean }[];
@@ -183,7 +184,7 @@ export default function FormEntri({
     >
       <fieldset disabled={mati} className="grid gap-3 sm:grid-cols-2">
         <Kolom label="Sub-kategori *" ket="Menentukan kode nomor registrasi (mis. PD.04). Kode lama tetap bila dikoreksi kemudian.">
-          <select required value={v.kategori_id} onChange={(e) => set("kategori_id", e.target.value ? Number(e.target.value) : "")} className={INPUT}>
+          <SelectCari required value={v.kategori_id} onChange={(e) => set("kategori_id", e.target.value ? Number(e.target.value) : "")} className={INPUT}>
             <option value="">— pilih —</option>
             {induk.map((k) => (
               <optgroup key={k.id} label={`${k.kode} ${k.nama}`}>
@@ -197,25 +198,25 @@ export default function FormEntri({
                   ))}
               </optgroup>
             ))}
-          </select>
+          </SelectCari>
         </Kolom>
         <Kolom label="Sifat jawaban">
-          <select value={v.sifat} onChange={(e) => set("sifat", e.target.value)} className={INPUT}>
+          <SelectCari value={v.sifat} onChange={(e) => set("sifat", e.target.value)} className={INPUT}>
             {Object.entries(SIFAT).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </Kolom>
         <Kolom label="Kanal">
-          <select value={v.kanal} onChange={(e) => set("kanal", e.target.value)} className={INPUT}>
+          <SelectCari value={v.kanal} onChange={(e) => set("kanal", e.target.value)} className={INPUT}>
             {Object.entries(KANAL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </Kolom>
         {v.kanal === "lainnya" ? (
           <Kolom label="Nama kanal lain">
@@ -279,7 +280,7 @@ export default function FormEntri({
               );
             })}
             {!mati && (
-              <select
+              <SelectCari
                 value=""
                 onChange={(e) => {
                   const id = Number(e.target.value);
@@ -293,7 +294,7 @@ export default function FormEntri({
                     {r.jenis} {r.nomor} ({r.tahun}){r.status !== "berlaku" ? ` — ${r.status}` : ""}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             )}
           </div>
         </div>
@@ -313,31 +314,31 @@ export default function FormEntri({
             ))}
             {!mati && (
               <div className="flex flex-wrap gap-2">
-                <select value={tautJenis} onChange={(e) => (setTautJenis(e.target.value), setTautRef(""), setTautTeks(""))} className={INPUT}>
+                <SelectCari value={tautJenis} onChange={(e) => (setTautJenis(e.target.value), setTautRef(""), setTautTeks(""))} className={INPUT}>
                   {Object.entries(JENIS_TAUTAN).map(([k, l]) => (
                     <option key={k} value={k}>
                       {l}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
                 {tautJenis === "kegiatan" ? (
-                  <select value={tautRef} onChange={(e) => setTautRef(e.target.value)} className={`${INPUT} min-w-[220px] flex-1`}>
+                  <SelectCari value={tautRef} onChange={(e) => setTautRef(e.target.value)} className={`${INPUT} min-w-[220px] flex-1`}>
                     <option value="">— pilih kegiatan —</option>
                     {refr.kegiatan.map((k) => (
                       <option key={k.id} value={k.id}>
                         {k.nama}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 ) : tautJenis === "kontrak_paket" ? (
-                  <select value={tautRef} onChange={(e) => setTautRef(e.target.value)} className={`${INPUT} min-w-[220px] flex-1`}>
+                  <SelectCari value={tautRef} onChange={(e) => setTautRef(e.target.value)} className={`${INPUT} min-w-[220px] flex-1`}>
                     <option value="">— pilih paket —</option>
                     {refr.kontrak.map((k) => (
                       <option key={k.id} value={k.id}>
                         {k.tahun} No {k.nomor_urut ?? "-"} · {k.nama}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 ) : tautJenis === "penugasan" ? (
                   <input value={tautRef} onChange={(e) => setTautRef(e.target.value.replace(/\D/g, ""))} placeholder="ID penugasan (lihat Admin > Penugasan)" className={`${INPUT} w-60`} />
                 ) : (
@@ -363,7 +364,7 @@ export default function FormEntri({
         </div>
 
         <Kolom label="Penanya (pegawai)">
-          <select
+          <SelectCari
             value={v.penanya_akun_id}
             onChange={(e) => {
               const id = e.target.value ? Number(e.target.value) : "";
@@ -377,7 +378,7 @@ export default function FormEntri({
                 {o.nama}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </Kolom>
         <Kolom label="Tim">
           <input value={v.tim} onChange={(e) => set("tim", e.target.value)} placeholder="mis. Tim Kesra" className={INPUT} />

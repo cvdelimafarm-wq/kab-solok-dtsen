@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { bacaSesi, bukaBlob, fetchJson, pesanGalat, SesiBerakhir, rupiah } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_ADM = "/api/sigap/pelatihan/administrasi";
 
@@ -303,12 +304,12 @@ export default function Administrasi() {
       >
         <div className="mb-2 flex flex-wrap gap-2">
           <input className={`${INPUT} min-w-[180px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} />
-          <select className={INPUT} value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filter status translok">
+          <SelectCari className={INPUT} value={fStatus} onChange={(e) => setFStatus(e.target.value)} aria-label="Filter status translok">
             <option value="">Semua status translok</option>
             {Object.entries(STATUS).map(([k, v]) => (
               <option key={k} value={k}>{v.label}</option>
             ))}
-          </select>
+          </SelectCari>
           <button type="button" className={BTN_O} onClick={() => setSel(new Set([...sel, ...tampil.map((p) => p.penugasan_id)]))}>Pilih semua (yang tampil)</button>
           <button type="button" className={BTN_O} onClick={() => setSel(new Set())}>Kosongkan</button>
         </div>
@@ -498,10 +499,10 @@ function PanelNarasi({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean
     <div className="mt-3 rounded-xl border border-[#E3E8EE] p-3">
       <div className="flex flex-wrap items-center gap-2">
         <b className="text-[13px]">Narasi laporan Kelas {kelas}</b>
-        <select className={INPUT} value={jenis} onChange={(e) => setJenis(e.target.value as "pelatihan" | "instruktur")} aria-label="Jenis laporan">
+        <SelectCari className={INPUT} value={jenis} onChange={(e) => setJenis(e.target.value as "pelatihan" | "instruktur")} aria-label="Jenis laporan">
           <option value="pelatihan">Laporan Pelatihan</option>
           <option value="instruktur">Laporan Pelatihan Instruktur</option>
-        </select>
+        </SelectCari>
       </div>
       <p className="mt-1 text-[12px] text-[#7B8794]">Angka (peserta, kehadiran, nilai tes) terisi otomatis dari data. Bagian narasi yang dikosongkan dicetak sebagai garis untuk ditulis tangan.</p>
       {!semua ? (
@@ -751,11 +752,11 @@ function ModalTambah({ kelas, tutup, setelah }: { kelas: number; tutup: () => vo
                 <p className="truncate text-[13px] font-semibold">{k.nama}</p>
                 <p className="text-[11.5px] text-[#7B8794]">{k.jenis === "organik" ? "Organik" : "Mitra"}{k.kecamatan ? ` · ${k.kecamatan}` : ""}</p>
               </div>
-              <select className={INPUT} value={peran[k.akun_id] ?? "ppl"} onChange={(e) => setPeran({ ...peran, [k.akun_id]: e.target.value })} aria-label="Peran">
+              <SelectCari className={INPUT} value={peran[k.akun_id] ?? "ppl"} onChange={(e) => setPeran({ ...peran, [k.akun_id]: e.target.value })} aria-label="Peran">
                 <option value="ppl">PPL</option>
                 <option value="pml">PML</option>
                 <option value="korwil">Korwil</option>
-              </select>
+              </SelectCari>
               <button type="button" className={BTN_G} disabled={sibuk !== null} onClick={() => tambahkan(k)}>{sibuk === k.akun_id ? "…" : "Tambahkan"}</button>
             </div>
           ))}

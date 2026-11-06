@@ -26,6 +26,7 @@ import {
   type UrutRentang,
 } from "@/lib/sigapQcRentang";
 import { tglPendekQc, type Rentang } from "./PeriodeQc";
+import SelectCari from "@/app/components/SelectCari";
 
 const API = "/api/portal/qc/admin";
 const pesanGalat = (e: unknown) => (e instanceof Error ? e.message : "Terjadi kesalahan.");
@@ -157,18 +158,18 @@ export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari, api }:
               <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <input className={`${INPUT} min-w-[180px] flex-1`} placeholder="Cari nama petugas atau PML" aria-label="Cari petugas" value={saring.cari} onChange={(e) => setSaring((s) => ({ ...s, cari: e.target.value }))} />
-                  <select className={INPUT} aria-label="Saring peran" value={saring.peran} onChange={(e) => setSaring((s) => ({ ...s, peran: e.target.value as SaringanRentang["peran"] }))}>
+                  <SelectCari className={INPUT} aria-label="Saring peran" value={saring.peran} onChange={(e) => setSaring((s) => ({ ...s, peran: e.target.value as SaringanRentang["peran"] }))}>
                     <option value="semua">Semua peran</option>
                     <option value="PML">PML</option>
                     <option value="PPL">PPL</option>
-                  </select>
-                  <select className={INPUT} aria-label="Saring tim" value={saring.pml} onChange={(e) => setSaring((s) => ({ ...s, pml: e.target.value }))}>
+                  </SelectCari>
+                  <SelectCari className={INPUT} aria-label="Saring tim" value={saring.pml} onChange={(e) => setSaring((s) => ({ ...s, pml: e.target.value }))}>
                     <option value="">Semua tim</option>
                     {tim.map((t) => <option key={t} value={t}>Tim {t}</option>)}
-                  </select>
-                  <select className={INPUT} aria-label="Urutkan" value={urut} onChange={(e) => setUrut(e.target.value as UrutRentang)}>
+                  </SelectCari>
+                  <SelectCari className={INPUT} aria-label="Urutkan" value={urut} onChange={(e) => setUrut(e.target.value as UrutRentang)}>
                     {(Object.keys(LABEL_URUT_RENTANG) as UrutRentang[]).map((k) => <option key={k} value={k}>Urut: {LABEL_URUT_RENTANG[k]}</option>)}
-                  </select>
+                  </SelectCari>
                 </div>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Saring status">
                   {STATUS.map((k) => (

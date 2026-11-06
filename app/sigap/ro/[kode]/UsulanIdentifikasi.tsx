@@ -22,6 +22,7 @@ import {
 } from "@/lib/keu/usulanRab";
 import { Chip, Galat, judulKartu, kartu, kolom, label, Memuat, tombol } from "../../keu-ui";
 import { tulisKeuKlien, useBacaKeu, useKirim } from "../useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 type BarisAcuan = {
   ident_id: number; tahun: number; ro_kode: string; nama: string; ident_ver: number; form_sah: unknown | null; upd: Record<string, { mulai: string; selesai: string }> | null;
@@ -92,15 +93,15 @@ function BarisUsulan({ u, sumber, props, tersedia, jendela }: { u: UsulanBaris; 
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={label} htmlFor={id("b")}>Bulan cair</label>
-          <select id={id("b")} className={kolom} value={v.bulan_mulai} onChange={(e) => ubah({ bulan_mulai: Number(e.target.value), bulan_sampai: Number(e.target.value) })}>
+          <SelectCari id={id("b")} className={kolom} value={v.bulan_mulai} onChange={(e) => ubah({ bulan_mulai: Number(e.target.value), bulan_sampai: Number(e.target.value) })}>
             {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
-          </select>
+          </SelectCari>
         </div>
         <div>
           <label className={label} htmlFor={id("m")}>Minggu cair</label>
-          <select id={id("m")} className={kolom} value={v.minggu} onChange={(e) => ubah({ minggu: Number(e.target.value) })}>
+          <SelectCari id={id("m")} className={kolom} value={v.minggu} onChange={(e) => ubah({ minggu: Number(e.target.value) })}>
             {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
-          </select>
+          </SelectCari>
         </div>
       </div>
       <p className="text-[12px] text-[#5B6B84]">
@@ -108,10 +109,10 @@ function BarisUsulan({ u, sumber, props, tersedia, jendela }: { u: UsulanBaris; 
       </p>
       <div>
         <label className={label} htmlFor={id("i")}>Item POK tujuan</label>
-        <select id={id("i")} className={kolom} value={itemId} onChange={(e) => setItemId(e.target.value)}>
+        <SelectCari id={id("i")} className={kolom} value={itemId} onChange={(e) => setItemId(e.target.value)}>
           {tersedia.length !== 1 && <option value="">Pilih item…</option>}
           {tersedia.map((p) => <option key={p.pok.detail_id} value={p.pok.detail_id}>{namaItem(p.pok)} (akun {p.pok.akun}, pagu {rupiah(p.pok.pok)})</option>)}
-        </select>
+        </SelectCari>
       </div>
       <p className="text-[13px] font-bold text-[#0F2A52]">Jumlah rincian: {jml === null ? "-" : rupiah(jml)}</p>
       {peringatan.length > 0 && (
@@ -279,9 +280,9 @@ export function UsulanIdentifikasi(props: PropsUsulan & { editable: boolean }) {
   const pemilih = daftarIdent.length > 1 && (
     <div>
       <label className={label} htmlFor="usulan-ident">Identifikasi sumber</label>
-      <select id="usulan-ident" className={kolom} value={b.ident_id} onChange={(e) => setPilih(Number(e.target.value))}>
+      <SelectCari id="usulan-ident" className={kolom} value={b.ident_id} onChange={(e) => setPilih(Number(e.target.value))}>
         {daftarIdent.map((x) => <option key={x.ident_id} value={x.ident_id}>{x.nama} ({x.tahun})</option>)}
-      </select>
+      </SelectCari>
     </div>
   );
   const isiKartu = (isi: (d: UsulanBaris[], j: JendelaCair) => JSX.Element) => (

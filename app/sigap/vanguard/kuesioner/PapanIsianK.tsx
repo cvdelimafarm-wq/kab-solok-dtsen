@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { KELOMPOK_IV1, RINCIAN_IV1, cariRincianIv1, rincianLainnya, type RincianIv1 } from "@/lib/vanguard/kuesioner/rincian";
 import { hitungBaris, hitungIv1, perART, periksaIv1, rekapIv31, rekapIv32, type EntriIv1 } from "@/lib/vanguard/kuesioner/engine";
+import SelectCari from "@/app/components/SelectCari";
 
 export type Isian = EntriIv1 & { nama?: string; satuan?: string };
 type Draf = { k1: string; k2: string; k3: string; k4: string; nama: string; satuan: string; sumber: string };
@@ -188,9 +189,9 @@ export default function PapanIsianK({ isian, setIsian, tabAwal, onUbah }: { isia
             {perART(edit.r) && (
               <div className="kp-2">
                 <label className="kp-f"><span>ART</span>
-                  <select value={edit.art} onChange={(e) => bukaEdit(edit.r, Number(e.target.value))}>{Array.from({ length: 15 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
+                  <SelectCari value={edit.art} onChange={(e) => bukaEdit(edit.r, Number(e.target.value))}>{Array.from({ length: 15 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}</SelectCari></label>
                 <label className="kp-f"><span>Sumber <small>R{edit.r}K7</small></span>
-                  <select value={draf.sumber} onChange={(e) => setDraf({ ...draf, sumber: e.target.value })}><option value="">—</option><option value="0">0 · bukan pembelian</option><option value="1">1 · online</option><option value="2">2 · offline</option><option value="3">3 · online dan offline</option></select></label>
+                  <SelectCari value={draf.sumber} onChange={(e) => setDraf({ ...draf, sumber: e.target.value })}><option value="">—</option><option value="0">0 · bukan pembelian</option><option value="1">1 · online</option><option value="2">2 · offline</option><option value="3">3 · online dan offline</option></SelectCari></label>
               </div>
             )}
             {rincianLainnya(rincianEdit) && (

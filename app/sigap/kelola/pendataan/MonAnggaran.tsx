@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { LABEL_LAJU, LABEL_POLA, PARAM_AWAL, perkiraanAnggaran, rupiah, tglPendek, type BarisAnggaran, type DasarLaju, type DataKinerja, type ParamAnggaran, type PolaKerja } from "@/lib/monitorKinerja";
 import { Catatan, Kartu, Kpi, fmt, fmt1, jam, label, sel, td, tdAngka, th, tombol } from "./monUi";
+import SelectCari from "@/app/components/SelectCari";
 
 const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -54,23 +55,23 @@ export default function MonAnggaran({ data }: { data: DataKinerja }) {
         <div className="grid grid-cols-2 items-end gap-2.5 sm:flex sm:flex-wrap sm:gap-3">
           <label className={`${label} col-span-2`}>
             Dasar laju harian
-            <select value={p.laju} onChange={(e) => setP({ ...p, laju: e.target.value as DasarLaju })} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[260px]`}>
+            <SelectCari value={p.laju} onChange={(e) => setP({ ...p, laju: e.target.value as DasarLaju })} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[260px]`}>
               {(Object.keys(LABEL_LAJU) as DasarLaju[]).map((k) => (
                 <option key={k} value={k}>
                   {LABEL_LAJU[k]}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <label className={label}>
             Hari kerja
-            <select value={p.pola} onChange={(e) => setP({ ...p, pola: e.target.value as PolaKerja })} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[160px]`}>
+            <SelectCari value={p.pola} onChange={(e) => setP({ ...p, pola: e.target.value as PolaKerja })} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[160px]`}>
               {(Object.keys(LABEL_POLA) as PolaKerja[]).map((k) => (
                 <option key={k} value={k}>
                   {LABEL_POLA[k]}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <label className="col-span-2 flex min-h-[44px] items-center gap-2 text-[13px] text-[#1B2B4B] sm:col-span-1 sm:min-h-[40px]">
             <input type="checkbox" checked={p.sertakanPmlKorwil} onChange={(e) => setP({ ...p, sertakanPmlKorwil: e.target.checked })} className="h-5 w-5 accent-[#1F5FD1]" />

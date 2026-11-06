@@ -15,6 +15,7 @@ import KepalaKolom from "../admin/KepalaKolom";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { durasi, saringPegawai, tanggalWib, teksDurasi, type BarisPegawai, type DaftarWilayah, type RingkasPegawai, type SaringanPegawai } from "@/lib/pegawaiOrganik";
 import { adaSaring, nilaiBeda, terapkanTabel, type NilaiSel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
+import SelectCari from "@/app/components/SelectCari";
 
 type Props = {
   baris: BarisPegawai[];
@@ -77,36 +78,36 @@ function DialogUbah({ b, wilayah, onTutup, onSimpan }: { b: BarisPegawai; wilaya
         <p className="text-[13px] text-[#55657D]">{b.nama}</p>
         <label className={label}>
           Kecamatan domisili
-          <select className={`${INPUT} mt-1 w-full`} value={f.kecamatan} onChange={(e) => setF({ ...f, kecamatan: e.target.value, nagari: "" })}>
+          <SelectCari className={`${INPUT} mt-1 w-full`} value={f.kecamatan} onChange={(e) => setF({ ...f, kecamatan: e.target.value, nagari: "" })}>
             <option value="">(kosong)</option>
             {daftarKec.map((k) => (
               <option key={k} value={k}>
                 {k}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </label>
         <label className={label}>
           Nagari domisili
-          <select className={`${INPUT} mt-1 w-full`} value={f.nagari} disabled={!f.kecamatan} onChange={(e) => setF({ ...f, nagari: e.target.value })}>
+          <SelectCari className={`${INPUT} mt-1 w-full`} value={f.nagari} disabled={!f.kecamatan} onChange={(e) => setF({ ...f, nagari: e.target.value })}>
             <option value="">(kosong)</option>
             {daftarNag.map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </label>
         <label className={label}>
           Kecamatan kantor
-          <select className={`${INPUT} mt-1 w-full`} value={f.kantor} onChange={(e) => setF({ ...f, kantor: e.target.value })}>
+          <SelectCari className={`${INPUT} mt-1 w-full`} value={f.kantor} onChange={(e) => setF({ ...f, kantor: e.target.value })}>
             <option value="">(kosong)</option>
             {daftarKec.map((k) => (
               <option key={k} value={k}>
                 {k}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </label>
         <label className="flex items-center gap-2 text-[12.5px] font-semibold text-[#44546F]">
           <input type="checkbox" checked={f.semua} onChange={(e) => setF({ ...f, semua: e.target.checked })} />
@@ -221,13 +222,13 @@ export default function DaftarPegawai({ baris, ringkasan, memuat, bolehKelola, n
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input aria-label="Cari pegawai" className={`${INPUT} min-w-[180px] flex-1`} placeholder="Cari nama, jabatan, email, wilayah…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select aria-label="Saring status" className={INPUT} value={status} onChange={(e) => setStatus(e.target.value as NonNullable<SaringanPegawai["status"]>)}>
+        <SelectCari aria-label="Saring status" className={INPUT} value={status} onChange={(e) => setStatus(e.target.value as NonNullable<SaringanPegawai["status"]>)}>
           <option value="semua">Semua ({baris.length})</option>
           <option value="PNS">PNS ({ringkasan.pns})</option>
           <option value="PPPK">PPPK ({ringkasan.pppk})</option>
           <option value="tanpa_akun">Belum punya akun ({ringkasan.tanpa_akun})</option>
           <option value="luar_daftar">Akun di luar daftar ({ringkasan.akun_di_luar_daftar})</option>
-        </select>
+        </SelectCari>
         {adaFilterKolom && (
           <button type="button" className={BTN_O} onClick={() => (setSaring({}), setUrut(null))}>
             Hapus saringan &amp; urutan kolom

@@ -44,6 +44,7 @@ import {
 import { buatGambarPml, buatGambarRekap } from "./gambarRekap";
 import { namaTampil } from "@/lib/namaTampil";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import SelectCari from "@/app/components/SelectCari";
 
 type Data = { sekarang: string; baris: BarisRekap[]; pml: BarisPml[] };
 type Mode = TingkatRekap | "pml" | "sanggah";
@@ -397,13 +398,13 @@ export default function RekapIdentifikasi({ sebaris = false }: { sebaris?: boole
                   {(mode === "nagari" || mode === "kecamatan") && (
                   <label className="mt-3 block text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                     {tingkat === "nagari" ? "Pilih nagari" : "Pilih kecamatan"}
-                    <select value={terpilih?.kunci ?? ""} onChange={(e) => setKunci(e.target.value)} className="mt-1 min-h-[46px] w-full rounded-[12px] border border-[#D9E3F2] bg-white px-3 text-[14px] font-bold text-[#0F2A52]">
+                    <SelectCari value={terpilih?.kunci ?? ""} onChange={(e) => setKunci(e.target.value)} className="mt-1 min-h-[46px] w-full rounded-[12px] border border-[#D9E3F2] bg-white px-3 text-[14px] font-bold text-[#0F2A52]">
                       {kelompok.map((k) => (
                         <option key={k.kunci} value={k.kunci}>
                           {tingkat === "nagari" ? `${rapikanNama(k.judul)} · ${rapikanNama(k.induk ?? "")}` : rapikanNama(k.judul)} ({k.baris.length})
                         </option>
                       ))}
-                    </select>
+                    </SelectCari>
                   </label>
                   )}
 

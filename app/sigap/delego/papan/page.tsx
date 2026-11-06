@@ -16,6 +16,7 @@ import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { PilihRo, saringRo, useFilterRo } from "../tim";
 import { Batang, Galat, Halaman, Kosong, Lencana, Memuat, NADA_STATUS, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const KOLOM: StatusDelegasi[] = ["baru", "berjalan", "ditunda", "selesai"];
 
@@ -76,10 +77,10 @@ export default function Papan() {
     >
       <div className="flex flex-wrap gap-2">
         <input className={`${KELAS.isian} !w-auto min-w-[220px] flex-1`} placeholder="Cari tugas atau nama" aria-label="Cari" value={cari} onChange={(e) => setCari(e.target.value)} />
-        <select className={`${KELAS.isian} !w-auto`} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Saring peran">
+        <SelectCari className={`${KELAS.isian} !w-auto`} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Saring peran">
           <option value="">Semua peran</option>
           {(Object.keys(NAMA_PERAN) as (keyof typeof NAMA_PERAN)[]).map((p) => (<option key={p} value={p}>{NAMA_PERAN[p]}</option>))}
-        </select>
+        </SelectCari>
         <label className="inline-flex min-h-[44px] items-center gap-2 text-[13.5px]"><input type="checkbox" checked={tampilBatal} onChange={(e) => setTampilBatal(e.target.checked)} /> Tampilkan yang batal</label>
       </div>
       {b.memuat && !b.data && <Memuat />}

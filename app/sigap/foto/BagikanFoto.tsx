@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ambilJson } from "./klien";
 import { MAKS_TAG } from "@/lib/sigapFoto";
+import SelectCari from "@/app/components/SelectCari";
 
 export type TagPilihan = { akun_id: number; nama: string; luar_tim: boolean; slot_usulan: number | null };
 type Rekan = { akun_id: number; nama: string; jenis: string; peran_di_tim: string | null };
@@ -119,12 +120,12 @@ export default function BagikanFoto({ kegiatanId, jumlahNomor, nilai, onUbah, ke
             <div key={n.akun_id} className="flex items-center gap-2 rounded-xl bg-[#E8EEF8] px-3 py-2">
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F2A52]">{n.nama}{n.luar_tim ? " (di luar tim)" : ""}</span>
               <label className="sr-only" htmlFor={`nomor-${n.akun_id}`}>Usulan nomor foto untuk {n.nama}</label>
-              <select id={`nomor-${n.akun_id}`} value={n.slot_usulan ?? ""} onChange={(e) => setNomor(n.akun_id, e.target.value ? Number(e.target.value) : null)} className="min-h-[40px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm">
+              <SelectCari id={`nomor-${n.akun_id}`} value={n.slot_usulan ?? ""} onChange={(e) => setNomor(n.akun_id, e.target.value ? Number(e.target.value) : null)} className="min-h-[40px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm">
                 <option value="">Nomor bebas</option>
                 {Array.from({ length: jumlahNomor }, (_, i) => i + 1).map((k) => (
                   <option key={k} value={k}>Foto {k}</option>
                 ))}
-              </select>
+              </SelectCari>
               <button type="button" onClick={() => ganti(n.akun_id, n.nama, n.luar_tim)} aria-label={`Batalkan ${n.nama}`} className="min-h-[40px] min-w-[40px] rounded-lg text-lg font-bold text-[#9B1C23]">×</button>
             </div>
           ))}

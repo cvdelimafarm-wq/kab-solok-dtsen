@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN, BTN_O, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Toast, useToast } from "../../admin/Toast";
+import SelectCari from "@/app/components/SelectCari";
 
 type Baris = { akun_id: number; nama: string; kelas: number };
 type Data = { instruktur: Baris[]; kelas: number[]; boleh_kelola: boolean };
@@ -98,7 +99,7 @@ export default function InstrukturKelola() {
               <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-[#1B2B4B]">{b.nama}</span>
               <label className="flex items-center gap-1.5 text-[12.5px] text-[#5B6B84]">
                 Kelas
-                <select
+                <SelectCari
                   className={INPUT}
                   value={b.kelas}
                   disabled={!boleh || sibuk === b.akun_id}
@@ -109,7 +110,7 @@ export default function InstrukturKelola() {
                       {k}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </label>
               {boleh && (
                 <button type="button" className={BTN_O} disabled={sibuk === b.akun_id} onClick={() => void kirim({ aksi: "lepas", akun_id: b.akun_id }, `${b.nama} dilepas dari instruktur.`, b.akun_id)}>
@@ -149,14 +150,14 @@ export default function InstrukturKelola() {
             </>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value === "" ? "" : Number(e.target.value))} aria-label="Kelas instruktur">
+            <SelectCari className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value === "" ? "" : Number(e.target.value))} aria-label="Kelas instruktur">
               <option value="">Pilih kelas</option>
               {opsiKelas.map((k) => (
                 <option key={k} value={k}>
                   Kelas {k}
                 </option>
               ))}
-            </select>
+            </SelectCari>
             <button type="button" className={BTN} disabled={!pilih || kelas === "" || sibuk !== null} onClick={() => void tetapkan()}>
               Tetapkan
             </button>

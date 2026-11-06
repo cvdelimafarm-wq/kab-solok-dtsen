@@ -17,6 +17,7 @@ import Bingkai from "../../kontrak/Bingkai";
 import { aksiP, ambilP, unduhBiner, type Kartu } from "../api";
 import { BadgeTinjau } from "../komponen";
 import { JENIS_REGULASI, KANAL, STATUS, tanggalIndo } from "@/lib/pedia/umum";
+import SelectCari from "@/app/components/SelectCari";
 
 type Tab = "register" | "rekap" | "master";
 const TAB: ItemTab<Tab>[] = [
@@ -132,15 +133,15 @@ function Register() {
       <section className="overflow-hidden rounded-[10px] border border-[#E3E8EE] bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-[#E3E8EE] px-[18px] py-3.5">
           <h2 className="mr-auto text-[15px] font-semibold">Buku register</h2>
-          <select value={f.tahun} onChange={(e) => setF({ ...f, tahun: e.target.value })} className={`${INPUT} h-[34px]`} aria-label="Tahun">
+          <SelectCari value={f.tahun} onChange={(e) => setF({ ...f, tahun: e.target.value })} className={`${INPUT} h-[34px]`} aria-label="Tahun">
             <option value="">Semua tahun</option>
             {(data?.tahun ?? []).map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
             ))}
-          </select>
-          <select value={f.kategori} onChange={(e) => setF({ ...f, kategori: e.target.value })} className={`${INPUT} h-[34px] max-w-[220px]`} aria-label="Kategori">
+          </SelectCari>
+          <SelectCari value={f.kategori} onChange={(e) => setF({ ...f, kategori: e.target.value })} className={`${INPUT} h-[34px] max-w-[220px]`} aria-label="Kategori">
             <option value="">Semua kategori</option>
             {induk.map((k) => (
               <optgroup key={k.id} label={`${k.kode} ${k.nama}`}>
@@ -156,23 +157,23 @@ function Register() {
                   ))}
               </optgroup>
             ))}
-          </select>
-          <select value={f.kanal} onChange={(e) => setF({ ...f, kanal: e.target.value })} className={`${INPUT} h-[34px]`} aria-label="Kanal">
+          </SelectCari>
+          <SelectCari value={f.kanal} onChange={(e) => setF({ ...f, kanal: e.target.value })} className={`${INPUT} h-[34px]`} aria-label="Kanal">
             <option value="">Semua kanal</option>
             {Object.entries(KANAL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
-          <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className={`${INPUT} h-[34px]`} aria-label="Status">
+          </SelectCari>
+          <SelectCari value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className={`${INPUT} h-[34px]`} aria-label="Status">
             <option value="">Semua status</option>
             {Object.entries(STATUS).map(([k, v]) => (
               <option key={k} value={k}>
                 {v.label}
               </option>
             ))}
-          </select>
+          </SelectCari>
           <label className="flex items-center gap-1.5 text-[13px] text-[#4D5B6B]">
             <input type="checkbox" checked={f.tinjau} onChange={(e) => setF({ ...f, tinjau: e.target.checked })} /> perlu ditinjau
           </label>
@@ -419,14 +420,14 @@ function Master() {
         </div>
         {kat && (
           <div className="grid gap-2 border-b border-[#E3E8EE] bg-[#F8FAFC] px-4 py-3 sm:grid-cols-6">
-            <select value={kat.induk_id ?? ""} onChange={(e) => setKat({ ...kat, induk_id: e.target.value ? Number(e.target.value) : null })} className={`${INPUT} sm:col-span-2`}>
+            <SelectCari value={kat.induk_id ?? ""} onChange={(e) => setKat({ ...kat, induk_id: e.target.value ? Number(e.target.value) : null })} className={`${INPUT} sm:col-span-2`}>
               <option value="">(kategori induk)</option>
               {induk.map((k) => (
                 <option key={k.id} value={k.id}>
                   sub dari {k.kode} {k.nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
             <input value={kat.kode ?? ""} onChange={(e) => setKat({ ...kat, kode: e.target.value })} placeholder="Kode (mis. PD.05)" className={INPUT} />
             <input value={kat.nama ?? ""} onChange={(e) => setKat({ ...kat, nama: e.target.value })} placeholder="Nama" className={`${INPUT} sm:col-span-2`} />
             <input type="number" value={kat.urutan ?? 0} onChange={(e) => setKat({ ...kat, urutan: Number(e.target.value) })} placeholder="Urutan" className={INPUT} />
@@ -477,18 +478,18 @@ function Master() {
         </div>
         {reg && (
           <div className="grid gap-2 border-b border-[#E3E8EE] bg-[#F8FAFC] px-4 py-3 sm:grid-cols-6">
-            <select value={reg.jenis} onChange={(e) => setReg({ ...reg, jenis: e.target.value })} className={INPUT}>
+            <SelectCari value={reg.jenis} onChange={(e) => setReg({ ...reg, jenis: e.target.value })} className={INPUT}>
               {JENIS_REGULASI.map((j) => (
                 <option key={j}>{j}</option>
               ))}
-            </select>
+            </SelectCari>
             <input value={reg.nomor ?? ""} onChange={(e) => setReg({ ...reg, nomor: e.target.value })} placeholder="Nomor (mis. 113/PMK.05/2012)" className={`${INPUT} sm:col-span-2`} />
             <input type="number" value={reg.tahun ?? ""} onChange={(e) => setReg({ ...reg, tahun: Number(e.target.value) })} placeholder="Tahun" className={INPUT} />
-            <select value={reg.status} onChange={(e) => setReg({ ...reg, status: e.target.value })} className={INPUT}>
+            <SelectCari value={reg.status} onChange={(e) => setReg({ ...reg, status: e.target.value })} className={INPUT}>
               <option value="berlaku">berlaku</option>
               <option value="diubah">diubah</option>
               <option value="dicabut">dicabut</option>
-            </select>
+            </SelectCari>
             <input value={reg.diubah_oleh_teks ?? ""} onChange={(e) => setReg({ ...reg, diubah_oleh_teks: e.target.value })} placeholder="Diubah/dicabut oleh…" className={INPUT} />
             <input value={reg.judul ?? ""} onChange={(e) => setReg({ ...reg, judul: e.target.value })} placeholder="Judul" className={`${INPUT} sm:col-span-4`} />
             <div className="flex gap-2 sm:col-span-2">

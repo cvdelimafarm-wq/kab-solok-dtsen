@@ -17,6 +17,7 @@ import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { PilihRo, saringRo, useFilterRo } from "../tim";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan, Memuat, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Tab = "pembinaan" | "skor" | "penghargaan";
 type Orang = { akun: number; nama: string; jenis: string; ro: string[]; delegasi: Delegasi[] };
@@ -159,28 +160,28 @@ export default function Pembinaan() {
               <Kartu judul="Catat pembinaan">
                 <div className="space-y-3">
                   <Medan label="Penerima">
-                    <select className={KELAS.isian} value={penerima} onChange={(e) => { setPenerima(e.target.value); setRoForm(""); setDelegasiForm(""); }}>
+                    <SelectCari className={KELAS.isian} value={penerima} onChange={(e) => { setPenerima(e.target.value); setRoForm(""); setDelegasiForm(""); }}>
                       <option value="">Pilih penerima</option>
                       {orang.filter((o) => o.ro.some((r) => bolehBeri(r))).map((o) => <option key={o.akun} value={o.akun}>{o.nama}</option>)}
-                    </select>
+                    </SelectCari>
                   </Medan>
                   <Medan label="RO">
-                    <select className={KELAS.isian} value={roForm} onChange={(e) => { setRoForm(e.target.value); setDelegasiForm(""); }}>
+                    <SelectCari className={KELAS.isian} value={roForm} onChange={(e) => { setRoForm(e.target.value); setDelegasiForm(""); }}>
                       <option value="">Pilih RO</option>
                       {roPilihan.map((r) => <option key={r} value={r}>{r}</option>)}
-                    </select>
+                    </SelectCari>
                   </Medan>
                   <Medan label="Langkah">
-                    <select className={KELAS.isian} value={langkah} onChange={(e) => setLangkah(Number(e.target.value))}>
+                    <SelectCari className={KELAS.isian} value={langkah} onChange={(e) => setLangkah(Number(e.target.value))}>
                       {TANGGA_PEMBINAAN.map((t) => <option key={t.langkah} value={t.langkah}>{t.langkah}. {t.nama}</option>)}
-                    </select>
+                    </SelectCari>
                   </Medan>
                   {langkah === 5 && <Info>Langkah ini hanya mencatat rujukan. Tindak lanjut formal oleh pejabat berwenang (cek aturan).</Info>}
                   <Medan label="Delegasi terkait (opsional)">
-                    <select className={KELAS.isian} value={delegasiForm} onChange={(e) => setDelegasiForm(e.target.value)} disabled={!roForm}>
+                    <SelectCari className={KELAS.isian} value={delegasiForm} onChange={(e) => setDelegasiForm(e.target.value)} disabled={!roForm}>
                       <option value="">Tidak spesifik</option>
                       {delegasiPilihan.map((d) => <option key={d.id} value={d.id}>{d.judul}</option>)}
-                    </select>
+                    </SelectCari>
                   </Medan>
                   <Medan label="Alasan dan kesepakatan" bantu="5 sampai 500 huruf">
                     <textarea className={KELAS.isian} rows={4} maxLength={500} value={alasan} onChange={(e) => setAlasan(e.target.value)} />
@@ -375,16 +376,16 @@ function TabHargai({ orang, data, roFilter, bolehBeri, muat }: { orang: Orang[];
       <Kartu judul="Beri penghargaan">
         <div className="space-y-3">
           <Medan label="Penerima">
-            <select className={KELAS.isian} value={penerima} onChange={(e) => { setPenerima(e.target.value); setRo(""); }}>
+            <SelectCari className={KELAS.isian} value={penerima} onChange={(e) => { setPenerima(e.target.value); setRo(""); }}>
               <option value="">Pilih penerima</option>
               {orang.filter((x) => x.ro.some((r) => bolehBeri(r))).map((x) => <option key={x.akun} value={x.akun}>{x.nama}</option>)}
-            </select>
+            </SelectCari>
           </Medan>
           <Medan label="RO">
-            <select className={KELAS.isian} value={ro} onChange={(e) => setRo(e.target.value)}>
+            <SelectCari className={KELAS.isian} value={ro} onChange={(e) => setRo(e.target.value)}>
               <option value="">Pilih RO</option>
               {roPilihan.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
+            </SelectCari>
           </Medan>
           <Medan label="Alasan" bantu="Penerima mendapat notifikasi"><textarea className={KELAS.isian} rows={3} maxLength={500} value={alasan} onChange={(e) => setAlasan(e.target.value)} /></Medan>
           {kirim.galat && <Galat>{kirim.galat}</Galat>}

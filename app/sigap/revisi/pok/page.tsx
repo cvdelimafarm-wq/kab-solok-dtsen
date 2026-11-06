@@ -21,6 +21,7 @@ import { aksiKeu, useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import { Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, kolom, Kpi, label, Memuat, Tenang, tombolBahaya, tombolKecil, tombolUtama } from "../../keu-ui";
 import Banding from "./Banding";
 import { bacaBerkasPok } from "./pdf";
+import SelectCari from "@/app/components/SelectCari";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string };
 
@@ -187,10 +188,10 @@ export default function HalamanPokResmi() {
                 </div>
                 <div>
                   <label className={label} htmlFor="jadwal-dasar">Jadwal revisi dasar (opsional)</label>
-                  <select id="jadwal-dasar" className={kolom} value={isianKini.jadwal} onChange={(e) => ubah({ jadwal: e.target.value })}>
+                  <SelectCari id="jadwal-dasar" className={kolom} value={isianKini.jadwal} onChange={(e) => ubah({ jadwal: e.target.value })}>
                     <option value="">Tanpa jadwal</option>
                     {jadwalPilihan.map((j) => <option key={j.id} value={j.id}>{j.judul} ({LABEL_JENIS_JADWAL[j.jenis] ?? j.jenis})</option>)}
-                  </select>
+                  </SelectCari>
                   <p className="mt-0.5 text-[11.5px] text-[#6B7A93]">Hanya jadwal yang sudah diterapkan atau sah. Revisi POK/administrasi mewajibkan total pagu tidak berubah.</p>
                 </div>
               </div>

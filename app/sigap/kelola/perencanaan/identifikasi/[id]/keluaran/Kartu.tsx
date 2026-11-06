@@ -13,6 +13,7 @@ import {
 } from "@/lib/keu/keluaran";
 import { NAMA_BULAN } from "@/lib/keu/rab";
 import { rupiah } from "@/lib/keu/ro";
+import SelectCari from "@/app/components/SelectCari";
 
 const tgl = (t: string | null): string => (t && /^\d{4}-\d{2}-\d{2}$/.test(t) ? `${t.slice(8, 10)}/${t.slice(5, 7)}/${t.slice(0, 4)}` : "-");
 const bulanTeks = (b: number): string => NAMA_BULAN[b - 1] ?? `Bulan ${b}`;
@@ -127,10 +128,10 @@ function FormSpek({ b, sibuk, onSimpan }: { b: ButirKeluaran; sibuk: boolean; on
           <div key={k.kunci} className={k.tipe === "panjang" ? "col-span-full" : ""}>
             <label className={label} htmlFor={id(k.kunci)}>{k.label}{k.wajib ? " *" : ""}</label>
             {k.tipe === "pilih" ? (
-              <select id={id(k.kunci)} className={kolom} value={isi[k.kunci] ?? ""} onChange={(e) => setIsi((a) => ({ ...a, [k.kunci]: e.target.value }))}>
+              <SelectCari id={id(k.kunci)} className={kolom} value={isi[k.kunci] ?? ""} onChange={(e) => setIsi((a) => ({ ...a, [k.kunci]: e.target.value }))}>
                 <option value="">Pilih…</option>
                 {(k.pilihan ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
+              </SelectCari>
             ) : k.tipe === "panjang" ? (
               <textarea id={id(k.kunci)} className={`${kolom} min-h-[64px]`} maxLength={800} value={isi[k.kunci] ?? ""} onChange={(e) => setIsi((a) => ({ ...a, [k.kunci]: e.target.value }))} />
             ) : (

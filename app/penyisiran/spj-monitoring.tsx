@@ -30,6 +30,7 @@ import {
   kunciPetugas,
   hitungKelengkapanPerJenis,
 } from "@/lib/spjMatriks";
+import SelectCari from "@/app/components/SelectCari";
 
 async function apiFetch(path: string, token: string) {
   const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
@@ -351,7 +352,7 @@ export function SpjMonitoring({
             )}
           </div>
         ) : (
-          <select
+          <SelectCari
             value={petugasKey}
             onChange={(e) => setPetugasKey(e.target.value)}
             className="min-w-[180px] rounded-md border border-line px-2 py-1.5 text-xs"
@@ -361,7 +362,7 @@ export function SpjMonitoring({
                 {p.nama}
               </option>
             ))}
-          </select>
+          </SelectCari>
         )}
       </div>
 

@@ -11,6 +11,7 @@ import { apiPortal } from "@/app/portal/sesi";
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import { API_PERMINTAAN, JUDUL_TEMPLAT_FASIH, barisTemplatFasih, namaBerkasTemplat, tanggalWib, tanpaEmail } from "@/lib/permintaanDaftar";
 import { SARINGAN_AWAL, adaPlotting, pesanTandaKeluar, bawaanTugas, daftarKecamatan, emailPilihanTugas, labelSub, pplBawaan, ringkasPlotting, riwayatTerakhir, saringBelum, type BelumItem, type DataBelum, type SaringanBelum, type TugasPilihan } from "@/lib/belumDiajukan";
+import SelectCari from "@/app/components/SelectCari";
 
 type Mode = "plotting" | "lain";
 
@@ -171,14 +172,14 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
         {jenis("kolam", "Di kolam", items.length - nPlot)}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <select aria-label="Kecamatan" value={saring.kecamatan} onChange={(e) => ubah(() => setSaring((s) => ({ ...s, kecamatan: e.target.value })))} className="h-10 min-w-0 flex-1 basis-[140px] rounded-[10px] border border-[#D9E3F2] bg-white px-2 text-[13px]">
+        <SelectCari aria-label="Kecamatan" value={saring.kecamatan} onChange={(e) => ubah(() => setSaring((s) => ({ ...s, kecamatan: e.target.value })))} className="h-10 min-w-0 flex-1 basis-[140px] rounded-[10px] border border-[#D9E3F2] bg-white px-2 text-[13px]">
           <option value="">Semua kecamatan</option>
           {kecamatan.map((k) => (
             <option key={k} value={k}>
               {rapikanNama(k)}
             </option>
           ))}
-        </select>
+        </SelectCari>
         <input type="search" value={saring.kata} onChange={(e) => setSaring((s) => ({ ...s, kata: e.target.value }))} placeholder="Cari jorong, nagari, PML, PPL" className="h-10 min-w-0 flex-[2] basis-[180px] rounded-[10px] border border-[#D9E3F2] bg-white px-3 text-[13px]" />
       </div>
 
@@ -242,25 +243,25 @@ export default function BelumDiajukan({ data, onSelesai }: { data: DataBelum | n
                 <div className="space-y-2">
                   <label className="block text-[12px] font-bold text-[#52627A]">
                     PML (tim) tujuan
-                    <select value={pmlLain ?? ""} onChange={(e) => gantiPml(e.target.value ? Number(e.target.value) : null)} className="mt-1 h-11 w-full rounded-[10px] border border-[#D9E3F2] bg-white px-2 text-[13px] font-normal text-[#0F2A52]">
+                    <SelectCari value={pmlLain ?? ""} onChange={(e) => gantiPml(e.target.value ? Number(e.target.value) : null)} className="mt-1 h-11 w-full rounded-[10px] border border-[#D9E3F2] bg-white px-2 text-[13px] font-normal text-[#0F2A52]">
                       <option value="">Pilih PML…</option>
                       {tim.map((t) => (
                         <option key={t.pml_id} value={t.pml_id}>
                           {rapikanNama(t.pml_nama)} · {t.sub} Sub SLS · {t.ppl.length} PPL
                         </option>
                       ))}
-                    </select>
+                    </SelectCari>
                   </label>
                   {timLain && (
                     <label className="block text-[12px] font-bold text-[#52627A]">
                       PPL penerima (akun yang dipakai login FASIH)
-                      <select value={pplLain ?? ""} onChange={(e) => ubah(() => setPplLain(e.target.value ? Number(e.target.value) : null))} className="mt-1 h-11 w-full rounded-[10px] border border-[#D9E3F2] bg-white px-2 text-[13px] font-normal text-[#0F2A52]">
+                      <SelectCari value={pplLain ?? ""} onChange={(e) => ubah(() => setPplLain(e.target.value ? Number(e.target.value) : null))} className="mt-1 h-11 w-full rounded-[10px] border border-[#D9E3F2] bg-white px-2 text-[13px] font-normal text-[#0F2A52]">
                         {timLain.ppl.map((p) => (
                           <option key={p.akun_id} value={p.akun_id}>
                             {rapikanNama(p.nama)}
                           </option>
                         ))}
-                      </select>
+                      </SelectCari>
                     </label>
                   )}
                   {timLain && timLain.ppl.length === 0 && <p className="text-[12px] font-bold text-[#B42329]">Tim ini belum punya PPL berakun aktif; pilih tim lain.</p>}

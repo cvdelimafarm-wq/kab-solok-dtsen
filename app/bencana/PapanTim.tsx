@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchBencana } from "./fetchBencana";
+import SelectCari from "@/app/components/SelectCari";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) Langkah 5 "Papan Tim" (keroyokan) -- permintaan user, mockup disetujui:
@@ -290,7 +291,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
         {s.dipecah ? (
           <p className="mt-0.5 text-[11px] text-indigo-700">✂️ Dipecah: {s.pecahan.join(", ") || "-"} (kelola di Langkah 4)</p>
         ) : t && priv ? (
-          <select
+          <SelectCari
             value={d.ppl_id ?? ""}
             onChange={(e) => setSub(s, { ppl_id: e.target.value ? Number(e.target.value) : null })}
             className={`mt-1 w-full rounded border px-1.5 py-1 text-[12px] ${pplValid ? "border-line" : "border-2 border-rust-500"}`}
@@ -301,7 +302,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
                 {p.nama}
               </option>
             ))}
-          </select>
+          </SelectCari>
         ) : (
           <p className="mt-0.5 text-[11px] text-amber-700">
             {t ? "Dikerjakan bersama seluruh PPL tim" : "Belum punya tim"}
@@ -309,7 +310,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
           </p>
         )}
         {!s.dipecah && (
-          <select
+          <SelectCari
             value=""
             onChange={(e) => {
               if (e.target.value === "") return;
@@ -327,7 +328,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
                   Tim {o.nama}
                 </option>
               ))}
-          </select>
+          </SelectCari>
         )}
       </div>
     );
@@ -352,7 +353,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
           <p className="text-[11px] text-ink/60">
             {[p.nagari ? `Nagari ${judul(p.nagari)}` : null, p.kecamatan ? `Kec. ${judul(p.kecamatan)}` : null].filter(Boolean).join(", ") || "Alamat belum diisi"}
           </p>
-          <select
+          <SelectCari
             value=""
             onChange={(e) => {
               if (e.target.value === "") return;
@@ -370,7 +371,7 @@ export default function PapanTim({ onBerubah }: { onBerubah?: () => void }) {
                   Tim {o.nama}
                 </option>
               ))}
-          </select>
+          </SelectCari>
         </div>
         {nilai != null && tn && (
           <span title={`Beban: private + bagian keroyok · ${tn.label}`} className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${tn.cls}`}>

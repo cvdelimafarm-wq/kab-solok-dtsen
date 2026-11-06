@@ -16,6 +16,7 @@ import { BadgeTinjau, type Detail } from "../../komponen";
 import FormEntri, { FORM_KOSONG, type NilaiForm, type Referensi } from "../FormEntri";
 import BagianFile, { type BarisFile } from "../BagianFile";
 import { STATUS, waktuWibPanjang } from "@/lib/pedia/umum";
+import SelectCari from "@/app/components/SelectCari";
 
 type Audit = { id: number; at: string; nama: string | null; ip: string | null; aksi: string; file_id: number | null; detail: Record<string, unknown> | null; hash: string };
 
@@ -186,7 +187,7 @@ export default function KelolaEntri({ params }: { params: Promise<{ id: string }
                 <div className="flex-1" />
                 {!terkunci && (
                   <>
-                    <select
+                    <SelectCari
                       value={e.status}
                       disabled={sibuk}
                       onChange={(x) => jalankan(() => aksiP("status", { id: Number(id), status: x.target.value }), "Status diperbarui.")}
@@ -198,7 +199,7 @@ export default function KelolaEntri({ params }: { params: Promise<{ id: string }
                           {STATUS[s].label}
                         </option>
                       ))}
-                    </select>
+                    </SelectCari>
                     <button
                       type="button"
                       className={BTN}

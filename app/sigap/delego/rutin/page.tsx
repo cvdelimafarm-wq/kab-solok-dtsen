@@ -15,6 +15,7 @@ import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import PemilihPenerima, { type Pilihan } from "../PemilihPenerima";
 import { Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan, Memuat, Peringatan, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const HARI: { n: number; label: string }[] = [
   { n: 1, label: "Sen" }, { n: 2, label: "Sel" }, { n: 3, label: "Rab" }, { n: 4, label: "Kam" }, { n: 5, label: "Jum" }, { n: 6, label: "Sab" }, { n: 7, label: "Min" },
@@ -102,18 +103,18 @@ export default function RutinHalaman() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Medan label="Judul" bantu="Tanggal periode otomatis ditambahkan pada judul delegasi."><input className={KELAS.isian} maxLength={150} value={f.judul} onChange={(e) => setF({ ...f, judul: e.target.value })} placeholder="Rekap mingguan dokumen masuk" /></Medan>
               <Medan label="Pekerjaan tim">
-                <select className={KELAS.isian} value={f.kelompok} onChange={(e) => { setF({ ...f, kelompok: e.target.value }); setPilih([]); }}>
+                <SelectCari className={KELAS.isian} value={f.kelompok} onChange={(e) => { setF({ ...f, kelompok: e.target.value }); setPilih([]); }}>
                   <option value="">Pilih kelompok</option>
                   {daftarKelompok.map((k) => <option key={k.kode} value={k.kode}>{k.nama}</option>)}
                   {f.kelompok && !daftarKelompok.some((k) => k.kode === f.kelompok) && <option value={f.kelompok}>{f.kelompok}</option>}
-                </select>
+                </SelectCari>
               </Medan>
               <Medan label="Jenis pekerjaan">
-                <select className={KELAS.isian} value={f.jenisId} onChange={(e) => setF({ ...f, jenisId: e.target.value })}>
+                <SelectCari className={KELAS.isian} value={f.jenisId} onChange={(e) => setF({ ...f, jenisId: e.target.value })}>
                   <option value="">Pilih jenis</option>
                   {jenis.map((j) => <option key={j.id} value={j.id}>{j.nama} · {fmt(angka(j.poin_per_satuan), 1)} poin/{j.satuan}</option>)}
                   {f.jenisId && !jenis.some((j) => String(j.id) === f.jenisId) && <option value={f.jenisId}>{namaJenis(Number(f.jenisId))?.nama ?? `Jenis ${f.jenisId}`} (nonaktif)</option>}
-                </select>
+                </SelectCari>
               </Medan>
               <Medan label={`Jumlah per periode${jn ? ` (${jn.satuan})` : ""}`}><input className={KELAS.isian} inputMode="decimal" value={f.jumlah} onChange={(e) => setF({ ...f, jumlah: e.target.value })} placeholder="3" /></Medan>
             </div>
@@ -121,24 +122,24 @@ export default function RutinHalaman() {
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Medan label="Pengulangan">
-                <select className={KELAS.isian} value={f.frekuensi} onChange={(e) => setF({ ...f, frekuensi: e.target.value as "mingguan" | "bulanan", hari: "1" })}>
+                <SelectCari className={KELAS.isian} value={f.frekuensi} onChange={(e) => setF({ ...f, frekuensi: e.target.value as "mingguan" | "bulanan", hari: "1" })}>
                   <option value="mingguan">Mingguan</option>
                   <option value="bulanan">Bulanan</option>
-                </select>
+                </SelectCari>
               </Medan>
               <Medan label={f.frekuensi === "mingguan" ? "Hari" : "Tanggal"}>
                 {f.frekuensi === "mingguan" ? (
-                  <select className={KELAS.isian} value={f.hari} onChange={(e) => setF({ ...f, hari: e.target.value })}>
+                  <SelectCari className={KELAS.isian} value={f.hari} onChange={(e) => setF({ ...f, hari: e.target.value })}>
                     {HARI.map((h) => <option key={h.n} value={h.n}>{NAMA_HARI_PANJANG[h.n]}</option>)}
-                  </select>
+                  </SelectCari>
                 ) : (
-                  <select className={KELAS.isian} value={f.hari} onChange={(e) => setF({ ...f, hari: e.target.value })}>
+                  <SelectCari className={KELAS.isian} value={f.hari} onChange={(e) => setF({ ...f, hari: e.target.value })}>
                     {Array.from({ length: 28 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-                  </select>
+                  </SelectCari>
                 )}
               </Medan>
               <Medan label="Durasi (hari)" bantu="Tenggat = hari jadwal + durasi - 1."><input className={KELAS.isian} inputMode="numeric" value={f.durasi} onChange={(e) => setF({ ...f, durasi: e.target.value })} /></Medan>
-              <Medan label="Bobot (1-5)"><select className={KELAS.isian} value={f.bobot} onChange={(e) => setF({ ...f, bobot: e.target.value })}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></Medan>
+              <Medan label="Bobot (1-5)"><SelectCari className={KELAS.isian} value={f.bobot} onChange={(e) => setF({ ...f, bobot: e.target.value })}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</SelectCari></Medan>
               <Medan label="Mulai berlaku"><input type="date" className={KELAS.isian} value={f.mulai} onChange={(e) => setF({ ...f, mulai: e.target.value })} /></Medan>
               <Medan label="Berakhir (opsional)"><input type="date" className={KELAS.isian} min={f.mulai} value={f.berakhir} onChange={(e) => setF({ ...f, berakhir: e.target.value })} /></Medan>
             </div>

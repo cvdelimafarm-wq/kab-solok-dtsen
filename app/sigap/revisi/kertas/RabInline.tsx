@@ -16,6 +16,7 @@ import { LABEL_STATUS_ITEM, STATUS_RAB_ITEM, type BarisRabKro, type RingkasRabKr
 import type { WarnaChip } from "@/lib/keu/revisi";
 import { Catatan, Chip, Galat, judulKartu, kartu, kisi, kolom, Kosong, Kpi, label, tombolAktif, tombolKecil, tombolUtama } from "../../keu-ui";
 import { aksiKeu, tulisKeuKlien, useBacaKeu } from "../../ro/useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 const WARNA_ITEM: Record<StatusRabItem, WarnaChip> = { sama: "hijau", rinci: "biru", belum: "kuning", selesai: "abu" };
 const fmtD = (v: number) => (v === 0 ? "0" : `${v > 0 ? "+" : "-"}${angka(Math.abs(v))}`);
@@ -74,18 +75,18 @@ function EditorRincian({ b, rabId, rows, satuan, kerja, tutup }: { b: BarisRabKr
                 <input aria-label={`Satuan rincian ${i + 1}`} list="rab-satuan" className={kecil} maxLength={20} value={d.f.satuan} onChange={(e) => ubah(d.kunci, { satuan: e.target.value })} />
                 <input aria-label={`Harga satuan rincian ${i + 1}`} className={`${kecil} text-right font-mono`} inputMode="numeric" value={d.f.harga} onChange={(e) => ubah(d.kunci, { harga: e.target.value.replace(/[^\d]/g, "").slice(0, 18) })} />
                 <div className="text-right font-mono font-semibold">{j === null ? "-" : angka(j)}</div>
-                <select aria-label={`Periode rincian ${i + 1}`} className={kecil} value={d.f.periode} onChange={(e) => ubah(d.kunci, { periode: e.target.value as Periode, ...(e.target.value === "sekali" ? { bulan_sampai: d.f.bulan_mulai } : {}) })}>
+                <SelectCari aria-label={`Periode rincian ${i + 1}`} className={kecil} value={d.f.periode} onChange={(e) => ubah(d.kunci, { periode: e.target.value as Periode, ...(e.target.value === "sekali" ? { bulan_sampai: d.f.bulan_mulai } : {}) })}>
                   {(Object.keys(LABEL_PERIODE) as Periode[]).map((k) => <option key={k} value={k}>{k === "sekali" ? "Sekali" : k === "bulanan" ? "Bulanan" : "Triwulanan"}</option>)}
-                </select>
-                <select aria-label={`Bulan mulai rincian ${i + 1}`} className={kecil} value={d.f.bulan_mulai} onChange={(e) => ubah(d.kunci, { bulan_mulai: Number(e.target.value), bulan_sampai: Math.max(d.f.bulan_sampai, Number(e.target.value)) })}>
+                </SelectCari>
+                <SelectCari aria-label={`Bulan mulai rincian ${i + 1}`} className={kecil} value={d.f.bulan_mulai} onChange={(e) => ubah(d.kunci, { bulan_mulai: Number(e.target.value), bulan_sampai: Math.max(d.f.bulan_sampai, Number(e.target.value)) })}>
                   {NAMA_BULAN.map((m, k) => <option key={m} value={k + 1}>{m}</option>)}
-                </select>
-                <select aria-label={`Bulan sampai rincian ${i + 1}`} className={kecil} disabled={d.f.periode === "sekali"} value={d.f.periode === "sekali" ? d.f.bulan_mulai : d.f.bulan_sampai} onChange={(e) => ubah(d.kunci, { bulan_sampai: Number(e.target.value) })}>
+                </SelectCari>
+                <SelectCari aria-label={`Bulan sampai rincian ${i + 1}`} className={kecil} disabled={d.f.periode === "sekali"} value={d.f.periode === "sekali" ? d.f.bulan_mulai : d.f.bulan_sampai} onChange={(e) => ubah(d.kunci, { bulan_sampai: Number(e.target.value) })}>
                   {NAMA_BULAN.map((m, k) => <option key={m} value={k + 1} disabled={k + 1 < d.f.bulan_mulai}>{m}</option>)}
-                </select>
-                <select aria-label={`Tag minggu rincian ${i + 1}`} className={kecil} value={d.f.minggu} onChange={(e) => ubah(d.kunci, { minggu: Number(e.target.value) })}>
+                </SelectCari>
+                <SelectCari aria-label={`Tag minggu rincian ${i + 1}`} className={kecil} value={d.f.minggu} onChange={(e) => ubah(d.kunci, { minggu: Number(e.target.value) })}>
                   {[1, 2, 3, 4].map((m) => <option key={m} value={m}>M{m}</option>)}
-                </select>
+                </SelectCari>
                 <div className="flex gap-1">
                   <button type="button" title="Duplikat rincian" aria-label={`Duplikat rincian ${i + 1}`} className="h-[28px] rounded border border-[#9ACFB0] bg-white px-1.5 text-[11px] font-semibold" onClick={() => tambah(d.f)}>Duplikat</button>
                   <button type="button" title="Hapus rincian dari daftar" aria-label={`Hapus rincian ${i + 1}`} className="h-[28px] rounded border border-[#E9A39B] bg-white px-2 text-[13px] font-bold text-[#9B1C23]" onClick={() => setDraft((x) => x.filter((y) => y.kunci !== d.kunci))}>×</button>
@@ -209,7 +210,7 @@ export function SubRab({ baris, ringkas, statusRo, namaRo, namaKomp, namaAkun, d
           {STATUS_RAB_ITEM.map((s) => <button key={s} type="button" className={saring === s ? tombolAktif : tombolKecil} onClick={() => setSaring(saring === s ? "" : s)}>{LABEL_STATUS_ITEM[s]} ({baris.filter((b) => b.status === s).length})</button>)}
           {ros.length > 1 && (
             <div><label className={label} htmlFor="rab-ro">RO</label>
-              <select id="rab-ro" className={`${kolom} !w-auto`} value={roPilih} onChange={(e) => setRoPilih(e.target.value)}><option value="">Semua RO</option>{ros.map((r) => <option key={r} value={r}>{r} {(namaRo.get(r) ?? "").slice(0, 30)}</option>)}</select></div>
+              <SelectCari id="rab-ro" className={`${kolom} !w-auto`} value={roPilih} onChange={(e) => setRoPilih(e.target.value)}><option value="">Semua RO</option>{ros.map((r) => <option key={r} value={r}>{r} {(namaRo.get(r) ?? "").slice(0, 30)}</option>)}</SelectCari></div>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">

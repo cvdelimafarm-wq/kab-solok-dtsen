@@ -47,6 +47,7 @@ import {
 } from "@/lib/anggaranRabUji";
 import { kunciDetail } from "@/lib/perencanaanPok";
 import type { DataUji, Ro } from "@/lib/perencanaanGsbpm";
+import SelectCari from "@/app/components/SelectCari";
 
 const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 const sekarang = () => new Date().toISOString();
@@ -352,21 +353,21 @@ export default function AnggaranTab({ data, ro, keBarisPok }: { data: DataUji; r
       <Kartu judul="Rencana penarikan dana (RPD)" ket={v.no === 1 ? "Dari RAB v1 (salinan POK); perbandingan muncul mulai v2" : `Dari RAB v${v.no}, dibanding v1 (salinan POK)`}>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[12.5px] text-[#4D5B6B]">
           Pelaksanaan bulan
-          <select className={INPUT} value={bulanMulai} onChange={(e) => setBulanMulai(Number(e.target.value))} aria-label="Bulan mulai">
+          <SelectCari className={INPUT} value={bulanMulai} onChange={(e) => setBulanMulai(Number(e.target.value))} aria-label="Bulan mulai">
             {BULAN.map((b, i) => (
               <option key={b} value={i + 1}>
                 {b}
               </option>
             ))}
-          </select>
+          </SelectCari>
           s.d.
-          <select className={INPUT} value={bulanSelesai} onChange={(e) => setBulanSelesai(Number(e.target.value))} aria-label="Bulan selesai">
+          <SelectCari className={INPUT} value={bulanSelesai} onChange={(e) => setBulanSelesai(Number(e.target.value))} aria-label="Bulan selesai">
             {BULAN.map((b, i) => (
               <option key={b} value={i + 1}>
                 {b}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse text-[12px]">

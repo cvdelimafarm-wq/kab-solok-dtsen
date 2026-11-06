@@ -13,6 +13,7 @@ import {
 } from "@/lib/keu/master";
 import { Catatan, Chip, Galat, judulKartu, kartu, kolom, label, tombolAktif, tombolKecil, tombolUtama } from "../keu-ui";
 import { tulisKeuKlien, useKirim } from "../ro/useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 export type PolaMaster = { kode: string; nama: string };
 export type KelompokMaster = { kode: string; nama: string };
@@ -45,9 +46,9 @@ export function BagianAkun({ akun, pola, pakai, boleh, sesudah }: { akun: AkunMa
               <td className="px-2.5 py-2">{namaKel[a.kelompok_kode] ?? a.kelompok_kode}</td>
               <td className="px-2.5 py-2">
                 {boleh ? (
-                  <select aria-label={`Pola dokumen akun ${a.kode}`} className={`${kolom} !min-h-[34px] !w-auto max-w-full`} value={a.pola_kode} disabled={mengirim} onChange={(e) => void jalankan(() => tulisKeuKlien("keu_master_akun", "update", { pola_kode: e.target.value }, { kode: a.kode }))}>
+                  <SelectCari aria-label={`Pola dokumen akun ${a.kode}`} className={`${kolom} !min-h-[34px] !w-auto max-w-full`} value={a.pola_kode} disabled={mengirim} onChange={(e) => void jalankan(() => tulisKeuKlien("keu_master_akun", "update", { pola_kode: e.target.value }, { kode: a.kode }))}>
                     {pola.map((p) => <option key={p.kode} value={p.kode}>{p.nama}</option>)}
-                  </select>
+                  </SelectCari>
                 ) : polaNama.get(a.pola_kode) ?? a.pola_kode}
               </td>
               <td className="px-2.5 py-2 text-right font-mono">{angka(pakai.get(a.kode)?.n ?? 0)}</td>
@@ -139,7 +140,7 @@ export function BagianSatuan({ satuan, alias, satuanPok, boleh, sesudah }: { sat
             <h3 className="text-[14px] font-bold text-[#0F2A52]">Tambah penulisan (alias) di POK</h3>
             <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
               <div><label className={label} htmlFor="sa-al">Penulisan di POK</label><input id="sa-al" className={kolom} value={al1} onChange={(e) => setAl1(e.target.value)} /></div>
-              <div><label className={label} htmlFor="sa-ak">Kode baku</label><select id="sa-ak" className={kolom} value={al2} onChange={(e) => setAl2(e.target.value)}><option value="">Pilih…</option>{urutan.map((s) => <option key={s.kode} value={s.kode}>{s.kode}</option>)}</select></div>
+              <div><label className={label} htmlFor="sa-ak">Kode baku</label><SelectCari id="sa-ak" className={kolom} value={al2} onChange={(e) => setAl2(e.target.value)}><option value="">Pilih…</option>{urutan.map((s) => <option key={s.kode} value={s.kode}>{s.kode}</option>)}</SelectCari></div>
               <button type="button" disabled={mengirim || !al1.trim() || !al2 || galatAlias.length > 0} className={tombolUtama} onClick={() => void jalankan(() => tulisKeuKlien("keu_master_satuan_alias", "insert", { alias: al1.trim(), satuan_kode: al2 })).then((ok) => { if (ok) { setAl1(""); setAl2(""); } })}>Tambah</button>
             </div>
             <Galat pesan={galatAlias} />

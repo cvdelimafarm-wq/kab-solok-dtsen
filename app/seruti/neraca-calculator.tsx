@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectCari from "@/app/components/SelectCari";
 
 type FormState = Record<string, string>;
 
@@ -686,7 +687,7 @@ export default function NeracaRtCalculator() {
             Jorong
           </label>
           <div className="mt-1">
-            <select
+            <SelectCari
               value={jorongId}
               onChange={(e) => setJorongId(e.target.value)}
               className="w-full rounded-md border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
@@ -697,7 +698,7 @@ export default function NeracaRtCalculator() {
                   {j.nama_jorong}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </div>
         </div>
         <div>

@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import type { BahanTim, Delegasi } from "@/lib/delego/tipe";
 import { useKonteksDelego } from "./konteks";
 import { KELAS } from "./merek";
+import SelectCari from "@/app/components/SelectCari";
 
 /** Pilihan RO (kosong = semua RO yang boleh dilihat). */
 export function useFilterRo() {
@@ -20,12 +21,12 @@ export function useFilterRo() {
 export function PilihRo({ ro, setRo, daftar, label = "Semua RO" }: { ro: string; setRo: (r: string) => void; daftar: string[]; label?: string }) {
   if (daftar.length <= 1 && !ro) return null;
   return (
-    <select aria-label="Saring RO" className={`${KELAS.isian} !w-auto min-w-[150px]`} value={ro} onChange={(e) => setRo(e.target.value)}>
+    <SelectCari aria-label="Saring RO" className={`${KELAS.isian} !w-auto min-w-[150px]`} value={ro} onChange={(e) => setRo(e.target.value)}>
       <option value="">{label}</option>
       {daftar.map((r) => (
         <option key={r} value={r}>{r}</option>
       ))}
-    </select>
+    </SelectCari>
   );
 }
 

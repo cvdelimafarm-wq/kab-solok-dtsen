@@ -5,6 +5,7 @@ import BuatAkunPanel from "../../undangan/BuatAkunPanel";
 import LengkapiDataPanel from "../../undangan/LengkapiDataPanel";
 import ModalSelesaikan from "../../undangan/ModalSelesaikan";
 import BrandBps from "@/app/components/BrandBps";
+import SelectCari from "@/app/components/SelectCari";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): "Tawaran Pendataan Bencana dengan Skema
@@ -574,12 +575,12 @@ export default function KonfirmasiMenginapPage({ params }: { params: Promise<{ t
                 <div className="flex flex-col gap-3">
                   <label className="flex flex-col gap-1 text-sm">
                     <span className="font-bold">Alasan utama</span>
-                    <select value={kategori} onChange={(e) => setKategori(e.target.value as typeof kategori)} className={INPUT_TEKS}>
+                    <SelectCari value={kategori} onChange={(e) => setKategori(e.target.value as typeof kategori)} className={INPUT_TEKS}>
                       <option value="">Pilih alasan...</option>
                       {KATEGORI_ALASAN.map((k) => (
                         <option key={k.nilai} value={k.nilai}>{k.label}</option>
                       ))}
-                    </select>
+                    </SelectCari>
                   </label>
                   <textarea
                     value={alasan}

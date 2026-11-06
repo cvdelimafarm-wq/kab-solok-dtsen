@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, use as usePromise } from "react";
 import BuatAkunPanel from "../../undangan/BuatAkunPanel";
 import ModalSelesaikan from "../../undangan/ModalSelesaikan";
 import BrandBps from "@/app/components/BrandBps";
+import SelectCari from "@/app/components/SelectCari";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): "Konfirmasi Kesediaan Ikut Pendataan
@@ -956,7 +957,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                     {perluPendidikan && (
                       <label className="flex flex-col gap-1 text-xs">
                         <span className="font-bold text-[#33435C]">Pendidikan Terakhir</span>
-                        <select
+                        <SelectCari
                           value={pendidikanInput}
                           onChange={(e) => setPendidikanInput(e.target.value)}
                           className={INPUT_TEKS}
@@ -967,13 +968,13 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                               {p}
                             </option>
                           ))}
-                        </select>
+                        </SelectCari>
                       </label>
                     )}
                     {perluPekerjaan && (
                       <label className="flex flex-col gap-1 text-xs">
                         <span className="font-bold text-[#33435C]">Pekerjaan</span>
-                        <select
+                        <SelectCari
                           value={pekerjaanInput}
                           onChange={(e) => setPekerjaanInput(e.target.value)}
                           className={INPUT_TEKS}
@@ -984,7 +985,7 @@ export default function KonfirmasiKesediaanPage({ params }: { params: Promise<{ 
                               {p}
                             </option>
                           ))}
-                        </select>
+                        </SelectCari>
                       </label>
                     )}
                     {perluMotor && (

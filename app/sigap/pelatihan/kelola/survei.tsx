@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchJson, pesanGalat, SesiBerakhir, tglSedang } from "../../admin/api";
 import { BTN_G, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { ringkasSurvei, validasiPelatihanBaru, type PelatihanSurvei, type StatusPelatihan, type Survei } from "@/lib/sigapPelatihanSurvei";
+import SelectCari from "@/app/components/SelectCari";
 
 export type DataSurvei = { survei: Survei[] };
 
@@ -120,7 +121,7 @@ export function PemilihSurveiPelatihan({
       <label htmlFor="pilih-survei-pelatihan" className="text-[13px] font-extrabold text-[#0F2A52]">
         Survei
       </label>
-      <select id="pilih-survei-pelatihan" value={survei?.kode ?? ""} onChange={(e) => onSurvei(e.target.value)} className={kelas}>
+      <SelectCari id="pilih-survei-pelatihan" value={survei?.kode ?? ""} onChange={(e) => onSurvei(e.target.value)} className={kelas}>
         {!survei && <option value="">Pilih survei…</option>}
         {daftar.map((s) => (
           <option key={s.kode} value={s.kode}>
@@ -128,19 +129,19 @@ export function PemilihSurveiPelatihan({
             {s.pelatihan.length === 0 ? " (belum ada pelatihan)" : ""}
           </option>
         ))}
-      </select>
+      </SelectCari>
       {banyak && survei && (
         <>
           <label htmlFor="pilih-pelatihan" className="ml-1 text-[13px] font-extrabold text-[#0F2A52]">
             Pelatihan
           </label>
-          <select id="pilih-pelatihan" value={kegiatanId ?? ""} onChange={(e) => onPelatihan(Number(e.target.value))} className={kelas}>
+          <SelectCari id="pilih-pelatihan" value={kegiatanId ?? ""} onChange={(e) => onPelatihan(Number(e.target.value))} className={kelas}>
             {survei.pelatihan.map((p: PelatihanSurvei) => (
               <option key={p.id} value={p.id}>
                 {p.nama}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </>
       )}
       <span className="text-[12.5px] text-[#6B7A90]">Semua tab di bawah mengikuti survei{banyak ? " dan pelatihan" : ""} yang dipilih.</span>

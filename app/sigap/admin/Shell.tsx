@@ -17,6 +17,7 @@ import { bolehKlien, fetchJson, keluar, SesiBerakhir, type Ringkas } from "./api
 import { NAMA_PAYUNG, susunMenu, type NamaIkon } from "@/lib/sigapMenuV2";
 import PaletPerintah, { type ItemPalet } from "./PaletPerintah";
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
+import SelectCari from "@/app/components/SelectCari";
 
 // (7 Okt 2026) + "pelatihan" (halaman peserta) & "pelatihan_kelola" (admin soal/jadwal/monitoring tes)
 // (24 Okt 2026) + "anggaran" (halaman Anggaran: daftar RO, ruang kerja RO, jadwal revisi, realisasi -- /sigap/ro, /sigap/revisi, /sigap/realisasi)
@@ -414,7 +415,7 @@ export default function Shell({
           {pemilihKegiatan && ringkas.kegiatan.length > 0 && (
             <label className="flex min-w-0 items-center">
               <span className="sr-only">Pilih kegiatan</span>
-              <select
+              <SelectCari
                 value={kegId ?? ""}
                 onChange={(e) => {
                   const id = Number(e.target.value);
@@ -429,7 +430,7 @@ export default function Shell({
                     {k.aktif ? "" : " (selesai)"}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
           )}
           <span className="shrink-0 rounded-lg border border-[#E3E8EE] px-2 py-1 text-[11.5px] font-semibold text-[#4D5B6B]" title="Tahun anggaran">

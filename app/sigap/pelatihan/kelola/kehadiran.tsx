@@ -11,6 +11,7 @@ import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import ResetPin from "../../admin/ResetPin";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon } from "./monitorKit";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_KEHADIRAN = "/api/sigap/pelatihan/admin/kehadiran";
 const BLN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -180,11 +181,11 @@ export function PengaturanPresensiKartu() {
           <span className="text-[12.5px] font-extrabold text-[#0F3D7A]">Presensi per hari</span>
           <label className="flex items-center gap-1.5 text-[12px] font-bold text-[#55657D]">
             Jumlah presensi per hari
-            <select className={INPUT} value={sesi.length} disabled={!bisa} onChange={(e) => aturJumlahSesi(Number(e.target.value))} aria-label="Jumlah presensi per hari">
+            <SelectCari className={INPUT} value={sesi.length} disabled={!bisa} onChange={(e) => aturJumlahSesi(Number(e.target.value))} aria-label="Jumlah presensi per hari">
               {Array.from({ length: MAKS_SESI }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>{n}× per hari</option>
               ))}
-            </select>
+            </SelectCari>
           </label>
         </div>
         <div className="mt-2 space-y-2">
@@ -433,12 +434,12 @@ export function MonitoringPresensi() {
                     <td className={TD} colSpan={7}>
                       <div className="flex flex-wrap items-center gap-2">
                         {p.sesi.filter((x) => !x.hadir).length > 1 && (
-                          <select className={INPUT} value={sesiManual ?? ""} onChange={(e) => setSesiManual(e.target.value === "" ? null : Number(e.target.value))} aria-label="Sesi presensi yang dicatat">
+                          <SelectCari className={INPUT} value={sesiManual ?? ""} onChange={(e) => setSesiManual(e.target.value === "" ? null : Number(e.target.value))} aria-label="Sesi presensi yang dicatat">
                             <option value="">Sesi yang sedang dibuka / berikutnya</option>
                             {p.sesi.filter((x) => !x.hadir).map((x) => (
                               <option key={x.no} value={x.no}>{x.nama} ({jamWib(x.buka_at)}–{jamWib(x.tutup_at)})</option>
                             ))}
-                          </select>
+                          </SelectCari>
                         )}
                         <input className={`${INPUT} min-w-[220px] flex-1`} placeholder="Alasan wajib (mis. GPS tidak terbaca)" value={alasan} onChange={(e) => setAlasan(e.target.value)} />
                         <button type="button" className={BTN} disabled={sibuk || alasan.trim().length < 5} onClick={() => catatManual(p.akun_id)}>

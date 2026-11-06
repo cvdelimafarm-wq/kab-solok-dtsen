@@ -9,6 +9,7 @@
 import { KEGIATAN_PENDATAAN } from "@/lib/sigapPendataanTab";
 import { Kartu } from "../../admin/ui";
 import type { KegiatanRingkas } from "../../admin/api";
+import SelectCari from "@/app/components/SelectCari";
 
 export function namaSurvei(daftar: KegiatanRingkas[], id: number): string {
   return daftar.find((k) => k.id === id)?.nama ?? (id === KEGIATAN_PENDATAAN ? "Pendataan Pascabencana" : `Survei ${id}`);
@@ -23,14 +24,14 @@ export default function PemilihSurvei({ daftar, aktif, onPilih }: { daftar: Kegi
       <label htmlFor="pilih-survei" className="text-[13px] font-extrabold text-[#0F2A52]">
         Survei
       </label>
-      <select id="pilih-survei" value={aktif} onChange={(e) => onPilih(Number(e.target.value))} className="min-h-[40px] min-w-[220px] max-w-full flex-1 rounded-lg border border-[#C9D4E8] bg-white px-3 text-[14px] font-bold text-[#0F2A52] sm:flex-none">
+      <SelectCari id="pilih-survei" value={aktif} onChange={(e) => onPilih(Number(e.target.value))} className="min-h-[40px] min-w-[220px] max-w-full flex-1 rounded-lg border border-[#C9D4E8] bg-white px-3 text-[14px] font-bold text-[#0F2A52] sm:flex-none">
         {item.map((k) => (
           <option key={k.id} value={k.id}>
             {k.nama}
             {k.aktif ? "" : " (tidak aktif)"}
           </option>
         ))}
-      </select>
+      </SelectCari>
       <span className="text-[12.5px] text-[#6B7A90]">Semua tab di bawah mengikuti survei yang dipilih.</span>
     </div>
   );

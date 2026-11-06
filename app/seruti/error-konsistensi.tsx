@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectCari from "@/app/components/SelectCari";
 
 // ============================================================================
 // Tab "Error Konsistensi" — VERSI 2 (rombak total dari versi katalog belajar
@@ -281,7 +282,7 @@ export default function ErrorKonsistensiTab() {
       {/* ---------- Identitas PPL ---------- */}
       <div className="rounded-lg border border-line bg-white p-3">
         <label className="text-xs font-semibold text-navy-900">Nama Anda (PPL)</label>
-        <select
+        <SelectCari
           value={namaPpl}
           onChange={(e) => updateNamaPpl(e.target.value)}
           className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
@@ -292,7 +293,7 @@ export default function ErrorKonsistensiTab() {
               {p}
             </option>
           ))}
-        </select>
+        </SelectCari>
         {namaTrim && !loadingNks && nksSaya && nksSaya.length > 0 && (
           <p className="mt-1.5 text-[11px] text-ink/50">
             NKS Anda: {nksSaya.map((n) => n.nks).join(", ")}
@@ -320,7 +321,7 @@ export default function ErrorKonsistensiTab() {
           {/* ---------- Filter kuesioner (M / KP) ---------- */}
           <div>
             <label className="text-xs font-semibold text-navy-900">Jenis Kuesioner</label>
-            <select
+            <SelectCari
               value={filterKuesioner}
               onChange={(e) => setFilterKuesioner(e.target.value as FilterKuesioner)}
               className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
@@ -328,7 +329,7 @@ export default function ErrorKonsistensiTab() {
               <option value="SEMUA">Semua ({jumlahM + jumlahKp})</option>
               <option value="M">VSEN26.M ({jumlahM})</option>
               <option value="KP">VSEN26.KP ({jumlahKp})</option>
-            </select>
+            </SelectCari>
           </div>
 
           {/* ---------- Ringkasan progres ---------- */}

@@ -15,6 +15,7 @@ import {
 import type { Form } from "@/lib/keu/identifikasi";
 import { Bagian, Centang, Poin } from "../../Kontrol";
 import { useUsulan } from "./usePelaksanaan";
+import SelectCari from "@/app/components/SelectCari";
 
 const rp = (n: number): string => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
 const periode = (a: string | null, b: string | null): string => (a && b ? `${tglIndo(a)} s.d. ${tglIndo(b)}` : "periode belum diatur");
@@ -65,20 +66,20 @@ export function KartuTautan(p: {
         <div className="grid min-w-0 gap-2.5 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <label className="block min-w-0">
             <span className={label}>Tautkan kegiatan</span>
-            <select className={kolom} value={pilih} onChange={(e) => pilihKegiatan(e.target.value)} disabled={p.mengirim || belum.length === 0}>
+            <SelectCari className={kolom} value={pilih} onChange={(e) => pilihKegiatan(e.target.value)} disabled={p.mengirim || belum.length === 0}>
               <option value="">{belum.length === 0 ? "Tidak ada kegiatan lain" : "Pilih kegiatan…"}</option>
               {kelompok.map((g) => (
                 <optgroup key={g.kunci} label={g.judul}>
                   {g.calon.map((c) => <option key={c.kegiatan_id} value={c.kegiatan_id}>{labelPilihan(c, belum)}</option>)}
                 </optgroup>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <label className="block min-w-0">
             <span className={label}>Fungsi (mengikuti jenis kegiatan)</span>
-            <select className={kolom} value={fungsi} onChange={(e) => setFungsi(e.target.value as FungsiKegiatan)} disabled={p.mengirim}>
+            <SelectCari className={kolom} value={fungsi} onChange={(e) => setFungsi(e.target.value as FungsiKegiatan)} disabled={p.mengirim}>
               {FUNGSI_KEGIATAN.map((f) => <option key={f} value={f}>{NAMA_FUNGSI[f]}</option>)}
-            </select>
+            </SelectCari>
           </label>
           <label className="block min-w-0 sm:col-span-2">
             <span className={label}>Catatan (opsional, maks. 300 huruf)</span>
@@ -134,9 +135,9 @@ export function KartuUsulan(p: {
         <>
           <label className="block min-w-0">
             <span className={label}>Kegiatan tujuan</span>
-            <select className={kolom} value={aktifId ?? ""} onChange={(e) => { setKid(Number(e.target.value)); setDipilih(new Set()); }}>
+            <SelectCari className={kolom} value={aktifId ?? ""} onChange={(e) => { setKid(Number(e.target.value)); setDipilih(new Set()); }}>
               {p.tertaut.map((k) => <option key={k.kegiatan_id} value={k.kegiatan_id}>{k.nama} ({NAMA_FUNGSI[k.fungsi]})</option>)}
-            </select>
+            </SelectCari>
           </label>
           {!p.final && <Catatan>Identifikasi lanjutan masih Draf. Usulan dapat dilihat, tetapi diterapkan hanya sesudah lanjutan Final.</Catatan>}
           {usulan.galat && galatKotak(usulan.galat)}

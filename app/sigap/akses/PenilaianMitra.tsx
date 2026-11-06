@@ -14,6 +14,7 @@ import KepalaKolom from "../admin/KepalaKolom";
 import { kapitalWilayah } from "@/lib/pegawaiOrganik";
 import { adaSaring, nilaiBeda, terapkanTabel, type NilaiSel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
 import { MAKS_CATATAN, rataRata, type NilaiMitra } from "@/lib/penilaianMitra";
+import SelectCari from "@/app/components/SelectCari";
 
 type Kolom = { id: number; kode: string; nama: string; kegiatan_id: number | null; urutan: number; dibuka: boolean };
 type Mitra = { akun_id: number; nama: string; kecamatan: string | null; nagari: string | null; aktif: boolean; red_flag: boolean; rekomendasi_pml: boolean; nilai: Record<string, NilaiMitra> };
@@ -242,14 +243,14 @@ export default function PenilaianMitra() {
             <div className="flex flex-wrap items-end gap-2">
               <label className="text-[12.5px] font-semibold text-[#44546F]">
                 Kegiatan (opsional)
-                <select className={`${INPUT} mt-1 block min-w-[220px]`} value={kegiatanBaru} onChange={(e) => setKegiatanBaru(e.target.value)}>
+                <SelectCari className={`${INPUT} mt-1 block min-w-[220px]`} value={kegiatanBaru} onChange={(e) => setKegiatanBaru(e.target.value)}>
                   <option value="">— tanpa kegiatan terdaftar —</option>
                   {(data?.kegiatan_tersedia ?? []).map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </label>
               <label className="min-w-[200px] flex-1 text-[12.5px] font-semibold text-[#44546F]">
                 Nama kolom {kegiatanBaru ? "(kosong = nama kegiatan)" : ""}
@@ -272,14 +273,14 @@ export default function PenilaianMitra() {
               Salin dari Excel tanpa judul atau dengan judul: kolom 1 = NIK lengkap atau nama lengkap, kolom 2 = nilai 1–5, kolom 3 = catatan (opsional). Nilai yang sudah ada pada kolom itu ditimpa.
             </p>
             <div className="flex flex-wrap items-center gap-2">
-              <select aria-label="Kolom tujuan" className={INPUT} value={kolomTempel} onChange={(e) => (setKolomTempel(e.target.value), setLaporan(null))}>
+              <SelectCari aria-label="Kolom tujuan" className={INPUT} value={kolomTempel} onChange={(e) => (setKolomTempel(e.target.value), setLaporan(null))}>
                 <option value="">Pilih kolom…</option>
                 {kolom.filter((k) => k.dibuka).map((k) => (
                   <option key={k.id} value={k.id}>
                     {k.nama}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </div>
             <textarea aria-label="Isi tempelan" className={`${INPUT} h-32 w-full font-mono text-[12px]`} placeholder={"1303010101010001\t4\tcekatan\nAni Putri\t5"} value={teks} onChange={(e) => (setTeks(e.target.value), setLaporan(null))} />
             {laporan && (
@@ -375,7 +376,7 @@ export default function PenilaianMitra() {
                       const kunci = !bolehKelola || !k.dibuka;
                       return (
                         <td key={k.id} className={TD}>
-                          <select
+                          <SelectCari
                             aria-label={`Nilai ${m.nama} untuk ${k.nama}`}
                             className={`rounded-lg border border-[#DDE6F3] px-2 py-1 text-[13px] font-bold outline-none focus:border-[#1F5FD1] disabled:opacity-70 ${kelasNilai(n) || "bg-white text-[#6B7A90]"}`}
                             value={n ?? ""}
@@ -388,7 +389,7 @@ export default function PenilaianMitra() {
                                 {v}
                               </option>
                             ))}
-                          </select>
+                          </SelectCari>
                         </td>
                       );
                     })}

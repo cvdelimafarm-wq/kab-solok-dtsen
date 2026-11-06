@@ -20,6 +20,7 @@ import Bingkai from "../Bingkai";
 import { aksiK, ambilK, unduhBerkas } from "../api";
 import { PanelRujukan } from "../../pedia/komponen";
 import { DAFTAR_DOKUMEN, DOK_TANGGAL, FIELD_MAK, FIELD_MASTER, JADWAL, angka, hitung, rp, terbilang, type Isian, type ItemIsian, type Penyedia } from "@/lib/kontrak/isi";
+import SelectCari from "@/app/components/SelectCari";
 
 type PenyediaDb = Penyedia & { id: number };
 type Paket = { id: number; tahun: number; nomor_urut: number | null; nama: string; status: string; penyedia_id: number | null; isian: Isian; timpa: Record<string, string> };
@@ -205,7 +206,7 @@ export default function HalamanPaket({ params }: { params: Promise<{ id: string 
             <div className="grid gap-2.5 sm:grid-cols-3">
               <label className="flex flex-col gap-1 sm:col-span-3">
                 <span className={LABEL}>Penyedia terpilih (= Survei 1)</span>
-                <select value={penyediaId ?? ""} disabled={!kelola} onChange={(e) => setPenyediaId(e.target.value ? Number(e.target.value) : null)} className={INPUT}>
+                <SelectCari value={penyediaId ?? ""} disabled={!kelola} onChange={(e) => setPenyediaId(e.target.value ? Number(e.target.value) : null)} className={INPUT}>
                   <option value="">— pilih penyedia —</option>
                   {data.penyedia.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -213,7 +214,7 @@ export default function HalamanPaket({ params }: { params: Promise<{ id: string 
                       {p.kota ? ` · ${p.kota}` : ""}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
                 {penyedia && (!penyedia.npwp || !penyedia.nama_pimpinan || !penyedia.nomor_rekening) && (
                   <span className="text-[11.5px] text-amber-700">
                     Data penyedia belum lengkap (NPWP/pimpinan/rekening). Lengkapi di{" "}

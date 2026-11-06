@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import BrandBps from "@/app/components/BrandBps";
+import SelectCari from "@/app/components/SelectCari";
 
 const FUNCTIONS_URL = process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL!;
 
@@ -117,7 +118,7 @@ export default function AturPinPage() {
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
         <div>
           <label className="text-sm font-medium text-ink">Nagari</label>
-          <select
+          <SelectCari
             required
             value={nagariId}
             onChange={(e) => setNagariId(e.target.value)}
@@ -131,7 +132,7 @@ export default function AturPinPage() {
                 {n.nama_nagari} ({n.kecamatan})
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
 
         <div>

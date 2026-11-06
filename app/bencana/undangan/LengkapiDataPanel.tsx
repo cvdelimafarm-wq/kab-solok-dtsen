@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import SelectCari from "@/app/components/SelectCari";
 
 // (4 Okt 2026) Panel "Lengkapi Data Anda" untuk halaman tawaran menginap --
 // pertanyaan yang SAMA dgn konfirmasi reguler (/bencana/konfirmasi/[token]),
@@ -226,27 +227,27 @@ export default function LengkapiDataPanel({ petugasToken }: { petugasToken: stri
           {perluPendidikan && (
             <label className="flex flex-col gap-1 text-xs">
               <span className="font-bold text-[#33435C]">Pendidikan Terakhir</span>
-              <select value={pendidikan} onChange={(e) => setPendidikan(e.target.value)} className={INPUT_TEKS}>
+              <SelectCari value={pendidikan} onChange={(e) => setPendidikan(e.target.value)} className={INPUT_TEKS}>
                 <option value="">Pilih pendidikan...</option>
                 {PILIHAN_PENDIDIKAN.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
           )}
           {perluPekerjaan && (
             <label className="flex flex-col gap-1 text-xs">
               <span className="font-bold text-[#33435C]">Pekerjaan</span>
-              <select value={pekerjaan} onChange={(e) => setPekerjaan(e.target.value)} className={INPUT_TEKS}>
+              <SelectCari value={pekerjaan} onChange={(e) => setPekerjaan(e.target.value)} className={INPUT_TEKS}>
                 <option value="">Pilih pekerjaan...</option>
                 {PILIHAN_PEKERJAAN.map((p) => (
                   <option key={p} value={p}>
                     {p}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
           )}
           {perluMotor && (

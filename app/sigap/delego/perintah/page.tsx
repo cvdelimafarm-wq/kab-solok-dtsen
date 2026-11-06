@@ -16,6 +16,7 @@ import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import PemilihPenerima, { type Pilihan } from "../PemilihPenerima";
 import { Galat, Halaman, Info, Kartu, Medan, Peringatan, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Lokasi = "luar" | "dalam";
 
@@ -140,22 +141,22 @@ export default function Perintah() {
               </Medan>
               {lokasi === "dalam" ? (
                 <Medan label="Kegiatan survei" bantu="Perintah akan terhitung di rekap kegiatan itu.">
-                  <select className={KELAS.isian} value={kegiatanId} onChange={(e) => { setKegiatanId(e.target.value); setPilih([]); }}>
+                  <SelectCari className={KELAS.isian} value={kegiatanId} onChange={(e) => { setKegiatanId(e.target.value); setPilih([]); }}>
                     <option value="">Pilih kegiatan</option>
                     {kegiatanBoleh.map((k) => <option key={k.id} value={k.id}>{k.nama}</option>)}
-                  </select>
+                  </SelectCari>
                 </Medan>
               ) : kelompok.length > 1 ? (
                 <Medan label="Kelompok pekerjaan tim">
-                  <select className={KELAS.isian} value={kelompokPakai} onChange={(e) => { setKelompokKode(e.target.value); setPilih([]); }}>
+                  <SelectCari className={KELAS.isian} value={kelompokPakai} onChange={(e) => { setKelompokKode(e.target.value); setPilih([]); }}>
                     {kelompok.map((k) => <option key={k.kode} value={k.kode}>{k.nama}</option>)}
-                  </select>
+                  </SelectCari>
                 </Medan>
               ) : null}
               <Medan label="Jenis perintah" bantu={jenis ? `${fmt(angka(jenis.poin_per_satuan), 1)} poin per ${jenis.satuan} (sekitar ${fmt(menitDariPoin(angka(jenis.poin_per_satuan)), 0)} menit). Skor diatur di Katalog skor.` : undefined}>
-                <select className={KELAS.isian} value={jenisId || String(jenisRapat?.id ?? "")} onChange={(e) => setJenisId(e.target.value)}>
+                <SelectCari className={KELAS.isian} value={jenisId || String(jenisRapat?.id ?? "")} onChange={(e) => setJenisId(e.target.value)}>
                   {jenisSiap.map((j) => <option key={j.id} value={j.id}>{j.nama}</option>)}
-                </select>
+                </SelectCari>
               </Medan>
               <Medan label="Isi perintah" bantu="Tulis singkat dan jelas, mis. Rapat koordinasi persiapan Seruti, ruang rapat lantai 2.">
                 <input className={KELAS.isian} maxLength={200} value={judul} onChange={(e) => setJudul(e.target.value)} />

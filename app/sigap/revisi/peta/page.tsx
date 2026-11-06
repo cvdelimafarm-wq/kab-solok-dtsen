@@ -21,6 +21,7 @@ import { caps, Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, kolom, Kosong, 
 import { useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import type { ParamMaster } from "../kertas/Kecukupan";
 import type { KeputusanRow } from "../kertas/Bagian";
+import SelectCari from "@/app/components/SelectCari";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string };
 type DasarRab = "aktif" | "disetujui";
@@ -179,9 +180,9 @@ function Isi() {
         </p>
         <div className="flex flex-wrap items-end gap-2">
           <div><label className={label} htmlFor="pt-j">Jadwal revisi (kertas kerja dan keputusan)</label>
-            <select id="pt-j" className={`${kolom} !w-auto max-w-full`} value={jd?.id ?? ""} onChange={(e) => ke({ jadwal: Number(e.target.value) })}>{urutJadwal.map((x) => <option key={x.id} value={x.id}>{x.judul}</option>)}</select></div>
+            <SelectCari id="pt-j" className={`${kolom} !w-auto max-w-full`} value={jd?.id ?? ""} onChange={(e) => ke({ jadwal: Number(e.target.value) })}>{urutJadwal.map((x) => <option key={x.id} value={x.id}>{x.judul}</option>)}</SelectCari></div>
           <div><label className={label} htmlFor="pt-d">RAB yang dibaca</label>
-            <select id="pt-d" className={`${kolom} !w-auto max-w-full`} value={dasar} onChange={(e) => ke({ dasar: e.target.value as DasarRab })}><option value="aktif">RAB aktif (draf, diproses, atau disetujui)</option><option value="disetujui">Hanya RAB yang disetujui</option></select></div>
+            <SelectCari id="pt-d" className={`${kolom} !w-auto max-w-full`} value={dasar} onChange={(e) => ke({ dasar: e.target.value as DasarRab })}><option value="aktif">RAB aktif (draf, diproses, atau disetujui)</option><option value="disetujui">Hanya RAB yang disetujui</option></SelectCari></div>
           {jd && <Chip warna={jd.status === "dibuka" ? "hijau" : jd.status === "terkumpul" ? "kuning" : "abu"}>{LABEL_STATUS_JADWAL[jd.status] ?? jd.status}</Chip>}
           <div className="ml-auto flex flex-wrap items-center gap-2 text-[12px] text-[#5B6B84]">
             <span>RAB menutup</span><span className="rounded-md border border-[#DCE3EE] bg-[#F5F8FE] px-2 py-1 font-mono font-semibold text-[#0F2A52]">{koma(faktor)}</span><span>dari kebutuhan riil</span>

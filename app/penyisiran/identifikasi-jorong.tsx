@@ -31,6 +31,7 @@
 // tambahan apa pun.
 
 import { useCallback, useEffect, useState } from "react";
+import SelectCari from "@/app/components/SelectCari";
 
 const TOKEN_KEY = "identifikasi-jorong-login-token";
 const NAMA_KEY = "identifikasi-jorong-login-nama";
@@ -506,7 +507,7 @@ function IdentifikasiJorongPanel({
       )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
-        <select
+        <SelectCari
           value={filterKec}
           onChange={(e) => {
             // Ganti Kecamatan -> Nagari & Sub SLS yg lama sudah tidak
@@ -524,8 +525,8 @@ function IdentifikasiJorongPanel({
               {k.nama} ({k.jumlah})
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterNagari}
           onChange={(e) => {
             // Ganti Nagari -> Sub SLS yg lama sudah tidak relevan, reset
@@ -542,8 +543,8 @@ function IdentifikasiJorongPanel({
               {n.nama} ({n.jumlah})
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterSubsls}
           onChange={(e) => setFilterSubsls(e.target.value)}
           disabled={!filterNagari}
@@ -555,8 +556,8 @@ function IdentifikasiJorongPanel({
               {s.label} ({s.jumlah})
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -567,7 +568,7 @@ function IdentifikasiJorongPanel({
           <option value="tidak_ada">Tidak Ada</option>
           <option value="ragu">Ragu-ragu</option>
           <option value="tidak_ditemukan">Tidak Ditemukan</option>
-        </select>
+        </SelectCari>
         <input
           type="search"
           value={searchInput}

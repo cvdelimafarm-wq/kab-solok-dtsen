@@ -28,6 +28,7 @@ import PilihNama from "../../PilihNama";
 import { Bagian, Cat } from "../../Kontrol";
 import { KelasSatu, lengkapiKerangka, type Ubah } from "./Isian";
 import { TabelSaring, type Kol } from "../../TabelSaring";
+import SelectCari from "@/app/components/SelectCari";
 
 const Pesan = ({ children }: { children: ReactNode }) => (
   <div role="status" className="rounded-lg border border-[#F2D58A] bg-[#FFF8E6] px-3 py-2 text-[12.5px] leading-snug text-[#6B4D00]">{children}</div>
@@ -185,9 +186,9 @@ export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan;
     {
       id: "fix", judul: "Kematangan", jenis: "pilih", nilai: (r) => (isi.peran[r.kode].fix ? "Fix" : "Perkiraan"),
       sel: (r) => (
-        <select aria-label={`Kematangan jumlah ${NAMA_PERAN[r.kode]}`} className={`${kolom} w-28`} disabled={mati || !isi.peran[r.kode].on} value={isi.peran[r.kode].fix ? "fix" : "perk"} onChange={(e) => set(r.kode, "fix", e.target.value === "fix")}>
+        <SelectCari aria-label={`Kematangan jumlah ${NAMA_PERAN[r.kode]}`} className={`${kolom} w-28`} disabled={mati || !isi.peran[r.kode].on} value={isi.peran[r.kode].fix ? "fix" : "perk"} onChange={(e) => set(r.kode, "fix", e.target.value === "fix")}>
           <option value="perk">≈ Perkiraan</option><option value="fix">Fix</option>
-        </select>
+        </SelectCari>
       ),
     },
   ];
@@ -261,29 +262,29 @@ export function TabelPetugas({ isi, ubah, mati, organik, mitra, galatDaftar, tug
     {
       id: "peran", judul: "Peran", jenis: "pilih", nilai: (r) => (r.p.peran ? NAMA_PERAN[r.p.peran] : "(belum dipilih)"),
       sel: ({ p, i }) => (
-        <select aria-label={`Peran petugas ${i + 1}`} className={`${kolom} min-w-[128px]`} disabled={mati} value={p.peran} onChange={(e) => set(p.id, (x) => { x.peran = e.target.value as Petugas["peran"]; })}>
+        <SelectCari aria-label={`Peran petugas ${i + 1}`} className={`${kolom} min-w-[128px]`} disabled={mati} value={p.peran} onChange={(e) => set(p.id, (x) => { x.peran = e.target.value as Petugas["peran"]; })}>
           <option value="">(belum dipilih)</option>
           {KODE_PERAN.map((k) => <option key={k} value={k}>{NAMA_PERAN[k]}</option>)}
-        </select>
+        </SelectCari>
       ),
     },
     {
       id: "status", judul: "Status", jenis: "pilih", nilai: (r) => r.p.status,
       sel: ({ p, i }) => (
-        <select
+        <SelectCari
           aria-label={`Status petugas ${i + 1}`} className={`${kolom} min-w-[100px]`} disabled={mati} value={p.status}
           onChange={(e) => { const v = e.target.value as Petugas["status"]; set(p.id, (x) => { if (x.status !== v) delete x.akun; x.status = v; x.sumber = v === "Mitra" ? (x.sumber || "kepka") : ""; }); }}
         >
           <option value="Organik">Organik</option><option value="Mitra">Mitra</option>
-        </select>
+        </SelectCari>
       ),
     },
     {
       id: "sumber", judul: "Sumber mitra", jenis: "pilih", nilai: (r) => (r.p.status === "Mitra" ? NAMA_SUMBER[r.p.sumber] ?? "—" : "—"),
       sel: ({ p, i }) => p.status !== "Mitra" ? "—" : (
-        <select aria-label={`Sumber mitra ${i + 1}`} className={`${kolom} min-w-[130px]`} disabled={mati} value={p.sumber} onChange={(e) => set(p.id, (x) => { x.sumber = e.target.value as Petugas["sumber"]; })}>
+        <SelectCari aria-label={`Sumber mitra ${i + 1}`} className={`${kolom} min-w-[130px]`} disabled={mati} value={p.sumber} onChange={(e) => set(p.id, (x) => { x.sumber = e.target.value as Petugas["sumber"]; })}>
           {(["kepka", "seleksi"] as const).map((s) => <option key={s} value={s}>{NAMA_SUMBER[s]}</option>)}
-        </select>
+        </SelectCari>
       ),
     },
     { id: "baru", judul: "Baru", jenis: "pilih", nilai: (r) => ya(r.p.baru), sel: ({ p, i }) => <Kotak aktif={p.baru} mati={mati || slotKosong(p)} nama={`Petugas baru ${i + 1}`} onUbah={(v) => set(p.id, (x) => { x.baru = v; })} /> },

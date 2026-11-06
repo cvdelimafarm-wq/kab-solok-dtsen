@@ -10,6 +10,7 @@
 import { kisi, kolom } from "@/app/sigap/keu-ui";
 import { MODE_FIX, modeRec, namaBulan, recPerk, ringkasRec, ubahRec, type ModeFix, type WaktuRec } from "@/lib/keu/waktu";
 import { FixPerk, Isian, Tgl, TglRentang } from "./Kontrol";
+import SelectCari from "@/app/components/SelectCari";
 
 const BULAN = Array.from({ length: 12 }, (_, i) => i);
 const MINGGU = [1, 2, 3, 4, 5];
@@ -19,15 +20,15 @@ function PilihBulanMinggu({ rec, tahun, mati, nama, onUbah }: { rec: WaktuRec; t
   return (
     <>
       <Isian judul="Bulan">
-        <select className={kolom} aria-label={`${nama}: bulan`} disabled={mati} value={rec.bulan ?? ""} onChange={(e) => { const v = e.target.value; if (v !== "") atur({ bulan: Number(v), minggu: rec.minggu ?? 1 }); }}>
+        <SelectCari className={kolom} aria-label={`${nama}: bulan`} disabled={mati} value={rec.bulan ?? ""} onChange={(e) => { const v = e.target.value; if (v !== "") atur({ bulan: Number(v), minggu: rec.minggu ?? 1 }); }}>
           <option value="">Pilih bulan…</option>
           {BULAN.map((b) => <option key={b} value={b}>{namaBulan(b)}</option>)}
-        </select>
+        </SelectCari>
       </Isian>
       <Isian judul="Minggu ke-">
-        <select className={kolom} aria-label={`${nama}: minggu ke-`} disabled={mati || rec.bulan === undefined} value={rec.minggu ?? 1} onChange={(e) => atur({ minggu: Number(e.target.value) })}>
+        <SelectCari className={kolom} aria-label={`${nama}: minggu ke-`} disabled={mati || rec.bulan === undefined} value={rec.minggu ?? 1} onChange={(e) => atur({ minggu: Number(e.target.value) })}>
           {MINGGU.map((m) => <option key={m} value={m}>Minggu ke-{m}</option>)}
-        </select>
+        </SelectCari>
       </Isian>
     </>
   );

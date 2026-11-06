@@ -12,6 +12,7 @@ import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Toast, useToast } from "../../admin/Toast";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import SelectCari from "@/app/components/SelectCari";
 
 type Petugas = { akun_id: number; nama: string; peran: string; kelas: number | null; atasan_akun_id: number | null; bawahan: number; kecamatan: string | null; respons: "terima" | "tolak" | null };
 type Perlu = { akun_id: number; nama: string; peran: string; kelas: number | null; bawahan: number; kecamatan: string | null; status: "menolak" | "kosong"; alasan: string | null; sejak: string | null };
@@ -108,7 +109,7 @@ export default function KendalaKelola() {
       <Kartu judul="Petugas mundur atau berhalangan" ket="Petugas yang tadinya menerima tetapi kini tidak bisa. Pilih namanya, lalu tentukan penggantinya.">
         {boleh && d?.tersedia ? (
           <div className="flex flex-wrap items-center gap-2">
-            <select className={`${INPUT} min-w-[16rem]`} value={pilihMundur} onChange={(e) => setPilihMundur(e.target.value)} aria-label="Pilih petugas yang mundur">
+            <SelectCari className={`${INPUT} min-w-[16rem]`} value={pilihMundur} onChange={(e) => setPilihMundur(e.target.value)} aria-label="Pilih petugas yang mundur">
               <option value="">Pilih petugas…</option>
               {petugas.map((p) => (
                 <option key={p.akun_id} value={p.akun_id}>
@@ -116,7 +117,7 @@ export default function KendalaKelola() {
                   {p.kelas != null ? ` · kelas ${p.kelas}` : ""}
                 </option>
               ))}
-            </select>
+            </SelectCari>
             <button
               type="button"
               className={BTN}
@@ -301,14 +302,14 @@ function ModalTangani({ sasaran, petugas, tutup, selesai, galat }: { sasaran: Sa
           <Pilihan aktif={pilihan === "alihkan"} onPilih={() => setPilihan("alihkan")} judul="Alihkan ke petugas yang sudah ada" ket="Tidak dibagi rata: seluruh bawahan pindah ke satu petugas seperan, sehingga bebannya bisa ganda." />
           {pilihan === "alihkan" && (
             <div className="ml-6 space-y-2" data-testid="pilih-penerima">
-              <select className={`${INPUT} w-full`} value={penerima} onChange={(e) => setPenerima(e.target.value === "" ? "" : Number(e.target.value))} aria-label="Petugas yang mengambil alih">
+              <SelectCari className={`${INPUT} w-full`} value={penerima} onChange={(e) => setPenerima(e.target.value === "" ? "" : Number(e.target.value))} aria-label="Petugas yang mengambil alih">
                 <option value="">Pilih petugas yang mengambil alih…</option>
                 {opsiPenerima.map((p) => (
                   <option key={p.akun_id} value={p.akun_id}>
                     {p.nama} · sekarang {p.bawahan} bawahan{p.kecamatan && sasaran.kecamatan === p.kecamatan ? " · satu kecamatan" : ""}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
               {opsiPenerima.length === 0 && <p className="text-[12.5px] text-[#B45309]">Tidak ada petugas seperan ({peranTeks(sasaran.peran)}) yang bisa mengambil alih.</p>}
               {dipilih && (
                 <p className="rounded-lg bg-[#FFF6E5] px-3 py-2 text-[12.5px] text-[#92400E]" data-testid="peringatan-beban">

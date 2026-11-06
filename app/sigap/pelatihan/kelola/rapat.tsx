@@ -11,6 +11,7 @@ import type { Rapat } from "@/lib/sigapRapat";
 import { tglIndo, usulanRapat, type KelasInfo, type UsulanRapat } from "@/lib/sigapKelasIdent";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_API = "/api/sigap/rapat/admin";
 const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(0, 16);
@@ -257,11 +258,11 @@ export default function RapatKelola({ kegiatanId = null }: { kegiatanId?: number
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className={lbl}>Sasaran</label>
-                <select className={INPUT} value={form.sasaran_peran} onChange={(e) => ubah("sasaran_peran", e.target.value as Form["sasaran_peran"])}>
+                <SelectCari className={INPUT} value={form.sasaran_peran} onChange={(e) => ubah("sasaran_peran", e.target.value as Form["sasaran_peran"])}>
                   <option value="semua">PPL + PML</option>
                   <option value="ppl">PPL saja</option>
                   <option value="pml">PML saja</option>
-                </select>
+                </SelectCari>
               </div>
               <label className="mt-5 flex items-center gap-2 text-[13px] font-semibold">
                 <input type="checkbox" checked={form.aktif} onChange={(e) => ubah("aktif", e.target.checked)} /> Aktif (tampil di petugas)

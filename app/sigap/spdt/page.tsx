@@ -33,6 +33,7 @@ import DokumenSupervisor from "./DokumenSupervisor";
 import KartuKkSpdt from "./KartuKkSpdt";
 import BarKegiatan, { useBarKegiatan } from "../BarKegiatan";
 import { useCatatBukaMenu } from "../BarisPengawasan";
+import SelectCari from "@/app/components/SelectCari";
 
 // (21 Okt 2026) Peta jalan di bawah titik KK: komponen/penarik data yang sama dengan Lembar Pendataan bencana (pustaka peta dimuat hanya saat tab Peta memakainya).
 const PetaDasar = dynamic(() => import("../pendataan/PetaDasar"), { ssr: false });
@@ -205,27 +206,27 @@ function Isi() {
             {ppl.length > 1 && (
               <label className="flex min-w-0 flex-1">
                 <span className="sr-only">Saring PPL</span>
-                <select value={pplF ?? ""} onChange={(e) => setPplF(e.target.value ? Number(e.target.value) : null)} className={SELECT}>
+                <SelectCari value={pplF ?? ""} onChange={(e) => setPplF(e.target.value ? Number(e.target.value) : null)} className={SELECT}>
                   <option value="">Semua PPL ({ppl.length})</option>
                   {ppl.map((p) => (
                     <option key={p.akun_id} value={p.akun_id}>
                       {judulKata(p.nama)} · {p.jumlah}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </label>
             )}
             {jorongOpsi.length > 1 && (
               <label className="flex min-w-0 flex-1">
                 <span className="sr-only">Saring Jorong</span>
-                <select value={jorongF ?? ""} onChange={(e) => setJorongF(e.target.value || null)} className={SELECT}>
+                <SelectCari value={jorongF ?? ""} onChange={(e) => setJorongF(e.target.value || null)} className={SELECT}>
                   <option value="">Semua Jorong ({jorongOpsi.length})</option>
                   {jorongOpsi.map((j) => (
                     <option key={j.v} value={j.v}>
                       {j.t}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </label>
             )}
           </div>

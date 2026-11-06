@@ -22,6 +22,7 @@ import { TabKertas } from "./Kertas";
 import { TabRevisi, useHakUsulan, useUsulanRo } from "./Revisi";
 import { TabTim } from "./Tim";
 import { TabAnggaran, TabRingkasan } from "./Tab";
+import SelectCari from "@/app/components/SelectCari";
 
 type RoRow = { kode: string; nama: string; sementara: boolean; aktif: boolean };
 
@@ -89,12 +90,12 @@ function Isi() {
           {daftarRo.length > 1 && (
             <div className="flex flex-wrap items-center gap-2">
               <label htmlFor="pindah-ro" className="text-[12px] text-[#5B6B84]">Pindah RO</label>
-              <select
+              <SelectCari
                 id="pindah-ro" className={`${kolom} !w-auto max-w-full`} value={kode}
                 onChange={(e) => router.replace(`/sigap/ro/${encodeURIComponent(e.target.value)}?tab=${tab}${akhiran}`, { scroll: false })}
               >
                 {daftarRo.map((r) => <option key={r.kode} value={r.kode}>{r.kode} {r.nama.slice(0, 50)}</option>)}
-              </select>
+              </SelectCari>
             </div>
           )}
           <nav aria-label="Tab RO" className="sticky top-0 z-20 -mx-3 flex gap-1.5 overflow-x-auto border-b border-[#DCE3EE] bg-[#F3F5F8] px-3 py-2 sm:-mx-5 sm:px-5 lg:top-[56px] lg:-mx-6 lg:px-6">

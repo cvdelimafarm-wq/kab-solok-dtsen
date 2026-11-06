@@ -15,6 +15,7 @@ import {
 import type { AliasSatuan, SatuanMaster, WaktuMaster } from "@/lib/keu/master";
 import { caps, Chip, Galat, judulKartu, kartu, kolom, label, Tenang, tombolAktif, tombolKecil, tombolUtama } from "../keu-ui";
 import { useBoleh, useKirim } from "../ro/useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 type AkunRef = { kode: string; nama: string; aktif: boolean; pola_kode?: string };
 type Sesudah = () => Promise<void>;
@@ -83,10 +84,10 @@ export default function FormTambah({ level, jalur, waktu, node, usulan, akun, sa
             return (
               <div key={t}>
                 <label className={label} htmlFor={id}>{terakhir ? `Induk: ${NAMA_TINGKAT[t]}` : `${NAMA_TINGKAT[t]} (menyaring pilihan di bawahnya)`}</label>
-                <select id={id} className={kolom} value={pilihSah[t] ?? ""} onChange={(e) => pilihInduk(t, e.target.value)}>
+                <SelectCari id={id} className={kolom} value={pilihSah[t] ?? ""} onChange={(e) => pilihInduk(t, e.target.value)}>
                   <option value="">{opsi.length ? `Pilih ${NAMA_TINGKAT[t]}` : `Tidak ada ${NAMA_TINGKAT[t]} pada pilihan di atas`}</option>
                   {opsi.map((o) => <option key={o.nilai} value={o.nilai}>{o.label}</option>)}
-                </select>
+                </SelectCari>
               </div>
             );
           })}

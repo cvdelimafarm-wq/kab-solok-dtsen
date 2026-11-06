@@ -10,6 +10,7 @@ import { BTN, BTN_O, Chip, INPUT, Pesan, TD, TH } from "../../admin/ui";
 import { JENIS_FILE, ukuranRapi, waktuWibPanjang } from "@/lib/pedia/umum";
 import { unduhBiner, unggahFile } from "../api";
 import Penampil from "./Penampil";
+import SelectCari from "@/app/components/SelectCari";
 
 export type BarisFile = {
   id: number;
@@ -313,14 +314,14 @@ export default function BagianFile({
                 <div key={`${a.file.name}-${i}`} className="flex flex-wrap items-center gap-2 text-[13px]">
                   <span className="min-w-0 flex-1 truncate">{a.file.name}</span>
                   <span className="text-[12px] text-[#7B8794]">{ukuranRapi(a.file.size)}</span>
-                  <select value={a.jenis} onChange={(e) => setAntre(antre.map((x, j) => (j === i ? { ...x, jenis: e.target.value } : x)))} className={`${INPUT} h-8`}>
+                  <SelectCari value={a.jenis} onChange={(e) => setAntre(antre.map((x, j) => (j === i ? { ...x, jenis: e.target.value } : x)))} className={`${INPUT} h-8`}>
                     <option value="otomatis">otomatis (dari isi)</option>
                     {Object.entries(JENIS_FILE).map(([k, l]) => (
                       <option key={k} value={k}>
                         {l}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 </div>
               ))}
               <button type="button" className={BTN} disabled={!!sibuk} onClick={unggah}>

@@ -33,6 +33,7 @@ import {
   type PesanAturan,
 } from "@/lib/kolamWilayah";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import SelectCari from "@/app/components/SelectCari";
 
 const UNGU = "#7A2BA8";
 const GRADIEN = "linear-gradient(135deg,#A33CD0,#6B1F96)";
@@ -315,7 +316,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
                                   <div className="mt-2 pl-9">
                                     <label className="block text-[11.5px] font-bold text-[#52627A]">
                                       PPL yang di-assign
-                                      <select
+                                      <SelectCari
                                         value={pilih[it.idsubsls] || ""}
                                         onChange={(e) => setPilih((x) => ({ ...x, [it.idsubsls]: Number(e.target.value) || 0 }))}
                                         className="mt-1 h-11 w-full rounded-[12px] border border-[#D9C6EA] bg-white px-3 text-[13.5px] font-bold text-[#0F2A52]"
@@ -327,7 +328,7 @@ export function KolamPanel({ anggota, sayaAkun, onTutup, onBuka }: { anggota: An
                                             {a.akun_id === sayaAkun ? " (saya)" : ""}
                                           </option>
                                         ))}
-                                      </select>
+                                      </SelectCari>
                                     </label>
                                   </div>
                                 )}

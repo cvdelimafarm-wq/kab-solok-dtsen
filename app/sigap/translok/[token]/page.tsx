@@ -35,6 +35,7 @@ import KartuVanguardHariIni from "@/app/sigap/KartuVanguardHariIni"; // (1 Nov 2
 import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
 import { tabBarDariTranslok, type ItemBar } from "@/lib/sigapMenuKegiatan";
+import SelectCari from "@/app/components/SelectCari";
 
 // ------------------------------------------------------------------------
 // (5 Okt 2026) SIGAP · Transport Lokal -- halaman petugas GENERIK utk semua kegiatan
@@ -2193,7 +2194,7 @@ function FormRealisasi({
       {boleh && (
         <div className="mt-2.5 space-y-2 rounded-xl bg-[#F6F8FB] p-3">
           {opsi.wilayah_tim.length > 0 && (
-            <select
+            <SelectCari
               className={SELECT}
               value=""
               onChange={(e) => {
@@ -2207,22 +2208,22 @@ function FormRealisasi({
                   {judul(w.jorong)} ({w.sub_sls}) · {judul(w.nagari)}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           )}
           <p className="text-[11.5px] font-semibold text-slate-500">{opsi.wilayah_tim.length > 0 ? "atau lokasi lain:" : "Pilih kecamatan → nagari → jorong:"}</p>
-          <select className={SELECT} value={kec} onChange={(e) => { setKec(e.target.value); setNag(""); setJor(""); }}>
+          <SelectCari className={SELECT} value={kec} onChange={(e) => { setKec(e.target.value); setNag(""); setJor(""); }}>
             <option value="">Kecamatan…</option>
             {daftarKec.map((k) => <option key={k} value={k}>{judul(k)}</option>)}
-          </select>
+          </SelectCari>
           <div className="grid grid-cols-2 gap-2">
-            <select className={SELECT} value={nag} disabled={!kec} onChange={(e) => { setNag(e.target.value); setJor(""); }}>
+            <SelectCari className={SELECT} value={nag} disabled={!kec} onChange={(e) => { setNag(e.target.value); setJor(""); }}>
               <option value="">Nagari…</option>
               {daftarNag.map((n) => <option key={n} value={n}>{judul(n)}</option>)}
-            </select>
-            <select className={SELECT} value={jor} disabled={!nag} onChange={(e) => setJor(e.target.value)}>
+            </SelectCari>
+            <SelectCari className={SELECT} value={jor} disabled={!nag} onChange={(e) => setJor(e.target.value)}>
               <option value="">Jorong…</option>
               {daftarJor.map((j) => <option key={j} value={j}>{judul(j)}</option>)}
-            </select>
+            </SelectCari>
           </div>
           <button
             type="button"
@@ -2437,7 +2438,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={a.url} alt="" className="aspect-[4/3] w-full object-cover" />
                   <div className="p-1.5">
-                    <select
+                    <SelectCari
                       value={a.slot}
                       disabled={massal}
                       onChange={(e) => tandai(a.id, Number(e.target.value))}
@@ -2450,7 +2451,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
                           {hari.foto.some((f) => f.slot === i + 1) ? " (ganti foto lama)" : ""}
                         </option>
                       ))}
-                    </select>
+                    </SelectCari>
                     {lama && <p className="mt-0.5 text-[10.5px] font-semibold text-amber-700">Akan mengganti foto lama</p>}
                   </div>
                 </div>

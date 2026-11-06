@@ -14,6 +14,7 @@ import { aksi, ambil, fetchJson, pesanGalat, rupiah, SesiBerakhir } from "./api"
 import { bandingPeriode, rentangTanggal, type PeriodeRencana } from "@/lib/sigapKelasIdent";
 import { PanelRujukan } from "../pedia/komponen";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH } from "./ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Kegiatan = {
   id: number;
@@ -315,7 +316,7 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
           <span className={label}>Satuan realisasi</span>
           <input value={satuan} onChange={(e) => setSatuan(e.target.value)} className={INPUT} disabled={!kelola} placeholder="ruta" />
           <span className={label}>Jenis kegiatan</span>
-          <select
+          <SelectCari
             value={jenis}
             onChange={(e) => {
               const j = JENIS_KEGIATAN.find((x) => x.kode === e.target.value);
@@ -333,7 +334,7 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
                 {j.label}
               </option>
             ))}
-          </select>
+          </SelectCari>
           <span className={label}>Isian petugas</span>
           <div className="flex flex-wrap items-center gap-3 text-[13px]">
             <label className="flex items-center gap-1.5">
@@ -352,10 +353,10 @@ function FormKegiatan({ k, kelola, onTersimpan, onBatal }: { k: Kegiatan | null;
             </label>
           </div>
           <span className={label}>Status</span>
-          <select value={aktif ? "1" : "0"} onChange={(e) => setAktif(e.target.value === "1")} className={INPUT} disabled={!kelola}>
+          <SelectCari value={aktif ? "1" : "0"} onChange={(e) => setAktif(e.target.value === "1")} className={INPUT} disabled={!kelola}>
             <option value="1">Aktif</option>
             <option value="0">Selesai</option>
-          </select>
+          </SelectCari>
         </div>
         {kelola && (
           <div className="mt-3 flex flex-wrap gap-2">

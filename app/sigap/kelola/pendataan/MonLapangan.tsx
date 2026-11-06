@@ -37,6 +37,7 @@ import {
   type SaringanLapangan,
   type StatusTranslok,
 } from "@/lib/lapangan";
+import SelectCari from "@/app/components/SelectCari";
 
 type Data = { sekarang: string; hari_ini: string; aturan: AturanIsian; kegiatan: { id: number; nama: string } | null; baris: BarisLapangan[] };
 type Cepat = "hari" | "kemarin" | "3hari" | "semua" | "kustom";
@@ -179,23 +180,23 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
               <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <label className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                   Peran
-                  <select className={`${sel} mt-1`} value={s.peran} onChange={(e) => ubah({ peran: e.target.value as SaringanLapangan["peran"] })}>
+                  <SelectCari className={`${sel} mt-1`} value={s.peran} onChange={(e) => ubah({ peran: e.target.value as SaringanLapangan["peran"] })}>
                     <option value="semua">Semua</option>
                     <option value="pml">PML</option>
                     <option value="ppl">PPL</option>
                     <option value="korwil">Korwil</option>
-                  </select>
+                  </SelectCari>
                 </label>
                 <label className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                   Tim (PML)
-                  <select className={`${sel} mt-1`} value={s.pml_id ?? ""} onChange={(e) => ubah({ pml_id: e.target.value ? Number(e.target.value) : null })}>
+                  <SelectCari className={`${sel} mt-1`} value={s.pml_id ?? ""} onChange={(e) => ubah({ pml_id: e.target.value ? Number(e.target.value) : null })}>
                     <option value="">Semua tim</option>
                     {tim.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.nama}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 </label>
                 <label className="col-span-2 text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                   Nama
@@ -211,24 +212,24 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
                 </label>
                 <label className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                   Status lapangan
-                  <select className={`${sel} mt-1`} value={s.lapangan} onChange={(e) => ubah({ lapangan: e.target.value as SaringanLapangan["lapangan"] })}>
+                  <SelectCari className={`${sel} mt-1`} value={s.lapangan} onChange={(e) => ubah({ lapangan: e.target.value as SaringanLapangan["lapangan"] })}>
                     <option value="semua">Semua</option>
                     <option value="identifikasi">Ada identifikasi</option>
                     <option value="pendataan">Ada pendataan</option>
                     <option value="qc">Ada Quality Check</option>
                     <option value="belum">Belum ada hasil</option>
-                  </select>
+                  </SelectCari>
                 </label>
                 <label className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                   Status translok
-                  <select className={`${sel} mt-1`} value={s.translok} onChange={(e) => ubah({ translok: e.target.value as SaringanLapangan["translok"] })}>
+                  <SelectCari className={`${sel} mt-1`} value={s.translok} onChange={(e) => ubah({ translok: e.target.value as SaringanLapangan["translok"] })}>
                     <option value="semua">Semua</option>
                     {(Object.keys(LABEL_STATUS_TRANSLOK) as StatusTranslok[]).map((k) => (
                       <option key={k} value={k}>
                         {LABEL_STATUS_TRANSLOK[k]}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 </label>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">

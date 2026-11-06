@@ -52,6 +52,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { MarkerRow, UserLocation } from "./penyisiran-map";
+import SelectCari from "@/app/components/SelectCari";
 
 const PenyisiranMap = dynamic(() => import("./penyisiran-map"), {
   ssr: false,
@@ -1776,7 +1777,7 @@ function PenyisiranPanel({
 
       {/* ---------- Filter ---------- */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
-        <select
+        <SelectCari
           value={filterKec}
           onChange={(e) => setFilterKec(e.target.value)}
           disabled={!lokasiRumahSiap || !liveSiap}
@@ -1795,8 +1796,8 @@ function PenyisiranPanel({
               {k.nama} ({k.jumlah})
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterNagari}
           onChange={(e) => setFilterNagari(e.target.value)}
           disabled={!filterKec}
@@ -1808,8 +1809,8 @@ function PenyisiranPanel({
               {n.nama} ({n.jumlah})
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterSubsls}
           onChange={(e) => setFilterSubsls(e.target.value)}
           disabled={!filterNagari}
@@ -1821,8 +1822,8 @@ function PenyisiranPanel({
               {s.label} ({s.jumlah})
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -1837,7 +1838,7 @@ function PenyisiranPanel({
               {STATUS_META[s].label}
             </option>
           ))}
-        </select>
+        </SelectCari>
         {/* "🚩 Ditandai PML" (permintaan user) -- toggle terpisah dari
             dropdown Status krn independen dari status_kunjungan (lihat
             komentar filterTagPml). Sengaja tombol toggle, bukan checkbox
@@ -1959,7 +1960,7 @@ function PenyisiranPanel({
                 </div>
                 <label className="flex items-center gap-1.5">
                   Urutkan:
-                  <select
+                  <SelectCari
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as SortBy)}
                     className="rounded-md border border-line px-2 py-1 text-xs text-ink"
@@ -1969,7 +1970,7 @@ function PenyisiranPanel({
                     <option value="jarak_terjauh">Jarak terjauh</option>
                     <option value="prioritas_desc">Prioritas tertinggi</option>
                     <option value="prioritas_asc">Prioritas terendah</option>
-                  </select>
+                  </SelectCari>
                 </label>
               </div>
             </div>
@@ -2630,7 +2631,7 @@ function ModalTambahManual({
 
           <label className="block">
             <span className="mb-1 block text-[11px] font-medium text-ink/60">Kecamatan *</span>
-            <select
+            <SelectCari
               value={mKec}
               onChange={(e) => setMKec(e.target.value)}
               className="w-full rounded-md border border-line px-2.5 py-1.5 text-sm"
@@ -2641,12 +2642,12 @@ function ModalTambahManual({
                   {k.nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
 
           <label className="block">
             <span className="mb-1 block text-[11px] font-medium text-ink/60">Nagari *</span>
-            <select
+            <SelectCari
               value={mNagari}
               onChange={(e) => setMNagari(e.target.value)}
               disabled={!mKec}
@@ -2658,12 +2659,12 @@ function ModalTambahManual({
                   {n.nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
 
           <label className="block">
             <span className="mb-1 block text-[11px] font-medium text-ink/60">SLS / Sub SLS *</span>
-            <select
+            <SelectCari
               value={mSubsls}
               onChange={(e) => setMSubsls(e.target.value)}
               disabled={!mNagari}
@@ -2675,7 +2676,7 @@ function ModalTambahManual({
                   {s.label}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
 
           <label className="block">
@@ -3356,7 +3357,7 @@ function RowCard({
               (bukan tombol, tidak bisa diklik) menggantikan status
               "✓ Tersimpan"/"Gagal" yg dulu ada di tombolnya. */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <select
+            <SelectCari
               value={status}
               onChange={(e) => {
                 const next = e.target.value as StatusKunjungan;
@@ -3385,7 +3386,7 @@ function RowCard({
                   {STATUS_META[s].label}
                 </option>
               ))}
-            </select>
+            </SelectCari>
             <input
               value={catatan}
               onChange={(e) => handleCatatanChange(e.target.value)}

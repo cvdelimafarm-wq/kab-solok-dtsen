@@ -20,6 +20,7 @@ import { recPerk } from "@/lib/keu/waktu";
 import { Angka, Cat, Centang, FixPerk, Isian, Pilihan, YaTidak } from "./Kontrol";
 import { WaktuIsian } from "./Waktu";
 import { TabelSaring, type Kol } from "./TabelSaring";
+import SelectCari from "@/app/components/SelectCari";
 
 export const BENTUK = ["Daring", "Luring", "Hybrid"] as const;
 export const MEDIA: readonly Media[] = ["Apel pagi", "Tatap muka", "Zoom"];
@@ -39,30 +40,30 @@ function KotakCentang({ aktif, onUbah, mati, nama }: { aktif: boolean; onUbah: (
 }
 function PilKecil<T extends string>({ nilai, opsi, onPilih, mati, nama, kosong }: { nilai: T; opsi: readonly T[]; onPilih: (v: T) => void; mati?: boolean; nama: string; kosong?: string }) {
   return (
-    <select aria-label={nama} className={`${selKecil} min-w-[92px]`} value={nilai} disabled={mati} onChange={(e) => onPilih(e.target.value as T)}>
+    <SelectCari aria-label={nama} className={`${selKecil} min-w-[92px]`} value={nilai} disabled={mati} onChange={(e) => onPilih(e.target.value as T)}>
       {kosong !== undefined && <option value="">{kosong}</option>}
       {opsi.map((o) => <option key={o} value={o}>{o}</option>)}
-    </select>
+    </SelectCari>
   );
 }
 function YaTidakKecil({ nilai, onPilih, mati, nama }: { nilai: boolean; onPilih: (v: boolean) => void; mati?: boolean; nama: string }) {
   return (
-    <select aria-label={nama} className={`${selKecil} w-[72px]`} value={nilai ? "ya" : "tidak"} disabled={mati} onChange={(e) => onPilih(e.target.value === "ya")}>
+    <SelectCari aria-label={nama} className={`${selKecil} w-[72px]`} value={nilai ? "ya" : "tidak"} disabled={mati} onChange={(e) => onPilih(e.target.value === "ya")}>
       <option value="ya">Ya</option>
       <option value="tidak">Tidak</option>
-    </select>
+    </SelectCari>
   );
 }
 /** Penanda Fix atau Perkiraan satu kolom (pilihan ganda). */
 function PerkKecil({ perk, onPilih, mati, nama }: { perk: boolean; onPilih: (perk: boolean) => void; mati?: boolean; nama: string }) {
   return (
-    <select
+    <SelectCari
       aria-label={`${nama}: Perkiraan atau Fix`} disabled={mati} value={perk ? "perk" : "fix"} onChange={(e) => onPilih(e.target.value === "perk")}
       className={`${selKecil} w-[112px] font-semibold ${perk ? "border-[#C98A00] bg-[#FFF4D6] text-[#8A6200]" : "border-[#2E9E63] bg-[#E6F6EC] text-[#14653A]"}`}
     >
       <option value="perk">≈ Perkiraan</option>
       <option value="fix">Fix</option>
-    </select>
+    </SelectCari>
   );
 }
 const LencanaPerk = ({ perk }: { perk: boolean }) => (

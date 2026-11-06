@@ -14,6 +14,7 @@ import { fetchJson, kegiatanPelatihanAktif, pesanGalat, SesiBerakhir } from "../
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, Pesan } from "../../admin/ui";
 import { URL_KUIS_ADMIN } from "./kuisHost";
 import { LABEL_STATUS, kirim, menit, type AksiFn, type Daftar, type KonfigKelas } from "./kuisBersama";
+import SelectCari from "@/app/components/SelectCari";
 
 const WIB_MS = 7 * 3600_000;
 const isoKeInput = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() + WIB_MS).toISOString().slice(0, 16) : "");
@@ -207,14 +208,14 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
         <Kartu judul="① Soal" ket={`${labelKelas(kelas)} · ${nPesertaKelas} peserta`} className="xl:col-span-2">
           <div className="flex flex-wrap items-center gap-2.5">
             <label className="text-[13px] font-semibold">Kuis dari bank</label>
-            <select className={`${INPUT} min-w-[220px]`} value={draft.kuis_id ?? ""} disabled={!bolehEdit} onChange={(e) => setDraft((d) => ({ ...d, kuis_id: e.target.value ? Number(e.target.value) : null, soal_pilihan: [] }))} aria-label="Kuis untuk kelas ini">
+            <SelectCari className={`${INPUT} min-w-[220px]`} value={draft.kuis_id ?? ""} disabled={!bolehEdit} onChange={(e) => setDraft((d) => ({ ...d, kuis_id: e.target.value ? Number(e.target.value) : null, soal_pilihan: [] }))} aria-label="Kuis untuk kelas ini">
               <option value="">— pilih kuis —</option>
               {data.kuis.map((k) => (
                 <option key={k.id} value={k.id} disabled={k.jumlah_soal === 0}>
                   {k.judul} ({k.jumlah_soal} soal)
                 </option>
               ))}
-            </select>
+            </SelectCari>
             {data.kuis.length === 0 && <span className="text-[12.5px] text-[#9A6200]">Belum ada kuis. Buat dulu di tab Bank Kuis.</span>}
           </div>
 

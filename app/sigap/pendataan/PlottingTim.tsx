@@ -15,6 +15,7 @@ import { API_PERMINTAAN, CATATAN_BATAL, CATATAN_CEK_SUBMIT, CATATAN_KEROYOKAN, L
 import { rapikanNama } from "@/lib/rekapIdentifikasi";
 import { namaTampil } from "@/lib/namaTampil";
 import type { Anggota, SubTim } from "@/lib/pendataan";
+import SelectCari from "@/app/components/SelectCari";
 
 const KUNCI_PANDUAN = "sigap_plotting_panduan";
 const namaSub = (s: Pick<SubTim, "nagari" | "sls" | "sub_sls">) => `${rapikanNama(s.sls)}${s.sub_sls ? ` Sub ${s.sub_sls}` : ""} (Nagari ${rapikanNama(s.nagari)})`;
@@ -281,7 +282,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
                     <div className="mt-2 pl-9">
                       <label className="block text-[11.5px] font-bold text-[#52627A]">
                         PPL yang di-assign
-                        <select
+                        <SelectCari
                           value={pilih[s.idsubsls] || ""}
                           onChange={(e) => setPilih((x) => ({ ...x, [s.idsubsls]: Number(e.target.value) || 0 }))}
                           className="mt-1 h-11 w-full rounded-[12px] border border-[#D9E3F2] bg-white px-3 text-[13.5px] font-bold text-[#0F2A52]"
@@ -293,7 +294,7 @@ export default function PlottingTim({ anggota, sub, totalKk, sayaAkun, onBuka }:
                               {a.akun_id === sayaAkun ? " (saya)" : ""}
                             </option>
                           ))}
-                        </select>
+                        </SelectCari>
                       </label>
                     </div>
                   )}

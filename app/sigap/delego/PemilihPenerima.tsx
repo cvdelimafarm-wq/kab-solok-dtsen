@@ -11,6 +11,7 @@ import { useCalon } from "./data";
 import { useKonteksDelego } from "./konteks";
 import { KELAS } from "./merek";
 import { Galat, Lencana, Memuat } from "./ui";
+import SelectCari from "@/app/components/SelectCari";
 
 export type Pilihan = { akun: number; nama: string; jenis: JenisAkun; peran: PeranDelegasi; pj: string };
 
@@ -74,9 +75,9 @@ export default function PemilihPenerima({
                 <button type="button" className={KELAS.tombolKecil} onClick={() => setPilih((x) => x.filter((y) => y.akun !== p.akun))} aria-label={`Hapus ${p.nama} dari daftar`}>Lepas</button>
               </div>
               <div className={`mt-2 grid gap-2 ${tampilPj && tampilPeran ? "grid-cols-2" : "grid-cols-1"}`}>
-                {tampilPeran && <select aria-label={`Peran ${p.nama}`} className={KELAS.isian} value={p.peran} onChange={(e) => ubah(p.akun, { peran: e.target.value as PeranDelegasi })}>
+                {tampilPeran && <SelectCari aria-label={`Peran ${p.nama}`} className={KELAS.isian} value={p.peran} onChange={(e) => ubah(p.akun, { peran: e.target.value as PeranDelegasi })}>
                   {(p.jenis === "mitra" ? (["pml", "ppl"] as const) : (["wakil", "pegawai", "pml", "ppl"] as const)).map((r) => <option key={r} value={r}>{NAMA_PERAN[r]}</option>)}
-                </select>}
+                </SelectCari>}
                 {tampilPj && <input aria-label={`PJ bidang ${p.nama}`} className={KELAS.isian} maxLength={80} placeholder="PJ bidang (opsional)" value={p.pj} onChange={(e) => ubah(p.akun, { pj: e.target.value })} />}
               </div>
               {infoBeban?.(p.akun)}

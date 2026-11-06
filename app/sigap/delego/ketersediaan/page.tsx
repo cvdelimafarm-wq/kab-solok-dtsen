@@ -13,6 +13,7 @@ import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import type { Nada } from "../merek";
 import { Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan, Memuat } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const NAMA: Record<JenisKetersediaan, string> = { cuti: "Cuti", izin: "Izin", sakit: "Sakit", dinas_luar: "Dinas luar", lainnya: "Lainnya" };
 const NADA: Record<Ketersediaan["status"], Nada> = { diajukan: "biru", disetujui: "hijau", ditolak: "merah" };
@@ -106,18 +107,18 @@ export default function KetersediaanHalaman() {
           <div className="space-y-3">
             {pemberi && (
               <Medan label="Pegawai" bantu="Dicatat langsung berlaku. Kosongkan untuk diri sendiri.">
-                <select className={KELAS.isian} value={akun} onChange={(e) => setAkun(e.target.value)}>
+                <SelectCari className={KELAS.isian} value={akun} onChange={(e) => setAkun(e.target.value)}>
                   <option value="">{hak.akun.nama} (saya)</option>
                   {(rekap.data?.orang ?? []).filter((o) => o.akun !== hak.akun.id && o.jenis === "organik").map((o) => (
                     <option key={o.akun} value={o.akun}>{o.nama}</option>
                   ))}
-                </select>
+                </SelectCari>
               </Medan>
             )}
             <Medan label="Jenis">
-              <select className={KELAS.isian} value={jenis} onChange={(e) => setJenis(e.target.value as JenisKetersediaan)}>
+              <SelectCari className={KELAS.isian} value={jenis} onChange={(e) => setJenis(e.target.value as JenisKetersediaan)}>
                 {(Object.keys(NAMA) as JenisKetersediaan[]).map((j) => <option key={j} value={j}>{NAMA[j]}</option>)}
-              </select>
+              </SelectCari>
             </Medan>
             <div className="grid grid-cols-2 gap-3">
               <Medan label="Mulai"><input type="date" className={KELAS.isian} value={mulai} onChange={(e) => { setMulai(e.target.value); if (selesai < e.target.value) setSelesai(e.target.value); }} /></Medan>

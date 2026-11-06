@@ -22,6 +22,7 @@ import { bandingPaguAkun, paguDariGlp } from "@/lib/keu/cekPagu";
 import KartuCekPagu, { useSisiSistem } from "../CekPaguAkun";
 import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kosong, label, Memuat, Potong, tombolAktif, tombolKecil } from "../../keu-ui";
 import { useBacaKeu } from "../../ro/useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string };
 type Tab = "versi" | "rpd" | "dampak" | "cek";
@@ -157,9 +158,9 @@ function PilihJadwal({ jadwal, jid, ubah }: { jadwal: Jadwal[]; jid: number | nu
   return (
     <div className="max-w-[560px]">
       <label className={label} htmlFor="pilih-jadwal">Kertas kerja jadwal</label>
-      <select id="pilih-jadwal" className={kolom} value={jid ?? ""} onChange={(e) => ubah(Number(e.target.value))}>
+      <SelectCari id="pilih-jadwal" className={kolom} value={jid ?? ""} onChange={(e) => ubah(Number(e.target.value))}>
         {jadwal.map((j) => <option key={j.id} value={j.id}>#{j.id} · {j.judul} · {LABEL_JENIS_JADWAL[j.jenis] ?? j.jenis} · {LABEL_STATUS_JADWAL[j.status] ?? j.status}</option>)}
-      </select>
+      </SelectCari>
     </div>
   );
 }

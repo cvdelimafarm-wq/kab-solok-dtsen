@@ -15,6 +15,7 @@ import {
   BATAS_LAPORAN, KATALOG, KELOMPOK_URUT, KET_PENANDA, KONFIG_LAPORAN_BAWAAN, LABEL_PERAN_LAPORAN, PENANDA, PERAN_LAPORAN, galatLaporan, lampiranUntuk, rapikanLaporan, salinLaporanBawaan,
   type KodeLampiran, type KonfigLaporan, type KonfigPeranLaporan, type PeranLaporan, type VariabelIdentifikasi,
 } from "@/lib/sigapLaporanIsi";
+import SelectCari from "@/app/components/SelectCari";
 
 const API = "/api/portal/pendataan/laporan-isi";
 
@@ -131,14 +132,14 @@ export default function IsiLaporanSpj() {
           <div className="flex flex-wrap items-end gap-3">
             <label className="block min-w-[220px]">
               <span className={LABEL}>Kegiatan</span>
-              <select value={kid} onChange={(e) => setKid(Number(e.target.value))} className={`${INPUT} mt-0.5 w-full`}>
+              <SelectCari value={kid} onChange={(e) => setKid(Number(e.target.value))} className={`${INPUT} mt-0.5 w-full`}>
                 {d.kegiatan.map((k) => (
                   <option key={k.id} value={k.id}>
                     {k.nama}
                     {k.tersimpan ? " · diatur khusus" : ""}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             <div role="tablist" aria-label="Level laporan" className="flex gap-1 rounded-lg bg-[#F5F8FE] p-1">
               {PERAN_LAPORAN.map((p) => (

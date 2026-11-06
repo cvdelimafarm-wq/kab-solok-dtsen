@@ -17,6 +17,7 @@ import { aksiKeu, useKatalogSkor, useRekap, useSaya, useTinjauBahan } from "../d
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Batang, Galat, Halaman, Info, Kartu, Medan, Memuat, Peringatan, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const HARI = [
   { n: 1, t: "Sen" },
@@ -140,24 +141,24 @@ export default function Catat() {
             <Kartu judul="Tautkan dengan kegiatan tim">
               <div className="space-y-3">
                 <Medan label="Pekerjaan ini bagian dari" bantu="Pilih kegiatan bila pekerjaan ini bagian dari kegiatan tim. Pilih Pekerjaan kantor bila tidak ada kegiatannya.">
-                  <select className={KELAS.isian} value={tautan} onChange={(e) => setTautan(e.target.value)}>
+                  <SelectCari className={KELAS.isian} value={tautan} onChange={(e) => setTautan(e.target.value)}>
                     <option value="kantor">Pekerjaan kantor (tanpa kegiatan tim)</option>
                     {d.kegiatan.map((k) => (
                       <option key={k.id} value={String(k.id)}>
                         {k.nama} · {k.ro_kode}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 </Medan>
                 {tautan === "kantor" && d.kelompok.length > 0 && (
                   <Medan label="Kelompok pekerjaan kantor">
-                    <select className={KELAS.isian} value={kelompok} onChange={(e) => setKelompok(e.target.value)}>
+                    <SelectCari className={KELAS.isian} value={kelompok} onChange={(e) => setKelompok(e.target.value)}>
                       {d.kelompok.map((k) => (
                         <option key={k.kode} value={k.kode}>
                           {k.nama}
                         </option>
                       ))}
-                    </select>
+                    </SelectCari>
                   </Medan>
                 )}
                 {d.kegiatan.length === 0 && <Info>Tidak ada kegiatan tim yang bisa ditautkan saat ini. Usulan dicatat sebagai Pekerjaan kantor.</Info>}
@@ -173,14 +174,14 @@ export default function Catat() {
                   <textarea className={KELAS.isian} rows={2} value={uraian} onChange={(e) => setUraian(e.target.value)} maxLength={1000} />
                 </Medan>
                 <Medan label="Jenis dari katalog (opsional)" bantu="Memilih jenis mengisi satuan dan skor otomatis. Jenis yang belum ada dapat diajukan di Katalog skor.">
-                  <select className={KELAS.isian} value={jenisId} onChange={(e) => pilihJenis(e.target.value)}>
+                  <SelectCari className={KELAS.isian} value={jenisId} onChange={(e) => pilihJenis(e.target.value)}>
                     <option value="">Tidak memakai katalog</option>
                     {jenisSiap.map((j) => (
                       <option key={j.id} value={j.id}>
                         {j.nama} · {fmt(angka(j.poin_per_satuan), 1)} poin per {j.satuan}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 </Medan>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <Medan label="Satuan">
@@ -210,14 +211,14 @@ export default function Catat() {
                   </div>
                 )}
                 <Medan label="Jenis urusan (opsional)" bantu="Bila dikosongkan, dicatat sebagai Pekerjaan langsung. Kehadiran lapangan dan pelatihan tidak perlu dicatat di sini: sudah otomatis dari penugasan kegiatan.">
-                  <select className={KELAS.isian} value={kelas} onChange={(e) => setKelas(e.target.value as KelasPekerjaan | "")}>
+                  <SelectCari className={KELAS.isian} value={kelas} onChange={(e) => setKelas(e.target.value as KelasPekerjaan | "")}>
                     <option value="">Otomatis</option>
                     {(Object.keys(NAMA_KELAS) as KelasPekerjaan[]).map((k) => (
                       <option key={k} value={k}>
                         {NAMA_KELAS[k]}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                 </Medan>
               </div>
             </Kartu>

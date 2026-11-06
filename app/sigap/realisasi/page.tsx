@@ -17,6 +17,7 @@ import { aksiKeu, useBacaKeu, useBoleh, useKirim } from "../ro/useKeu";
 import KartuCekPagu, { statusCek, useSisiSistem, type SumberSistem } from "../revisi/CekPaguAkun";
 import BagianSkor from "./Skor";
 import { Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kpi, kisi, label, Memuat, Tenang, tombol, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Unggah = {
   id: number; tahun: number; sampai_tanggal: string; nama_berkas: string; n_item: number | string; total_pagu: number | string;
@@ -194,10 +195,10 @@ export default function HalamanRealisasi() {
                   <div className="flex flex-col gap-2">
                     <div className="max-w-[560px]">
                       <label className={label} htmlFor="pembanding-pagu">Langkah 3: bandingkan pagu laporan dengan</label>
-                      <select id="pembanding-pagu" className={kolom} value={pembanding} onChange={(e) => setPembanding(e.target.value)}>
+                      <SelectCari id="pembanding-pagu" className={kolom} value={pembanding} onChange={(e) => setPembanding(e.target.value)}>
                         <option value="pok">POK berlaku{pokBerlaku.baris?.[0] ? ` (revisi ${pokBerlaku.baris[0].nomor_revisi})` : ""}</option>
                         {jadwalAcuan.map((j) => <option key={j.id} value={`kertas:${j.id}`}>Kertas kerja #{j.id} · {j.judul} ({j.status})</option>)}
-                      </select>
+                      </SelectCari>
                     </div>
                     <KartuCekPagu
                       hasil={cek.hasil} memuat={cek.status === "memuat"} galat={sisi.galat} terpotong={sisi.terpotong}

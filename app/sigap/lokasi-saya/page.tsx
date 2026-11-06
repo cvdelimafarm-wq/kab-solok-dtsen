@@ -11,6 +11,7 @@ import { apiPortal } from "@/app/portal/sesi";
 import { bacaSesi } from "@/app/sigap/admin/api";
 import { bacaPosisi, GalatBacaLokasi, pesanGalatLokasi, type PosisiGps } from "@/lib/lokasiGalat";
 import { AKURASI_BAIK_M, MAKS_AKURASI_SIMPAN_M, tautanPeta, tujuanKembali } from "@/lib/lokasiMitra";
+import SelectCari from "@/app/components/SelectCari";
 
 type Data = {
   nama: string;
@@ -178,10 +179,10 @@ export default function HalamanLokasiSaya() {
                     <h2 className="text-[16px] font-extrabold text-[#0F2A52]">{perluTitik ? "2. " : ""}Kecamatan tempat tinggal</h2>
                     <label className="block">
                       <span className="sr-only">Kecamatan tempat tinggal</span>
-                      <select value={kecamatan} onChange={(e) => { setKecamatan(e.target.value); setYakin(false); }} className="min-h-[46px] w-full rounded-[14px] border border-[#CBD6E6] bg-white px-3 text-[14.5px]">
+                      <SelectCari value={kecamatan} onChange={(e) => { setKecamatan(e.target.value); setYakin(false); }} className="min-h-[46px] w-full rounded-[14px] border border-[#CBD6E6] bg-white px-3 text-[14.5px]">
                         <option value="">Pilih kecamatan…</option>
                         {d.pilihan_kecamatan.map((k) => <option key={k} value={k}>{k}</option>)}
-                      </select>
+                      </SelectCari>
                     </label>
                   </div>
                 )}

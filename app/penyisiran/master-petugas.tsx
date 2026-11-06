@@ -38,6 +38,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
+import SelectCari from "@/app/components/SelectCari";
 
 // NILAI STRING INI HARUS PERSIS SAMA dgn TOKEN_KEY/NAMA_KEY/
 // PETUGAS_ID_STORE_KEY/LAT_KEY/LNG_KEY di app/seruti/penyisiran-usaha.tsx
@@ -800,7 +801,7 @@ function BarisMaster({
         />
       </td>
       <td className="px-3 py-1.5">
-        <select
+        <SelectCari
           value={status}
           onChange={(e) => {
             const v = (e.target.value || "") as StatusKepegawaian | "";
@@ -815,10 +816,10 @@ function BarisMaster({
               {STATUS_LABEL[s]}
             </option>
           ))}
-        </select>
+        </SelectCari>
       </td>
       <td className="px-3 py-1.5">
-        <select
+        <SelectCari
           value={jabatan}
           onChange={(e) => {
             const v = (e.target.value || "") as Jabatan | "";
@@ -833,11 +834,11 @@ function BarisMaster({
               {JABATAN_LABEL[j]}
             </option>
           ))}
-        </select>
+        </SelectCari>
       </td>
       <td className="px-3 py-1.5">
         <div className="flex items-center gap-1.5">
-          <select
+          <SelectCari
             value={pengawasId}
             onChange={(e) => {
               const v = e.target.value;
@@ -852,7 +853,7 @@ function BarisMaster({
                 {x.nama}
               </option>
             ))}
-          </select>
+          </SelectCari>
           {saveStatus === "saving" && <span className="text-[10px] text-ink/40">...</span>}
           {saveStatus === "ok" && <span className="text-[10px] text-moss-700">✓</span>}
           {saveStatus === "err" && <span className="text-[10px] text-rust-700">✕</span>}
@@ -951,7 +952,7 @@ function TambahPetugasForm({
         </div>
         <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/60">Status Kepegawaian</label>
-          <select
+          <SelectCari
             value={status}
             onChange={(e) => setStatus((e.target.value || "") as StatusKepegawaian | "")}
             className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
@@ -962,11 +963,11 @@ function TambahPetugasForm({
                 {STATUS_LABEL[s]}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
         <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/60">Jabatan</label>
-          <select
+          <SelectCari
             value={jabatan}
             onChange={(e) => setJabatan((e.target.value || "") as Jabatan | "")}
             className="w-full rounded-md border border-line px-2.5 py-1.5 text-xs outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
@@ -977,7 +978,7 @@ function TambahPetugasForm({
                 {JABATAN_LABEL[j]}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
         <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/60">Email</label>

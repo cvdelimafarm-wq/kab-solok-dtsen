@@ -15,6 +15,7 @@ import { PETUNJUK_TEMPLATE, bacaImpor, barisTemplate, type HasilImpor } from "@/
 import KelasIdentKelola from "./kelasIdent";
 import InstrukturKelola from "./instruktur";
 import { ChipSetelan, PilihSub, useSub, type ItemSub } from "./GrupTab";
+import SelectCari from "@/app/components/SelectCari";
 
 type Data = { tersedia: boolean; simpul: SimpulHierarki[]; boleh_kelola: boolean };
 
@@ -314,13 +315,13 @@ function KartuHierarki() {
                   </td>
                   <td className={TD}>
                     {bisa ? (
-                      <select className={INPUT} value={s.peran} aria-label={`Peran ${s.nama}`} onChange={(e) => ubah(s.akun_id, { peran: e.target.value as PeranPelatihan })}>
+                      <SelectCari className={INPUT} value={s.peran} aria-label={`Peran ${s.nama}`} onChange={(e) => ubah(s.akun_id, { peran: e.target.value as PeranPelatihan })}>
                         {(["korwil", "pml", "ppl"] as PeranPelatihan[]).map((p) => (
                           <option key={p} value={p}>
                             {LABEL_PERAN_PELATIHAN[p]}
                           </option>
                         ))}
-                      </select>
+                      </SelectCari>
                     ) : (
                       LABEL_PERAN_PELATIHAN[s.peran]
                     )}
@@ -328,7 +329,7 @@ function KartuHierarki() {
                   <td className={TD}>{s.kelas ?? "–"}</td>
                   <td className={TD}>
                     {bisa ? (
-                      <select
+                      <SelectCari
                         className={`${INPUT} max-w-[220px]`}
                         value={s.atasan_akun_id ?? ""}
                         aria-label={`Atasan ${s.nama}`}
@@ -342,7 +343,7 @@ function KartuHierarki() {
                               {x.nama} ({LABEL_PERAN_PELATIHAN[x.peran]}){turunan.has(x.akun_id) ? " – bawahan Anda" : ""}
                             </option>
                           ))}
-                      </select>
+                      </SelectCari>
                     ) : (
                       (s.atasan_akun_id !== null ? nama.get(s.atasan_akun_id) : null) ?? "–"
                     )}

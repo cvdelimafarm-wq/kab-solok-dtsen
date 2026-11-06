@@ -20,6 +20,7 @@ import BagikanFoto, { type TagPilihan } from "./BagikanFoto";
 import BagikanWa from "./BagikanWa";
 import { hurufCadangan, rekanKeHari, susunHari } from "@/lib/sigapSusunHari";
 import { peranRingkas } from "@/lib/sigapUrutanFoto";
+import SelectCari from "@/app/components/SelectCari";
 
 type TagSaya = {
   id: number; foto_id: number; peran_tag: string; status: string; penugasan_id: number | null; slot: number | null; slot_usulan: number | null;
@@ -275,15 +276,15 @@ function KartuMenunggu({ t, mode, muat }: { t: TagSaya; mode: Mode["kegiatan"]; 
       ) : (
         <div className="grid grid-cols-2 gap-2">
           <label className="col-span-2 flex flex-col gap-1 text-xs font-bold text-[#0F2A52]">Kegiatan
-            <select value={pen} onChange={(e) => setPen(e.target.value ? Number(e.target.value) : "")} className="min-h-[44px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm font-normal">
+            <SelectCari value={pen} onChange={(e) => setPen(e.target.value ? Number(e.target.value) : "")} className="min-h-[44px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm font-normal">
               {pilihan.map((k) => <option key={k.penugasan_id} value={k.penugasan_id}>{k.nama}</option>)}
-            </select>
+            </SelectCari>
           </label>
           <label className="col-span-2 flex flex-col gap-1 text-xs font-bold text-[#0F2A52]">Nomor foto saya
-            <select value={slot} onChange={(e) => setSlot(e.target.value ? Number(e.target.value) : "")} className="min-h-[44px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm font-normal">
+            <SelectCari value={slot} onChange={(e) => setSlot(e.target.value ? Number(e.target.value) : "")} className="min-h-[44px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm font-normal">
               <option value="">Pilih nomor…</option>
               {Array.from({ length: maks }, (_, i) => i + 1).map((n) => <option key={n} value={n}>Foto {n}</option>)}
-            </select>
+            </SelectCari>
           </label>
         </div>
       )}

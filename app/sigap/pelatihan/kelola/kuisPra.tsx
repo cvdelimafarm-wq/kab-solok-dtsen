@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
 import { BTN_G, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import type { PengaturanKuisPra, StatusKuisPra } from "@/lib/sigapKuisPra";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_API = "/api/sigap/pelatihan/kuis-pra";
 type Pengaturan = PengaturanKuisPra & { kegiatan_anomali_id: number | null; kegiatan_bank_id: number | null };
@@ -103,25 +104,25 @@ function Pengaturan({ data, setelah }: { data: Data; setelah: () => Promise<void
         </label>
         <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
           Anomali diambil dari survei
-          <select className={`${INPUT} mt-1 w-full`} value={anomali} disabled={!bisa} onChange={(e) => setAnomali(e.target.value === "" ? "" : Number(e.target.value))}>
+          <SelectCari className={`${INPUT} mt-1 w-full`} value={anomali} disabled={!bisa} onChange={(e) => setAnomali(e.target.value === "" ? "" : Number(e.target.value))}>
             <option value="">(tanpa riwayat: soal acak dari bank)</option>
             {data.pilihan_kegiatan.filter((k) => k.jenis !== "pelatihan").map((k) => (
               <option key={k.id} value={k.id}>
                 {k.nama}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </label>
         <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
           Bank soal (kegiatan pemilik soal KT-)
-          <select className={`${INPUT} mt-1 w-full`} value={bank} disabled={!bisa} onChange={(e) => setBank(e.target.value === "" ? "" : Number(e.target.value))}>
+          <SelectCari className={`${INPUT} mt-1 w-full`} value={bank} disabled={!bisa} onChange={(e) => setBank(e.target.value === "" ? "" : Number(e.target.value))}>
             <option value="">Pilih bank soal…</option>
             {bankPilihan.map((k) => (
               <option key={k.id} value={k.id}>
                 {k.nama} ({k.soal_kt} soal)
               </option>
             ))}
-          </select>
+          </SelectCari>
         </label>
         <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
           Jumlah soal per percobaan

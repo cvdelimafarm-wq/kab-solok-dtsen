@@ -35,6 +35,7 @@ import { rupiah, urlBaca } from "@/lib/keu/ro";
 import { jendelaCair, labelSumber, periksaCair, periksaHarga, type JendelaCair } from "@/lib/keu/usulanRab";
 import { Chip, Galat, judulKartu, kartu, kolom, label, Memuat, tombol } from "../../keu-ui";
 import { tulisKeuKlien, useBacaKeu, useKirim, type HasilAksi } from "../useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 type BarisAcuan = {
   ident_id: number; tahun: number; ro_kode: string; nama: string; ident_ver: number; form_sah: unknown | null; upd: Record<string, { mulai: string; selesai: string }> | null;
@@ -335,15 +336,15 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
               <>
                 <div className="w-[150px]">
                   <label className={label} htmlFor={id("b")}>Bulan cair</label>
-                  <select id={id("b")} className={kolom} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
+                  <SelectCari id={id("b")} className={kolom} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
                     {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
-                  </select>
+                  </SelectCari>
                 </div>
                 <div className="w-[120px]">
                   <label className={label} htmlFor={id("m")}>Minggu cair</label>
-                  <select id={id("m")} className={kolom} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
+                  <SelectCari id={id("m")} className={kolom} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
                     {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
-                  </select>
+                  </SelectCari>
                 </div>
                 {rc.selesai !== null
                   ? <button type="button" className={`${tombol} bg-white text-[#1F5FD1] ring-1 ring-[#C5D0E2]`} onClick={() => { setUbah({ bulan_mulai: undefined, minggu: undefined }); setUbahJadwal(false); }}>Kembali otomatis</button>
@@ -361,10 +362,10 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
           <div className="space-y-1.5">
             <div>
               <label className={label} htmlFor={id("i")}>Masuk ke item mana? (disarankan item POK)</label>
-              <select id={id("i")} className={kolom} value={tujuan} onChange={(e) => setUbah({ tujuan: e.target.value, dobel: undefined, pakaiId: undefined })}>
+              <SelectCari id={id("i")} className={kolom} value={tujuan} onChange={(e) => setUbah({ tujuan: e.target.value, dobel: undefined, pakaiId: undefined })}>
                 <option value="">Pilih item…</option>
                 {pilihan.opsi.map((o) => <option key={o.nilai} value={o.nilai}>{o.label}</option>)}
-              </select>
+              </SelectCari>
               <p className="mt-1 text-[12px] text-[#5B6B84]">{pilihan.hasil.pesan}</p>
             </div>
             {tampilNama && (
@@ -717,9 +718,9 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                 {kelompokAda.map((k) => (
                   <div key={k}>
                     <label className={label} htmlFor={`rps-m-${k}`.replace(/\W/g, "_")}>{k}</label>
-                    <select id={`rps-m-${k}`.replace(/\W/g, "_")} className={kolom} value={mode[k]} onChange={(e) => setMode((a) => ({ ...a, [k as KelompokRincian]: e.target.value === "gabung" ? "gabung" : "periode" }))}>
+                    <SelectCari id={`rps-m-${k}`.replace(/\W/g, "_")} className={kolom} value={mode[k]} onChange={(e) => setMode((a) => ({ ...a, [k as KelompokRincian]: e.target.value === "gabung" ? "gabung" : "periode" }))}>
                       {Object.entries(NAMA_MODE).map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-                    </select>
+                    </SelectCari>
                   </div>
                 ))}
               </div>
@@ -893,9 +894,9 @@ export function RabPerSurvei(props: PropsRabSurvei) {
       {daftarIdent.length > 1 && (
         <div>
           <label className={label} htmlFor="rps-ident">Identifikasi survei</label>
-          <select id="rps-ident" className={kolom} value={b.ident_id} onChange={(e) => setPilih(Number(e.target.value))}>
+          <SelectCari id="rps-ident" className={kolom} value={b.ident_id} onChange={(e) => setPilih(Number(e.target.value))}>
             {daftarIdent.map((x) => <option key={x.ident_id} value={x.ident_id}>{x.nama} ({x.tahun})</option>)}
-          </select>
+          </SelectCari>
         </div>
       )}
       {daftarIdent.length === 1 && <p className="text-[13px] font-semibold text-[#0F2A52]">{b.nama} ({b.tahun})</p>}

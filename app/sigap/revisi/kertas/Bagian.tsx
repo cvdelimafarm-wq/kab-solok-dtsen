@@ -16,6 +16,7 @@ import {
 } from "@/lib/keu/kk";
 import { Chip, Galat, judulKartu, kartu, kolom, label, tombolBahaya, tombolKecil, tombolUtama } from "../../keu-ui";
 import { tulisKeuKlien, useKirim } from "../../ro/useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 export type AkunMaster = { kode: string; nama: string };
 export type KeputusanRow = { kro: string; keputusan: KeputusanKro; jumlah: number | string | null; catatan: string };
@@ -35,7 +36,7 @@ export function PanelPasangan({ b, jadwal, akun, sesudah, tutup }: { b: BarisKk;
       <p className="text-[12.5px] text-[#5B6B84]">Item resmi tidak diedit langsung. Sistem mengurangi volume item lama dan membuat item baru (pasangan) berisi salinan dengan akun/redaksi yang Anda isi. Jadwal {jadwal}.</p>
       <div className="grid gap-2 sm:grid-cols-3">
         <div><label className={label} htmlFor={`pa-${b.id}`}>Akun baru (kosong = tetap)</label>
-          <select id={`pa-${b.id}`} className={kolom} value={akunBaru} onChange={(e) => setAkunBaru(e.target.value)}><option value="">Akun tetap ({b.akun_menjadi})</option>{akun.map((a) => <option key={a.kode} value={a.kode}>{a.kode} {a.nama.slice(0, 40)}</option>)}</select></div>
+          <SelectCari id={`pa-${b.id}`} className={kolom} value={akunBaru} onChange={(e) => setAkunBaru(e.target.value)}><option value="">Akun tetap ({b.akun_menjadi})</option>{akun.map((a) => <option key={a.kode} value={a.kode}>{a.kode} {a.nama.slice(0, 40)}</option>)}</SelectCari></div>
         <div><label className={label} htmlFor={`pu-${b.id}`}>Redaksi baru (kosong = tetap)</label><input id={`pu-${b.id}`} className={kolom} value={uraianBaru} onChange={(e) => setUraianBaru(e.target.value)} /></div>
         <div><label className={label} htmlFor={`pv-${b.id}`}>Volume yang dipindah (maks {n(b.vol_menjadi)})</label><input id={`pv-${b.id}`} inputMode="decimal" className={kolom} value={vol} onChange={(e) => setVol(e.target.value)} /></div>
       </div>
@@ -60,11 +61,11 @@ export function FormBaru({ jadwal, ro, komponen, akun, satuan, sesudah, awal, on
     <div className={`${kartu} flex flex-col gap-2`}>
       <h3 className="text-[14px] font-bold text-[#0F2A52]">Item baru{awal ? ` di akun ${awal.akun}` : ""} · RO {ro}</h3>
       <div className="grid gap-2 sm:grid-cols-3">
-        <div><label className={label} htmlFor="kb-k">Komponen</label><select id="kb-k" className={kolom} value={v.komponen} onChange={set("komponen")}>{komponen.map((k) => <option key={k} value={k}>{k}</option>)}</select></div>
-        <div><label className={label} htmlFor="kb-a">Akun</label><select id="kb-a" className={kolom} value={v.akun} onChange={set("akun")}><option value="">Pilih akun…</option>{akun.map((a) => <option key={a.kode} value={a.kode}>{a.kode} {a.nama.slice(0, 40)}</option>)}</select></div>
+        <div><label className={label} htmlFor="kb-k">Komponen</label><SelectCari id="kb-k" className={kolom} value={v.komponen} onChange={set("komponen")}>{komponen.map((k) => <option key={k} value={k}>{k}</option>)}</SelectCari></div>
+        <div><label className={label} htmlFor="kb-a">Akun</label><SelectCari id="kb-a" className={kolom} value={v.akun} onChange={set("akun")}><option value="">Pilih akun…</option>{akun.map((a) => <option key={a.kode} value={a.kode}>{a.kode} {a.nama.slice(0, 40)}</option>)}</SelectCari></div>
         <div><label className={label} htmlFor="kb-u">Uraian</label><input id="kb-u" className={kolom} value={v.uraian} onChange={set("uraian")} /></div>
         <div><label className={label} htmlFor="kb-v">Volume</label><input id="kb-v" inputMode="decimal" className={kolom} value={v.vol} onChange={set("vol")} /></div>
-        <div><label className={label} htmlFor="kb-s">Satuan</label><select id="kb-s" className={kolom} value={v.sat} onChange={set("sat")}><option value="">Pilih…</option>{satuan.map((s) => <option key={s} value={s}>{s}</option>)}</select></div>
+        <div><label className={label} htmlFor="kb-s">Satuan</label><SelectCari id="kb-s" className={kolom} value={v.sat} onChange={set("sat")}><option value="">Pilih…</option>{satuan.map((s) => <option key={s} value={s}>{s}</option>)}</SelectCari></div>
         <div><label className={label} htmlFor="kb-h">Harga satuan (Rp)</label><input id="kb-h" inputMode="decimal" className={kolom} value={v.harga} onChange={set("harga")} /></div>
       </div>
       <Galat pesan={g.length ? g : galat} />
@@ -92,8 +93,8 @@ export function FormPenggenap({ jadwal, ro, komponen, akun, sisa, sesudah }: { j
       <h3 className="text-[14px] font-bold text-[#0F2A52]">Dana penggenap</h3>
       <p className="text-[12.5px] text-[#5B6B84]">Menampung pagu RO yang belum terpakai RAB agar jumlah RO tetap tepat sampai pagu resmi. Hanya akun 52xxxx; tidak boleh minus.</p>
       <div className="grid gap-2 sm:grid-cols-3">
-        <div><label className={label} htmlFor="pg-a">Akun</label><select id="pg-a" className={kolom} value={ak} onChange={(e) => setAk(e.target.value)}><option value="">Pilih akun 52xxxx…</option>{akun52.map((a) => <option key={a.kode} value={a.kode}>{a.kode} {a.nama.slice(0, 40)}</option>)}</select></div>
-        <div><label className={label} htmlFor="pg-k">Komponen</label><select id="pg-k" className={kolom} value={kp} onChange={(e) => setKp(e.target.value)}>{komponen.map((k) => <option key={k} value={k}>{k}</option>)}</select></div>
+        <div><label className={label} htmlFor="pg-a">Akun</label><SelectCari id="pg-a" className={kolom} value={ak} onChange={(e) => setAk(e.target.value)}><option value="">Pilih akun 52xxxx…</option>{akun52.map((a) => <option key={a.kode} value={a.kode}>{a.kode} {a.nama.slice(0, 40)}</option>)}</SelectCari></div>
+        <div><label className={label} htmlFor="pg-k">Komponen</label><SelectCari id="pg-k" className={kolom} value={kp} onChange={(e) => setKp(e.target.value)}>{komponen.map((k) => <option key={k} value={k}>{k}</option>)}</SelectCari></div>
         <div><label className={label} htmlFor="pg-j">Jumlah (Rp)</label><input id="pg-j" inputMode="decimal" className={kolom} value={jml} onChange={(e) => setJml(e.target.value)} /></div>
       </div>
       <Galat pesan={g.length ? g : galat} />
@@ -163,7 +164,7 @@ export function KartuKecukupan({ jadwal, ro, kro, kec, keputusan, bolehPutus, se
           {bolehPutus ? (
             <>
               <div className="grid gap-2 sm:grid-cols-3">
-                <div><label className={label} htmlFor="kp-p">Keputusan PPK</label><select id="kp-p" className={kolom} value={pilih} onChange={(e) => setPilih(e.target.value as KeputusanKro)}>{(Object.keys(LABEL_KEPUTUSAN) as KeputusanKro[]).map((k) => <option key={k} value={k}>{LABEL_KEPUTUSAN[k]}</option>)}</select></div>
+                <div><label className={label} htmlFor="kp-p">Keputusan PPK</label><SelectCari id="kp-p" className={kolom} value={pilih} onChange={(e) => setPilih(e.target.value as KeputusanKro)}>{(Object.keys(LABEL_KEPUTUSAN) as KeputusanKro[]).map((k) => <option key={k} value={k}>{LABEL_KEPUTUSAN[k]}</option>)}</SelectCari></div>
                 {pilih === "sebagian" && <div><label className={label} htmlFor="kp-j">Jumlah diterima (Rp)</label><input id="kp-j" inputMode="decimal" className={kolom} value={jml} onChange={(e) => setJml(e.target.value)} /></div>}
                 <div><label className={label} htmlFor="kp-c">Catatan</label><input id="kp-c" className={kolom} value={cat} onChange={(e) => setCat(e.target.value)} /></div>
               </div>
@@ -205,8 +206,8 @@ export function KartuGeseran({ jadwal, baris, geseran, bisaUbah, sesudah }: { ja
       {bisaUbah && (
         <>
           <div className="grid gap-2 sm:grid-cols-4">
-            <div><label className={label} htmlFor="gs-d">Donor</label><select id="gs-d" className={kolom} value={donor} onChange={(e) => setDonor(e.target.value)}><option value="">Pilih…</option>{pilihan}</select></div>
-            <div><label className={label} htmlFor="gs-p">Penerima</label><select id="gs-p" className={kolom} value={penerima} onChange={(e) => setPenerima(e.target.value)}><option value="">Pilih…</option>{pilihan}</select></div>
+            <div><label className={label} htmlFor="gs-d">Donor</label><SelectCari id="gs-d" className={kolom} value={donor} onChange={(e) => setDonor(e.target.value)}><option value="">Pilih…</option>{pilihan}</SelectCari></div>
+            <div><label className={label} htmlFor="gs-p">Penerima</label><SelectCari id="gs-p" className={kolom} value={penerima} onChange={(e) => setPenerima(e.target.value)}><option value="">Pilih…</option>{pilihan}</SelectCari></div>
             <div><label className={label} htmlFor="gs-j">Jumlah (Rp)</label><input id="gs-j" inputMode="numeric" className={kolom} value={jml} onChange={(e) => setJml(e.target.value)} /></div>
             <div><label className={label} htmlFor="gs-c">Catatan</label><input id="gs-c" className={kolom} value={cat} onChange={(e) => setCat(e.target.value)} /></div>
           </div>

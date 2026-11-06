@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { aksi, ambil, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import { BTN, BTN_R, Chip, INPUT, Kartu, Pesan, TabelKartu, TD, TH } from "../admin/ui";
 import type { DataAkses } from "./tipe";
+import SelectCari from "@/app/components/SelectCari";
 
 type Akun = { id: number; nama: string; jenis: string; alamat_kecamatan: string | null };
 
@@ -70,14 +71,14 @@ export default function AkunPeranTab({ data, onMuatUlang }: { data: DataAkses; o
         ket={`${data.akun_peran.length} pemberian peran · satu akun boleh punya beberapa peran`}
         kanan={
           <div className="flex flex-wrap items-center gap-2">
-            <select value={fPeran} onChange={(e) => setFPeran(Number(e.target.value) || "")} className={INPUT} aria-label="Filter peran">
+            <SelectCari value={fPeran} onChange={(e) => setFPeran(Number(e.target.value) || "")} className={INPUT} aria-label="Filter peran">
               <option value="">Semua peran</option>
               {data.peran.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari akun…" className={`${INPUT} w-44`} />
           </div>
         }
@@ -233,7 +234,7 @@ function BeriPeran({ data, onTersimpan }: { data: DataAkses; onTersimpan: (pesan
             </div>
           )}
         </div>
-        <select
+        <SelectCari
           value={peranId}
           onChange={(e) => {
             const id = Number(e.target.value) || "";
@@ -248,15 +249,15 @@ function BeriPeran({ data, onTersimpan }: { data: DataAkses; onTersimpan: (pesan
               {p.nama}
             </option>
           ))}
-        </select>
-        <select value={kegId} onChange={(e) => setKegId(Number(e.target.value) || "")} className={`${INPUT} max-w-[260px]`} aria-label="Lingkup kegiatan">
+        </SelectCari>
+        <SelectCari value={kegId} onChange={(e) => setKegId(Number(e.target.value) || "")} className={`${INPUT} max-w-[260px]`} aria-label="Lingkup kegiatan">
           <option value="">{peran?.butuh_lingkup ? "Pilih kegiatan (wajib)…" : "Lingkup: semua kegiatan"}</option>
           {data.kegiatan.map((k) => (
             <option key={k.id} value={k.id}>
               {k.nama}
             </option>
           ))}
-        </select>
+        </SelectCari>
         <button type="submit" className={BTN} disabled={busy || !akun || !peran || (peran.butuh_lingkup && !kegId)}>
           {busy ? "Menyimpan…" : "Beri peran"}
         </button>

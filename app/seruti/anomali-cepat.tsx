@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectCari from "@/app/components/SelectCari";
 
 // ---------- tipe data ----------
 
@@ -446,7 +447,7 @@ export default function AnomaliCepatTab() {
               onChange={(e) => setFilterNks(e.target.value)}
               className="w-28 rounded-md border border-line px-2 py-1 text-xs"
             />
-            <select
+            <SelectCari
               value={filterKode}
               onChange={(e) => setFilterKode(e.target.value)}
               className="rounded-md border border-line px-2 py-1 text-xs"
@@ -457,8 +458,8 @@ export default function AnomaliCepatTab() {
                   {k}
                 </option>
               ))}
-            </select>
-            <select
+            </SelectCari>
+            <SelectCari
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
               className="rounded-md border border-line px-2 py-1 text-xs"
@@ -468,7 +469,7 @@ export default function AnomaliCepatTab() {
               <option value="sesuai">Sesuai</option>
               <option value="perlu_koreksi">Perlu Koreksi</option>
               <option value="resolved">Selesai</option>
-            </select>
+            </SelectCari>
           </div>
           <table className="mt-2 w-full text-xs">
             <thead className="bg-[#2563eb] text-left text-white">

@@ -14,6 +14,7 @@ import { BTN, BTN_O, BTN_R, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { Kerangka } from "../komponen";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { csvRekap, labelJenisRekap, NAMA_METODE, PILIHAN_RADIUS_M, SEMUA_METODE, teksSisa, type BarisRekap, type MetodeAbsen, metodeUtama } from "@/lib/sigapAbsen";
+import SelectCari from "@/app/components/SelectCari";
 
 type Sesi = {
   no: number; label: string; jam: string; sudah_dimulai: boolean;
@@ -464,10 +465,10 @@ export default function HalamanAbsen() {
                             <div className="flex flex-wrap items-center gap-2">
                               <b className="text-[13.5px] text-[#0F2A52]">Radar {sesi.radius_m} m</b>
                               <label className="flex items-center gap-1.5 text-[12.5px] text-[#44546F]">radius
-                                <select className={`${INPUT} !min-h-[34px] !w-auto !py-0`} value={sesi.radius_m} disabled={sibuk} aria-label="Radius radar sementara untuk sesi ini"
+                                <SelectCari className={`${INPUT} !min-h-[34px] !w-auto !py-0`} value={sesi.radius_m} disabled={sibuk} aria-label="Radius radar sementara untuk sesi ini"
                                   onChange={(e) => void kirim({ aksi: "radius", sesi_id: sesi.id, radius_m: Number(e.target.value) }, `Radius radar sesi ini diubah ke ${e.target.value} m.`)}>
                                   {Array.from(new Set([...PILIHAN_RADIUS_M, sesi.radius_m])).sort((a, b) => a - b).map((r) => <option key={r} value={r}>{r} m</option>)}
-                                </select>
+                                </SelectCari>
                               </label>
                               {gps === "aktif" ? <Chip teks="posisi Anda dikirim" nada="ok" /> : <Chip teks="belum aktif" nada="wait" />}
                               {gps !== "aktif" && <button type="button" className={`${BTN} ml-auto`} onClick={() => setGps("aktif")}>Aktifkan radar</button>}

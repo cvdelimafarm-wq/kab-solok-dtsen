@@ -16,6 +16,7 @@ import {
 } from "@/lib/keu/pok";
 import { aksiKeu, useBacaKeu, useKirim } from "../../ro/useKeu";
 import { Chip, Galat, Memuat, Potong, tombolAktif, tombolBahaya, tombolKecil } from "../../keu-ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const n = (x: number | string | null | undefined) => (x === null || x === undefined ? 0 : Number(x));
 const selisihTeks = (x: number | null) => (x === null || x === 0 ? "-" : `${x > 0 ? "+" : "-"}${angka(Math.abs(x))}`);
@@ -61,10 +62,10 @@ export default function Banding({ unggahId, boleh, namaRo, ringkas, keputusan, m
           ))}
         </div>
         <label className="flex items-center gap-1.5 text-[12px] text-[#44546F]">RO
-          <select value={ro} onChange={(e) => { setRo(e.target.value); setTampil(HALAMAN); setPilih(null); }} className="min-h-[36px] rounded-md border border-[#C9D4E5] bg-white px-2 text-[12.5px]">
+          <SelectCari value={ro} onChange={(e) => { setRo(e.target.value); setTampil(HALAMAN); setPilih(null); }} className="min-h-[36px] rounded-md border border-[#C9D4E5] bg-white px-2 text-[12.5px]">
             <option value="">Semua RO ({daftarRo.length})</option>
             {daftarRo.map((k) => <option key={k} value={k}>{k} {namaRo.get(k) ? `· ${namaRo.get(k)!.slice(0, 40)}` : ""}</option>)}
-          </select>
+          </SelectCari>
         </label>
       </div>
       {!adaUsulan && <p className="text-[12px] text-[#5B6B84]">Unggahan ini tidak punya jadwal revisi dasar, jadi tidak ada usulan pembanding: semua selisih terhadap POK sistem menunggu keputusan operator.</p>}

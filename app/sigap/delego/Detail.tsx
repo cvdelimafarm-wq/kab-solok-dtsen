@@ -16,6 +16,7 @@ import { DaftarBukti } from "./BuktiFoto";
 import { KELAS } from "./merek";
 import { PanelHasil, PanelLangkah, Penanda } from "./KerjaTeknis";
 import { Batang, Galat, Info, Kartu, Lencana, Medan, NADA_STATUS, Peringatan, fmt } from "./ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const STATUS: StatusDelegasi[] = ["baru", "berjalan", "ditunda", "selesai", "batal"];
 
@@ -200,10 +201,10 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
               <div className="space-y-2">
                 <textarea className={KELAS.isian} rows={2} maxLength={500} value={isi} onChange={(e) => setIsi(e.target.value)} placeholder="Tulis tanggapan untuk penerima" aria-label="Tanggapan" />
                 <div className="flex flex-wrap gap-2">
-                  <select className={`${KELAS.isian} !w-auto`} value={lap} onChange={(e) => setLap(e.target.value)} aria-label="Terkait laporan">
+                  <SelectCari className={`${KELAS.isian} !w-auto`} value={lap} onChange={(e) => setLap(e.target.value)} aria-label="Terkait laporan">
                     <option value="">Umum (tanpa laporan)</option>
                     {laporan.map((l) => (<option key={l.id} value={l.id}>Laporan {tglPendek(l.tanggal)}</option>))}
-                  </select>
+                  </SelectCari>
                   <button type="button" className={KELAS.tombolUtama} disabled={kirim.mengirim || !isi.trim()} onClick={() => void tanggapi()}>Kirim tanggapan</button>
                 </div>
               </div>
@@ -232,9 +233,9 @@ export default function Detail({ d, b, bolehUbah, hari, tutup, muat }: { d: Dele
                 </div>
                 <Medan label="PJ bidang (opsional)"><input className={KELAS.isian} value={pj} maxLength={80} onChange={(e) => setPj(e.target.value)} placeholder="mis. kualitas data" /></Medan>
                 <Medan label="Status">
-                  <select className={KELAS.isian} value={status} onChange={(e) => setStatus(e.target.value as StatusDelegasi)}>
+                  <SelectCari className={KELAS.isian} value={status} onChange={(e) => setStatus(e.target.value as StatusDelegasi)}>
                     {STATUS.map((s) => (<option key={s} value={s}>{NAMA_STATUS[s]}</option>))}
-                  </select>
+                  </SelectCari>
                 </Medan>
                 {(status === "ditunda" || status === "batal") && (
                   <Medan label="Alasan (wajib, minimal 5 huruf)"><input className={KELAS.isian} value={alasan} maxLength={300} onChange={(e) => setAlasan(e.target.value)} /></Medan>

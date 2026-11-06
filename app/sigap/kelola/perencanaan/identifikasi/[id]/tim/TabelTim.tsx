@@ -13,6 +13,7 @@ import { JABATAN, namaJabatan, strataUntuk, type IsiKebijakan, type KodeJabatan 
 import { slotKosong, teksJabatan } from "@/lib/keu/selisihLanjutan";
 import { Bagian, Cat } from "../../Kontrol";
 import { TabelSaring, type Kol } from "../../TabelSaring";
+import SelectCari from "@/app/components/SelectCari";
 
 type BarisJabatan = { k: KodeJabatan; nama: string; min: number | null; pemegang: { p: Petugas; i: number }[] };
 type BarisRangkap = { p: Petugas; i: number; nama: string };
@@ -78,7 +79,7 @@ export function SusunanTim({ isi, lembar, lembarSiap, versi, verHilir, mati, set
               </span>
             ))}
             {!mati && (
-              <select
+              <SelectCari
                 aria-label={`Tambah pemegang ${r.nama}`} className="min-h-[34px] rounded-lg border border-[#C5D0E2] bg-white px-2 text-[12.5px]" value=""
                 onChange={(e) => { if (e.target.value) setJabatan(e.target.value, r.k, true); }}
               >
@@ -86,7 +87,7 @@ export function SusunanTim({ isi, lembar, lembarSiap, versi, verHilir, mati, set
                 {calon.map(({ p, i }) => (
                   <option key={p.id} value={p.id}>{namaPetugas(p, i + 1)} · {p.peran ? NAMA_PERAN[p.peran] : "tanpa peran"} · {p.status}{p.jabatan.length > 0 ? ` · ${p.jabatan.length} jabatan` : ""}</option>
                 ))}
-              </select>
+              </SelectCari>
             )}
           </div>
         );

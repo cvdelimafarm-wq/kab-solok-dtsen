@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { FITUR, STRATEGI, fiturEfektif, fiturTersedia, type PetaFitur, type StrategiKegiatan } from "@/lib/sigapFitur";
 import { BTN, BTN_O, Kartu, Pesan } from "../../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard
 
 type Props = {
@@ -89,7 +90,7 @@ export default function FiturKegiatan({ kegiatanId, nama, strategi, fitur, siap,
 
       <label className="mt-3 block text-[12px] font-bold uppercase tracking-wide text-[#55657D]">
         Strategi kegiatan
-        <select
+        <SelectCari
           className="mt-1 block min-h-[42px] w-full max-w-xl rounded-lg border border-[#CBD5E1] bg-white px-3 text-[14px] font-normal normal-case tracking-normal text-[#1E2B3F]"
           value={st}
           onChange={(e) => gantiStrategi(e.target.value as StrategiKegiatan)}
@@ -100,7 +101,7 @@ export default function FiturKegiatan({ kegiatanId, nama, strategi, fitur, siap,
               {s.label}
             </option>
           ))}
-        </select>
+        </SelectCari>
       </label>
       {infoStrategi && <p className="mt-1 max-w-3xl text-[12.5px] text-[#6B7A90]">{infoStrategi.ket}</p>}
 

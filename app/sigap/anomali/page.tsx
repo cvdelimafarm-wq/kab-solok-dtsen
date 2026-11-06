@@ -10,6 +10,7 @@ import { HeaderAdmin, BTN_G, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan } from "..
 import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir, waktuWib } from "../admin/api";
 import TombolKembali from "@/app/components/TombolKembali";
 import { LABEL_STATUS, PENYEBAB, labelPenyebab, type RingkasTemuan, type StatusTemuan } from "@/lib/sigapAnomali";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_API = "/api/sigap/anomali";
 
@@ -146,14 +147,14 @@ function KartuTemuan({ t, bisaIsi, setelah, lihatPetugas }: { t: Temuan; bisaIsi
         <div className="mt-3 space-y-2">
           <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
             Penyebab
-            <select className={`${INPUT} mt-1 w-full`} value={penyebab} onChange={(e) => setPenyebab(e.target.value)} disabled={sibuk}>
+            <SelectCari className={`${INPUT} mt-1 w-full`} value={penyebab} onChange={(e) => setPenyebab(e.target.value)} disabled={sibuk}>
               <option value="">Pilih penyebab…</option>
               {PENYEBAB.map((p) => (
                 <option key={p.kode} value={p.kode}>
                   {p.label}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <label className="block text-[12.5px] font-bold text-[#1B2B4B]">
             Catatan (opsional)

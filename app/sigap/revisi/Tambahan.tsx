@@ -11,6 +11,7 @@ import { rupiah } from "@/lib/keu/ro";
 import { useKirim } from "../ro/useKeu";
 import type { Jadwal } from "./KartuJadwal";
 import { Chip, Galat, kartu, kolom, label, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
+import SelectCari from "@/app/components/SelectCari";
 
 export type Tambahan = { id: number; ro_kode: string; jumlah: number | string; jalur: string; nomor_dokumen: string; tanggal_dokumen: string; status: string; dipenuhi_total: number | string | null; sisa_penggenap: number | string | null; alasan_batal: string | null };
 
@@ -34,7 +35,7 @@ function FormTambahan({ jadwal, tutup, sesudah }: { jadwal: Jadwal[]; tutup: () 
         <div><label className={label} htmlFor="tp-ro">Kode RO</label><input id="tp-ro" className={kolom} placeholder="2906.BMA.005" maxLength={20} value={v.ro} onChange={(e) => u({ ro: e.target.value.toUpperCase() })} /></div>
         <div><label className={label} htmlFor="tp-jml">Jumlah (Rp)</label><input id="tp-jml" className={kolom} inputMode="numeric" value={v.jumlah} onChange={(e) => u({ jumlah: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} /></div>
         <div><label className={label} htmlFor="tp-jalur">Jalur</label>
-          <select id="tp-jalur" className={kolom} value={v.jalur} onChange={(e) => u({ jalur: e.target.value as IsianTambahan["jalur"], jadwal: "" })}><option value="">Pilih</option><option value="dja">DJA</option><option value="djpb">DJPb</option></select></div>
+          <SelectCari id="tp-jalur" className={kolom} value={v.jalur} onChange={(e) => u({ jalur: e.target.value as IsianTambahan["jalur"], jadwal: "" })}><option value="">Pilih</option><option value="dja">DJA</option><option value="djpb">DJPb</option></SelectCari></div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div><label className={label} htmlFor="tp-no">Nomor dokumen revisi</label><input id="tp-no" className={kolom} maxLength={120} value={v.nomor} onChange={(e) => u({ nomor: e.target.value })} /></div>
@@ -42,7 +43,7 @@ function FormTambahan({ jadwal, tutup, sesudah }: { jadwal: Jadwal[]; tutup: () 
       </div>
       {cocok.length > 0 && (
         <div><label className={label} htmlFor="tp-jd">Jadwal revisi (opsional)</label>
-          <select id="tp-jd" className={kolom} value={v.jadwal} onChange={(e) => u({ jadwal: e.target.value })}><option value="">Tanpa jadwal</option>{cocok.map((j) => <option key={j.jadwal_id} value={j.jadwal_id}>{j.judul}</option>)}</select></div>
+          <SelectCari id="tp-jd" className={kolom} value={v.jadwal} onChange={(e) => u({ jadwal: e.target.value })}><option value="">Tanpa jadwal</option>{cocok.map((j) => <option key={j.jadwal_id} value={j.jadwal_id}>{j.judul}</option>)}</SelectCari></div>
       )}
       <div><label className={label} htmlFor="tp-cat">Catatan (opsional)</label><input id="tp-cat" className={kolom} maxLength={300} value={v.catatan} onChange={(e) => u({ catatan: e.target.value })} /></div>
       <Galat pesan={[...salah, ...(galat ? [galat] : [])]} />

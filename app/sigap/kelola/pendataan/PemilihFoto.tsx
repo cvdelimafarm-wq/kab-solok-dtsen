@@ -15,6 +15,7 @@ import {
 } from "@/lib/laporanFoto";
 import { gambarKecil, gambarKecilTersimpan } from "./fotoKlien";
 import { BTN_O } from "../../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const INPUT = "w-full rounded-lg border border-[#CBD5E1] bg-white px-2.5 py-1.5 text-[13px] text-[#1E2B3F] focus:border-[#1F5FD1] focus:outline-none";
 const FILTER_AWAL: FilterFoto = { peran: [], slot: [], dari: "", sampai: "", cari: "", halaman: 1, ukuran: UKURAN_HALAMAN };
@@ -277,13 +278,13 @@ export default function PemilihFoto({ kegiatanId, status, onUbah }: { kegiatanId
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-[12px] text-[#55657D]">
               Per halaman
-              <select className={`${INPUT} !w-auto py-1`} value={filter.ukuran} onChange={(e) => ubahFilter({ ukuran: Number(e.target.value) })}>
+              <SelectCari className={`${INPUT} !w-auto py-1`} value={filter.ukuran} onChange={(e) => ubahFilter({ ukuran: Number(e.target.value) })}>
                 {[24, 48, 96].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             {adaSaringan && (
               <button
@@ -409,20 +410,20 @@ export default function PemilihFoto({ kegiatanId, status, onUbah }: { kegiatanId
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-[12px] font-bold text-[#55657D]">
             Foto per baris
-            <select className={`${INPUT} mt-1 font-normal`} value={status.opsi.perBaris} onChange={(e) => onUbah({ ...status, opsi: { ...status.opsi, perBaris: e.target.value === "3" ? 3 : 2 } })}>
+            <SelectCari className={`${INPUT} mt-1 font-normal`} value={status.opsi.perBaris} onChange={(e) => onUbah({ ...status, opsi: { ...status.opsi, perBaris: e.target.value === "3" ? 3 : 2 } })}>
               <option value={2}>2 foto per baris (lebih besar)</option>
               <option value={3}>3 foto per baris (lebih ringkas)</option>
-            </select>
+            </SelectCari>
           </label>
           <label className="block text-[12px] font-bold text-[#55657D]">
             Urutan foto
-            <select className={`${INPUT} mt-1 font-normal`} value={status.urut} onChange={(e) => onUbah({ ...status, urut: e.target.value as UrutFoto })}>
+            <SelectCari className={`${INPUT} mt-1 font-normal`} value={status.urut} onChange={(e) => onUbah({ ...status, urut: e.target.value as UrutFoto })}>
               {URUT.map((u) => (
                 <option key={u.kode} value={u.kode}>
                   {u.label}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
         </div>
         <div>

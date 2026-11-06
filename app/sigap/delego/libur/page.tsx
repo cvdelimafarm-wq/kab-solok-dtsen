@@ -14,6 +14,7 @@ import { useKirim } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const NAMA_JENIS: Record<LiburDelegasi["jenis"], string> = { nasional: "Libur nasional", cuti_bersama: "Cuti bersama", lainnya: "Lainnya" };
 
@@ -45,9 +46,9 @@ export default function KalenderLibur() {
       judul="Kalender libur"
       sub="Tanggal libur tidak dihitung hari kerja: tanpa target, hutang, beban, kewajiban lapor, dan pengingat."
       kanan={
-        <select className={`${KELAS.isian} !w-auto`} value={tahun} onChange={(e) => setTahun(e.target.value)} aria-label="Tahun">
+        <SelectCari className={`${KELAS.isian} !w-auto`} value={tahun} onChange={(e) => setTahun(e.target.value)} aria-label="Tahun">
           {(tahunAda.length ? tahunAda : [tahun]).map((t) => (<option key={t} value={t}>{t}</option>))}
-        </select>
+        </SelectCari>
       }
     >
       <Info>

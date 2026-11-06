@@ -9,6 +9,7 @@
 import { Angka } from "./Kontrol";
 import { tglIndo, type Rel } from "@/lib/keu/identifikasi";
 import { gabungSelisih, pecahSelisih, peringatanRentang, type ArahSelisih } from "@/lib/keu/relJadwal";
+import SelectCari from "@/app/components/SelectCari";
 
 const pilih = "box-border min-h-[40px] rounded-md border border-[#C5D0E2] bg-white px-2 text-[13.5px] font-semibold text-[#0F2A52] focus:outline-2 focus:outline-[#1F5FD1] disabled:opacity-60";
 
@@ -22,13 +23,13 @@ function Baris({ judul, nama, d, a, acuan, tanggal, mati, onD, onA }: {
       <span className="w-14 shrink-0 text-[13px] font-bold text-[#0F2A52]">{judul}</span>
       <div className="w-[84px]"><Angka nama={`${nama}, jumlah hari`} nilai={n} min={0} maks={365} mati={mati} onUbah={(v) => onD(gabungSelisih(v, arah))} /></div>
       <span className="text-[13px] text-[#44546F]">hari</span>
-      <select aria-label={`${nama}, sebelum atau sesudah`} className={pilih} value={n === 0 ? "sama" : arah} disabled={mati || n === 0} onChange={(e) => onD(gabungSelisih(n, e.target.value as ArahSelisih))}>
+      <SelectCari aria-label={`${nama}, sebelum atau sesudah`} className={pilih} value={n === 0 ? "sama" : arah} disabled={mati || n === 0} onChange={(e) => onD(gabungSelisih(n, e.target.value as ArahSelisih))}>
         {n === 0 ? <option value="sama">tepat pada</option> : (<><option value="sesudah">sesudah</option><option value="sebelum">sebelum</option></>)}
-      </select>
-      <select aria-label={`${nama}, acuan`} className={pilih} value={a} disabled={mati} onChange={(e) => onA(e.target.value as "mulai" | "selesai")}>
+      </SelectCari>
+      <SelectCari aria-label={`${nama}, acuan`} className={pilih} value={a} disabled={mati} onChange={(e) => onA(e.target.value as "mulai" | "selesai")}>
         <option value="mulai">mulai {acuan}</option>
         <option value="selesai">selesai {acuan}</option>
-      </select>
+      </SelectCari>
       <span className="rounded-md border border-[#CFE6D8] bg-white px-2 py-1 text-[12.5px] font-bold text-[#14653A]">→ {tanggal ? tglIndo(tanggal) : "belum dapat dihitung"}</span>
     </div>
   );

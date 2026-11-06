@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import TombolKembali from "@/app/components/TombolKembali";
 import { apiPortal, bacaSesi } from "../../sesi";
 import { NAMA_MODUL, periksaTahapAdmin, type BukaMode } from "@/lib/sigapTahap";
+import SelectCari from "@/app/components/SelectCari";
 
 type InfoInduk = { kode: string; nama: string; pendek: string; ikon: string; kegiatan_ids: number[]; urutan: number; aktif: boolean };
 type BarisTahap = { induk_kode: string; kode: string; urutan: number; nama: string; uraian: string | null; isi: string[]; buka_mode: BukaMode; buka_tanggal: string | null; aktif: boolean };
@@ -218,11 +219,11 @@ export default function AturTahapPage() {
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     <label className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#7B8794]">
                       Aturan buka
-                      <select value={x.buka_mode} onChange={(e) => ubah(i, { buka_mode: e.target.value as BukaMode })} className={`${INPUT} mt-1 normal-case tracking-normal`}>
+                      <SelectCari value={x.buka_mode} onChange={(e) => ubah(i, { buka_mode: e.target.value as BukaMode })} className={`${INPUT} mt-1 normal-case tracking-normal`}>
                         {ATURAN.map((a) => (
                           <option key={a.v} value={a.v}>{a.label}</option>
                         ))}
-                      </select>
+                      </SelectCari>
                     </label>
                     {x.buka_mode === "tanggal" && (
                       <label className="text-[12px] font-bold uppercase tracking-[0.06em] text-[#7B8794]">

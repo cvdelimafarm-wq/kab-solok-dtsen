@@ -96,6 +96,7 @@ import {
   type Pertanyaan,
   type SubKegiatan,
 } from "@/lib/perencanaanIdentifikasi";
+import SelectCari from "@/app/components/SelectCari";
 
 type Bagian = "kegiatan" | "pok" | "rencana" | "anggaran";
 const BAGIAN: { kode: Bagian; label: string }[] = [
@@ -448,13 +449,13 @@ function FormKegiatan({
         {roPilihan && roPilihan.length > 1 && (
           <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
             RO
-            <select className={INPUT} value={roId} onChange={(e) => setRoId(e.target.value)}>
+            <SelectCari className={INPUT} value={roId} onChange={(e) => setRoId(e.target.value)}>
               {roPilihan.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.kode} · {r.nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
         )}
       </div>
@@ -1341,7 +1342,7 @@ function FormSusunan({ nilai, ubah, tandai }: { nilai: SusunanPelatihan; ubah: (
                   value={p.nama}
                   onChange={(e) => ubah({ ...nilai, panitia: nilai.panitia.map((x) => (x.id === p.id ? { ...x, nama: e.target.value } : x)) })}
                 />
-                <select
+                <SelectCari
                   className={`${INPUT} w-36`}
                   aria-label={`Tugas panitia ${i + 1}`}
                   value={p.tugas}
@@ -1352,7 +1353,7 @@ function FormSusunan({ nilai, ubah, tandai }: { nilai: SusunanPelatihan; ubah: (
                       {t.label}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
                 <button type="button" className="text-[12px] font-semibold text-[#B42329] underline" onClick={() => ubah({ ...nilai, panitia: nilai.panitia.filter((x) => x.id !== p.id) })}>
                   Hapus
                 </button>
@@ -1718,13 +1719,13 @@ function PanelPok({ data, ro, simpan }: { data: DataUji; ro: Ro; simpan: (d: Dat
           kanan={
             <label className="flex items-center gap-2 text-[12.5px] text-[#4D5B6B]">
               Tampilkan
-              <select className={INPUT} value={saring} onChange={(e) => setSaring(e.target.value as typeof saring)}>
+              <SelectCari className={INPUT} value={saring} onChange={(e) => setSaring(e.target.value as typeof saring)}>
                 <option value="semua">Semua baris</option>
                 <option value="belum">Belum dipetakan</option>
                 <option value="sebagian">Sebagian</option>
                 <option value="penuh">Terpetakan</option>
                 <option value="lebih">Melebihi pagu</option>
-              </select>
+              </SelectCari>
             </label>
           }
         >
@@ -1890,14 +1891,14 @@ function EditorAlokasi({
             <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end">
               <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">
                 Kegiatan
-                <select className={INPUT} value={x.kegiatanId} onChange={(e) => ubah(i, { kegiatanId: e.target.value })}>
+                <SelectCari className={INPUT} value={x.kegiatanId} onChange={(e) => ubah(i, { kegiatanId: e.target.value })}>
                   <option value="">Pilih kegiatan…</option>
                   {kegiatan.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </label>
               {pakaiVolume ? (
                 <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#4D5B6B]">

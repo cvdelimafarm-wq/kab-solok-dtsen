@@ -20,6 +20,7 @@ import { Chip, Galat, judulKartu, kartu, kisi, kolom, Kpi, label, Memuat, tombol
 import { aksiKeu, tulisKeuKlien, useAnggaranRo, useBoleh, useKirim, useRabRo } from "../useKeu";
 import { RabPerSurvei } from "./RabPerSurvei";
 import { UsulanIdentifikasi } from "./UsulanIdentifikasi";
+import SelectCari from "@/app/components/SelectCari";
 
 const WARNA_STATUS: Record<string, WarnaChip> = { draf: "abu", dikembalikan: "merah", menunggu_ketua: "kuning", menunggu_ppk: "kuning", disetujui: "hijau" };
 const LABEL_ITEM: Record<PemetaanItem["status"], string> = { belum: "Belum ada RAB", sama: "RAB = Item", rinci: "RAB rinci", selesai: "Selesai" };
@@ -29,9 +30,9 @@ function PilihBulan({ id, nilai, ubah, teks }: { id: string; nilai: number; ubah
   return (
     <div>
       <label className={label} htmlFor={id}>{teks}</label>
-      <select id={id} className={kolom} value={nilai} onChange={(e) => ubah(Number(e.target.value))}>
+      <SelectCari id={id} className={kolom} value={nilai} onChange={(e) => ubah(Number(e.target.value))}>
         {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
-      </select>
+      </SelectCari>
     </div>
   );
 }
@@ -39,9 +40,9 @@ function PilihMinggu({ id, nilai, ubah }: { id: string; nilai: number; ubah: (n:
   return (
     <div>
       <label className={label} htmlFor={id}>Minggu cair</label>
-      <select id={id} className={kolom} value={nilai} onChange={(e) => ubah(Number(e.target.value))}>
+      <SelectCari id={id} className={kolom} value={nilai} onChange={(e) => ubah(Number(e.target.value))}>
         {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
-      </select>
+      </SelectCari>
     </div>
   );
 }
@@ -76,10 +77,10 @@ function FormSama({ p, ctx, tutup }: { p: PemetaanItem; ctx: Ctx; tutup: () => v
       {!p.rab && (
         <div>
           <label className={label} htmlFor={`sp-${p.pok.detail_id}`}>Prioritas (boleh kosong)</label>
-          <select id={`sp-${p.pok.detail_id}`} className={kolom} value={prioritas} onChange={(e) => setPrioritas(e.target.value)}>
+          <SelectCari id={`sp-${p.pok.detail_id}`} className={kolom} value={prioritas} onChange={(e) => setPrioritas(e.target.value)}>
             <option value="">Tanpa prioritas</option>
             {PRIORITAS.map((x) => <option key={x.kode} value={x.kode}>{x.nama}</option>)}
-          </select>
+          </SelectCari>
         </div>
       )}
       {galat && <Galat pesan={galat} />}
@@ -136,9 +137,9 @@ function FormBaris({ p, ctx, awal, barisId, tutup }: { p: PemetaanItem; ctx: Ctx
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={label} htmlFor={`bp-${p.pok.detail_id}`}>Jadwal</label>
-          <select id={`bp-${p.pok.detail_id}`} className={kolom} value={v.periode} onChange={(e) => ubah({ periode: e.target.value as Periode })}>
+          <SelectCari id={`bp-${p.pok.detail_id}`} className={kolom} value={v.periode} onChange={(e) => ubah({ periode: e.target.value as Periode })}>
             {(Object.keys(LABEL_PERIODE) as Periode[]).map((k) => <option key={k} value={k}>{LABEL_PERIODE[k]}</option>)}
-          </select>
+          </SelectCari>
         </div>
         <PilihMinggu id={`bm-${p.pok.detail_id}`} nilai={v.minggu} ubah={(n) => ubah({ minggu: n })} />
         <PilihBulan id={`bbm-${p.pok.detail_id}`} nilai={v.bulan_mulai} ubah={(n) => ubah({ bulan_mulai: n, bulan_sampai: Math.max(v.bulan_sampai, n) })} teks={v.periode === "sekali" ? "Bulan cair" : "Mulai bulan"} />

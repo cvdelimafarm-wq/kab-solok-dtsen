@@ -22,6 +22,7 @@ import {
 } from "@/lib/sigapQcSemua";
 import { BatangMendatar, Pergerakan, SelNilai, warnaNilai } from "./BatangQc";
 import { tglPendekQc } from "./PeriodeQc";
+import SelectCari from "@/app/components/SelectCari";
 
 const API = "/api/portal/qc/admin";
 const pesanGalat = (e: unknown) => (e instanceof Error ? e.message : "Terjadi kesalahan.");
@@ -144,18 +145,18 @@ export default function RekapSemuaQc({ kegiatanId, onBukaHari, api }: { kegiatan
               <div className="space-y-2.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <input className={`${INPUT} min-w-[180px] flex-1`} placeholder="Cari nama petugas atau PML" aria-label="Cari petugas" value={saring.cari} onChange={(e) => setSaring((s) => ({ ...s, cari: e.target.value }))} />
-                  <select className={INPUT} aria-label="Saring peran" value={saring.peran} onChange={(e) => setSaring((s) => ({ ...s, peran: e.target.value as SaringanSemua["peran"] }))}>
+                  <SelectCari className={INPUT} aria-label="Saring peran" value={saring.peran} onChange={(e) => setSaring((s) => ({ ...s, peran: e.target.value as SaringanSemua["peran"] }))}>
                     <option value="semua">Semua peran</option>
                     <option value="PML">PML</option>
                     <option value="PPL">PPL</option>
-                  </select>
-                  <select className={INPUT} aria-label="Saring tim" value={saring.pml} onChange={(e) => setSaring((s) => ({ ...s, pml: e.target.value }))}>
+                  </SelectCari>
+                  <SelectCari className={INPUT} aria-label="Saring tim" value={saring.pml} onChange={(e) => setSaring((s) => ({ ...s, pml: e.target.value }))}>
                     <option value="">Semua tim</option>
                     {tim.map((t) => <option key={t} value={t}>Tim {t}</option>)}
-                  </select>
-                  <select className={INPUT} aria-label="Urutkan" value={urut} onChange={(e) => setUrut(e.target.value as UrutSemua)}>
+                  </SelectCari>
+                  <SelectCari className={INPUT} aria-label="Urutkan" value={urut} onChange={(e) => setUrut(e.target.value as UrutSemua)}>
                     {(Object.keys(LABEL_URUT_SEMUA) as UrutSemua[]).map((k) => <option key={k} value={k}>Urut: {LABEL_URUT_SEMUA[k]}</option>)}
-                  </select>
+                  </SelectCari>
                   {(saring.peran !== "semua" || saring.pml || saring.cari) && (
                     <button type="button" className="min-h-[34px] rounded-full px-3 text-[12px] font-bold text-[#1F5FD1] underline" onClick={() => setSaring(SARINGAN_SEMUA_AWAL)}>Hapus saringan</button>
                   )}

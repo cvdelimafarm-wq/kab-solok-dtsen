@@ -14,6 +14,7 @@ import { LABEL_PUTUSAN, tglPanjang, type Putusan, type WarnaChip } from "@/lib/k
 import { waktuWib } from "@/lib/keu/status";
 import { aksiKeu, useAnggaranRo, useBacaKeu, useBoleh, useKirim } from "../useKeu";
 import { Chip, Galat, judulKartu, kartu, kisi, kolom, Kpi, label, Memuat, Potong, tombol, tombolAktif, tombolKecil, tombolUtama } from "../../keu-ui";
+import SelectCari from "@/app/components/SelectCari";
 
 
 type Kek = { id: number; akun_kode: string; uraian: string; jumlah: number | string; prioritas_kode: string; prioritas_nama: string | null; alasan: string | null; status: string; terbuka: boolean; kali_ditunda: number | string | null; alasan_putus: string | null; dicatat_oleh: number | string | null; dicatat_at: string | null; diputus_oleh: number | string | null; diputus_at: string | null };
@@ -26,11 +27,11 @@ function Bidang({ nilai, ubah, akunPilihan, baru }: { nilai: IsianKekurangan; ub
       {baru && (
         <div>
           <label className={label} htmlFor="kek-akun">Akun anggaran</label>
-          <select id="kek-akun" className={kolom} value={bebas ? "__lain" : nilai.akun_kode} onChange={(e) => { if (e.target.value === "__lain") { setBebas(true); ubah({ akun_kode: "" }); } else { setBebas(false); ubah({ akun_kode: e.target.value }); } }}>
+          <SelectCari id="kek-akun" className={kolom} value={bebas ? "__lain" : nilai.akun_kode} onChange={(e) => { if (e.target.value === "__lain") { setBebas(true); ubah({ akun_kode: "" }); } else { setBebas(false); ubah({ akun_kode: e.target.value }); } }}>
             <option value="">Pilih akun</option>
             {akunPilihan.map((a) => <option key={a} value={a}>{a}</option>)}
             <option value="__lain">Akun lain (ketik sendiri)</option>
-          </select>
+          </SelectCari>
           {bebas && <input className={`${kolom} mt-2`} inputMode="numeric" maxLength={6} placeholder="6 angka, mis. 521211" value={nilai.akun_kode} onChange={(e) => ubah({ akun_kode: e.target.value.replace(/\D/g, "").slice(0, 6) })} aria-label="Kode akun" />}
         </div>
       )}
@@ -45,10 +46,10 @@ function Bidang({ nilai, ubah, akunPilihan, baru }: { nilai: IsianKekurangan; ub
         </div>
         <div>
           <label className={label} htmlFor="kek-prioritas">Prioritas</label>
-          <select id="kek-prioritas" className={kolom} value={nilai.prioritas} onChange={(e) => ubah({ prioritas: e.target.value })}>
+          <SelectCari id="kek-prioritas" className={kolom} value={nilai.prioritas} onChange={(e) => ubah({ prioritas: e.target.value })}>
             <option value="">Pilih</option>
             {PRIORITAS.map((p) => <option key={p.kode} value={p.kode}>{p.nama}</option>)}
-          </select>
+          </SelectCari>
         </div>
       </div>
       <div>

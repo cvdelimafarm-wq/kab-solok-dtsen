@@ -14,6 +14,7 @@ import { tujuanAman } from "@/lib/vanguard/navigasi";
 import { NAMA_LEVEL, URUTAN_LEVEL } from "@/lib/vanguard/kasus/daftar";
 import { inputWibKeIso, isoKeInputWib, levelDibuka, type Pengaturan, type StatusJadwal } from "@/lib/vanguard/pengaturan";
 import type { JenisKesalahan, Tingkat } from "@/lib/vanguard/tipe";
+import SelectCari from "@/app/components/SelectCari";
 
 type Daftar = { id: number; nama: string; jenis: string; menyala: boolean; percobaan: number }[];
 type PengaturanJadwal = Pengaturan & { status: StatusJadwal };
@@ -182,9 +183,9 @@ function TabelPetugas({ petugas }: { petugas: BarisPetugas[] }) {
   return (
     <>
       <label className="mt-2 flex items-center gap-2 text-[12.5px] text-[#44546F]">Urutkan
-        <select value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className="min-h-[40px] rounded-[10px] border border-[#CBD6E6] bg-white px-2 text-[13px] text-[#0F2A52]">
+        <SelectCari value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className="min-h-[40px] rounded-[10px] border border-[#CBD6E6] bg-white px-2 text-[13px] text-[#0F2A52]">
           <option value="nama">Nama</option><option value="fatal">Kesalahan fatal terbanyak</option><option value="percobaan">Percobaan terbanyak</option><option value="benar">Kasus benar terbanyak</option>
-        </select>
+        </SelectCari>
       </label>
       <div className="mt-2 overflow-x-auto">
         <table className="w-full min-w-[760px] border-collapse text-[12.5px]">

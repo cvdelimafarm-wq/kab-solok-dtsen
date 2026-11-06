@@ -22,6 +22,7 @@ import { BTN, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TabelKartu, 
 import GrafikMonitoring from "./GrafikMonitoring";
 import PanelSiaranPerbaikan from "./PanelSiaranPerbaikan";
 import RincianHari from "./RincianHari";
+import SelectCari from "@/app/components/SelectCari";
 
 type Status = "lengkap" | "sebagian" | "terlewat" | "rencana";
 type Row = {
@@ -333,20 +334,20 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
       {/* (6 Okt 2026) Filter satu baris di atas grafik & tabel -- keduanya mengikuti filter. */}
       <Kartu className="!py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <select value={fKec} onChange={(e) => setFKec(e.target.value)} className={INPUT} aria-label="Filter kecamatan tujuan">
+          <SelectCari value={fKec} onChange={(e) => setFKec(e.target.value)} className={INPUT} aria-label="Filter kecamatan tujuan">
             <option value="">Semua kecamatan</option>
             {opsiKec.map((k) => (
               <option key={k}>{k}</option>
             ))}
-          </select>
-          <select value={fPeran} onChange={(e) => setFPeran(e.target.value)} className={INPUT} aria-label="Filter peran">
+          </SelectCari>
+          <SelectCari value={fPeran} onChange={(e) => setFPeran(e.target.value)} className={INPUT} aria-label="Filter peran">
             <option value="">Semua peran</option>
             {opsiPeran.map((p) => (
               <option key={p} value={p}>
                 {p.toUpperCase()}
               </option>
             ))}
-          </select>
+          </SelectCari>
           <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama…" className={`${INPUT} min-w-[160px] flex-1 sm:flex-none`} />
           <label className="flex items-center gap-1.5 text-[12px] font-semibold text-[#4D5B6B]">
             <input type="checkbox" checked={penuh} onChange={(e) => setPenuh(e.target.checked)} disabled={!kegiatan?.tanggal_mulai || !kegiatan?.tanggal_selesai} />
@@ -645,7 +646,7 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
               <p className="text-[12.5px] text-[#7B8794]">Tidak ada petugas dengan tanggal terlewat. 🎉</p>
             ) : (
               <form onSubmit={beriIzin} className="flex flex-wrap items-center gap-2">
-                <select
+                <SelectCari
                   value={izPen}
                   onChange={(e) => {
                     const id = Number(e.target.value) || "";
@@ -662,19 +663,19 @@ export default function TabMonitoring({ kegiatanId, kegiatan, hariIni }: { kegia
                       {r.nama} · {r.peran.toUpperCase()} ({r.terlewat.length} terlewat)
                     </option>
                   ))}
-                </select>
-                <select value={izTgl} onChange={(e) => setIzTgl(e.target.value)} className={`${INPUT} min-w-[220px]`} disabled={!rowIzin} aria-label="Tanggal terlewat">
+                </SelectCari>
+                <SelectCari value={izTgl} onChange={(e) => setIzTgl(e.target.value)} className={`${INPUT} min-w-[220px]`} disabled={!rowIzin} aria-label="Tanggal terlewat">
                   {!rowIzin && <option value="">Pilih tanggal…</option>}
                   {rowIzin?.terlewat.map((t) => (
                     <option key={t} value={t}>
                       {tglPanjang(t)} {rowIzin.izin.includes(t) ? "(izin sudah pernah diberi)" : "(terlewat)"}
                     </option>
                   ))}
-                </select>
-                <select value={izSampai} onChange={(e) => setIzSampai(e.target.value as "hari_ini" | "besok")} className={INPUT} aria-label="Berlaku sampai">
+                </SelectCari>
+                <SelectCari value={izSampai} onChange={(e) => setIzSampai(e.target.value as "hari_ini" | "besok")} className={INPUT} aria-label="Berlaku sampai">
                   <option value="hari_ini">Berlaku s.d. hari ini 23:59 WIB</option>
                   <option value="besok">Berlaku s.d. besok 23:59 WIB</option>
-                </select>
+                </SelectCari>
                 <input value={izAlasan} onChange={(e) => setIzAlasan(e.target.value)} placeholder="Alasan (wajib)" className={`${INPUT} min-w-[180px] flex-1`} maxLength={300} />
                 <button type="submit" className={BTN} disabled={izBusy || !izPen || !izTgl || izAlasan.trim().length < 5}>
                   {izBusy ? "Menyimpan…" : "Beri izin"}

@@ -36,6 +36,7 @@ import {
 import { BTN, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 import KepalaKolom from "./KepalaKolom";
 import { adaSaring, nilaiBeda, terapkanTabel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
+import SelectCari from "@/app/components/SelectCari";
 
 type Baris = PetugasCetak & { dikunci_at: string | null };
 type Data = { kegiatan: { kode: string } | null; rows: Baris[]; hari_min: string | null; hari_maks: string | null };
@@ -310,22 +311,22 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
           <div>
             <label className={label}>
               Peran
-              <select value={peran} onChange={(e) => setPeran(e.target.value as FilterPeran)} className={`${INPUT} mt-1 w-full`}>
+              <SelectCari value={peran} onChange={(e) => setPeran(e.target.value as FilterPeran)} className={`${INPUT} mt-1 w-full`}>
                 {PILIHAN_PERAN.map((o) => (
                   <option key={o.kode} value={o.kode}>
                     {o.label}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
           </div>
           <div>
             <label className={label}>
               Urutan
-              <select value={urut} onChange={(e) => setUrut(e.target.value as UrutCetak)} className={`${INPUT} mt-1 w-full`}>
+              <SelectCari value={urut} onChange={(e) => setUrut(e.target.value as UrutCetak)} className={`${INPUT} mt-1 w-full`}>
                 <option value="tim">Menurut tim (PML dulu, lalu PPL-nya)</option>
                 <option value="abjad">Abjad nama</option>
-              </select>
+              </SelectCari>
             </label>
             <p className="mt-1 text-[12px] text-[#6B7A90]">{teksUrutan(urut, peran)}</p>
           </div>
@@ -346,10 +347,10 @@ export default function TabUnduhSpj({ kegiatanId }: { kegiatanId: number }) {
           <div>
             <label className={label}>
               Keluaran
-              <select value={format} onChange={(e) => setFormat(e.target.value as FormatCetak)} className={`${INPUT} mt-1 w-full`}>
+              <SelectCari value={format} onChange={(e) => setFormat(e.target.value as FormatCetak)} className={`${INPUT} mt-1 w-full`}>
                 <option value="pdf">PDF gabungan terurut (siap cetak)</option>
                 <option value="zip">ZIP berisi PDF per petugas</option>
-              </select>
+              </SelectCari>
             </label>
           </div>
         </div>

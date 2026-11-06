@@ -19,6 +19,7 @@ import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, tglPanjang } from "@/lib/keu/r
 import { urlBaca } from "@/lib/keu/ro";
 import { aksiKeu, useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kosong, label, Memuat, tombolAktif, tombolKecil } from "../../keu-ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string };
 type Waktu = { kode: string; nilai_tanggal: string | null; nilai: string };
@@ -139,9 +140,9 @@ function Isi() {
             {daftarJadwal.length > 0 && (
               <div className="max-w-[560px]">
                 <label className={label} htmlFor="pilih-jadwal-lampiran">Kertas kerja yang dicatat kelengkapannya</label>
-                <select id="pilih-jadwal-lampiran" className={kolom} value={jid ?? ""} onChange={(e) => ke({ jadwal: Number(e.target.value) })}>
+                <SelectCari id="pilih-jadwal-lampiran" className={kolom} value={jid ?? ""} onChange={(e) => ke({ jadwal: Number(e.target.value) })}>
                   {daftarJadwal.map((j) => <option key={j.id} value={j.id}>#{j.id} · {j.judul} · {LABEL_JENIS_JADWAL[j.jenis] ?? j.jenis} · {LABEL_STATUS_JADWAL[j.status] ?? j.status}</option>)}
-                </select>
+                </SelectCari>
               </div>
             )}
             {daftarJadwal.length === 0 && <Kosong teks="Belum ada jadwal revisi, jadi kelengkapan lampiran belum bisa dicatat." />}
@@ -184,10 +185,10 @@ function Isi() {
               <h2 className={judulKartu}>Draf isi surat usulan</h2>
               <div className="flex flex-wrap items-center gap-2">
                 {daftarKro.length > 0 && (
-                  <select aria-label="Cakupan KRO" className={`${kolom} !min-h-[32px] !w-auto !text-[12px]`} value={kroPakai} onChange={(e) => setKro(e.target.value)}>
+                  <SelectCari aria-label="Cakupan KRO" className={`${kolom} !min-h-[32px] !w-auto !text-[12px]`} value={kroPakai} onChange={(e) => setKro(e.target.value)}>
                     <option value="">Seluruh baris yang berubah</option>
                     {daftarKro.map((k) => <option key={k} value={k}>KRO {k}</option>)}
-                  </select>
+                  </SelectCari>
                 )}
                 <button type="button" onClick={() => void salin()} className={`${tombolKecil} !min-h-[32px] !px-2.5 !text-[12px]`}>{tersalin ? "Tersalin" : "Salin draf"}</button>
                 <Chip warna="abu">Draf, bukan dokumen resmi</Chip>

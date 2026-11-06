@@ -19,6 +19,7 @@ import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import PemilihPenerima, { type Pilihan } from "../PemilihPenerima";
 import { Galat, Halaman, Info, Kartu, Kosong, Medan, Peringatan, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const HARI: { n: number; label: string }[] = [
   { n: 1, label: "Sen" }, { n: 2, label: "Sel" }, { n: 3, label: "Rab" }, { n: 4, label: "Kam" }, { n: 5, label: "Jum" }, { n: 6, label: "Sab" }, { n: 7, label: "Min" },
@@ -198,28 +199,28 @@ export default function Buat() {
               </div>
               {asal === "tim" && (
                 <Medan label="Pekerjaan tim" bantu="Untuk pekerjaan teknis kantor yang tidak melekat pada satu RO (memeriksa dokumen, menyusun KAK, evaluasi, briefing).">
-                  <select className={KELAS.isian} value={kelompok} onChange={(e) => setKelompok(e.target.value)}>
+                  <SelectCari className={KELAS.isian} value={kelompok} onChange={(e) => setKelompok(e.target.value)}>
                     <option value="">Pilih kelompok</option>
                     {daftarKelompok.map((k) => <option key={k.kode} value={k.kode}>{k.nama}</option>)}
-                  </select>
+                  </SelectCari>
                 </Medan>
               )}
               {asal === "ident" && (
                 <Medan label="Identifikasi kebutuhan" bantu="Pilih identifikasi yang sudah disahkan sebagai asal pekerjaan ini.">
-                  <select className={KELAS.isian} value={ident ?? ""} onChange={(e) => setIdent(e.target.value ? Number(e.target.value) : null)}>
+                  <SelectCari className={KELAS.isian} value={ident ?? ""} onChange={(e) => setIdent(e.target.value ? Number(e.target.value) : null)}>
                     <option value="">Pilih identifikasi</option>
                     {hak.ident.map((i) => (
                       <option key={i.id} value={i.id}>{i.nama} · {i.ro_kode}{i.lanjutan_final ? " · lanjutan final" : ""}</option>
                     ))}
-                  </select>
+                  </SelectCari>
                 </Medan>
               )}
               {asal === "ro" && (
                 <Medan label="RO">
-                  <select className={KELAS.isian} value={roBebas} onChange={(e) => setRoBebas(e.target.value)}>
+                  <SelectCari className={KELAS.isian} value={roBebas} onChange={(e) => setRoBebas(e.target.value)}>
                     <option value="">Pilih RO</option>
                     {roSaja.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  </SelectCari>
                 </Medan>
               )}
               {ro && asal !== "tim" && <p className="m-0 text-[13px] text-[#3B4A57]">RO: <b>{ro}</b></p>}
@@ -235,10 +236,10 @@ export default function Buat() {
 
               {daftarJenis.length > 0 && (
                 <Medan label="Jenis pekerjaan" bantu={jenis ? `${fmt(pps, 1)} poin per ${jenis.satuan} (sekitar ${teksDurasi(pps)}). ${jenis.uraian}` : "Pilih dari katalog supaya beban dihitung dengan ukuran tetap; atau kosongkan untuk mengisi poin langsung."}>
-                  <select className={KELAS.isian} value={jenisId} onChange={(e) => pilihJenis(e.target.value)}>
+                  <SelectCari className={KELAS.isian} value={jenisId} onChange={(e) => pilihJenis(e.target.value)}>
                     <option value="">Lainnya (isi poin langsung)</option>
                     {daftarJenis.map((j) => <option key={j.id} value={j.id}>{j.nama} · {fmt(angka(j.poin_per_satuan), 1)} poin/{j.satuan}</option>)}
-                  </select>
+                  </SelectCari>
                 </Medan>
               )}
               <Medan label="Judul"><input className={KELAS.isian} maxLength={200} value={judul} onChange={(e) => setJudul(e.target.value)} placeholder="Contoh: Memeriksa dokumen pertanggungjawaban Oktober" /></Medan>
@@ -265,7 +266,7 @@ export default function Buat() {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <Medan label="Bobot (1-5)"><select className={KELAS.isian} value={bobot} onChange={(e) => setBobot(e.target.value)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</select></Medan>
+                <Medan label="Bobot (1-5)"><SelectCari className={KELAS.isian} value={bobot} onChange={(e) => setBobot(e.target.value)}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}</SelectCari></Medan>
                 <Medan label="Jam tenggat (opsional, WIB)"><input type="time" className={KELAS.isian} value={jamTenggat} onChange={(e) => setJamTenggat(e.target.value)} /></Medan>
                 <Medan label="Mulai"><input type="date" className={KELAS.isian} value={mulai} disabled={mendadak} onChange={(e) => setMulai(e.target.value)} /></Medan>
                 <Medan label="Tenggat"><input type="date" className={KELAS.isian} min={mulai} value={tenggat} onChange={(e) => setTenggat(e.target.value)} /></Medan>
@@ -329,26 +330,26 @@ export default function Buat() {
           <Kartu judul="Jenis urusan (opsional)">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Medan label="Jenis urusan" bantu="Bila dikosongkan, dicatat sebagai pekerjaan langsung.">
-                <select className={KELAS.isian} value={kelas} onChange={(e) => setKelas(e.target.value as KelasPekerjaan | "")}>
+                <SelectCari className={KELAS.isian} value={kelas} onChange={(e) => setKelas(e.target.value as KelasPekerjaan | "")}>
                   <option value="">Otomatis</option>
                   {(Object.keys(NAMA_KELAS) as KelasPekerjaan[]).map((k) => (
                     <option key={k} value={k}>{NAMA_KELAS[k]}</option>
                   ))}
-                </select>
+                </SelectCari>
               </Medan>
               <Medan label="Tautkan ke kegiatan" bantu="Supaya terhitung di rekap kegiatan itu.">
-                <select className={KELAS.isian} value={kegiatanId} onChange={(e) => setKegiatanId(e.target.value)}>
+                <SelectCari className={KELAS.isian} value={kegiatanId} onChange={(e) => setKegiatanId(e.target.value)}>
                   <option value="">Tanpa kegiatan</option>
                   {(katalog.data?.kegiatan ?? []).filter((k) => !ro || k.ro_kode === ro).map((k) => (
                     <option key={k.id} value={k.id}>{k.nama}</option>
                   ))}
-                </select>
+                </SelectCari>
               </Medan>
               <Medan label="Cara menutup" bantu="Ringan: laporan langsung diakui tanpa tinjau (untuk urusan kecil).">
-                <select className={KELAS.isian} value={modeTutup} onChange={(e) => setModeTutup(e.target.value as "tinjau" | "ringan")}>
+                <SelectCari className={KELAS.isian} value={modeTutup} onChange={(e) => setModeTutup(e.target.value as "tinjau" | "ringan")}>
                   <option value="tinjau">Ditinjau Ketua Tim</option>
                   <option value="ringan">Ringan, tanpa tinjau</option>
-                </select>
+                </SelectCari>
               </Medan>
             </div>
           </Kartu>

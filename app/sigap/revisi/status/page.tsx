@@ -28,6 +28,7 @@ import { useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kolom, Kosong, label, Memuat, tombolAktif, tombolBahaya, tombolKecil, tombolUtama } from "../../keu-ui";
 import KartuCekPagu, { useSisiSistem } from "../CekPaguAkun";
 import { bacaBerkasPok } from "../pok/pdf";
+import SelectCari from "@/app/components/SelectCari";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; buka: string; tutup: string; ulang: string; status: string };
 type PeranBaca = Peran & { aktif?: boolean };
@@ -149,9 +150,9 @@ function Isi() {
             {daftar.length > 0 ? (
               <div className="max-w-[640px]">
                 <label className={label} htmlFor="pilih-jadwal-status">Kertas kerja (jadwal revisi)</label>
-                <select id="pilih-jadwal-status" className={kolom} value={jid ?? ""} onChange={(e) => ganti(Number(e.target.value))}>
+                <SelectCari id="pilih-jadwal-status" className={kolom} value={jid ?? ""} onChange={(e) => ganti(Number(e.target.value))}>
                   {daftar.map((j) => <option key={j.id} value={j.id}>#{j.id} · {j.judul} · {LABEL_JENIS_JADWAL[j.jenis] ?? j.jenis} · {LABEL_STATUS_JADWAL[j.status] ?? j.status}</option>)}
-                </select>
+                </SelectCari>
               </div>
             ) : <Kosong teks={semua.length === 0 ? "Belum ada jadwal revisi." : "Tidak ada jadwal untuk jenis ini."} />}
 

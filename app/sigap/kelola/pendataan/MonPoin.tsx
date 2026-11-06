@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { ATURAN, kelasPoin, matriksPoin, tglPendek, type BarisPoin, type DataKinerja, type KelasPoin, type SelPoin } from "@/lib/monitorKinerja";
 import { Catatan, Kpi, fmt, fmt2, label, sel, td, tdAngka, th, tombol } from "./monUi";
+import SelectCari from "@/app/components/SelectCari";
 
 type Urut = "bawaan" | "rata_rendah" | "total" | "hutang";
 const GAYA: Record<KelasPoin, string> = {
@@ -78,14 +79,14 @@ export default function MonPoin({ data }: { data: DataKinerja }) {
         <div className="grid grid-cols-2 items-end gap-2.5 sm:flex sm:flex-wrap sm:gap-3">
           <label className={label}>
             Tim (PML)
-            <select value={pml ?? ""} onChange={(e) => setPml(e.target.value ? Number(e.target.value) : null)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[170px]`}>
+            <SelectCari value={pml ?? ""} onChange={(e) => setPml(e.target.value ? Number(e.target.value) : null)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[170px]`}>
               <option value="">Semua tim</option>
               {timList.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <label className={label}>
             Cari nama
@@ -93,12 +94,12 @@ export default function MonPoin({ data }: { data: DataKinerja }) {
           </label>
           <label className={label}>
             Urutkan
-            <select value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[180px]`}>
+            <SelectCari value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[180px]`}>
               <option value="bawaan">Tim lalu nama</option>
               <option value="rata_rendah">Rata-rata poin terendah</option>
               <option value="total">Total poin tertinggi</option>
               <option value="hutang">Hutang terbesar</option>
-            </select>
+            </SelectCari>
           </label>
           <button type="button" onClick={() => void unduh()} className={tombol}>
             Unduh Excel

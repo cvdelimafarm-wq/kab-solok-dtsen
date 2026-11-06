@@ -51,6 +51,7 @@ import {
   useSpjMonitoring,
 } from "./spj-monitoring";
 import { SpjCetakTab, SpjCetakSaya } from "./spj-cetak";
+import SelectCari from "@/app/components/SelectCari";
 
 // Tanggal hari ini menurut WIB (UTC+7, tanpa DST) -- dipakai modal ucapan
 // terima kasih SPJ (bandingkan tanggal Laporan/Dokumentasi vs "hari ini")
@@ -2092,14 +2093,14 @@ function LaporanForm({
         </div>
         <div>
           <label className="mb-1 block text-[10px] font-medium text-ink/50">Mode Isi Laporan</label>
-          <select
+          <SelectCari
             value={mode}
             onChange={(e) => setMode(e.target.value === "bebas" ? "bebas" : "template")}
             className="w-full rounded-md border border-line px-2 py-1.5 text-xs"
           >
             <option value="template">Template (otomatis dari Identifikasi)</option>
             <option value="bebas">Narasi Bebas</option>
-          </select>
+          </SelectCari>
         </div>
       </div>
 
@@ -2561,7 +2562,7 @@ function DokumentasiStCard({
                       className="h-12 w-12 shrink-0 rounded object-cover"
                     />
                     <span className="min-w-0 flex-1 truncate text-[11px] text-ink/70">{b.file.name}</span>
-                    <select
+                    <SelectCari
                       value={b.slot ?? ""}
                       onChange={(e) => ubahSlotBatch(i, Number(e.target.value))}
                       disabled={batchBusy}
@@ -2576,7 +2577,7 @@ function DokumentasiStCard({
                           {foto[s] ? " (ganti foto lama)" : ""}
                         </option>
                       ))}
-                    </select>
+                    </SelectCari>
                     <button
                       type="button"
                       onClick={() => hapusDariBatch(i)}

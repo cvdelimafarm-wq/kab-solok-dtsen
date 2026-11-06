@@ -49,6 +49,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 import { useExcelTable, ExcelTh } from "./_shared/excel-table";
+import SelectCari from "@/app/components/SelectCari";
 
 // NILAI STRING INI HARUS PERSIS SAMA dgn TOKEN_KEY/NAMA_KEY/
 // PETUGAS_ID_STORE_KEY/LAT_KEY/LNG_KEY di app/seruti/penyisiran-usaha.tsx
@@ -554,7 +555,7 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
     <div className="rounded-lg border border-line bg-white p-3">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-navy-900">📊 Ringkasan Hasil Identifikasi</p>
-        <select
+        <SelectCari
           value={level}
           onChange={(e) => setLevel(e.target.value as Level)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -564,7 +565,7 @@ function RingkasanIdentifikasi({ token, onSessionExpired }: { token: string; onS
               Per {LEVEL_LABEL[l]}
             </option>
           ))}
-        </select>
+        </SelectCari>
       </div>
 
       {level === "kec" && (
@@ -1074,7 +1075,7 @@ function TargetIdentifikasiSection({
             className="w-24 rounded-md border border-line px-2 py-1.5 text-xs"
           />
         </div>
-        <select
+        <SelectCari
           value={bulkSatuan}
           onChange={(e) => setBulkSatuan(e.target.value as SatuanIdentifikasi)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -1084,7 +1085,7 @@ function TargetIdentifikasiSection({
               {SATUAN_LABEL[s]}
             </option>
           ))}
-        </select>
+        </SelectCari>
         <button
           type="button"
           onClick={handleTerapkan}
@@ -1227,7 +1228,7 @@ function BarisIdentifikasi({
       </td>
       <td className="px-3 py-1.5">
         <div className="flex items-center gap-1.5">
-          <select
+          <SelectCari
             value={satuan}
             onChange={(e) => {
               const v = e.target.value as SatuanIdentifikasi;
@@ -1241,7 +1242,7 @@ function BarisIdentifikasi({
                 {SATUAN_LABEL[s]}
               </option>
             ))}
-          </select>
+          </SelectCari>
           {status === "saving" && <span className="text-[10px] text-ink/40">...</span>}
           {status === "ok" && <span className="text-[10px] text-moss-700">✓</span>}
           {status === "err" && <span className="text-[10px] text-rust-700">✕</span>}

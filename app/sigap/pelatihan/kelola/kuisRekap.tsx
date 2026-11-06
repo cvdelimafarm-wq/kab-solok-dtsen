@@ -11,6 +11,7 @@ import { BTN, BTN_O, BTN_R, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH, TabelKart
 import { URL_KUIS_ADMIN } from "./kuisHost";
 import { kirim, type AksiFn, type Daftar } from "./kuisBersama";
 import { labelKelas } from "@/lib/sigapKuis";
+import SelectCari from "@/app/components/SelectCari";
 
 export function Riwayat({ data, bisaKelola, sibuk, aksi, bukaHost, bukaRekap, rekapAktif, tutupRekap }: { data: Daftar; bisaKelola: boolean; sibuk: boolean; aksi: AksiFn; bukaHost: (ruangId: number) => void; bukaRekap: (ruangId: number) => void; rekapAktif: number | null; tutupRekap: () => void }) {
   const [hapusRuang, setHapusRuang] = useState<number | null>(null);
@@ -144,22 +145,22 @@ export function Rekap({ ruangId, onTutup }: { ruangId: number; onTutup: () => vo
       {d && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter rekap">
-            <select className={INPUT} value={tampil} onChange={(e) => setTampil(e.target.value as "ikut" | "semua" | "tidak")} aria-label="Keikutsertaan">
+            <SelectCari className={INPUT} value={tampil} onChange={(e) => setTampil(e.target.value as "ikut" | "semua" | "tidak")} aria-label="Keikutsertaan">
               <option value="ikut">Yang ikut kuis</option>
               <option value="tidak">Belum/tidak ikut</option>
               <option value="semua">Semua peserta pelatihan</option>
-            </select>
-            <select className={INPUT} value={jenis} onChange={(e) => setJenis(e.target.value)} aria-label="Filter jenis">
+            </SelectCari>
+            <SelectCari className={INPUT} value={jenis} onChange={(e) => setJenis(e.target.value)} aria-label="Filter jenis">
               <option value="">Organik & Mitra</option>
               <option value="organik">Organik</option>
               <option value="mitra">Mitra</option>
-            </select>
-            <select className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
+            </SelectCari>
+            <SelectCari className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
               <option value="">Semua kelas</option>
               {[1, 2, 3, 4].map((k) => (
                 <option key={k} value={k}>{labelKelas(k)}</option>
               ))}
-            </select>
+            </SelectCari>
             <input className={`${INPUT} min-w-[150px] flex-1`} placeholder="Cari nama…" value={cari} onChange={(e) => setCari(e.target.value)} aria-label="Cari nama" />
           </div>
           <TabelKartu className="!shadow-none">

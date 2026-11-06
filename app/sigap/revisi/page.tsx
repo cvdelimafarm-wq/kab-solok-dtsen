@@ -17,6 +17,7 @@ import { tulisKeuKlien, useBacaKeu, useBoleh, useKirim } from "../ro/useKeu";
 import KartuJadwal, { type Jadwal, type Sah } from "./KartuJadwal";
 import BagianTambahan, { type Tambahan } from "./Tambahan";
 import { caps, Catatan, Chip, Galat, HalamanKeu, kartu, kolom, label, Tenang, tombolAktif, tombolKecil, tombolUtama } from "../keu-ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Tenggat = { kode: string; nama: string; tanggal: string; sisa_hari: number | string | null };
 type PokVersi = { id: number; nomor_pok: string | null; tanggal_efektif: string | null };
@@ -146,9 +147,9 @@ export default function HalamanRevisi() {
             {bolehJadwal && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <label className="sr-only" htmlFor="bln-th">Tahun anggaran</label>
-                <select id="bln-th" className={`${kolom} !w-auto`} value={tahunBawaan} onChange={(e) => setTahunPilih(e.target.value)}>
+                <SelectCari id="bln-th" className={`${kolom} !w-auto`} value={tahunBawaan} onChange={(e) => setTahunPilih(e.target.value)}>
                   {(tahunTerdaftar.length ? tahunTerdaftar : [Number(tahunBawaan)]).map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
+                </SelectCari>
                 <button type="button" disabled={mengirim} className={tombolKecil} onClick={() => void buatBawaan()}>Buat jadwal bawaan Revisi POK tanggal 10 ({tahunBawaan})</button>
               </div>
             )}

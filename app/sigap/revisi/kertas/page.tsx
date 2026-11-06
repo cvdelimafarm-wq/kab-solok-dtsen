@@ -30,6 +30,7 @@ import { KartuVersiRab, SubRab, type StatusRabRo, type VersiRabRow } from "./Rab
 import { urlPeta } from "@/lib/keu/peta";
 import { sandingkanRab, type ItemRabKro, type JadwalItem } from "@/lib/keu/rabKro";
 import type { BarisRabRow as RincianRabRow } from "@/lib/keu/rab";
+import SelectCari from "@/app/components/SelectCari";
 
 type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string; buka: string; tutup: string };
 type RoRow = { kode: string; nama: string; sementara: boolean; aktif: boolean };
@@ -291,9 +292,9 @@ function Isi() {
           <section className={`${kartu} flex flex-col gap-3`}>
             <div className="flex flex-wrap items-end gap-2">
               <div><label className={label} htmlFor="kk-j">Jadwal revisi</label>
-                <select id="kk-j" className={`${kolom} !w-auto max-w-full`} value={jd.id} onChange={(e) => ke({ jadwal: Number(e.target.value) })}>{urutJadwal.map((x) => <option key={x.id} value={x.id}>{x.judul}</option>)}</select></div>
+                <SelectCari id="kk-j" className={`${kolom} !w-auto max-w-full`} value={jd.id} onChange={(e) => ke({ jadwal: Number(e.target.value) })}>{urutJadwal.map((x) => <option key={x.id} value={x.id}>{x.judul}</option>)}</SelectCari></div>
               <div><label className={label} htmlFor="kk-k">KRO</label>
-                <select id="kk-k" className={`${kolom} !w-auto max-w-full`} value={kro} onChange={(e) => ke({ kro: e.target.value })}>{daftarKro.map((k) => <option key={k} value={k}>{k}</option>)}</select></div>
+                <SelectCari id="kk-k" className={`${kolom} !w-auto max-w-full`} value={kro} onChange={(e) => ke({ kro: e.target.value })}>{daftarKro.map((k) => <option key={k} value={k}>{k}</option>)}</SelectCari></div>
               <Chip warna={jd.status === "dibuka" ? "hijau" : jd.status === "terkumpul" || (jd.status === "diterapkan" && (jd.jenis === "pok" || jd.jenis === "administrasi")) ? "kuning" : "abu"}>
                 {jd.status === "dibuka" || jd.status === "terkumpul" ? "Draf, belum diterapkan"
                   : jd.status === "diterapkan" && (jd.jenis === "pok" || jd.jenis === "administrasi") ? "Diterapkan, menunggu Sah (masih dapat disesuaikan dengan POK resmi)"
@@ -373,7 +374,7 @@ function Isi() {
             <section className={`${kartu} flex flex-col gap-2.5`}>
               <h2 className={judulKartu}>Item baru dan Dana penggenap</h2>
               <div className="max-w-[420px]"><label className={label} htmlFor="kk-ra">RO</label>
-                <select id="kk-ra" className={kolom} value={roPilih} onChange={(e) => setRoAksi(e.target.value)}>{roBisa.map((r) => <option key={r} value={r}>{r} {(namaRo.get(r) ?? "").slice(0, 40)}</option>)}</select></div>
+                <SelectCari id="kk-ra" className={kolom} value={roPilih} onChange={(e) => setRoAksi(e.target.value)}>{roBisa.map((r) => <option key={r} value={r}>{r} {(namaRo.get(r) ?? "").slice(0, 40)}</option>)}</SelectCari></div>
               {roPilih && komponenRo.length > 0 && (
                 <>
                   <p className="text-[12.5px] text-[#5B6B84]">Sisa pagu RO {roPilih}: <b>{rupiah(sisaTerhadapPagu(barisRoPilih))}</b>{sisaTerhadapPagu(barisRoPilih) > 0 ? ". Dana penggenap menampung sisa ini." : sisaTerhadapPagu(barisRoPilih) < 0 ? ". Jumlah Menjadi melebihi pagu RO; kurangi pada baris lain." : ". Sudah tepat sampai pagu."}</p>

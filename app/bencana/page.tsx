@@ -14,6 +14,7 @@ import BrandBps from "@/app/components/BrandBps";
 import IkonMenu from "@/app/portal/IkonMenu";
 // (23 Okt 2026) tombol Kembali seragam + tautan logo ke Beranda (audit navigasi Tahap 1)
 import TombolKembali from "@/app/components/TombolKembali";
+import SelectCari from "@/app/components/SelectCari";
 
 // ------------------------------------------------------------------------
 // Halaman publik (tanpa login): Identifikasi SLS/Jorong Terdampak Bencana
@@ -2289,7 +2290,7 @@ function RekapSubslsSection({
       <div className="mt-2 grid grid-cols-1 gap-3 rounded-md border border-line bg-white p-3 sm:grid-cols-3">
         <div>
           <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
-          <select
+          <SelectCari
             value={kecFilter}
             onChange={(e) => {
               setKecFilter(e.target.value);
@@ -2303,11 +2304,11 @@ function RekapSubslsSection({
                 {k}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
         <div>
           <label className="text-xs font-medium text-ink/60">Filter Status</label>
-          <select
+          <SelectCari
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value as "" | JorongStatus);
@@ -2319,7 +2320,7 @@ function RekapSubslsSection({
             <option value="terdampak">Terdampak</option>
             <option value="tidak_terdampak">Tidak Terdampak</option>
             <option value="belum">Belum Diisi</option>
-          </select>
+          </SelectCari>
         </div>
         <div>
           <label className="text-xs font-medium text-ink/60">Cari Nagari/Jorong/Sub SLS</label>
@@ -4609,7 +4610,7 @@ function KegiatanPetugasSection() {
                   {/* (3 Okt 2026) "Status Kepegawaian" dipindah ke PALING
                       UJUNG (permintaan user), sejalan dgn <th>-nya di atas. */}
                   <td className="px-3 py-2">
-                    <select
+                    <SelectCari
                       value={r.status_kepegawaian}
                       disabled={busy.has(kunciStatus)}
                       onChange={(e) => ubahStatusKepegawaian(r.id, e.target.value as "organik" | "mitra")}
@@ -4617,7 +4618,7 @@ function KegiatanPetugasSection() {
                     >
                       <option value="organik">Organik</option>
                       <option value="mitra">Mitra</option>
-                    </select>
+                    </SelectCari>
                     {errSel.has(kunciStatus) && (
                       <p className="mt-0.5 text-[10px] text-rust-600">{errSel.get(kunciStatus)}</p>
                     )}
@@ -7383,7 +7384,7 @@ function AlokasiPetugasSection() {
         {kandidatTerbuka && (
           <div className="mt-3">
             <div className="flex flex-wrap items-center gap-2">
-              <select
+              <SelectCari
                 value={kandidatKecFilter}
                 onChange={(e) => {
                   setKandidatKecFilter(e.target.value);
@@ -7397,8 +7398,8 @@ function AlokasiPetugasSection() {
                     {k}
                   </option>
                 ))}
-              </select>
-              <select
+              </SelectCari>
+              <SelectCari
                 value={kandidatNagariFilter}
                 onChange={(e) => setKandidatNagariFilter(e.target.value)}
                 className="rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-400"
@@ -7409,7 +7410,7 @@ function AlokasiPetugasSection() {
                     {n}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
               {(kandidatKecFilter || kandidatNagariFilter) && (
                 <button
                   type="button"
@@ -7583,7 +7584,7 @@ function AlokasiPetugasSection() {
                 </label>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <select
+                  <SelectCari
                     value={tawaranKecFilterBaru}
                     onChange={(e) => {
                       setTawaranKecFilterBaru(e.target.value);
@@ -7597,8 +7598,8 @@ function AlokasiPetugasSection() {
                         {k}
                       </option>
                     ))}
-                  </select>
-                  <select
+                  </SelectCari>
+                  <SelectCari
                     value={tawaranNagariFilterBaru}
                     onChange={(e) => setTawaranNagariFilterBaru(e.target.value)}
                     className="rounded-md border border-line bg-white px-2 py-1.5 text-xs outline-none focus:border-teal-400"
@@ -7609,7 +7610,7 @@ function AlokasiPetugasSection() {
                         {n}
                       </option>
                     ))}
-                  </select>
+                  </SelectCari>
                   <span className="text-xs text-ink/50">
                     {tawaranKandidatDipilih.size} kandidat dipilih dari {tawaranKandidatPilihanList.length} ditampilkan
                   </span>
@@ -8008,7 +8009,7 @@ function AlokasiPetugasSection() {
             <div className="mt-2 grid grid-cols-1 gap-3 rounded-md border border-line bg-white p-3 sm:grid-cols-2">
               <div>
                 <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
-                <select
+                <SelectCari
                   value={bebanKecFilter}
                   onChange={(e) => {
                     setBebanKecFilter(e.target.value);
@@ -8022,7 +8023,7 @@ function AlokasiPetugasSection() {
                       {k}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </div>
               <div>
                 <label className="text-xs font-medium text-ink/60">Cari Nagari/Jorong/Sub SLS</label>
@@ -8315,7 +8316,7 @@ function AlokasiPetugasSection() {
         <div className="mt-3 grid grid-cols-1 gap-3 rounded-md border border-line bg-blue-50/40 p-3 sm:grid-cols-4">
           <div>
             <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
-            <select
+            <SelectCari
               value={sampelKecFilter}
               onChange={(e) => {
                 setSampelKecFilter(e.target.value);
@@ -8329,11 +8330,11 @@ function AlokasiPetugasSection() {
                   {k}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </div>
           <div>
             <label className="text-xs font-medium text-ink/60">Status Sampel</label>
-            <select
+            <SelectCari
               value={sampelStatusFilter}
               onChange={(e) => {
                 setSampelStatusFilter(e.target.value as "" | "sudah" | "belum");
@@ -8344,7 +8345,7 @@ function AlokasiPetugasSection() {
               <option value="">Semua</option>
               <option value="sudah">Sudah dicentang</option>
               <option value="belum">Belum dicentang</option>
-            </select>
+            </SelectCari>
           </div>
           <div>
             <label className="text-xs font-medium text-ink/60">Cari Nagari/Jorong/Sub SLS</label>
@@ -9652,7 +9653,7 @@ function AlokasiPetugasSection() {
 
               <label className="mt-3 block text-xs font-medium text-ink/70">Lingkup</label>
               <div className="mt-1 flex flex-col gap-1.5">
-                <select
+                <SelectCari
                   value={resetKecamatan}
                   onChange={(e) => {
                     setResetKecamatan(e.target.value);
@@ -9666,8 +9667,8 @@ function AlokasiPetugasSection() {
                       {k}
                     </option>
                   ))}
-                </select>
-                <select
+                </SelectCari>
+                <SelectCari
                   value={resetNagari}
                   onChange={(e) => setResetNagari(e.target.value)}
                   disabled={!resetKecamatan}
@@ -9681,7 +9682,7 @@ function AlokasiPetugasSection() {
                       {n}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </div>
               <p className="mt-1.5 text-xs font-medium text-rust-700">
                 {resetNagari
@@ -9924,7 +9925,7 @@ function AlokasiPetugasSection() {
           <LegendaStatusBeban withBelum />
           <div className="flex items-center gap-1.5 text-xs text-ink/60">
             <span>Tampilkan:</span>
-            <select
+            <SelectCari
               value={alokasiPageSize === Infinity ? "semua" : alokasiPageSize}
               onChange={(e) => {
                 setAlokasiPageSize(e.target.value === "semua" ? Infinity : Number(e.target.value));
@@ -9938,7 +9939,7 @@ function AlokasiPetugasSection() {
               <option value={40}>40</option>
               <option value={50}>50</option>
               <option value="semua">Semua</option>
-            </select>
+            </SelectCari>
             <span>baris</span>
           </div>
         </div>
@@ -9946,7 +9947,7 @@ function AlokasiPetugasSection() {
         <div className="mt-2 grid grid-cols-1 gap-3 rounded-md border border-line bg-white p-3 sm:grid-cols-4">
           <div>
             <label className="text-xs font-medium text-ink/60">Filter Kecamatan</label>
-            <select
+            <SelectCari
               value={kecFilter}
               onChange={(e) => {
                 setKecFilter(e.target.value);
@@ -9960,7 +9961,7 @@ function AlokasiPetugasSection() {
                   {k}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </div>
           <div>
             <label className="text-xs font-medium text-ink/60">Filter PPL</label>
@@ -9990,7 +9991,7 @@ function AlokasiPetugasSection() {
           </div>
           <div>
             <label className="text-xs font-medium text-ink/60">Status Beban PPL</label>
-            <select
+            <SelectCari
               value={statusBebanFilter}
               onChange={(e) => {
                 setStatusBebanFilter(e.target.value as "" | BalanceTone);
@@ -10003,11 +10004,11 @@ function AlokasiPetugasSection() {
               <option value="perhatian">🟡 Perhatian</option>
               <option value="kelebihan">🔴 Kelebihan</option>
               <option value="rendah">🟣 Beban Rendah</option>
-            </select>
+            </SelectCari>
           </div>
           <div>
             <label className="text-xs font-medium text-ink/60">Status Plot</label>
-            <select
+            <SelectCari
               value={statusPlotFilter}
               onChange={(e) => {
                 setStatusPlotFilter(e.target.value as "" | "sudah" | "belum");
@@ -10018,11 +10019,11 @@ function AlokasiPetugasSection() {
               <option value="">Semua</option>
               <option value="sudah">Sudah diplot</option>
               <option value="belum">Belum diplot</option>
-            </select>
+            </SelectCari>
           </div>
           <div>
             <label className="text-xs font-medium text-ink/60">Status Data KK</label>
-            <select
+            <SelectCari
               value={dataFilter}
               onChange={(e) => {
                 setDataFilter(e.target.value as "" | "lengkap" | "belum");
@@ -10033,7 +10034,7 @@ function AlokasiPetugasSection() {
               <option value="">Semua</option>
               <option value="lengkap">Data Lengkap</option>
               <option value="belum">Belum Ada Data</option>
-            </select>
+            </SelectCari>
           </div>
           <div className="sm:col-span-2">
             <label className="text-xs font-medium text-ink/60">Cari Nagari/Jorong/Sub SLS</label>
@@ -11451,7 +11452,7 @@ export default function BencanaPage() {
                 <label className="text-sm font-medium text-ink">
                   Kecamatan <span className="text-rust-500">*</span>
                 </label>
-                <select
+                <SelectCari
                   value={selectedKecamatan}
                   onChange={(e) => handleKecamatanChange(e.target.value)}
                   className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
@@ -11462,13 +11463,13 @@ export default function BencanaPage() {
                       {k}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </div>
               <div>
                 <label className="text-sm font-medium text-ink">
                   Nagari <span className="text-rust-500">*</span>
                 </label>
-                <select
+                <SelectCari
                   value={selectedIddesa}
                   onChange={(e) => handleNagariChange(e.target.value)}
                   disabled={!selectedKecamatan}
@@ -11480,7 +11481,7 @@ export default function BencanaPage() {
                       {n.nagari}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </div>
             </div>
           </section>

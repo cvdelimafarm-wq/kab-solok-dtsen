@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import SelectCari from "@/app/components/SelectCari";
 
 // ============================================================================
 // Tab "Rekap Temuan & Catatan untuk PPL" — rekap SEMUA temuan anomali
@@ -180,7 +181,7 @@ export default function RekapTemuanTab() {
 
       {/* ---------- Filter ---------- */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
-        <select
+        <SelectCari
           value={filterPpl}
           onChange={(e) => setFilterPpl(e.target.value)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -191,8 +192,8 @@ export default function RekapTemuanTab() {
               {p}
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterKode}
           onChange={(e) => setFilterKode(e.target.value)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -203,8 +204,8 @@ export default function RekapTemuanTab() {
               {k}
             </option>
           ))}
-        </select>
-        <select
+        </SelectCari>
+        <SelectCari
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -215,7 +216,7 @@ export default function RekapTemuanTab() {
           <option value="perlu_koreksi">Perlu Koreksi</option>
           <option value="salah_entry">Salah Entry</option>
           <option value="resolved">Selesai</option>
-        </select>
+        </SelectCari>
         <span className="ml-auto text-xs text-ink/40">
           {rows.length} baris
           {rows.length >= BATAS_BARIS ? " (dibatasi 1000 — persempit filter utk lihat sisanya)" : ""}

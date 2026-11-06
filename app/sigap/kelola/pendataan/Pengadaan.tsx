@@ -13,6 +13,7 @@ import Bingkai from "../../kontrak/Bingkai";
 import { aksiK, ambilK } from "../../kontrak/api";
 import { useDetak } from "../../useDetak";
 import type { Penyedia } from "@/lib/kontrak/isi";
+import SelectCari from "@/app/components/SelectCari";
 
 type Tab = "paket" | "master" | "penyedia";
 const TAB: ItemTab<Tab>[] = [
@@ -53,7 +54,7 @@ export default function PortalKontrak({ tertanam = false }: { tertanam?: boolean
   const pilihanTahun = Array.from(new Set([...(daftar?.daftar_tahun ?? []), new Date().getFullYear(), tahun])).sort();
 
   const pilihTahun = (gelap: boolean) => (
-    <select
+    <SelectCari
       value={tahun}
       onChange={(e) => setTahun(Number(e.target.value))}
       className={gelap ? "rounded-full bg-white/15 px-2 py-1 text-[12px] font-bold text-white" : "h-8 rounded-[7px] border border-[#E3E8EE] bg-white px-2 text-[13px] text-[#14202E]"}
@@ -64,7 +65,7 @@ export default function PortalKontrak({ tertanam = false }: { tertanam?: boolean
           TA {t}
         </option>
       ))}
-    </select>
+    </SelectCari>
   );
 
   const isi = (

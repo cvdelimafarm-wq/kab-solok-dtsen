@@ -27,6 +27,7 @@ import {
   type Saringan,
   type SoalMentah,
 } from "@/lib/korwilHasilQc";
+import SelectCari from "@/app/components/SelectCari";
 
 type Data = { kelompok: number; sekarang: string; anggota: AnggotaHasil[]; percobaan: PercobaanMentah[]; soal: SoalMentah[] };
 type Tampilan = "tim" | "matriks";
@@ -103,30 +104,30 @@ export default function KorwilHasilQc({ kelompok }: { kelompok: number | null })
     <div className="space-y-2">
       <section className={`${KOTAK} space-y-2`} aria-label="Saringan">
         <div className="grid grid-cols-3 gap-1.5">
-          <select aria-label="Tim (PML)" className={SELECT_PADAT} value={sar.tim ?? ""} onChange={(e) => setSar({ ...sar, tim: e.target.value || null, petugas: null })}>
+          <SelectCari aria-label="Tim (PML)" className={SELECT_PADAT} value={sar.tim ?? ""} onChange={(e) => setSar({ ...sar, tim: e.target.value || null, petugas: null })}>
             <option value="">Semua tim</option>
             {opsi.tim.map((t) => (
               <option key={t} value={t}>
                 {namaSingkatTampil(t)}
               </option>
             ))}
-          </select>
-          <select aria-label="Petugas" className={SELECT_PADAT} value={sar.petugas ?? ""} onChange={(e) => setSar({ ...sar, petugas: e.target.value ? Number(e.target.value) : null })}>
+          </SelectCari>
+          <SelectCari aria-label="Petugas" className={SELECT_PADAT} value={sar.petugas ?? ""} onChange={(e) => setSar({ ...sar, petugas: e.target.value ? Number(e.target.value) : null })}>
             <option value="">Semua petugas</option>
             {petugasPilihan.map((p) => (
               <option key={p.akun_id} value={p.akun_id}>
                 {namaSingkatTampil(p.nama)}
               </option>
             ))}
-          </select>
-          <select aria-label="Tanggal" className={SELECT_PADAT} value={sar.tanggal ?? ""} onChange={(e) => setSar({ ...sar, tanggal: e.target.value || null })}>
+          </SelectCari>
+          <SelectCari aria-label="Tanggal" className={SELECT_PADAT} value={sar.tanggal ?? ""} onChange={(e) => setSar({ ...sar, tanggal: e.target.value || null })}>
             <option value="">Semua tanggal</option>
             {opsi.tanggal.map((t) => (
               <option key={t} value={t}>
                 {tglPendek(t)}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
         <div className="grid grid-cols-2 gap-1.5">
           <Segmen label="Percobaan yang dihitung (satu per petugas per hari)" nilai={sar.mode} onPilih={(v) => setSar({ ...sar, mode: v })} pilihan={[["pertama", "Coba pertama"], ["terakhir", "Coba terakhir"]]} />

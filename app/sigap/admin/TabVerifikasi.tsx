@@ -13,6 +13,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { aksi, ambil, ambilBlob, bukaBlob, pesanGalat, rentangPendek, rupiah, SesiBerakhir, waktuWib } from "./api";
 import { bagiBatch, namaZip, ringkasanMassal, unikanNama, type HasilMassal } from "@/lib/sigapUnduhMassal";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, INPUT, KartuAngka, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Dok = { surat_tugas: boolean; kwitansi: boolean; visum: boolean; laporan: boolean; dokumentasi: boolean; surat_pernyataan: boolean };
 type Row = {
@@ -276,12 +277,12 @@ export default function TabVerifikasi({ kegiatanId }: { kegiatanId: number }) {
         ket="Kunci = PDF Kwitansi/Visum/Surat Pernyataan dibekukan & disimpan sekali. Buka kunci tercatat di riwayat."
         kanan={
           <div className="flex flex-wrap items-center gap-2">
-            <select value={fStatus} onChange={(e) => setFStatus(e.target.value as typeof fStatus)} className={INPUT} aria-label="Filter status">
+            <SelectCari value={fStatus} onChange={(e) => setFStatus(e.target.value as typeof fStatus)} className={INPUT} aria-label="Filter status">
               <option value="">Semua status</option>
               <option value="belum">Belum dikunci</option>
               <option value="siap">Siap dikunci</option>
               <option value="dikunci">Sudah dikunci</option>
-            </select>
+            </SelectCari>
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama…" className={`${INPUT} w-40`} />
             <button type="button" className={BTN_O} onClick={unduhMassal} disabled={!!unduh || !!massal || busy !== null || rows.every((r) => r.hari_dibayar <= 0)} title="PDF gabungan semua dokumen tiap petugas yang sedang tampil, dalam ZIP">
               {unduh ? "Menyusun ZIP…" : `⬇ Paket SPJ (ZIP) · ${rows.filter((r) => r.hari_dibayar > 0).length}`}

@@ -22,6 +22,7 @@
 // Penyisiran Usaha (app/seruti/penyisiran-usaha.tsx).
 
 import { useCallback, useEffect, useState } from "react";
+import SelectCari from "@/app/components/SelectCari";
 
 const TOKEN_KEY = "identifikasi-ppl-login-token";
 const NAMA_KEY = "identifikasi-ppl-login-nama";
@@ -466,7 +467,7 @@ function IdentifikasiPanel({
       )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-white p-3">
-        <select
+        <SelectCari
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
           className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -477,9 +478,9 @@ function IdentifikasiPanel({
           <option value="tidak_ada">Tidak Ada</option>
           <option value="ragu">Ragu-ragu</option>
           <option value="tidak_ditemukan">Tidak Ditemukan</option>
-        </select>
+        </SelectCari>
         {subslsOptions.length > 0 && (
-          <select
+          <SelectCari
             value={filterSubsls}
             onChange={(e) => setFilterSubsls(e.target.value)}
             className="rounded-md border border-line px-2 py-1.5 text-xs"
@@ -490,7 +491,7 @@ function IdentifikasiPanel({
                 {s.label} ({s.jumlah})
               </option>
             ))}
-          </select>
+          </SelectCari>
         )}
         <input
           type="search"

@@ -24,6 +24,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import SelectCari from "@/app/components/SelectCari";
 
 type Status = "belum_didata" | "selesai_didata" | "selesai_dibersihkan";
 
@@ -467,7 +468,7 @@ function FormulirTab() {
 
         <div className="mt-4">
           <label className="text-sm font-medium text-ink">Pilih Jorong</label>
-          <select
+          <SelectCari
             value={jorongId}
             onChange={(e) => loadSampel(e.target.value)}
             className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2.5 outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
@@ -480,7 +481,7 @@ function FormulirTab() {
                 {o.nama_jorong}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
       </div>
 
@@ -533,7 +534,7 @@ function FormulirTab() {
                         </span>
                       </div>
 
-                      <select
+                      <SelectCari
                         value={s.status}
                         onChange={(e) =>
                           editLocal(s.id, {
@@ -551,7 +552,7 @@ function FormulirTab() {
                             {STATUS_LABEL[key]}
                           </option>
                         ))}
-                      </select>
+                      </SelectCari>
 
                       {s.status === "belum_didata" && (
                         <div className="mt-3">

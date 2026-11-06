@@ -11,6 +11,7 @@ import { Catatan, Chip, kolom, label, tombolKecil, tombolUtama } from "@/app/sig
 import { hitungTingkat, LABEL_TINGKAT, NAMA_JENIS_GAP, NAMA_KATEGORI, TINGKAT, urutkanTemuan, type RingkasGap, type Temuan } from "@/lib/keu/gap";
 import { Bagian, Poin } from "../../Kontrol";
 import type { StatusTanggapan, TanggapanGap, VersiGap } from "./useGap";
+import SelectCari from "@/app/components/SelectCari";
 
 const rp = (n: number): string => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
 const waktu = (iso: string): string => {
@@ -120,9 +121,9 @@ function BarisTemuanTersimpan(p: {
       {buka && (
         <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <label className="block min-w-0"><span className={label}>Tanggapan</span>
-            <select className={kolom} value={status} onChange={(e) => setStatus(e.target.value as StatusTanggapan)}>
+            <SelectCari className={kolom} value={status} onChange={(e) => setStatus(e.target.value as StatusTanggapan)}>
               {(Object.keys(NAMA_TANGGAPAN) as StatusTanggapan[]).map((s) => <option key={s} value={s}>{NAMA_TANGGAPAN[s]}</option>)}
-            </select>
+            </SelectCari>
           </label>
           <label className="block min-w-0"><span className={label}>{wajib ? "Penjelasan atau tindak lanjut (wajib, minimal 10 huruf)" : "Catatan (opsional)"}</span>
             <input className={kolom} maxLength={500} value={catatan} onChange={(e) => setCatatan(e.target.value)} />

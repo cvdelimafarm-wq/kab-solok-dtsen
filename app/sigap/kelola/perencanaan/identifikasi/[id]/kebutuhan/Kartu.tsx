@@ -15,6 +15,7 @@ import { LABEL_MITRA, teksTenggat, type RingkasRekrutmen } from "@/lib/keu/rekru
 import { ringkasPengadaan, sisaHariButuh, teksDraf, urutkanPengadaan, type ItemPengadaan } from "@/lib/keu/pengadaan";
 import { LABEL_STATUS, URUTAN_STATUS, periksaCatatan, ringkasStatus, statusBerikut, statusButir, type CatatanStatus, type StatusPengadaan } from "@/lib/keu/statusPengadaan";
 import { Bagian, Poin } from "../../Kontrol";
+import SelectCari from "@/app/components/SelectCari";
 
 export const ID_KB = { rekrutmen: "kb-rekrutmen", pengadaan: "kb-pengadaan" } as const;
 
@@ -149,9 +150,9 @@ function SelPelacakan({ it, p }: { it: ItemPengadaan; p: PelacakanProps }) {
         <div className="mt-1.5 grid w-[220px] max-w-full gap-1.5 rounded-md border border-[#DCE3EE] bg-[#F7F9FC] p-2">
           <div>
             <label className={label} htmlFor={`st-${it.id}`}>Status</label>
-            <select id={`st-${it.id}`} className={kolom} value={status} onChange={(e) => setStatus(e.target.value as StatusPengadaan)}>
+            <SelectCari id={`st-${it.id}`} className={kolom} value={status} onChange={(e) => setStatus(e.target.value as StatusPengadaan)}>
               {URUTAN_STATUS.map((s) => <option key={s} value={s}>{LABEL_STATUS[s].teks}</option>)}
-            </select>
+            </SelectCari>
           </div>
           <div>
             <label className={label} htmlFor={`rj-${it.id}`}>Rujukan (nomor permintaan, SPK, atau kontrak)</label>

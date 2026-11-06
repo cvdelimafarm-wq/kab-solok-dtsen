@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import SelectCari from "@/app/components/SelectCari";
 
 // (4 Okt 2026) Formulir "Lengkapi Data" di halaman Undangan. Alur:
 //   1) Petugas MEMILIH NAMA dari dropdown (hanya nama yg sudah ada di data).
@@ -366,7 +367,7 @@ export default function DaftarLengkapiForm({
               placeholder="Ketik untuk mencari nama…"
               autoComplete="off"
             />
-            <select className={INPUT} value={pilihan} onChange={(e) => setPilihan(e.target.value)} required>
+            <SelectCari className={INPUT} value={pilihan} onChange={(e) => setPilihan(e.target.value)} required>
               <option value="">
                 {cari && hasilCari.length === 0 ? "Tidak ada nama yang cocok" : `Pilih nama… (${hasilCari.length}${daftar.length > hasilCari.length ? " dari " + daftar.length : ""})`}
               </option>
@@ -377,7 +378,7 @@ export default function DaftarLengkapiForm({
                 </option>
               ))}
               <option value="baru">Nama saya tidak ada di daftar</option>
-            </select>
+            </SelectCari>
           </>
         )}
         {baru && (
@@ -456,7 +457,7 @@ export default function DaftarLengkapiForm({
               <>
                 <div>
                   <label className={LABEL}>Kecamatan</label>
-                  <select className={INPUT} value={kecPilih} onChange={(e) => setKecPilih(e.target.value)} required>
+                  <SelectCari className={INPUT} value={kecPilih} onChange={(e) => setKecPilih(e.target.value)} required>
                     <option value="">Pilih kecamatan…</option>
                     {KECAMATAN.map((k) => (
                       <option key={k} value={k}>
@@ -464,7 +465,7 @@ export default function DaftarLengkapiForm({
                       </option>
                     ))}
                     <option value="__lain">Lainnya (di luar daftar)</option>
-                  </select>
+                  </SelectCari>
                   {kecPilih === "__lain" && (
                     <input className={`${INPUT} mt-2`} value={kecLain} onChange={(e) => setKecLain(e.target.value)} placeholder="Tulis nama kecamatan" required />
                   )}
@@ -510,23 +511,23 @@ export default function DaftarLengkapiForm({
             {butuh.pendidikan && (
               <div>
                 <label className={LABEL}>Pendidikan terakhir</label>
-                <select className={INPUT} value={pendidikan} onChange={(e) => setPendidikan(e.target.value)} required>
+                <SelectCari className={INPUT} value={pendidikan} onChange={(e) => setPendidikan(e.target.value)} required>
                   <option value="">Pilih…</option>
                   {PENDIDIKAN.map((p) => (
                     <option key={p}>{p}</option>
                   ))}
-                </select>
+                </SelectCari>
               </div>
             )}
             {butuh.pekerjaan && (
               <div>
                 <label className={LABEL}>Pekerjaan utama</label>
-                <select className={INPUT} value={pekerjaan} onChange={(e) => setPekerjaan(e.target.value)} required>
+                <SelectCari className={INPUT} value={pekerjaan} onChange={(e) => setPekerjaan(e.target.value)} required>
                   <option value="">Pilih…</option>
                   {PEKERJAAN.map((p) => (
                     <option key={p}>{p}</option>
                   ))}
-                </select>
+                </SelectCari>
               </div>
             )}
             {butuh.bisa_mengendarai_motor && (

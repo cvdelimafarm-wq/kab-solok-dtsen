@@ -28,6 +28,7 @@ import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lol
 import ModalFotoPanitia from "../ModalFotoPanitia";
 import { HubSurvei, PemilihSurveiPelatihan, SurveiTanpaPelatihan, useDaftarSurvei } from "./survei"; // (31 Okt 2026) halaman awal = satu kartu per survei + dropdown survei
 import { bacaParamKelola, cariSurvei, pilihPelatihanAwal, urlKelola, type Survei } from "@/lib/sigapPelatihanSurvei";
+import SelectCari from "@/app/components/SelectCari";
 
 type TesRingkas = { id: number; jenis: JenisTes; judul: string; buka_at: string; tutup_at: string; durasi_menit: number; aktif: boolean; ulang_maks?: number; nilai_lulus?: number | null; wajib_lulus?: boolean; wajib_100?: boolean; jumlah_soal: number; jumlah_sesi: number };
 type Ringkas = { nama: string; sekarang: string; boleh_kelola: boolean; tes: TesRingkas[] };
@@ -443,13 +444,13 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
             {ulang && (
               <label className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-[#7B8794]">
                 Jumlah percobaan maksimal per peserta
-                <select className={`${INPUT} w-auto`} value={ulangMaks} disabled={!bisaKelola} onChange={(e) => setUlangMaks(e.target.value)}>
+                <SelectCari className={`${INPUT} w-auto`} value={ulangMaks} disabled={!bisaKelola} onChange={(e) => setUlangMaks(e.target.value)}>
                   {[2, 3, 4, 5].map((n) => (
                     <option key={n} value={n}>
                       {n}× (mengulang {n - 1}×)
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </label>
             )}
             <p className="mt-1 text-[11.5px] text-[#7B8794]">
@@ -911,11 +912,11 @@ function Monitoring() {
         judul="Analisis per soal"
         ket={`berdasarkan ${selesaiAnalisis} peserta yang sudah selesai${adaFilter ? " (sesuai filter)" : ""}`}
         kanan={
-          <select className={INPUT} value={jenisAnalisis} onChange={(e) => setJenisAnalisis(e.target.value as JenisTes)} aria-label="Pilih tes">
+          <SelectCari className={INPUT} value={jenisAnalisis} onChange={(e) => setJenisAnalisis(e.target.value as JenisTes)} aria-label="Pilih tes">
             {DAFTAR_JENIS_TES.map((j) => (
               <option key={j} value={j}>{LABEL_JENIS_TES[j]}</option>
             ))}
-          </select>
+          </SelectCari>
         }
       >
         {analisis.length === 0 ? (

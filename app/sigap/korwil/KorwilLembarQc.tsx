@@ -25,6 +25,7 @@ import {
   type SoalKuesioner,
   type StrukturKuesioner,
 } from "@/lib/sigapQcKuesioner";
+import SelectCari from "@/app/components/SelectCari";
 
 type Anggota = { akun_id: number; nama: string; peran: "pml" | "ppl"; pml_nama: string | null };
 type Kuesioner = { id: number; objek: ObjekKuesioner; versi: number; judul: string; struktur: StrukturKuesioner };
@@ -274,7 +275,7 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number | null }
             </p>
             <label className="block text-[12.5px] font-bold text-[#52627A]">
               {objek === "kk" ? "PPL pendata" : "Petugas yang diperiksa"}
-              <select className={`${SELECT} mt-1`} value={subjek ?? ""} onChange={(e) => setSubjek(e.target.value ? Number(e.target.value) : null)}>
+              <SelectCari className={`${SELECT} mt-1`} value={subjek ?? ""} onChange={(e) => setSubjek(e.target.value ? Number(e.target.value) : null)}>
                 <option value="">Pilih…</option>
                 {calon.map((a) => (
                   <option key={a.akun_id} value={a.akun_id}>
@@ -282,19 +283,19 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number | null }
                     {a.pml_nama ? ` (PML ${namaSingkatTampil(a.pml_nama)})` : ""}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             {objek === "kk" && subjek && (
               <label className="block text-[12.5px] font-bold text-[#52627A]">
                 Keluarga (KK) yang diperiksa
-                <select className={`${SELECT} mt-1`} value={kkId ?? ""} onChange={(e) => setKkId(e.target.value ? Number(e.target.value) : null)}>
+                <SelectCari className={`${SELECT} mt-1`} value={kkId ?? ""} onChange={(e) => setKkId(e.target.value ? Number(e.target.value) : null)}>
                   <option value="">{kkDaftar.length ? "Pilih…" : "PPL ini belum punya KK terdata"}</option>
                   {kkDaftar.map((k) => (
                     <option key={k.id} value={k.id}>
                       {k.nama_kk} · {HASIL_KK[k.hasil] ?? k.hasil} · {k.idsubsls.slice(-6)}
                     </option>
                   ))}
-                </select>
+                </SelectCari>
               </label>
             )}
             <label className="block text-[12.5px] font-bold text-[#52627A]">

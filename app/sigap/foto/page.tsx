@@ -16,6 +16,7 @@ import { siapkanData, useData } from "@/app/portal/dataBersama";
 import { galatSinyal, jalurFotoSaya } from "@/lib/sigapFotoCache";
 import { bolehFotoLaporan } from "@/lib/sigapFoto";
 import { fotoHanyaHariKerja } from "@/lib/hariKerjaPelatihan";
+import SelectCari from "@/app/components/SelectCari";
 
 type Mode = { bawaan: string; nama_saya?: string; kegiatan: { kegiatan_id: number; penugasan_id: number; nama: string; peran?: string; jenis?: string; jumlah_foto: number; mode: string; hari_kerja_hari_ini?: boolean; laporan_hari_ini?: { sumber: string; diunggah_at: string } | null }[] };
 type Tab = "kamera" | "saya" | "periksa";
@@ -115,9 +116,9 @@ function Isi() {
           {mode && kamera.length === 0 && <div className="rounded-lg bg-[#FFF4D6] px-3 py-3 text-sm text-[#5E4300]">Belum ada kegiatan Anda yang memakai Kamera SIGAP. Gunakan Unggah foto seperti biasa.</div>}
           {kamera.length > 1 && (
             <label className="flex flex-col gap-1 text-xs font-bold text-[#0F2A52]">Kegiatan
-              <select value={aktif?.kegiatan_id ?? ""} onChange={(e) => setPilih(Number(e.target.value))} className="min-h-[44px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm font-normal">
+              <SelectCari value={aktif?.kegiatan_id ?? ""} onChange={(e) => setPilih(Number(e.target.value))} className="min-h-[44px] rounded-lg border border-[#C9D3E6] bg-white px-2 text-sm font-normal">
                 {kamera.map((k) => <option key={k.kegiatan_id} value={k.kegiatan_id}>{k.nama}</option>)}
-              </select>
+              </SelectCari>
             </label>
           )}
           {kameraTutup && (

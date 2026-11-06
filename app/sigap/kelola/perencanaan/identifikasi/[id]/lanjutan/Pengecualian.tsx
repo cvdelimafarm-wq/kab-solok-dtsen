@@ -11,6 +11,7 @@ import { ID_LJ } from "@/lib/keu/lanjutan";
 import type { AcuanModul } from "@/lib/keu/acuan";
 import { aksiPengecualian, LABEL_STATUS_PENGECUALIAN, NAMA_JENIS_PENGECUALIAN, type BarisPengecualian } from "@/lib/keu/notifikasi";
 import { Poin } from "../../Kontrol";
+import SelectCari from "@/app/components/SelectCari";
 
 const waktu = (iso: string): string => {
   try { return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(new Date(iso)); } catch { return iso; }
@@ -85,10 +86,10 @@ export function KartuPengecualian(p: {
           </div>
           <label className="block">
             <span className={kelasLabel}>Hal yang dikecualikan</span>
-            <select className={kolom} value={pilih} onChange={(e) => setPilih(e.target.value)}>
+            <SelectCari className={kolom} value={pilih} onChange={(e) => setPilih(e.target.value)}>
               <option value="">(tulis sendiri)</option>
               {p.peringatan.map((w) => <option key={w} value={w}>{w.length > 110 ? `${w.slice(0, 107)}…` : w}</option>)}
-            </select>
+            </SelectCari>
           </label>
           {pilih === "" && (
             <label className="block">

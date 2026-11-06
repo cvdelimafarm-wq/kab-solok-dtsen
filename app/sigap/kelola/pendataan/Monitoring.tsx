@@ -13,6 +13,7 @@ import MonPoin from "./MonPoin";
 import MonAnggaran from "./MonAnggaran";
 import { useKinerja } from "./useKinerja";
 import { Galat, jam, label, sel, tombol } from "./monUi";
+import SelectCari from "@/app/components/SelectCari";
 
 type Variabel = "progres" | "transport" | "poin" | "anggaran";
 const PILIHAN: [Variabel, string][] = [
@@ -45,13 +46,13 @@ export default function Monitoring() {
         <div className="flex flex-wrap items-end gap-3">
           <label className={`${label} w-full sm:w-auto`}>
             Variabel
-            <select value={variabel} onChange={(e) => pilih(e.target.value as Variabel)} className={`${sel} border-2 border-[#1F5FD1] font-extrabold normal-case tracking-normal text-[#0F2A52] sm:min-w-[300px]`}>
+            <SelectCari value={variabel} onChange={(e) => pilih(e.target.value as Variabel)} className={`${sel} border-2 border-[#1F5FD1] font-extrabold normal-case tracking-normal text-[#0F2A52] sm:min-w-[300px]`}>
               {PILIHAN.map(([k, n]) => (
                 <option key={k} value={k}>
                   {n}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           {kinerja && (
             <button type="button" onClick={() => void muat(true)} disabled={memuat} className={`${tombol} w-full sm:w-auto`}>

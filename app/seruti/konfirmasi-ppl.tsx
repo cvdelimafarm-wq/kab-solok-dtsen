@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Narasi } from "./anomali-cepat";
+import SelectCari from "@/app/components/SelectCari";
 
 // ============================================================================
 // Halaman ini didesain ulang total (UI/UX) mengikuti brief:
@@ -356,7 +357,7 @@ export default function KonfirmasiPplTab() {
       <div className="space-y-2 rounded-lg border border-line bg-white p-3">
         <div>
           <label className="text-xs font-semibold text-navy-900">1. NKS &ndash; Nama Jorong</label>
-          <select
+          <SelectCari
             value={filterNks}
             onChange={(e) => setFilterNks(e.target.value)}
             className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
@@ -367,7 +368,7 @@ export default function KonfirmasiPplTab() {
                 {o.label}
               </option>
             ))}
-          </select>
+          </SelectCari>
         </div>
         <div className="flex items-start gap-2 rounded-md border border-navy-100 bg-navy-50 px-2.5 py-2 text-[11px] text-navy-700">
           <span className="mt-0.5 shrink-0">📋</span>
@@ -378,7 +379,7 @@ export default function KonfirmasiPplTab() {
         </div>
         <div>
           <label className="text-xs font-semibold text-navy-900">2. Kuesioner</label>
-          <select
+          <SelectCari
             value={filterKuesioner}
             onChange={(e) => setFilterKuesioner(e.target.value as "" | "KP" | "M")}
             className="mt-1 w-full rounded-md border border-line px-2.5 py-2 text-sm"
@@ -386,7 +387,7 @@ export default function KonfirmasiPplTab() {
             <option value="">-- Pilih Kuesioner --</option>
             <option value="KP">VSEN26.KP (Konsumsi/Pengeluaran)</option>
             <option value="M">VSEN26.M (Sosial Budaya/KOR)</option>
-          </select>
+          </SelectCari>
         </div>
       </div>
 

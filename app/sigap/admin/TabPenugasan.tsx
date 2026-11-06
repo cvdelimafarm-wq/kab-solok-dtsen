@@ -14,6 +14,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { aksi, ambil, bukaUrlAsync, fetchJson, pesanGalat, rentangPendek, SesiBerakhir } from "./api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 import UnggahSt from "./UnggahSt";
+import SelectCari from "@/app/components/SelectCari";
 import PeringatanBeban from "./PeringatanBeban"; // (1 Nov 2026) peringatan beban calon (Delego + penugasan lain)
 
 export type StBaris = { id: number; nomor: string; tanggal_st: string | null; mulai: string | null; selesai: string | null; tujuan: string[]; ada_file: boolean };
@@ -258,20 +259,20 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
           <p className="mb-2 text-[12.5px] font-extrabold">Penugasan</p>
           <div className="grid grid-cols-[90px_1fr] items-center gap-2">
             <span className={label}>Peran</span>
-            <select value={peran} onChange={(e) => setPeran(e.target.value)} className={INPUT} disabled={!kelola}>
+            <SelectCari value={peran} onChange={(e) => setPeran(e.target.value)} className={INPUT} disabled={!kelola}>
               {opsi.map((p) => (
                 <option key={p} value={p}>
                   {p.toUpperCase()}
                 </option>
               ))}
-            </select>
+            </SelectCari>
             <span className={label}>Maks hari</span>
             <input value={maks} onChange={(e) => setMaks(e.target.value)} inputMode="numeric" placeholder={b.maks_efektif != null && b.maks_hari == null ? `default ${b.maks_efektif}` : "kosong = default"} className={INPUT} disabled={!kelola} />
             <span className={label}>Status</span>
-            <select value={aktif ? "1" : "0"} onChange={(e) => setAktif(e.target.value === "1")} className={INPUT} disabled={!kelola}>
+            <SelectCari value={aktif ? "1" : "0"} onChange={(e) => setAktif(e.target.value === "1")} className={INPUT} disabled={!kelola}>
               <option value="1">Aktif</option>
               <option value="0">Nonaktif</option>
-            </select>
+            </SelectCari>
           </div>
           {kelola && (
             <button type="button" onClick={simpanPen} className={`${BTN} mt-2.5`} disabled={busy !== null}>
@@ -420,14 +421,14 @@ function TambahPetugas({ kegiatanId, opsi, onTambah }: { kegiatanId: number; ops
             </div>
           )}
         </div>
-        <select value={peran} onChange={(e) => setPeran(e.target.value)} className={INPUT} aria-label="Peran">
+        <SelectCari value={peran} onChange={(e) => setPeran(e.target.value)} className={INPUT} aria-label="Peran">
           {opsi.length === 0 && <option value="">(belum ada peran)</option>}
           {opsi.map((o) => (
             <option key={o.peran} value={o.peran}>
               {o.peran.toUpperCase()}
             </option>
           ))}
-        </select>
+        </SelectCari>
         <input value={maks} onChange={(e) => setMaks(e.target.value)} inputMode="numeric" placeholder={defaultMaks ? `Maks hari (default ${defaultMaks})` : "Maks hari (kosong = default)"} className={`${INPUT} w-44`} />
         <button type="button" onClick={tambah} className={BTN} disabled={busy || !pilih || !peran}>
           {busy ? "Menambah…" : "＋ Tambah"}

@@ -20,6 +20,7 @@ import { PenyuntingBukti, type ButirForm } from "../BuktiFoto";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Galat, Halaman, Info, Kartu, Kosong, Medan, Memuat, Peringatan, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Hasil = { id: number; tanggal: string; terlambat: boolean; mewakili: boolean };
 
@@ -106,7 +107,7 @@ export default function Lapor() {
           <Kartu>
             <div className="space-y-3">
               <Medan label="Delegasi">
-                <select className={KELAS.isian} value={id ?? ""} onChange={(e) => setId(Number(e.target.value))}>
+                <SelectCari className={KELAS.isian} value={id ?? ""} onChange={(e) => setId(Number(e.target.value))}>
                   <optgroup label="Tugas saya">
                     {pilihan.filter((x) => x.penerima_akun === d.akun.id).map((x) => (
                       <option key={x.id} value={x.id}>{x.judul}</option>
@@ -119,7 +120,7 @@ export default function Lapor() {
                       ))}
                     </optgroup>
                   )}
-                </select>
+                </SelectCari>
               </Medan>
               {mewakili && <Info>Anda melapor mewakili <b>{terpilih.penerima_nama}</b>. Laporan akan ditandai &quot;diwakili&quot;.</Info>}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

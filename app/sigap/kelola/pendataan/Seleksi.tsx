@@ -15,6 +15,7 @@ import PenilaianSeleksi from "./PenilaianSeleksi";
 import { kebutuhanSama } from "@/lib/seleksiTurunan";
 import type { UsulanSeleksi } from "@/lib/portal/seleksiTurunan";
 import { SYARAT_BAWAAN, sisaKebutuhan, type HasilKelayakan, type JalurPerekrutan, type PeringkatLevel, type RingkasKelayakan, type SyaratSeleksi, type WilayahSeleksi } from "@/lib/seleksiSyarat";
+import SelectCari from "@/app/components/SelectCari";
 
 type RingkasSeleksi = { id: number; nama: string; jalur: JalurPerekrutan; status: string; kebutuhan_ppl: number; kebutuhan_pml: number; sudah_ppl: number; sudah_pml: number; diubah_at: string };
 type Daftar = { tabel_siap: boolean; boleh_kelola: boolean; seleksi: RingkasSeleksi[] };
@@ -378,11 +379,11 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
                           <input type="checkbox" disabled={!bolehUbah} checked={form.syarat.domisili.aktif} onChange={(e) => set("syarat", { ...form.syarat, domisili: { ...form.syarat.domisili, aktif: e.target.checked } })} />
                           Domisili di wilayah sampel
                         </label>
-                        <select aria-label="Tingkat domisili" className={kolom} disabled={!bolehUbah || !form.syarat.domisili.aktif} value={form.syarat.domisili.level} onChange={(e) => set("syarat", { ...form.syarat, domisili: { ...form.syarat.domisili, level: e.target.value === "nagari" ? "nagari" : e.target.value === "sls" ? "sls" : "kecamatan" } })}>
+                        <SelectCari aria-label="Tingkat domisili" className={kolom} disabled={!bolehUbah || !form.syarat.domisili.aktif} value={form.syarat.domisili.level} onChange={(e) => set("syarat", { ...form.syarat, domisili: { ...form.syarat.domisili, level: e.target.value === "nagari" ? "nagari" : e.target.value === "sls" ? "sls" : "kecamatan" } })}>
                           <option value="kecamatan">Sekecamatan dengan wilayah sampel</option>
                           <option value="nagari">Senagari dengan wilayah sampel</option>
                           <option value="sls">Sesama SLS/jorong dengan wilayah sampel</option>
-                        </select>
+                        </SelectCari>
                       </div>
                       <div>
                         <label className="flex items-center gap-2 text-[13.5px] font-semibold">
@@ -451,11 +452,11 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
                     </div>
                     <div>
                       <label className={label} htmlFor="sel-peringkat">Peringkat dihitung per</label>
-                      <select id="sel-peringkat" className={kolom} disabled={!bolehUbah} value={form.peringkat_level} onChange={(e) => set("peringkat_level", e.target.value as PeringkatLevel)}>
+                      <SelectCari id="sel-peringkat" className={kolom} disabled={!bolehUbah} value={form.peringkat_level} onChange={(e) => set("peringkat_level", e.target.value as PeringkatLevel)}>
                         <option value="kabupaten">Kabupaten (satu peringkat)</option>
                         <option value="kecamatan">Per kecamatan</option>
                         <option value="nagari">Per nagari</option>
-                      </select>
+                      </SelectCari>
                     </div>
                     <label className="flex items-center gap-2 self-end pb-2 text-[13.5px] font-semibold">
                       <input type="checkbox" disabled={!bolehUbah} checked={form.tampil_nilai} onChange={(e) => set("tampil_nilai", e.target.checked)} />

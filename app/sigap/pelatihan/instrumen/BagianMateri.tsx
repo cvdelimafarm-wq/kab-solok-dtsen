@@ -13,6 +13,7 @@ import { useDataPel } from "../dataPel";
 import { BTN, BTN_O, BTN_R, INPUT, Kartu, Pesan } from "../../admin/ui";
 import PemutarVideo, { type ProgresVideo } from "./PemutarVideo";
 import { lupakanBenderaTab } from "../TabPelatihan";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_MATERI = "/api/sigap/pelatihan/materi";
 // (3 Nov 2026) Tombol aksi di tab Instrumen dibedakan WARNA: Putar video = oranye, Buka tautan = hijau-biru, Unduh berkas = biru, Buka berkas tersimpan = hijau (page.tsx).
@@ -222,10 +223,10 @@ function FormMateri({ sibuk, onSimpan }: { sibuk: boolean; onSimpan: (i: { jenis
     <Kartu judul="➕ Tambah video atau tautan" ket="Video harus tautan YouTube. Tandai Wajib bila peserta harus menyelesaikannya; video wajib juga menahan Pretest bila 'Blokir antar tahapan' menyala.">
       <div className="space-y-2">
         <div className="flex flex-wrap gap-2">
-          <select className={`${INPUT} w-auto`} value={jenis} onChange={(e) => setJenis(e.target.value as "video" | "tautan")} aria-label="Jenis">
+          <SelectCari className={`${INPUT} w-auto`} value={jenis} onChange={(e) => setJenis(e.target.value as "video" | "tautan")} aria-label="Jenis">
             <option value="video">Video (YouTube)</option>
             <option value="tautan">Tautan</option>
-          </select>
+          </SelectCari>
           <input className={`${INPUT} min-w-[180px] flex-1`} placeholder="Judul" value={judul} onChange={(e) => setJudul(e.target.value)} maxLength={160} />
         </div>
         <input className={INPUT} placeholder={jenis === "video" ? "https://youtu.be/…" : "https://…"} value={url} onChange={(e) => setUrl(e.target.value)} inputMode="url" autoCapitalize="none" />

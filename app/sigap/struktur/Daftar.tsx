@@ -14,6 +14,7 @@ import {
 } from "@/lib/keu/struktur";
 import { Catatan, Chip, Galat, judulKartu, kartu, kolom, label, tombolBahaya, tombolKecil, tombolUtama } from "../keu-ui";
 import { useBacaKeu, useKirim } from "../ro/useKeu";
+import SelectCari from "@/app/components/SelectCari";
 
 type Sesudah = () => Promise<void>;
 
@@ -33,10 +34,10 @@ function PadanManual({ u, semua, node, sesudah, tutup }: { u: UsulanStruktur; se
     <div className="flex flex-col gap-2 rounded-lg border border-[#B7CDF5] bg-[#F7FAFE] p-3">
       <label className={label} htmlFor={`pd-${u.id}`}>Padankan dengan {u.level === "item" ? "item" : namaLevelPendek(u.level_nama)} resmi di POK berlaku</label>
       {induk === null ? <Catatan>Usulan induk belum aktif. Padankan dulu usulan induknya.</Catatan> : (
-        <select id={`pd-${u.id}`} className={kolom} value={resmi} onChange={(e) => setResmi(e.target.value)}>
+        <SelectCari id={`pd-${u.id}`} className={kolom} value={resmi} onChange={(e) => setResmi(e.target.value)}>
           <option value="">{kandidat.length ? "Pilih padanan" : detail.memuat ? "Memuat..." : "Tidak ada padanan yang tersedia"}</option>
           {kandidat.map((k) => <option key={k.nilai} value={k.nilai}>{k.label}</option>)}
-        </select>
+        </SelectCari>
       )}
       <Galat pesan={detail.galat} />
       <Galat pesan={galat} />
@@ -75,7 +76,7 @@ function UbahIsian({ u, sesudah, tutup }: { u: UsulanStruktur; sesudah: Sesudah;
       )}
       <div>
         <label className={label} htmlFor={`ud-${u.id}`}>Sumber dana</label>
-        <select id={`ud-${u.id}`} className={kolom} value={i.sumber} onChange={(e) => p({ sumber: e.target.value })}>{SUMBER_DANA.map((s) => <option key={s.kode} value={s.kode}>{s.nama}</option>)}</select>
+        <SelectCari id={`ud-${u.id}`} className={kolom} value={i.sumber} onChange={(e) => p({ sumber: e.target.value })}>{SUMBER_DANA.map((s) => <option key={s.kode} value={s.kode}>{s.nama}</option>)}</SelectCari>
       </div>
       <div><label className={label} htmlFor={`uc-${u.id}`}>Catatan</label><input id={`uc-${u.id}`} className={kolom} maxLength={300} value={i.catatan} onChange={(e) => p({ catatan: e.target.value })} /></div>
       <Galat pesan={[...salah, ...(galat ? [galat] : [])]} />

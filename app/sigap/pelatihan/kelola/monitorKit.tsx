@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BTN_O, INPUT, TH } from "../../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 
 export type Opsi = string | { nilai: string; label: string; grup?: string };
 const nilaiOpsi = (o: Opsi) => (typeof o === "string" ? o : o.nilai);
@@ -104,7 +105,7 @@ function PilihSatu({ nilai, opsi, semua, label, onUbah, grup }: { nilai: Set<str
   const v = nilai.size === 1 ? [...nilai][0] : banyak ? "__banyak" : "";
   const grupSet = grup ? [...new Set(opsi.map((o) => (typeof o === "string" ? "" : (o.grup ?? ""))))] : [""];
   return (
-    <select className={INPUT} value={v} onChange={(e) => onUbah(e.target.value && e.target.value !== "__banyak" ? new Set([e.target.value]) : new Set())} aria-label={label}>
+    <SelectCari className={INPUT} value={v} onChange={(e) => onUbah(e.target.value && e.target.value !== "__banyak" ? new Set([e.target.value]) : new Set())} aria-label={label}>
       <option value="">{semua}</option>
       {banyak && (
         <option value="__banyak" disabled>
@@ -126,7 +127,7 @@ function PilihSatu({ nilai, opsi, semua, label, onUbah, grup }: { nilai: Set<str
           daftar
         );
       })}
-    </select>
+    </SelectCari>
   );
 }
 

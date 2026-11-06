@@ -13,6 +13,7 @@ import { petugasPalingSalah, ringkasStatus, ringkasTim, sebaranNilaiAwal, sebara
 import type { QcRekapTim } from "@/lib/sigapQc";
 import type { RincianQc } from "@/lib/sigapQcMonitor";
 import type { BarisQc, FokusQc } from "@/lib/sigapQcTabel";
+import SelectCari from "@/app/components/SelectCari";
 
 type Tab = "ringkasan" | "soal" | "tim" | "petugas";
 const TAB: { id: Tab; label: string }[] = [
@@ -270,10 +271,10 @@ export default function InfografisQc({ baris, rekap, rincian, nilaiLulus, kolom,
               <Judul judul="Perbandingan tim (per PML)" ket={`Batang = rata-rata nilai percobaan pertama (0–100); garis tegak = batas lulus ${nilaiLulus}`} />
               <label className="mb-1.5 flex items-center gap-1.5 text-[12px] text-[#55657D]">
                 Urut
-                <select value={urutTim} onChange={(e) => setUrutTim(e.target.value as "salah" | "nilai")} className="min-h-[34px] rounded-md border border-[#CBD5E3] bg-white px-1.5 text-[12px] text-[#1B2B4B]">
+                <SelectCari value={urutTim} onChange={(e) => setUrutTim(e.target.value as "salah" | "nilai")} className="min-h-[34px] rounded-md border border-[#CBD5E3] bg-white px-1.5 text-[12px] text-[#1B2B4B]">
                   <option value="salah">Rata-rata salah terbanyak</option>
                   <option value="nilai">Nilai awal terendah</option>
-                </select>
+                </SelectCari>
               </label>
             </div>
             {tim.length === 0 ? (

@@ -15,6 +15,7 @@ import { useBahan, useRekap } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Batang, Galat, Info, Kartu, Kosong, Lencana, Memuat, fmt } from "../ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const PUNCAK = 150;
 const SASARAN = { min: 80, max: 100 } as const;
@@ -88,12 +89,12 @@ export default function Terpadu() {
         <button type="button" className={KELAS.tombolKecil} onClick={() => setGeser((g) => g + 1)} aria-label="Berikutnya">›</button>
         {geser !== 0 && <button type="button" className={KELAS.tombolKecil} onClick={() => setGeser(0)}>Hari ini</button>}
         {pemberi && <TombolSinkron sesudah={async () => { await bahan.muat(); await rekap.muat(); }} />}
-        <select aria-label="Saring kegiatan" className={`${KELAS.isian} !w-auto min-w-[200px]`} value={kegiatan} onChange={(e) => { setKegiatan(e.target.value); setPilih(null); }}>
+        <SelectCari aria-label="Saring kegiatan" className={`${KELAS.isian} !w-auto min-w-[200px]`} value={kegiatan} onChange={(e) => { setKegiatan(e.target.value); setPilih(null); }}>
           <option value="semua">Semua kegiatan (rekap)</option>
           {semuaKegiatan.map((k) => (
             <option key={String(k.id)} value={k.id === null ? "kantor" : String(k.id)}>{k.id === null ? NAMA_KANTOR : k.nama}</option>
           ))}
-        </select>
+        </SelectCari>
       </div>
 
       {(rekap.memuat || bahan.memuat) && !hasil && <Memuat />}

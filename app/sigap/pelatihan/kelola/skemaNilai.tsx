@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN_G, BTN_O, Chip, INPUT, Kartu, Pesan } from "../../admin/ui";
 import { KET_TAMBAHAN, KOMPONEN, KOMPONEN_TAMBAHAN, LABEL_DASAR_KUIS, LABEL_KOMPONEN, LABEL_TAMBAHAN, SKEMA_BAWAAN, kanonik, lulusAkhirDari, ringkasSkema, tambahanDari, validasiSkema, type DasarKuis, type KomponenTambahan, type KuisNilai, type SkemaNilai } from "@/lib/sigapNilaiHitung";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_NILAI = "/api/sigap/pelatihan/nilai";
 
@@ -195,11 +196,11 @@ export function PanelSkemaNilai({ nilai, asal }: { nilai: PakaiSkemaNilai; asal:
       <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
         <label className={`flex items-center gap-1.5 text-[12.5px] ${draf.pakai.kuis ? "" : "opacity-50"}`}>
           Nilai kuis dari
-          <select className={INPUT} value={draf.dasar_kuis} disabled={!bisaUbah || !draf.pakai.kuis} onChange={(e) => setDraf((d) => ({ ...d, dasar_kuis: e.target.value as DasarKuis }))}>
+          <SelectCari className={INPUT} value={draf.dasar_kuis} disabled={!bisaUbah || !draf.pakai.kuis} onChange={(e) => setDraf((d) => ({ ...d, dasar_kuis: e.target.value as DasarKuis }))}>
             {(Object.keys(LABEL_DASAR_KUIS) as DasarKuis[]).map((x) => (
               <option key={x} value={x}>{LABEL_DASAR_KUIS[x]}</option>
             ))}
-          </select>
+          </SelectCari>
         </label>
         <span className={`text-[12.5px] font-bold tabular-nums ${total === 100 ? "text-[#1E7A4C]" : "text-[#B5352D]"}`}>Total bobot: {total}%{total === 100 ? " ✓" : " (harus 100%)"}</span>
         {bisaUbah && (

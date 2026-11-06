@@ -15,6 +15,7 @@ import { aksiKeu } from "@/app/sigap/ro/useKeu";
 import { awalForm, normalisasi } from "@/lib/keu/identifikasi";
 import { barisH15, labelStatus, type UpdTercatat } from "@/lib/keu/identifikasiHilir";
 import { hariIniWib, useDaftarIdent, useDaftarRo, useGapTerbaru, type BarisDaftar } from "./useIdent";
+import SelectCari from "@/app/components/SelectCari";
 
 const URUT_STATUS: Record<string, number> = { menunggu_ketua: 0, menunggu_setuju: 0, draf: 1, revisi: 1, sah: 2, dibatalkan: 3 };
 
@@ -88,10 +89,10 @@ function Isi() {
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))]">
             <div>
               <label htmlFor="ro-baru" className={label}>Rincian Output (RO)</label>
-              <select id="ro-baru" className={kolom} value={roBaru} onChange={(e) => setRoBaru(e.target.value)}>
+              <SelectCari id="ro-baru" className={kolom} value={roBaru} onChange={(e) => setRoBaru(e.target.value)}>
                 <option value="">Pilih RO…</option>
                 {roAktif.map((r) => <option key={r.kode} value={r.kode}>{r.kode} {r.nama.slice(0, 60)}</option>)}
-              </select>
+              </SelectCari>
             </div>
             <div>
               <label htmlFor="nama-baru" className={label}>Nama survei</label>
@@ -107,10 +108,10 @@ function Isi() {
             <h2 id="h-daftar" className={`${judulKartu} m-0`}>Daftar survei</h2>
             <div className="ml-auto flex items-center gap-2">
               <label htmlFor="ro-filter" className="text-[12px] text-[#5B6B84]">Saring RO</label>
-              <select id="ro-filter" className={`${kolom} !w-auto max-w-full`} value={roFilter} onChange={(e) => setRoFilter(e.target.value)}>
+              <SelectCari id="ro-filter" className={`${kolom} !w-auto max-w-full`} value={roFilter} onChange={(e) => setRoFilter(e.target.value)}>
                 <option value="">Semua RO</option>
                 {roAktif.map((r) => <option key={r.kode} value={r.kode}>{r.kode}</option>)}
-              </select>
+              </SelectCari>
             </div>
           </div>
           {!daftar.baris && !daftar.galat && <Memuat />}

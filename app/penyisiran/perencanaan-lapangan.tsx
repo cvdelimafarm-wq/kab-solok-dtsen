@@ -135,6 +135,7 @@ import { bolehAksesManajemenTarget } from "@/lib/manajemenTargetAkses";
 import { IS_PML_KEY } from "../seruti/penyisiran-usaha";
 import { useExcelTable, ExcelTh, type ExcelColumn } from "./_shared/excel-table";
 import { BarProgres, StatPill, LegendaProgresStandar, BannerKartu, CatatanKartu, useSalinGambar } from "./_shared/kartu-monitoring";
+import SelectCari from "@/app/components/SelectCari";
 
 const TOKEN_KEY = "penyisiran-petugas-login-token";
 const NAMA_KEY = "penyisiran-petugas-login-nama";
@@ -1009,7 +1010,7 @@ function OhMonitoringPanel({ token }: { token: string }) {
           <div className="mt-3 rounded-md border border-dashed border-navy-300 bg-navy-50/40 p-2">
             <p className="text-xs font-semibold text-navy-900">➕ Tambah Hari Tugas (utk petugas aktif mana pun)</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <select
+              <SelectCari
                 value={tambahPetugasId}
                 onChange={(e) => setTambahPetugasId(e.target.value)}
                 className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-ink/80"
@@ -1020,8 +1021,8 @@ function OhMonitoringPanel({ token }: { token: string }) {
                     {p.nama}
                   </option>
                 ))}
-              </select>
-              <select
+              </SelectCari>
+              <SelectCari
                 value={tambahTanggal}
                 onChange={(e) => setTambahTanggal(e.target.value)}
                 className="rounded-md border border-line bg-white px-2 py-1 text-[11px] text-ink/80"
@@ -1032,7 +1033,7 @@ function OhMonitoringPanel({ token }: { token: string }) {
                     {labelTanggalPendek(t)}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
               <button
                 type="button"
                 disabled={!tambahPetugasId || !tambahTanggal || aksiBusyKey === `${Number(tambahPetugasId)}-${tambahTanggal}`}

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH } from "@/lib/sigapPushUtil";
+import SelectCari from "@/app/components/SelectCari";
 
 type Petugas = { akun_id: number; nama: string; peran: string; perangkat: number };
 type Hasil = { ok: boolean; nama: string; perangkat: number; terkirim: number; gagal: number };
@@ -85,14 +86,14 @@ export default function KirimSatu({ kegiatanId = 1 }: { kegiatanId?: number }) {
 
       <label className="mt-3 block text-[12px] font-bold text-[#55657D]">
         Penerima
-        <select value={akunId ?? ""} onChange={(e) => { setAkunId(e.target.value ? Number(e.target.value) : null); setYakin(false); setHasil(null); }} className={`${kolom} min-h-[44px]`} disabled={!daftar}>
+        <SelectCari value={akunId ?? ""} onChange={(e) => { setAkunId(e.target.value ? Number(e.target.value) : null); setYakin(false); setHasil(null); }} className={`${kolom} min-h-[44px]`} disabled={!daftar}>
           <option value="">{daftar ? "Pilih petugas…" : "Memuat…"}</option>
           {(daftar ?? []).map((p) => (
             <option key={p.akun_id} value={p.akun_id}>
               {p.nama} · {labelPeran(p.peran)} · {p.perangkat > 0 ? `${p.perangkat} perangkat` : "belum aktifkan notifikasi"}
             </option>
           ))}
-        </select>
+        </SelectCari>
       </label>
       {dipilih && dipilih.perangkat === 0 && <p className="mt-1.5 rounded-[10px] bg-[#FFF4D6] px-3 py-2 text-[12px] font-semibold text-[#6B4A0E]">Petugas ini belum mengaktifkan notifikasi di HP-nya, jadi tidak ada yang akan menerima. Minta beliau menekan &quot;Aktifkan notifikasi&quot; di Beranda.</p>}
 

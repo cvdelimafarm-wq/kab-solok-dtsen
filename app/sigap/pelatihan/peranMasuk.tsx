@@ -9,6 +9,7 @@
 import { useSyncExternalStore } from "react";
 import { useDataPel } from "./dataPel";
 import { kunciPeran, labelPilihan, perluPemilih, pilihPeran, type PeranMasuk } from "@/lib/peranMasuk";
+import SelectCari from "@/app/components/SelectCari";
 
 type Jawab = { kegiatan_id: number; peran_tersedia?: PeranMasuk[]; peran_nyata?: PeranMasuk[]; peserta?: unknown | null; status?: string; tab_baru?: boolean; terkunci_undangan?: boolean };
 
@@ -79,7 +80,7 @@ export function PemilihPeran({ dalamMenu = false, setelahPilih }: { dalamMenu?: 
       <label htmlFor="masuk-sebagai" className="text-[11px] font-bold uppercase tracking-wide text-[#5B6B7F]">
         Masuk sebagai
       </label>
-      <select
+      <SelectCari
         id="masuk-sebagai"
         value={peran}
         onChange={(e) => {
@@ -93,7 +94,7 @@ export function PemilihPeran({ dalamMenu = false, setelahPilih }: { dalamMenu?: 
             {labelPilihan(p, nyata)}
           </option>
         ))}
-      </select>
+      </SelectCari>
     </div>
   );
 }

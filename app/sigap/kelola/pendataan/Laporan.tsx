@@ -20,6 +20,7 @@ import { STATUS_FOTO_AWAL, bacaStatusFoto, fotoUntukLaporan, kunciStatusFoto, ty
 import PemilihFoto, { GambarFoto } from "./PemilihFoto";
 import { siapkanGambar } from "./fotoKlien";
 import { BTN, BTN_O, Kartu } from "../../admin/ui";
+import SelectCari from "@/app/components/SelectCari";
 
 const KUNCI_OPSI = "sigap.laporan.opsi.v1";
 
@@ -397,21 +398,21 @@ export default function Laporan({ kegiatanId = 1 }: { kegiatanId?: number }) {
                               <div className="grid gap-2 sm:grid-cols-2">
                                 <label className="block text-[12px] font-bold text-[#55657D]">
                                   Urutan
-                                  <select className={`${INPUT} mt-1 font-normal`} value={opsi.urutNilai} onChange={(e) => ubah({ urutNilai: e.target.value as UrutNilai })}>
+                                  <SelectCari className={`${INPUT} mt-1 font-normal`} value={opsi.urutNilai} onChange={(e) => ubah({ urutNilai: e.target.value as UrutNilai })}>
                                     {URUTAN.map((u) => (
                                       <option key={u.kode} value={u.kode}>
                                         {u.label}
                                       </option>
                                     ))}
-                                  </select>
+                                  </SelectCari>
                                 </label>
                                 <label className="block text-[12px] font-bold text-[#55657D]">
                                   Petugas
-                                  <select className={`${INPUT} mt-1 font-normal`} value={opsi.peranNilai} onChange={(e) => ubah({ peranNilai: e.target.value as PeranNilai })}>
+                                  <SelectCari className={`${INPUT} mt-1 font-normal`} value={opsi.peranNilai} onChange={(e) => ubah({ peranNilai: e.target.value as PeranNilai })}>
                                     <option value="semua">PML dan PPL</option>
                                     <option value="pml">Hanya PML</option>
                                     <option value="ppl">Hanya PPL</option>
-                                  </select>
+                                  </SelectCari>
                                 </label>
                               </div>
                             </div>

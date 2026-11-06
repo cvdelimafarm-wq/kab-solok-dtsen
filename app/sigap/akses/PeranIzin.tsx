@@ -11,6 +11,7 @@ import { useState } from "react";
 import { aksi, pesanGalat, SesiBerakhir } from "../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Pesan, TabelKartu, TD, TH } from "../admin/ui";
 import { ikonPortal, kelompokPortal, type DataAkses, type Izin, type Peran } from "./tipe";
+import SelectCari from "@/app/components/SelectCari";
 
 type StatusSel = "simpan" | "ok" | "galat";
 
@@ -149,7 +150,7 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
                       <td key={p.id} className={`${TD} text-center`}>
                         {kelola && !terkunci ? (
                           <span className="inline-flex items-center gap-1">
-                            <select
+                            <SelectCari
                               value={lv ?? ""}
                               onChange={(e) => setMenunggu({ p, menu: m.kode, namaMenu: m.nama, dari: lv, ke: (e.target.value || null) as "lihat" | "kelola" | null })}
                               disabled={st === "simpan"}
@@ -159,7 +160,7 @@ export default function PeranIzin({ data, setData, onMuatUlang }: { data: DataAk
                               <option value="">–</option>
                               <option value="lihat">Lihat</option>
                               <option value="kelola">Kelola</option>
-                            </select>
+                            </SelectCari>
                             <span className="w-3 text-[11px]" aria-live="polite">
                               {st === "simpan" ? "…" : st === "ok" ? <span className="text-emerald-700">✓</span> : st === "galat" ? <span className="text-red-600">!</span> : ""}
                             </span>
@@ -245,10 +246,10 @@ function FormPeran({ peran, onTutup, onTersimpan }: { peran: Peran | null; onTut
         <span className={label}>Keterangan</span>
         <input value={ket} onChange={(e) => setKet(e.target.value)} className={INPUT} placeholder="mis. Memeriksa SPJ sebelum pembayaran" />
         <span className={label}>Butuh lingkup?</span>
-        <select value={lingkup ? "1" : "0"} onChange={(e) => setLingkup(e.target.value === "1")} className={INPUT}>
+        <SelectCari value={lingkup ? "1" : "0"} onChange={(e) => setLingkup(e.target.value === "1")} className={INPUT}>
           <option value="1">Ya — wajib pilih kegiatan saat diberikan</option>
           <option value="0">Tidak — boleh semua kegiatan</option>
-        </select>
+        </SelectCari>
         <span />
         <div className="flex flex-wrap gap-2">
           <button type="submit" className={BTN} disabled={busy}>

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { MAKS_BYTE_DOKUMEN, MAKS_JUDUL, MAKS_KETERANGAN, labelUkuran, labelWilayah, periksaUkuranDokumen, type DokumenPeriksa } from "@/lib/dokumenPeriksa";
 import { API_SPDT_DOKUMEN } from "@/lib/spdtNtp";
+import SelectCari from "@/app/components/SelectCari";
 
 const pesanGalat = (e: unknown) => (e instanceof Error ? e.message : "Terjadi kesalahan.");
 const waktuWib = (iso: string) =>
@@ -153,10 +154,10 @@ export default function DokumenPml() {
           <div className="grid gap-2.5 sm:grid-cols-2">
             <label className="block text-[12px] font-bold text-[#0F2A52]">
               Jorong <span className="font-normal text-[#6B7A90]">(opsional)</span>
-              <select value={pilihWilayah} onChange={(e) => setPilihWilayah(e.target.value)} className={KOTAK}>
+              <SelectCari value={pilihWilayah} onChange={(e) => setPilihWilayah(e.target.value)} className={KOTAK}>
                 <option value="">Semua / tidak spesifik</option>
                 {wilayah.map((w) => <option key={w} value={w}>{labelWilayah(w)}</option>)}
-              </select>
+              </SelectCari>
             </label>
             <label className="block text-[12px] font-bold text-[#0F2A52]">
               Tanggal pemeriksaan

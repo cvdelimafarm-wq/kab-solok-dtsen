@@ -31,6 +31,7 @@ import { BarisRelatif } from "./Relatif";
 import { TabelJadwalTahap, TabelPeran, TabelRapat, TabelSesi, KartuHonorTim, type BarisTahap } from "./TabelAwal";
 import { mingguDariTanggal, mingguKe, namaBulan, namaHari, akhirBulanDari, polaDariTanggal, tanggalLengkap } from "@/lib/keu/waktu";
 import { keteranganHari } from "@/lib/keu/tanggalDurasi";
+import SelectCari from "@/app/components/SelectCari";
 
 export type OpsiRujukan = { nama: string; ro: string; sah: boolean };
 export type PropsFormulir = {
@@ -170,21 +171,21 @@ function BagianA({ f, ubah, tahun, mati, pa, setPa, lst }: Pick<PropsFormulir, "
           <div className="flex flex-wrap items-center gap-2">
             {m && <><div className="w-[84px]"><Angka nama="Jumlah hari terakhir" nilai={n} min={1} maks={31} mati={mati} onUbah={(v) => setJend({ mn: v })} /></div><span className="text-[13px] text-[#44546F]">hari terakhir</span></>}
             <span className="text-[13px] text-[#44546F]">bulan</span>
-            <select aria-label={`Bulan ${sisi}`} className={pilihSel} value={bln} disabled={mati} onChange={(e) => setJend(m ? { mb: Number(e.target.value) } : { sb: Number(e.target.value) })}>
+            <SelectCari aria-label={`Bulan ${sisi}`} className={pilihSel} value={bln} disabled={mati} onChange={(e) => setJend(m ? { mb: Number(e.target.value) } : { sb: Number(e.target.value) })}>
               {Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{awal >= 0 ? namaBln(i) : `bulan ke-${i + 1}`}</option>)}
-            </select>
+            </SelectCari>
           </div>
         ) : mode === "Tanggal" ? (
           <div className="w-[200px]"><Tgl nama={`Tanggal ${sisi} (periode acuan ${first})`} nilai={tglAcuan} mati={mati} onUbah={(v) => { if (v) pasang(v); }} /></div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <select aria-label={`Bulan ${sisi}`} className={pilihSel} value={mg ? mg.bulan : ""} disabled={mati} onChange={(e) => pasangMinggu(Number(e.target.value), mg?.minggu ?? 1)}>
+            <SelectCari aria-label={`Bulan ${sisi}`} className={pilihSel} value={mg ? mg.bulan : ""} disabled={mati} onChange={(e) => pasangMinggu(Number(e.target.value), mg?.minggu ?? 1)}>
               {!mg && <option value="">Pilih bulan…</option>}
               {Array.from({ length: 12 }, (_, i) => <option key={i} value={i}>{namaBulan(i)}</option>)}
-            </select>
-            <select aria-label={`Minggu ke- ${sisi}`} className={pilihSel} value={mg ? mg.minggu : 1} disabled={mati || !mg} onChange={(e) => mg && pasangMinggu(mg.bulan, Number(e.target.value))}>
+            </SelectCari>
+            <SelectCari aria-label={`Minggu ke- ${sisi}`} className={pilihSel} value={mg ? mg.minggu : 1} disabled={mati || !mg} onChange={(e) => mg && pasangMinggu(mg.bulan, Number(e.target.value))}>
               {[1, 2, 3, 4, 5].map((k) => <option key={k} value={k}>Minggu ke-{k}</option>)}
-            </select>
+            </SelectCari>
           </div>
         )}
         {salahTgl[sisi] && <span role="status" className="rounded-md border border-[#F2D58A] bg-[#FFF8E6] px-2 py-1 text-[12px] font-semibold text-[#8A5A00]">{salahTgl[sisi]}</span>}
@@ -362,11 +363,11 @@ function BagianB({ f, ubah, tahun, mati, pa, rujukan }: Pick<PropsFormulir, "f" 
       {f.berbagi ? (
         <>
           <Isian judul="Survei yang dirujuk">
-            <select className={kolom} value={f.rujukan} disabled={mati} onChange={(e) => ubah((g) => { g.rujukan = e.target.value; })} aria-label="Survei yang dirujuk">
+            <SelectCari className={kolom} value={f.rujukan} disabled={mati} onChange={(e) => ubah((g) => { g.rujukan = e.target.value; })} aria-label="Survei yang dirujuk">
               <option value="">Pilih survei…</option>
               {lainnya.map((r) => <option key={`${r.ro}|${r.nama}`} value={r.nama}>{r.nama} · {r.ro}{r.sah ? "" : " · belum sah"}</option>)}
               {f.rujukan && !lainnya.some((r) => r.nama === f.rujukan) && <option value={f.rujukan}>{f.rujukan}</option>}
-            </select>
+            </SelectCari>
           </Isian>
           <Cat>Pelatihan dan briefing mengikuti {f.rujukan || "survei yang dipilih di atas"}. Pertanyaan sesi tidak ditanya di sini dan tidak menambah kebutuhan anggaran survei ini.</Cat>
         </>

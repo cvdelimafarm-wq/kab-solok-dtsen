@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { persenLengkap, susunTransport, tglPendek, type BarisTransport, type DataKinerja, geser } from "@/lib/monitorKinerja";
 import { Catatan, Kartu, Kpi, Persen, fmt, label, sel, td, tdAngka, th, tombol } from "./monUi";
+import SelectCari from "@/app/components/SelectCari";
 
 type Rekap = "ppl" | "pml" | "tim";
 type Urut = "bawaan" | "rendah" | "kosong";
@@ -109,14 +110,14 @@ export default function MonTransport({ data }: { data: DataKinerja }) {
           </div>
           <label className={label}>
             Tim (PML)
-            <select value={pml ?? ""} onChange={(e) => setPml(e.target.value ? Number(e.target.value) : null)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[170px]`}>
+            <SelectCari value={pml ?? ""} onChange={(e) => setPml(e.target.value ? Number(e.target.value) : null)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[170px]`}>
               <option value="">Semua tim</option>
               {timList.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.nama}
                 </option>
               ))}
-            </select>
+            </SelectCari>
           </label>
           <label className={label}>
             Cari nama
@@ -124,11 +125,11 @@ export default function MonTransport({ data }: { data: DataKinerja }) {
           </label>
           <label className={label}>
             Urutkan
-            <select value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[170px]`}>
+            <SelectCari value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className={`${sel} font-normal normal-case tracking-normal sm:min-w-[170px]`}>
               <option value="bawaan">Tim lalu nama</option>
               <option value="rendah">% lengkap terendah</option>
               <option value="kosong">Kosong terbanyak</option>
-            </select>
+            </SelectCari>
           </label>
           <div className="flex flex-col gap-1">
             <span className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">Tanggal</span>

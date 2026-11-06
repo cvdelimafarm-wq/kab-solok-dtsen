@@ -11,6 +11,7 @@ import { IKON_PENGUMUMAN, JENIS_PENGUMUMAN, LABEL_FREKUENSI, LABEL_JENIS_PENGUMU
 import { fetchJson, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { ModalPengumuman } from "../pengumumanUi";
+import SelectCari from "@/app/components/SelectCari";
 
 const URL_API = "/api/sigap/pelatihan/admin/pengumuman";
 const keInputWib = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(0, 16) : "");
@@ -214,13 +215,13 @@ export default function PengumumanKelola() {
           <div className="grid grid-cols-2 gap-2">
             <label className="text-[12px] text-[#7B8794]">
               Jenis tampilan
-              <select className={`${INPUT} mt-0.5 w-full`} value={form.jenis} onChange={(e) => ubah("jenis", e.target.value as JenisPengumuman)}>
+              <SelectCari className={`${INPUT} mt-0.5 w-full`} value={form.jenis} onChange={(e) => ubah("jenis", e.target.value as JenisPengumuman)}>
                 {JENIS_PENGUMUMAN.map((j) => (
                   <option key={j} value={j}>
                     {IKON_PENGUMUMAN[j]} {LABEL_JENIS_PENGUMUMAN[j]}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             <label className="flex items-end gap-2 pb-1.5 text-[12.5px]">
               <input type="checkbox" checked={form.aktif} onChange={(e) => ubah("aktif", e.target.checked)} /> Aktif (tampil bagi peserta)
@@ -254,32 +255,32 @@ export default function PengumumanKelola() {
           <div className="grid grid-cols-2 gap-2">
             <label className="col-span-2 text-[12px] text-[#7B8794] sm:col-span-1">
               Frekuensi tampil
-              <select className={`${INPUT} mt-0.5 w-full`} value={form.frekuensi} onChange={(e) => ubah("frekuensi", e.target.value as FrekuensiPengumuman)}>
+              <SelectCari className={`${INPUT} mt-0.5 w-full`} value={form.frekuensi} onChange={(e) => ubah("frekuensi", e.target.value as FrekuensiPengumuman)}>
                 <option value="sekali">{LABEL_FREKUENSI.sekali}</option>
                 <option value="tiap">{LABEL_FREKUENSI.tiap}</option>
-              </select>
+              </SelectCari>
             </label>
             <label className="text-[12px] text-[#7B8794]">
               Sasaran kelas
-              <select className={`${INPUT} mt-0.5 w-full`} value={form.sasaran_kelas} onChange={(e) => ubah("sasaran_kelas", e.target.value)}>
+              <SelectCari className={`${INPUT} mt-0.5 w-full`} value={form.sasaran_kelas} onChange={(e) => ubah("sasaran_kelas", e.target.value)}>
                 <option value="">Semua kelas</option>
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <option key={n} value={n}>
                     Kelas {n}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             <label className="text-[12px] text-[#7B8794]">
               Sasaran peran
-              <select className={`${INPUT} mt-0.5 w-full`} value={form.sasaran_peran} onChange={(e) => ubah("sasaran_peran", e.target.value)}>
+              <SelectCari className={`${INPUT} mt-0.5 w-full`} value={form.sasaran_peran} onChange={(e) => ubah("sasaran_peran", e.target.value)}>
                 <option value="">Semua peran</option>
                 {PERAN_SASARAN.map((r) => (
                   <option key={r} value={r}>
                     Hanya {r.toUpperCase()}
                   </option>
                 ))}
-              </select>
+              </SelectCari>
             </label>
             <label className="text-[12px] text-[#7B8794]">
               Tampil mulai (WIB, kosong = langsung)

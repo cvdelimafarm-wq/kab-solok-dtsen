@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { BAWAAN_KERTAS, JENIS_KERTAS, NAMA_KERTAS, SATUAN_KERTAS, bacaKertas, hitungKertas, type JenisKertas, type KertasKerja } from "@/lib/delego/skor";
 import { KELAS } from "./merek";
 import { Galat, Info, Medan, fmt } from "./ui";
+import SelectCari from "@/app/components/SelectCari";
 
 type Isian = { kunci: string; label: string; bantu?: string; satuan?: string };
 const ISIAN: Record<JenisKertas, Isian[]> = {
@@ -89,13 +90,13 @@ export default function KertasKerjaPanel({ awal, onPakai }: { awal?: unknown; on
     <div className="space-y-3 rounded-xl border border-[#9CC5BF] bg-[#F7FBFA] p-3">
       <div className="text-[14px] font-bold text-[#0B524C]">Kertas kerja perhitungan beban</div>
       <Medan label="Jenis pekerjaan">
-        <select className={KELAS.isian} value={jenis} onChange={(e) => ganti(e.target.value as JenisKertas)}>
+        <SelectCari className={KELAS.isian} value={jenis} onChange={(e) => ganti(e.target.value as JenisKertas)}>
           {JENIS_KERTAS.map((j) => (
             <option key={j} value={j}>
               {NAMA_KERTAS[j]}
             </option>
           ))}
-        </select>
+        </SelectCari>
       </Medan>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {ISIAN[jenis].map((i) => (

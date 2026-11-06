@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import SelectCari from "@/app/components/SelectCari";
 
 // ============================================================================
 // Tab "Anomali Cepat AI" — DEMO/PROTOTIPE tampilan alur input yang "kelihatan
@@ -108,14 +109,14 @@ export default function AnomaliCepatAiTab() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="text-xs font-medium text-ink/70">Jenis Kuesioner</label>
-              <select
+              <SelectCari
                 value={jenis}
                 onChange={(e) => setJenis(e.target.value as JenisKuesioner)}
                 className="mt-1 w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-navy-400 focus:ring-1 focus:ring-navy-400"
               >
                 <option value="KP">VSEN26.KP</option>
                 <option value="M">VSEN26.M</option>
-              </select>
+              </SelectCari>
             </div>
             <div>
               <label className="text-xs font-medium text-ink/70">NKS (opsional)</label>
