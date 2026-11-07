@@ -81,7 +81,7 @@ describe("Master > KK master dan Mitra/Pegawai (C3, C4)", () => {
   it("KK master: kartu ringkasan, unggah, dan riwayat tampil; memuat dulu", () => {
     const t = teksDari(renderToString(<KkMaster />));
     expect(t).toContain("KK per kecamatan");
-    expect(t).toContain("Unggah daftar KK satu kecamatan");
+    expect(t).toContain("Unggah daftar KK");
     expect(t).toContain("Unduh templat");
     expect(t).toContain("Riwayat unggahan KK");
     expect(t).toContain("Memuat");

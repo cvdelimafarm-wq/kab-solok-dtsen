@@ -10,7 +10,8 @@ import { bacaKodeWilayah, type GalatBaris } from "@/lib/sampelSls";
 import { KOTAK_SOLOK } from "@/lib/batasUnggah";
 
 export const API_MASTER_KK = "/api/portal/master/kk";
-export const MAKS_BARIS_KK = 30000;
+export const MAKS_BARIS_KK = 30000; // satu panggilan ke server = satu kecamatan
+export const MAKS_BARIS_BERKAS_KK = 300000; // satu berkas boleh memuat banyak kecamatan; dipecah per kecamatan di browser
 export const PANJANG_SUBSLS_KK = 16;
 export const MAKS_NAMA_KK = 120;
 export const MAKS_ANGGOTA_KK = 500;
@@ -105,7 +106,7 @@ export function periksaBarisKk(baris: readonly Record<string, unknown>[]): Hasil
   const nomor: number[] = [];
   const kosong = (g: GalatBaris[]): HasilPeriksaKk => ({ baris: hasil, nomor, galat: g, peringatan, dilewati: 0, galat_total: g.length, peringatan_total: 0 });
   if (baris.length === 0) return kosong([{ baris: 0, pesan: "Berkas tidak berisi baris KK." }]);
-  if (baris.length > MAKS_BARIS_KK) return kosong([{ baris: 0, pesan: `Berkas memuat ${baris.length} baris; batas satu unggahan ${MAKS_BARIS_KK}. Pecah per kecamatan.` }]);
+  if (baris.length > MAKS_BARIS_BERKAS_KK) return kosong([{ baris: 0, pesan: `Berkas memuat ${baris.length} baris; batas satu berkas ${MAKS_BARIS_BERKAS_KK}.` }]);
   const kolom = petaKolomKk(Object.keys(baris[0]));
   const hilang = (["kode", "nama"] as Medan[]).filter((m) => !kolom[m]);
   if (hilang.length > 0) return kosong([{ baris: 1, pesan: `Kolom tidak ditemukan: ${hilang.map((m) => LABEL[m]).join(", ")}. Unduh templat untuk melihat format.` }]);
@@ -161,6 +162,18 @@ export function kecamatanBerkas(baris: readonly Pick<BarisKk, "idsubsls">[]): { 
   return { utama: urut[0]?.[0] ?? null, jumlah: urut.length, daftar: urut.map((u) => u[0]) };
 }
 
+/** Pecah baris per kecamatan (7 digit pertama kode), urut kode. Dipakai untuk memproses berkas banyak kecamatan satu per satu. */
+export function kelompokKecamatan<T extends Pick<BarisKk, "idsubsls">>(baris: readonly T[]): { kd: string; baris: T[] }[] {
+  const m = new Map<string, T[]>();
+  for (const b of baris) {
+    const k = b.idsubsls.slice(0, 7);
+    const a = m.get(k);
+    if (a) a.push(b);
+    else m.set(k, [b]);
+  }
+  return [...m.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([kd, bs]) => ({ kd, baris: bs }));
+}
+
 export function templatKk(): string[][] {
   return [
     [...KOLOM_TEMPLAT_KK],
@@ -172,7 +185,7 @@ export const PETUNJUK_TEMPLAT_KK = [
   "Kode Sub SLS wajib 16 digit dan berformat TEKS (jangan angka, supaya tidak berubah menjadi notasi ilmiah).",
   "Nama KK wajib. Anggota Lain dan Patokan boleh kosong.",
   "Latitude dan Longitude boleh kosong, tetapi bila diisi harus berpasangan; pakai titik atau koma desimal.",
-  "Pilih kecamatan yang sesuai sebelum mengunggah: semua kode harus milik kecamatan itu.",
+  "Satu berkas boleh memuat banyak kecamatan (sampai 300.000 baris); sistem memprosesnya per kecamatan, paling banyak 30.000 baris per kecamatan. Kode kecamatan yang tidak ada di master wilayah membuat berkas ditolak.",
   "Pencocokan memakai Kode Sub SLS + Nama KK (huruf besar/kecil dan spasi ganda diabaikan). Baris yang cocok tetapi isinya berbeda akan diperbarui di tempat; yang tidak ada di berkas hanya dinonaktifkan bila Anda memilihnya, dan tidak pernah bila KK itu dipakai tag atau penggantian sampel.",
 ];
 

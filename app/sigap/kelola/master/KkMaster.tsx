@@ -2,14 +2,14 @@
 
 // app/sigap/kelola/master/KkMaster.tsx
 //
-// (7 Nov 2026, tahap C3) Master > KK master: (1) ringkasan KK per kecamatan, (2) unggah daftar KK satu kecamatan (Excel/CSV) dengan pratinjau selisih yang dihitung
-// fungsi SQL yang SAMA dengan penerapannya, (3) riwayat unggahan, (4) keputusan atas usulan pembaruan master dari lapangan (penggantian sampel yang ditandai usul).
+// (7 Nov 2026, tahap C3) Master > KK master: (1) ringkasan KK per kecamatan, (2) unggah daftar KK (Excel/CSV; satu berkas boleh memuat banyak kecamatan, dipecah per
+// kecamatan di browser dan diproses satu per satu) dengan pratinjau selisih yang dihitung fungsi SQL yang SAMA dengan penerapannya, (3) riwayat unggahan, (4) keputusan atas usulan pembaruan master dari lapangan (penggantian sampel yang ditandai usul).
 // KK yang dipakai tag atau penggantian sampel tidak pernah dinonaktifkan; baris yang cocok diperbarui di tempat sehingga rujukan tetap sah. SQL 20261107j.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import {
-  API_MASTER_KK, MAKS_BARIS_KK, PETUNJUK_TEMPLAT_KK, kecamatanBerkas, periksaBarisKk, templatKk,
+  API_MASTER_KK, MAKS_BARIS_BERKAS_KK, MAKS_BARIS_KK, PETUNJUK_TEMPLAT_KK, kecamatanBerkas, kelompokKecamatan, periksaBarisKk, templatKk,
   type DataMasterKk, type HasilPeriksaKk, type HasilTerapkanKk, type ContohKk, type UsulanKk,
 } from "@/lib/masterKk";
 import { LABEL_ALASAN_USUL } from "@/lib/masterWilayah";
@@ -31,6 +31,8 @@ async function unduhTemplat() {
 }
 
 type Berkas = { nama: string; periksa: HasilPeriksaKk };
+type StatusKec = { status: "proses" | "siap" | "selesai" | "galat"; pratinjau?: HasilTerapkanKk; hasil?: HasilTerapkanKk; pesan?: string };
+const adaUbah = (h: HasilTerapkanKk) => h.baru + h.berubah + h.diaktifkan + h.nonaktif > 0;
 async function bacaBerkas(file: File): Promise<Berkas> {
   const XLSX = await import("xlsx");
   const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
@@ -69,6 +71,8 @@ export default function KkMaster() {
   const [catatan, setCatatan] = useState("");
   const input = useRef<HTMLInputElement | null>(null);
   const urutan = useRef(0);
+  const [multi, setMulti] = useState<Record<string, StatusKec>>({});
+  const [multiSibuk, setMultiSibuk] = useState(false);
 
   const muat = useCallback(async () => {
     try {
@@ -81,9 +85,11 @@ export default function KkMaster() {
   useEffect(() => { void muat(); }, [muat]);
 
   const barisSah = berkas?.periksa.baris ?? [];
-  const asalKec = useMemo(() => kecamatanBerkas(barisSah), [barisSah]);
+  const kelompok = useMemo(() => kelompokKecamatan(barisSah), [barisSah]);
   const namaKec = useMemo(() => new Map((data?.kecamatan ?? []).map((k) => [k.kd_kec, k.kecamatan])), [data]);
-  const campur = asalKec.jumlah > 1;
+  const campur = kelompok.length > 1;
+  const tidakDikenal = campur ? kelompok.filter((g) => !namaKec.has(g.kd)).map((g) => g.kd) : [];
+  const terlalu = kelompok.filter((g) => g.baris.length > MAKS_BARIS_KK);
 
   const hitung = useCallback(async (b: Berkas, kd: string, nonaktifkan: boolean) => {
     const no = ++urutan.current;
@@ -102,10 +108,40 @@ export default function KkMaster() {
     }
   }, []);
 
+  /** Berkas banyak kecamatan: pratinjau dihitung satu kecamatan per panggilan (server dibatasi per kecamatan). */
+  const hitungSemua = useCallback(async (b: Berkas, nonaktifkan: boolean) => {
+    const no = ++urutan.current;
+    setMulti({});
+    setYakin(false);
+    setGalatPratinjau("");
+    if (b.periksa.galat_total > 0) return;
+    setMultiSibuk(true);
+    for (const g of kelompokKecamatan(b.periksa.baris)) {
+      if (no !== urutan.current) return;
+      setMulti((m) => ({ ...m, [g.kd]: { status: "proses" } }));
+      try {
+        const h = await apiPortal<HasilTerapkanKk>(API_MASTER_KK, { method: "POST", body: JSON.stringify({ aksi: "pratinjau", kec: g.kd, berkas: b.nama, baris: g.baris, nonaktifkan }) });
+        if (no !== urutan.current) return;
+        setMulti((m) => ({ ...m, [g.kd]: { status: "siap", pratinjau: h } }));
+      } catch (e) {
+        if (no !== urutan.current) return;
+        setMulti((m) => ({ ...m, [g.kd]: { status: "galat", pesan: e instanceof Error ? e.message : "Pratinjau belum bisa dihitung." } }));
+      }
+    }
+    if (no === urutan.current) setMultiSibuk(false);
+  }, []);
+
+  const bisaDiproses = (g: { kd: string; baris: unknown[] }[]) => g.every((x) => namaKec.has(x.kd) && x.baris.length <= MAKS_BARIS_KK);
+
+  const kosongkan = () => { urutan.current++; setBerkas(null); setPratinjau(null); setMulti({}); setMultiSibuk(false); setYakin(false); };
+
   const pilihBerkas = async (f: File | undefined) => {
     if (!f) return;
     setMembaca(true);
     setInfo("");
+    urutan.current++;
+    setMulti({});
+    setMultiSibuk(false);
     setBerkas(null);
     setPratinjau(null);
     try {
@@ -114,7 +150,8 @@ export default function KkMaster() {
       const k = kecamatanBerkas(b.periksa.baris);
       const pilih = k.utama && namaKec.has(k.utama) ? k.utama : "";
       setKec(pilih);
-      if (pilih && k.jumlah === 1) void hitung(b, pilih, nonaktif);
+      if (k.jumlah === 1) { if (pilih) void hitung(b, pilih, nonaktif); }
+      else if (b.periksa.galat_total === 0 && bisaDiproses(kelompokKecamatan(b.periksa.baris))) void hitungSemua(b, nonaktif);
     } catch (e) {
       setBerkas({ nama: f.name, periksa: { baris: [], nomor: [], galat: [{ baris: 0, pesan: e instanceof Error ? e.message : "Berkas tidak terbaca." }], peringatan: [], dilewati: 0, galat_total: 1, peringatan_total: 0 } });
     } finally {
@@ -123,8 +160,13 @@ export default function KkMaster() {
     }
   };
 
-  const ubahKec = (kd: string) => { setKec(kd); if (berkas && !(kecamatanBerkas(berkas.periksa.baris).jumlah > 1)) void hitung(berkas, kd, nonaktif); };
-  const ubahNonaktif = (v: boolean) => { setNonaktif(v); if (berkas && kec && !campur) void hitung(berkas, kec, v); };
+  const ubahKec = (kd: string) => { setKec(kd); if (berkas && !campur) void hitung(berkas, kd, nonaktif); };
+  const ubahNonaktif = (v: boolean) => {
+    setNonaktif(v);
+    if (!berkas) return;
+    if (campur) { if (berkas.periksa.galat_total === 0 && bisaDiproses(kelompok)) void hitungSemua(berkas, v); }
+    else if (kec) void hitung(berkas, kec, v);
+  };
 
   const terapkan = async () => {
     if (!berkas || !kec) return;
@@ -144,6 +186,32 @@ export default function KkMaster() {
     }
   };
 
+  const terapkanSemua = async () => {
+    if (!berkas) return;
+    setMenerapkan(true);
+    setGalat("");
+    setYakin(false);
+    let baru = 0, berubah = 0, diaktifkan = 0, mati = 0, selesai = 0, gagal = 0;
+    for (const g of kelompokKecamatan(berkas.periksa.baris)) {
+      const pr = multi[g.kd]?.pratinjau;
+      if (!pr || !adaUbah(pr)) continue;
+      setMulti((m) => ({ ...m, [g.kd]: { status: "proses", pratinjau: pr } }));
+      try {
+        const h = await apiPortal<HasilTerapkanKk>(API_MASTER_KK, { method: "POST", body: JSON.stringify({ aksi: "terapkan", kec: g.kd, berkas: berkas.nama, baris: g.baris, nonaktifkan: nonaktif }) });
+        setMulti((m) => ({ ...m, [g.kd]: { status: "selesai", pratinjau: pr, hasil: h } }));
+        baru += h.baru; berubah += h.berubah; diaktifkan += h.diaktifkan; mati += h.nonaktif; selesai++;
+      } catch (e) {
+        gagal++;
+        setMulti((m) => ({ ...m, [g.kd]: { status: "galat", pratinjau: pr, pesan: e instanceof Error ? e.message : "Belum bisa diterapkan." } }));
+      }
+    }
+    if (selesai > 0) setInfo(`${selesai} kecamatan diterapkan: ${fmt(baru)} baru, ${fmt(berubah)} diperbarui, ${fmt(diaktifkan)} diaktifkan kembali${mati ? `, ${fmt(mati)} dinonaktifkan` : ""}.`);
+    if (gagal > 0) setGalat(`${gagal} kecamatan gagal diterapkan; kecamatan lain sudah berlaku. Tekan "Hitung ulang" untuk melihat sisa selisih, lalu terapkan lagi.`);
+    else kosongkan();
+    await muat();
+    setMenerapkan(false);
+  };
+
   const putuskan = async (u: UsulanKk, putusan: "diterapkan" | "ditolak") => {
     setUsulSibuk(u.id);
     setGalat("");
@@ -161,7 +229,11 @@ export default function KkMaster() {
   };
 
   const p = berkas?.periksa;
-  const bolehTerapkan = !!pratinjau && !!kec && !campur && !menghitung && !menerapkan && (pratinjau.baru + pratinjau.berubah + pratinjau.diaktifkan + pratinjau.nonaktif > 0);
+  const bolehTerapkan = !!pratinjau && !!kec && !campur && terlalu.length === 0 && !menghitung && !menerapkan && adaUbah(pratinjau);
+  const semuaSiap = campur && kelompok.every((g) => multi[g.kd]?.status === "siap");
+  const bolehTerapkanSemua = semuaSiap && !multiSibuk && !menerapkan && tidakDikenal.length === 0 && terlalu.length === 0 && kelompok.some((g) => { const pr = multi[g.kd]?.pratinjau; return !!pr && adaUbah(pr); });
+  const perluHitungUlang = campur && !multiSibuk && !menerapkan && kelompok.some((g) => { const st = multi[g.kd]?.status; return st === "galat" || st === "selesai"; });
+  const jumlahUbah = kelompok.filter((g) => { const pr = multi[g.kd]?.pratinjau; return !!pr && adaUbah(pr); }).length;
   const tampilGalat = (p?.galat ?? []).slice(0, 15);
   const tampilPeringatan = (p?.peringatan ?? []).slice(0, 8);
 
@@ -193,16 +265,16 @@ export default function KkMaster() {
         )}
       </Kartu>
 
-      <Kartu judul="Unggah daftar KK satu kecamatan" ket="Pratinjau tidak mengubah apa pun; baru berlaku setelah Anda menerapkan">
+      <Kartu judul="Unggah daftar KK" ket="Pratinjau tidak mengubah apa pun; baru berlaku setelah Anda menerapkan">
         <p className="mb-2.5 text-[12.5px] leading-relaxed text-[#5B6B84]">
           Kolom: Kode Sub SLS (16 digit, teks), Nama KK, Anggota Lain, Patokan, Latitude, Longitude. Baris yang cocok (sub SLS + nama) diperbarui di tempat; baris baru ditambahkan.
-          KK yang tidak ada di berkas <b>tidak disentuh</b> kecuali Anda memilih menonaktifkannya, dan KK yang dipakai tag atau penggantian sampel tidak pernah dinonaktifkan. Maksimal {fmt(MAKS_BARIS_KK)} baris.
+          KK yang tidak ada di berkas <b>tidak disentuh</b> kecuali Anda memilih menonaktifkannya, dan KK yang dipakai tag atau penggantian sampel tidak pernah dinonaktifkan. Satu berkas boleh memuat banyak kecamatan (maksimal {fmt(MAKS_BARIS_BERKAS_KK)} baris); sistem memprosesnya per kecamatan, paling banyak {fmt(MAKS_BARIS_KK)} baris per kecamatan.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <input ref={input} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => void pilihBerkas(e.target.files?.[0])} />
           <button type="button" className={BTN} disabled={membaca || menerapkan || !data?.siap} onClick={() => input.current?.click()}>{membaca ? "Membaca…" : "Pilih berkas"}</button>
           <button type="button" className={BTN_O} onClick={() => void unduhTemplat()}>Unduh templat</button>
-          {berkas && <button type="button" className={BTN_O} disabled={menerapkan} onClick={() => { setBerkas(null); setPratinjau(null); setYakin(false); }}>Batalkan</button>}
+          {berkas && <button type="button" className={BTN_O} disabled={menerapkan} onClick={kosongkan}>Batalkan</button>}
         </div>
 
         {membaca && <div className="mt-3"><Memuat teks="Membaca dan memeriksa berkas…" /></div>}
@@ -236,16 +308,73 @@ export default function KkMaster() {
 
             {p.baris.length > 0 && p.galat_total === 0 && (
               <>
-                {campur && <Pesan>Berkas memuat {asalKec.jumlah} kecamatan ({asalKec.daftar.map((k) => namaKec.get(k) ?? k).join(", ")}). Unggah satu kecamatan per berkas.</Pesan>}
+                {terlalu.length > 0 && <Pesan>{terlalu.map((g) => `${namaKec.get(g.kd) ?? g.kd} memuat ${fmt(g.baris.length)} baris`).join("; ")}; batasnya {fmt(MAKS_BARIS_KK)} baris per kecamatan. Bagi berkasnya lalu unggah ulang.</Pesan>}
+                {campur && tidakDikenal.length > 0 && <Pesan>Kode kecamatan tidak ada di master wilayah: {tidakDikenal.join(", ")}. Periksa 7 digit pertama Kode Sub SLS, lalu unggah ulang.</Pesan>}
+                {campur && (
+                  <div className="flex flex-col gap-2.5">
+                    <div className="text-[12.5px] text-[#5B6B84]">Berkas memuat <b>{fmt(kelompok.length)} kecamatan</b>; masing-masing dihitung dan diterapkan satu per satu.</div>
+                    <label className="flex items-start gap-2 text-[12.5px] font-semibold text-[#5B6B84]">
+                      <input type="checkbox" className="mt-0.5" checked={nonaktif} onChange={(e) => ubahNonaktif(e.target.checked)} disabled={multiSibuk || menerapkan} />
+                      <span>Nonaktifkan KK di sub SLS yang muncul di berkas tetapi KK-nya tidak ada di berkas <span className="font-normal">(KK terpakai tag/penggantian dilewati)</span></span>
+                    </label>
+                    <div className="overflow-x-auto rounded-xl border border-[#DDE6F3]">
+                      <table className="w-full border-collapse text-[12.5px]">
+                        <thead><tr><th className={TH}>Kecamatan</th><th className={TH}>Baris</th><th className={TH}>Selisih dengan master</th></tr></thead>
+                        <tbody>
+                          {kelompok.map((g) => {
+                            const st = multi[g.kd];
+                            const pr = st?.pratinjau;
+                            return (
+                              <tr key={g.kd}>
+                                <td className={TD}><b>{namaKec.get(g.kd) ?? g.kd}</b>{!namaKec.has(g.kd) && <span className="ml-1.5"><Chip w="bad">tidak dikenal</Chip></span>}</td>
+                                <td className={TD}>{fmt(g.baris.length)}{g.baris.length > MAKS_BARIS_KK && <span className="ml-1.5"><Chip w="bad">melebihi batas</Chip></span>}</td>
+                                <td className={TD}>
+                                  {!st && <Chip w="mut">{multiSibuk ? "Menunggu giliran" : "Belum dihitung"}</Chip>}
+                                  {st?.status === "proses" && <Chip w="wait">{menerapkan ? "Menerapkan…" : "Menghitung…"}</Chip>}
+                                  {st?.status === "galat" && <span className="text-[#B4261E]">{st.pesan}</span>}
+                                  {st?.status === "selesai" && st.hasil && <Chip w="ok">Diterapkan: {fmt(st.hasil.baru)} baru, {fmt(st.hasil.berubah)} diperbarui{st.hasil.diaktifkan ? `, ${fmt(st.hasil.diaktifkan)} diaktifkan` : ""}{st.hasil.nonaktif ? `, ${fmt(st.hasil.nonaktif)} dinonaktifkan` : ""}</Chip>}
+                                  {st?.status === "siap" && pr && (
+                                    <span className="flex flex-wrap items-center gap-1.5">
+                                      <Chip w={pr.baru ? "ok" : "mut"}>{fmt(pr.baru)} baru</Chip>
+                                      <Chip w={pr.berubah ? "wait" : "mut"}>{fmt(pr.berubah)} diperbarui</Chip>
+                                      {pr.diaktifkan > 0 && <Chip w="ok">{fmt(pr.diaktifkan)} diaktifkan kembali</Chip>}
+                                      <Chip w="mut">{fmt(pr.sama)} tetap</Chip>
+                                      {pr.hilang > 0 && <Chip w="wait">{fmt(pr.hilang)} tidak ada di berkas</Chip>}
+                                      {nonaktif && pr.nonaktif > 0 && <Chip w="bad">{fmt(pr.nonaktif)} akan dinonaktifkan</Chip>}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {semuaSiap && jumlahUbah === 0 && <div className="text-[12.5px] text-[#6B7A90]">Berkas ini sama persis dengan master; tidak ada yang perlu diterapkan.</div>}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {!yakin ? (
+                        <button type="button" className={BTN_G} disabled={!bolehTerapkanSemua} onClick={() => setYakin(true)}>Terapkan ke master ({fmt(jumlahUbah)} kecamatan)</button>
+                      ) : (
+                        <>
+                          <span className="text-[12.5px] font-semibold text-[#8A6200]">Yakin menerapkan ke {fmt(jumlahUbah)} kecamatan?</span>
+                          <button type="button" className={BTN_G} disabled={menerapkan} onClick={() => void terapkanSemua()}>{menerapkan ? "Menerapkan…" : "Ya, terapkan"}</button>
+                          <button type="button" className={BTN_O} disabled={menerapkan} onClick={() => setYakin(false)}>Batal</button>
+                        </>
+                      )}
+                      {perluHitungUlang && <button type="button" className={BTN_O} onClick={() => void hitungSemua(berkas, nonaktif)}>Hitung ulang</button>}
+                    </div>
+                  </div>
+                )}
+                {!campur && <>
                 <label className="flex max-w-xs flex-col gap-1 text-[12px] font-semibold text-[#5B6B84]">
                   Kecamatan *
-                  <select className={INPUT} value={kec} onChange={(e) => ubahKec(e.target.value)} disabled={campur}>
+                  <select className={INPUT} value={kec} onChange={(e) => ubahKec(e.target.value)}>
                     <option value="">— pilih —</option>
                     {(data?.kecamatan ?? []).map((k) => <option key={k.kd_kec} value={k.kd_kec}>{k.kecamatan}</option>)}
                   </select>
                 </label>
                 <label className="flex items-start gap-2 text-[12.5px] font-semibold text-[#5B6B84]">
-                  <input type="checkbox" className="mt-0.5" checked={nonaktif} onChange={(e) => ubahNonaktif(e.target.checked)} disabled={campur} />
+                  <input type="checkbox" className="mt-0.5" checked={nonaktif} onChange={(e) => ubahNonaktif(e.target.checked)} />
                   <span>Nonaktifkan KK di sub SLS ini yang tidak ada di berkas <span className="font-normal">(hanya sub SLS yang muncul di berkas; KK terpakai tag/penggantian dilewati)</span></span>
                 </label>
 
@@ -283,6 +412,7 @@ export default function KkMaster() {
                     </>
                   )}
                 </div>
+                </>}
               </>
             )}
           </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KOLOM_TEMPLAT_KK, MAKS_BARIS_KK, kecamatanBerkas, periksaBarisKk, petaKolomKk, sahkanBarisKk, sahkanSatuKk, templatKk } from "../masterKk";
+import { KOLOM_TEMPLAT_KK, MAKS_BARIS_BERKAS_KK, MAKS_BARIS_KK, kecamatanBerkas, kelompokKecamatan, periksaBarisKk, petaKolomKk, sahkanBarisKk, sahkanSatuKk, templatKk } from "../masterKk";
 
 const b = (o: Record<string, unknown> = {}) => ({ "Kode Sub SLS": "1303110005000102", "Nama KK": "Budi Santoso", "Anggota Lain": "", Patokan: "", Latitude: "", Longitude: "", ...o });
 
@@ -72,7 +72,12 @@ describe("periksaBarisKk", () => {
   });
   it("berkas kosong dan berkas terlalu besar", () => {
     expect(periksaBarisKk([]).galat[0].pesan).toMatch(/tidak berisi/);
-    expect(periksaBarisKk(new Array(MAKS_BARIS_KK + 1).fill(b())).galat[0].pesan).toMatch(/batas/);
+    expect(periksaBarisKk(new Array(MAKS_BARIS_BERKAS_KK + 1).fill(b())).galat[0].pesan).toMatch(/batas/);
+  });
+  it("berkas melebihi batas satu panggilan server tetap terbaca (dipecah per kecamatan di layar)", () => {
+    const r = periksaBarisKk(Array.from({ length: MAKS_BARIS_KK + 5 }, (_, i) => b({ "Nama KK": `KK ${i}` })));
+    expect(r.galat_total).toBe(0);
+    expect(r.baris).toHaveLength(MAKS_BARIS_KK + 5);
   });
   it("daftar galat dipotong tetapi totalnya tetap dihitung", () => {
     const r = periksaBarisKk(Array.from({ length: 500 }, () => b({ "Nama KK": "" })));
@@ -103,5 +108,15 @@ describe("kecamatanBerkas", () => {
     const r = kecamatanBerkas([{ idsubsls: "1303110005000102" }, { idsubsls: "1303110005000202" }, { idsubsls: "1303080001000102" }]);
     expect(r).toEqual({ utama: "1303110", jumlah: 2, daftar: ["1303110", "1303080"] });
     expect(kecamatanBerkas([]).utama).toBeNull();
+  });
+});
+
+describe("kelompokKecamatan", () => {
+  it("memecah per 7 digit pertama, urut kode, tanpa kehilangan baris", () => {
+    const baris = [{ idsubsls: "1303110005000102" }, { idsubsls: "1303080001000102" }, { idsubsls: "1303110005000202" }];
+    const r = kelompokKecamatan(baris);
+    expect(r.map((g) => g.kd)).toEqual(["1303080", "1303110"]);
+    expect(r.map((g) => g.baris.length)).toEqual([1, 2]);
+    expect(kelompokKecamatan([])).toEqual([]);
   });
 });
