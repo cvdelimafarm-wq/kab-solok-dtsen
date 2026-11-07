@@ -16,6 +16,8 @@ vi.mock("@/app/sigap/kontrak/Bingkai", () => ({ default: ({ jejak, children }: {
 import WilayahPeta, { Baris } from "@/app/sigap/kelola/master/WilayahPeta";
 import BatasShapefile from "@/app/sigap/kelola/master/BatasShapefile";
 import MasterHalaman from "@/app/sigap/kelola/master/page";
+import KkMaster from "@/app/sigap/kelola/master/KkMaster";
+import OrangMaster, { Temuan } from "@/app/sigap/kelola/master/OrangMaster";
 
 const teksDari = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const b = (o: Partial<BarisMaster> = {}): BarisMaster => ({
@@ -72,6 +74,28 @@ describe("Master > Batas wilayah (C2)", () => {
     expect(t).toContain("Wilayah dan peta");
     expect(t).toContain("Batas wilayah");
     expect(t).toContain("Pengelolaan &gt; Master &gt; Wilayah dan peta");
+  });
+});
+
+describe("Master > KK master dan Mitra/Pegawai (C3, C4)", () => {
+  it("KK master: kartu ringkasan, unggah, dan riwayat tampil; memuat dulu", () => {
+    const t = teksDari(renderToString(<KkMaster />));
+    expect(t).toContain("KK per kecamatan");
+    expect(t).toContain("Unggah daftar KK satu kecamatan");
+    expect(t).toContain("Unduh templat");
+    expect(t).toContain("Riwayat unggahan KK");
+    expect(t).toContain("Memuat");
+  });
+  it("Mitra dan Pegawai: memuat dulu", () => {
+    expect(teksDari(renderToString(<OrangMaster />))).toContain("Memuat");
+  });
+  it("temuan menampilkan judul, jumlah, contoh, dan batas tampilan", () => {
+    const t = teksDari(renderToString(<Temuan t={{ kode: "mitra_tanpa_pool", tingkat: "perlu", judul: "Akun mitra aktif yang belum masuk pool tahun ini", ket: "Tandai di Mitra Kepka.", jumlah: 15, contoh: [{ id: 1, nama: "Budi", ket: "KUBUNG" }, { id: 2, nama: "Citra", ket: "kecamatan belum diisi" }] }} />));
+    expect(t).toContain("Perlu ditindak");
+    expect(t).toContain("Akun mitra aktif yang belum masuk pool tahun ini");
+    expect(t).toContain("15");
+    expect(t).toContain("Budi");
+    expect(t).toContain("Menampilkan 2 dari 15");
   });
 });
 

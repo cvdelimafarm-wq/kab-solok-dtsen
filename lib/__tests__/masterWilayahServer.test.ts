@@ -44,6 +44,7 @@ function dbTiruan(tabel: Record<string, Baris[] | { error: { code: string; messa
       const q: Record<string, unknown> = {
         select: () => q,
         eq: (k: string, v: unknown) => { hasil = hasil.filter((r) => r[k] === v); return q; },
+        is: (k: string, v: unknown) => { hasil = hasil.filter((r) => (r[k] ?? null) === v); return q; },
         in: (k: string, v: unknown[]) => { hasil = hasil.filter((r) => v.includes(r[k])); return q; },
         order: () => q,
         limit: () => q,
@@ -78,6 +79,18 @@ describe("dataMasterWilayah", () => {
     expect(r.baris).toHaveLength(2);
     expect(r.kegiatan_tahun).toEqual([{ id: 6, nama: "Seruti", sub_sls: 1 }]);
     expect(r.usulan[0]).toMatchObject({ id: 3, kegiatan: "Seruti Triwulan IV 2026", nama_kk: "Pak Uji", kecamatan: "KUBUNG", status: "disetujui" });
+  });
+  it("usulan yang sudah diputuskan (usul_putusan terisi) tidak ditampilkan", async () => {
+    const r = await dataMasterWilayah(dbTiruan({
+      master_v_subsls_status: tampilan,
+      sigap_sampel_ganti: [
+        { id: 3, kegiatan_id: 6, idsubsls: "1303110005000102", utama_kk_id: 11, alasan: "pindah", usul_master: true, status: "disetujui", usul_putusan: "diterapkan", diajukan_at: "2026-11-12T01:00:00Z" },
+        { id: 4, kegiatan_id: 6, idsubsls: "1303110005000102", utama_kk_id: 11, alasan: "kosong", usul_master: true, status: "disetujui", usul_putusan: null, diajukan_at: "2026-11-12T02:00:00Z" },
+      ],
+      master_kk: [{ id: 11, nama_kk: "Pak Uji" }],
+      sigap_kegiatan: [{ id: 6, nama: "Seruti" }],
+    }));
+    expect(r.usulan.map((u) => u.id)).toEqual([4]);
   });
   it("tabel penggantian belum ada: usulan kosong, bagian lain tetap jalan", async () => {
     const r = await dataMasterWilayah(dbTiruan({ master_v_subsls_status: tampilan, sigap_sampel_ganti: { error: { code: "42P01", message: "does not exist" } } }));

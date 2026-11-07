@@ -2,24 +2,29 @@
 
 // app/sigap/kelola/master/page.tsx
 //
-// (7 Nov 2026, tahap C1-C2) Menu Master (Pengelolaan): wilayah, peta, dan keluarga (KK) master lintas kegiatan. Khusus admin Master (Ketua): izin `master.wilayah`
-// lewat peran `admin_master` (SQL 20261107h). Tab: Wilayah dan peta (C1), Batas wilayah = unggah shapefile berversi (C2, SQL 20261107i).
-// Menyusul: KK master (C3), Mitra dan Pegawai (C4). Tab terpilih disimpan di ?tab= (tanpa useSearchParams agar halaman tetap statis).
+// (7 Nov 2026, tahap C1-C4) Menu Master (Pengelolaan): wilayah, peta, keluarga (KK), mitra, dan pegawai master lintas kegiatan. Khusus admin Master (Ketua): izin
+// `master.wilayah` lewat peran `admin_master` (SQL 20261107h). Tab: Wilayah dan peta (C1), Batas wilayah = unggah shapefile berversi (C2, SQL 20261107i),
+// KK master = unggah per kecamatan + usulan lapangan (C3, SQL 20261107j), Mitra dan Pegawai = kesehatan master, baca saja (C4).
+// Tab terpilih disimpan di ?tab= (tanpa useSearchParams agar halaman tetap statis).
 
 import { useEffect, useState } from "react";
 import { bacaSesi, keMasuk } from "../../admin/api";
 import { BarisTab, type ItemTab } from "../../admin/ui";
 import Bingkai from "../../kontrak/Bingkai";
 import BatasShapefile from "./BatasShapefile";
+import KkMaster from "./KkMaster";
+import OrangMaster from "./OrangMaster";
 import WilayahPeta from "./WilayahPeta";
 
-type TabMaster = "wilayah" | "batas";
+type TabMaster = "wilayah" | "batas" | "kk" | "orang";
 const TAB: ItemTab<TabMaster>[] = [
   { kode: "wilayah", label: "Wilayah dan peta" },
   { kode: "batas", label: "Batas wilayah" },
+  { kode: "kk", label: "KK master" },
+  { kode: "orang", label: "Mitra dan Pegawai" },
 ];
-const JUDUL: Record<TabMaster, string> = { wilayah: "Wilayah dan peta", batas: "Batas wilayah" };
-const sahTab = (t: string | null): t is TabMaster => t === "wilayah" || t === "batas";
+const JUDUL: Record<TabMaster, string> = { wilayah: "Wilayah dan peta", batas: "Batas wilayah", kk: "KK master", orang: "Mitra dan Pegawai" };
+const sahTab = (t: string | null): t is TabMaster => t === "wilayah" || t === "batas" || t === "kk" || t === "orang";
 
 export default function MasterWilayahHalaman() {
   const [tab, setTab] = useState<TabMaster>("wilayah");
@@ -55,7 +60,10 @@ export default function MasterWilayahHalaman() {
     >
       <div className="flex flex-col gap-3.5">
         <BarisTab tab={TAB} aktif={tab} onPilih={pilih} />
-        {tab === "wilayah" ? <WilayahPeta /> : <BatasShapefile />}
+        {tab === "wilayah" && <WilayahPeta />}
+        {tab === "batas" && <BatasShapefile />}
+        {tab === "kk" && <KkMaster />}
+        {tab === "orang" && <OrangMaster />}
       </div>
     </Bingkai>
   );

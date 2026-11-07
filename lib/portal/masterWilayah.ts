@@ -32,13 +32,17 @@ async function bacaTampilan(db: Db): Promise<{ siap: boolean; mentah: unknown[] 
 
 /** Usulan pembaruan master dari lapangan (penggantian sampel yang ditandai usul_master), terbaru dulu, maks 200. */
 async function bacaUsulan(db: Db, baris: readonly BarisMaster[]): Promise<UsulanMaster[]> {
-  const { data, error } = await db
-    .from("sigap_sampel_ganti")
-    .select("id, kegiatan_id, idsubsls, utama_kk_id, alasan, status, diajukan_nama, diajukan_at")
-    .eq("usul_master", true)
-    .in("status", ["menunggu", "disetujui"])
-    .order("id", { ascending: false })
-    .limit(200);
+  const ambil = (belumDiputus: boolean) => {
+    let q = db
+      .from("sigap_sampel_ganti")
+      .select("id, kegiatan_id, idsubsls, utama_kk_id, alasan, status, diajukan_nama, diajukan_at")
+      .eq("usul_master", true)
+      .in("status", ["menunggu", "disetujui"]);
+    if (belumDiputus) q = q.is("usul_putusan", null); // kolom keputusan ada sejak SQL 20261107j (tahap C3)
+    return q.order("id", { ascending: false }).limit(200);
+  };
+  let { data, error } = await ambil(true);
+  if (error) ({ data, error } = await ambil(false)); // SQL j belum dijalankan: kolom belum ada
   if (error || !data || data.length === 0) return [];
   const r = data as Record<string, unknown>[];
   const kkIds = [...new Set(r.map((x) => Number(x.utama_kk_id)).filter((n) => Number.isInteger(n)))];
