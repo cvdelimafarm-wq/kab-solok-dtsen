@@ -68,7 +68,7 @@ export const FITUR: DefFitur[] = [
   { kode: "ringkasan", kelompok: "Ringkasan", label: "Ringkasan pendataan", ket: "Angka utama dan alur kerja dalam satu layar.", bergantung: "status" },
   { kode: "persiapan_sasaran", kelompok: "1 · Persiapan", label: "Unggah daftar sasaran dan permintaan FASIH", ket: "Daftar KK sasaran, permintaan daftar ke FASIH, Sub SLS yang belum diajukan.", bergantung: "status" },
   { kode: "persiapan_lembar", kelompok: "1 · Persiapan", label: "Pengaturan lembar pendataan", ket: "Istilah, warna, bentuk, dan alasan tombol hasil; variabel radar.", bergantung: "status" },
-  { kode: "persiapan_sampel", kelompok: "1 · Persiapan", label: "Alokasi sampel per SLS (unggah Excel)", ket: "Unggah templat sampel utama/cadangan per SLS, pantau alokasi, dan atur penggantian sampel oleh PPL.", bergantung: "umum" },
+  { kode: "persiapan_sampel", kelompok: "1 · Persiapan", label: "Alokasi sampel 2 stage (sub SLS → tag KK dari master)", ket: "Stage 1: unggah daftar sub SLS/NKS dan plotting PPL/PML. Stage 2: PPL menandai KK sampel utama/cadangan dari master KK saat jendela rilis dibuka.", bergantung: "umum" },
   { kode: "persiapan_laporan_spj", kelompok: "1 · Persiapan", label: "Isi laporan SPJ", ket: "Pengaturan isi laporan harian untuk SPJ transport lokal.", bergantung: "status" },
   { kode: "tim_alokasi", kelompok: "2 · Tim & Surat Tugas", label: "Alokasi PML/PPL per Sub SLS", ket: "Alokasi wilayah tim pada peta Sub SLS dan pelatihan petugas.", bergantung: "status" },
   { kode: "tim_penugasan", kelompok: "2 · Tim & Surat Tugas", label: "Penugasan dan Surat Tugas", ket: "Tautkan petugas ke kegiatan, unggah Surat Tugas, daftar ST.", bergantung: "umum" },
