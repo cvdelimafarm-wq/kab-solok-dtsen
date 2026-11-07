@@ -20,6 +20,7 @@ import {
 } from "@/lib/keu/matriks";
 import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, kolom, Kosong, Kpi, label, Memuat, Potong, tombolAktif, tombolBahaya, tombolKecil, tombolUtama } from "../../keu-ui";
 import { aksiKeu, tulisKeuKlien, useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
+import KartuIsiNiat from "./KartuIsiNiat";
 import { FormBaru, FormPenggenap, KartuGeseran, KartuKecukupan, KartuPeriksa, PanelPasangan, type AkunMaster, type KeputusanRow } from "./Bagian";
 import Matriks, { type RincianRab } from "./Matriks";
 import KartuJaga from "./KartuJaga";
@@ -359,6 +360,7 @@ function Isi() {
 
           <KartuPeriksa p={periksa.baris ?? []} />
           <KartuJaga key={jd.id} jadwal={jd.id} jenis={jd.jenis} status={jd.status} bolehJadwal={bolehJadwal} />
+          {roParam && roKro.includes(roParam) && <KartuIsiNiat key={`${jd.id}-${roParam}`} jadwal={jd.id} ro={roParam} bisa={bisaUbah(roParam)} sesudah={segarkan} />}
           {sandingan && <PanelKecukupan baris={sandingan.baris} kro={kro} param={param.baris ?? []} prioritas={prioritas.baris ?? []} buku={bukuKlien} jenisJadwal={jd.jenis} />}
           <KartuKecukupan jadwal={jd.id} ro={roKro.join(", ")} kro={kro} kec={kec.baris ?? []} keputusan={putus.baris ?? []} bolehPutus={bolehSahkan} sesudah={segarkan} />
           <BukuSelisih item={kecItem.baris ?? []} baris={rows ?? []} prioritas={prioritas.baris ?? []} />

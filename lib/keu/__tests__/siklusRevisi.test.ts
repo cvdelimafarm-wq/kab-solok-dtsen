@@ -111,7 +111,7 @@ describe("teks dan tautan", () => {
     expect(keadaanRo(dasar({ sudah_usulan: true })).warna).toBe("hijau");
   });
   it("tautan kertas kerja memakai KRO; kode tak dikenal ke daftar revisi", () => {
-    expect(tautKertas({ jadwal_id: 2, ro_kode: "2906.BMA.006" })).toBe("/sigap/revisi/kertas?jadwal=2&kro=2906.BMA");
+    expect(tautKertas({ jadwal_id: 2, ro_kode: "2906.BMA.006" })).toBe("/sigap/revisi/kertas?jadwal=2&kro=2906.BMA&ro=2906.BMA.006");
     expect(tautKertas({ jadwal_id: 2, ro_kode: "TIM-X" })).toBe("/sigap/revisi");
   });
   it("sisa tunda", () => {

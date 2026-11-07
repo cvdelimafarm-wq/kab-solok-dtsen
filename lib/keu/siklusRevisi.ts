@@ -127,10 +127,10 @@ export function pilihanTersedia(t: TanggapanSaya): PilihanTanggapan[] {
 /** "Tidak mengusulkan" boleh dibuka lagi selama siklus belum ditutup (siapa pun dari ketua tim atau wakil). */
 export const bisaBukaLagi = (t: TanggapanSaya): boolean => t.status === "tidak" && t.masih_buka && !t.sudah_usulan;
 
-/** Tautan ke kertas kerja revisi untuk RO ini (per KRO); RO yang kodenya tak dikenal diarahkan ke daftar revisi. */
+/** Tautan ke kertas kerja revisi untuk RO ini (per KRO, dengan RO terpilih supaya kartu Isi dari rencana tindakan tampil); RO yang kodenya tak dikenal diarahkan ke daftar revisi. */
 export function tautKertas(t: Pick<TanggapanSaya, "jadwal_id" | "ro_kode">): string {
   const kro = kroDariRo(t.ro_kode);
-  return kro ? `/sigap/revisi/kertas?jadwal=${t.jadwal_id}&kro=${kro}` : "/sigap/revisi";
+  return kro ? `/sigap/revisi/kertas?jadwal=${t.jadwal_id}&kro=${kro}&ro=${encodeURIComponent(t.ro_kode)}` : "/sigap/revisi";
 }
 
 export type KeadaanRo = { teks: string; warna: "hijau" | "kuning" | "merah" | "biru" | "abu" };
