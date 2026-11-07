@@ -11,6 +11,7 @@ import { tentukanTujuan } from "@/lib/undangan";
 import { idPelatihanTahap, type BukaMode, type InfoIdentifikasi, type InfoKorwil, type InfoPendataan, type InfoPerencanaan, type InfoWilayah, type Induk, type TahapDef } from "@/lib/sigapTahap";
 import { pengelolaPelatihan } from "@/lib/portal/pengelolaPelatihan";
 import { indukRelevan } from "@/lib/sigapIndukRelevan";
+import { hanyaTranslok, idTranslokMenu } from "@/lib/sigapMenuKegiatan";
 import type { InfoSpdt } from "@/lib/spdtNtp";
 import type { InfoSampel } from "@/lib/sampelSls";
 import { ringkasModulSampel } from "@/lib/portal/sampel";
@@ -212,9 +213,9 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     if (t.length === 0) continue;
     const idPelIni = idPelInduk.get(i.kode);
     const pengelolaIni = idPelIni !== undefined && pengelola.has(idPelIni); // (3 Nov 2026) panitia / instruktur pelatihan induk ini
-    // (7 Nov 2026) aturan lengkap di lib/sigapIndukRelevan.ts: SPDT NTP dan induk non-bencana (Seruti) hanya untuk yang bertugas di kegiatannya;
-    // syarat petugas_bencana_id hanya untuk induk bermodul khas pendataan bencana (dulu berlaku bagi semua induk non-SPDT -> kartu Seruti muncul di semua petugas)
-    const relevan = indukRelevan({ isiModul: t.flatMap((x) => x.isi), petugasBencana: !!akun.petugas_bencana_id, jumlahPenugasan: penInduk.length, pengelola: pengelolaIni, supervisorSpdt });
+    // (7 Nov 2026) aturan baku di lib/sigapIndukRelevan.ts: hanya yang ditugaskan di kegiatan induk ini (atau pengelola pelatihannya; supervisor untuk SPDT).
+    // petugas_bencana_id (tautan ke roster seluruh mitra) TIDAK lagi membuka induk -- dulu kartu Seruti dan Pascabencana tampil di ratusan akun yang tak bertugas.
+    const relevan = indukRelevan({ isiModul: t.flatMap((x) => x.isi), jumlahPenugasan: penInduk.length, pengelola: pengelolaIni, supervisorSpdt });
     if (!relevan) continue;
     terpilih.push({ i, t, isi: new Set(t.flatMap((x) => x.isi)), penInduk });
   }
@@ -281,6 +282,8 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
       pendataan: isi.has("pendataan") ? pendataan : null,
       spdt: isi.has("spdt_lembar") ? spdt : null,
       korwil: isi.has("monitoring_korwil") ? korwil : null,
+      // (7 Nov 2026) induk yang pendataannya hanya Transport Lokal (Seruti): perannya dari penugasan pada kegiatan translok bermenu itu
+      peranPenugasan: hanyaTranslok(t) ? (penInduk.find((p) => idTranslokMenu(t).includes(p.kegiatan.id))?.peran ?? null) : null,
       pengelola: (() => {
         const id = idPelInduk.get(i.kode);
         const peran = id !== undefined ? pengelola.get(id) : undefined;

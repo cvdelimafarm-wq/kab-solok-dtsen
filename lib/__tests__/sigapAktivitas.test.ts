@@ -106,3 +106,14 @@ describe("pelatihan ganda (1 Nov 2026): kartu membawa kegiatannya", () => {
     expect(a[0]).toMatchObject({ pelatihanId: null, href: "/sigap/pelatihan" });
   });
 });
+
+
+describe("Seruti TW IV (pendataan hanya Transport Lokal)", () => {
+  const seruti = INDUK([T("pelatihan", 1, ["pelatihan", "translok:7"]), T("pendataan", 2, ["translok:6"])], { kode: "seruti_tw4", nama: "Seruti Triwulan IV 2026", pendek: "Seruti TW IV", ikon: "grafik" });
+  it("ikon Pendataan membuka Hari Ini kegiatan (bukan garis waktu tahap); ikon Pelatihan tetap halaman pelatihan", () => {
+    const a = aktivitasDariInduk(K(seruti, [TL(7, "biru"), TL(6, "biru")]));
+    expect(a.map((x) => x.judul)).toEqual(["Pelatihan Seruti TW IV", "Pendataan Seruti TW IV"]);
+    expect(a[1].href).toBe("/sigap/kegiatan/seruti_tw4");
+    expect(a[0].href).toBe("/sigap/pelatihan?kegiatan=7");
+  });
+});

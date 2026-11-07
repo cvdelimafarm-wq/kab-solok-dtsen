@@ -78,6 +78,8 @@ export type Induk = {
   korwil?: InfoKorwil | null;
   /** (3 Nov 2026) peran akun ini sebagai PENGELOLA pelatihan (id kegiatan pelatihan -> panitia / instruktur) walau bukan peserta; kartu Pelatihan tetap tampil di Beranda */
   pengelola?: Record<number, PeranPengelola>;
+  /** (7 Nov 2026) peran penugasan akun pada Transport Lokal kegiatan bermenu; hanya diisi untuk induk yang pendataannya HANYA Transport Lokal (Seruti), supaya menu bawah tahu perannya */
+  peranPenugasan?: string | null;
 };
 
 export type PeranPengelola = "panitia" | "instruktur";

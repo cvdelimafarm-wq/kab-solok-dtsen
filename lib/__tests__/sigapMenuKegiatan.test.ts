@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alamatHariIni, alamatPengawasan, alamatSampel, idTranslokMenu, indukMemuatModul, langkahSekali, modulRutin, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok, tahapMenu } from "../sigapMenuKegiatan";
+import { hanyaTranslok, alamatHariIni, alamatPengawasan, alamatSampel, idTranslokMenu, indukMemuatModul, langkahSekali, modulRutin, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok, tahapMenu } from "../sigapMenuKegiatan";
 
 const TL = { href: "/sigap/translok/tok123?p=7", kegiatanId: 2 };
 
@@ -163,5 +163,38 @@ describe("indukMemuatModul (tautan Translok tanpa ?k=)", () => {
     expect(indukMemuatModul(spdt, "spdt_lembar")).toBe(true);
     expect(indukMemuatModul(bencana, "pendataan")).toBe(true);
     expect(indukMemuatModul(bencana, "spdt_lembar")).toBe(false);
+  });
+});
+
+
+describe("Seruti TW IV: pendataan yang isinya hanya Transport Lokal (7 Nov 2026)", () => {
+  const seruti = [{ isi: ["pelatihan", "translok:7"] }, { isi: ["translok:6"] }];
+
+  it("bertemplate: ikon Pendataan membuka Hari Ini (tanpa modul pemicu lain)", () => {
+    expect(hanyaTranslok(seruti)).toBe(true);
+    expect(pakaiTemplateMenu(seruti)).toBe(true);
+  });
+  it("translok milik tahap Pelatihan tidak dihitung; hanya pelatihan = bukan kegiatan bermenu", () => {
+    expect(idTranslokMenu(seruti)).toEqual([6]);
+    expect(hanyaTranslok([{ isi: ["pelatihan", "translok:7"] }])).toBe(false);
+    expect(pakaiTemplateMenu([{ isi: ["pelatihan", "translok:7"] }])).toBe(false);
+  });
+  it("modul rutin lain yang belum berbar, atau modul wilayah/konfirmasi tanpa pemicu, tetap tidak bertemplate", () => {
+    expect(pakaiTemplateMenu([{ isi: ["sampel:5"] }, { isi: ["translok:2"] }])).toBe(false);
+    expect(hanyaTranslok([{ isi: ["wilayah_tim", "translok:1"] }])).toBe(false);
+    expect(hanyaTranslok([])).toBe(false);
+  });
+  it("peran dari penugasan (korwil = supervisor); modul lain tetap didahulukan", () => {
+    expect(peranMenuDariInduk({ peranPenugasan: "ppl" })).toBe("ppl");
+    expect(peranMenuDariInduk({ peranPenugasan: "pml" })).toBe("pml");
+    expect(peranMenuDariInduk({ peranPenugasan: "korwil" })).toBe("supervisor");
+    expect(peranMenuDariInduk({ peranPenugasan: "lain" })).toBeNull();
+    expect(peranMenuDariInduk({ peranPenugasan: null })).toBeNull();
+    expect(peranMenuDariInduk({ wilayah: { peran: "pml" }, peranPenugasan: "ppl" })).toBe("pml");
+  });
+  it("bar PPL Seruti: Hari Ini | Kamera | Translok (tanpa tab Sampel/Pengawasan)", () => {
+    const b = susunBar({ kode: "seruti_tw4", peran: "ppl", modul: [], translok: { href: "/sigap/translok/tok9?p=3", kegiatanId: 6 } });
+    expect(b.map((x) => x.kunci)).toEqual(["hari_ini", "kamera", "translok"]);
+    expect(b[0].href).toBe("/sigap/translok/tok9?p=3&k=seruti_tw4&tab=hari_ini");
   });
 });

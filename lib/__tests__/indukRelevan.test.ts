@@ -1,69 +1,53 @@
 // lib/__tests__/indukRelevan.test.ts
 //
-// (7 Nov 2026) Kartu Seruti TW IV tidak boleh muncul di petugas yang tidak ditugaskan di Seruti (bug: 450 akun bencana ikut melihatnya).
+// (7 Nov 2026) Kartu kegiatan induk hanya untuk yang ditugaskan di kegiatan itu. Bug: roster seluruh mitra (petugas_bencana_id, ~450 akun)
+// ikut melihat kartu Seruti TW IV dan Pascabencana.
 
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { indukRelevan, MODUL_KHAS_BENCANA, type SyaratRelevan } from "@/lib/sigapIndukRelevan";
+import { indukRelevan, type SyaratRelevan } from "@/lib/sigapIndukRelevan";
 
 // isi tahap nyata di sigap_tahap (7 Nov 2026)
 const ISI_BENCANA = ["konfirmasi", "pelatihan", "translok:3", "monitoring_korwil", "wilayah_tim", "identifikasi", "pendataan", "translok:1"];
 const ISI_SERUTI = ["pelatihan", "translok:7", "translok:6"];
 const ISI_SPDT = ["spdt_lembar", "translok:2"];
 
-const dasar: SyaratRelevan = { isiModul: [], petugasBencana: false, jumlahPenugasan: 0, pengelola: false, supervisorSpdt: false };
-const s = (x: Partial<SyaratRelevan>): SyaratRelevan => ({ ...dasar, ...x });
+const s = (isiModul: string[], x: Partial<SyaratRelevan> = {}): SyaratRelevan => ({ isiModul, jumlahPenugasan: 0, pengelola: false, supervisorSpdt: false, ...x });
 
-describe("induk Seruti (tanpa modul khas bencana)", () => {
-  it("petugas bencana TANPA penugasan Seruti tidak melihatnya (inti bug)", () => {
-    expect(indukRelevan(s({ isiModul: ISI_SERUTI, petugasBencana: true }))).toBe(false);
+describe.each([
+  ["Seruti TW IV", ISI_SERUTI],
+  ["Pascabencana", ISI_BENCANA],
+  ["SPDT NTP", ISI_SPDT],
+])("induk %s", (_nama, isi) => {
+  it("akun tanpa penugasan dan bukan pengelola tidak melihatnya", () => {
+    expect(indukRelevan(s(isi))).toBe(false);
   });
-  it("akun tanpa penugasan apa pun tidak melihatnya", () => {
-    expect(indukRelevan(s({ isiModul: ISI_SERUTI }))).toBe(false);
+  it("akun yang ditugaskan melihatnya", () => {
+    expect(indukRelevan(s(isi, { jumlahPenugasan: 1 }))).toBe(true);
+    expect(indukRelevan(s(isi, { jumlahPenugasan: 3 }))).toBe(true);
   });
-  it("petugas yang ditugaskan di Seruti melihatnya, dengan atau tanpa id petugas bencana", () => {
-    expect(indukRelevan(s({ isiModul: ISI_SERUTI, jumlahPenugasan: 2 }))).toBe(true);
-    expect(indukRelevan(s({ isiModul: ISI_SERUTI, jumlahPenugasan: 1, petugasBencana: true }))).toBe(true);
-  });
-  it("panitia/instruktur pelatihan Seruti tetap melihatnya", () => {
-    expect(indukRelevan(s({ isiModul: ISI_SERUTI, pengelola: true }))).toBe(true);
-  });
-  it("supervisor SPDT tidak otomatis melihat Seruti", () => {
-    expect(indukRelevan(s({ isiModul: ISI_SERUTI, supervisorSpdt: true }))).toBe(false);
+  it("panitia/instruktur pelatihan induk ini melihatnya", () => {
+    expect(indukRelevan(s(isi, { pengelola: true }))).toBe(true);
   });
 });
 
-describe("induk Pascabencana (modul khas bencana) tidak berubah", () => {
-  it("petugas bencana melihatnya walau belum ada penugasan", () => {
-    expect(indukRelevan(s({ isiModul: ISI_BENCANA, petugasBencana: true }))).toBe(true);
-  });
-  it("akun bukan petugas bencana dan tanpa penugasan tidak melihatnya", () => {
-    expect(indukRelevan(s({ isiModul: ISI_BENCANA }))).toBe(false);
-  });
-  it("penugasan atau pengelola cukup", () => {
-    expect(indukRelevan(s({ isiModul: ISI_BENCANA, jumlahPenugasan: 1 }))).toBe(true);
-    expect(indukRelevan(s({ isiModul: ISI_BENCANA, pengelola: true }))).toBe(true);
-  });
-  it("setiap modul khas bencana saja sudah cukup mengenali induk bencana", () => {
-    for (const m of MODUL_KHAS_BENCANA) expect(indukRelevan(s({ isiModul: [m], petugasBencana: true }))).toBe(true);
+describe("supervisor SPDT", () => {
+  it("melihat SPDT NTP tanpa penugasan, tetapi tidak membuka induk lain", () => {
+    expect(indukRelevan(s(ISI_SPDT, { supervisorSpdt: true }))).toBe(true);
+    expect(indukRelevan(s(ISI_SERUTI, { supervisorSpdt: true }))).toBe(false);
+    expect(indukRelevan(s(ISI_BENCANA, { supervisorSpdt: true }))).toBe(false);
   });
 });
 
-describe("induk SPDT NTP tidak berubah", () => {
-  it("petugas bencana tidak ikut melihatnya", () => {
-    expect(indukRelevan(s({ isiModul: ISI_SPDT, petugasBencana: true }))).toBe(false);
+describe("lib/portal/induk.ts", () => {
+  const src = fs.readFileSync(path.resolve(__dirname, "..", "portal", "induk.ts"), "utf8").replace(/\/\/[^\n]*/g, "");
+  it("memutuskan relevansi lewat indukRelevan", () => {
+    expect(src).toMatch(/const relevan = indukRelevan\(/);
   });
-  it("penugasan atau supervisor melihatnya", () => {
-    expect(indukRelevan(s({ isiModul: ISI_SPDT, jumlahPenugasan: 1 }))).toBe(true);
-    expect(indukRelevan(s({ isiModul: ISI_SPDT, supervisorSpdt: true }))).toBe(true);
-  });
-});
-
-describe("lib/portal/induk.ts memakai indukRelevan", () => {
-  it("indukUntukAkun tidak lagi memakai syarat petugas_bencana_id sendiri untuk semua induk", () => {
-    const src = fs.readFileSync(path.resolve(__dirname, "..", "portal", "induk.ts"), "utf8").replace(/\/\/[^\n]*/g, "");
-    expect(src).toMatch(/indukRelevan\(/);
-    expect(src).toMatch(/const relevan = indukRelevan\(/); // bukan ekspresi sendiri
+  it("petugas_bencana_id tidak lagi ikut menentukan induk mana yang tampil", () => {
+    const ambil = src.slice(src.indexOf("const relevan = indukRelevan("));
+    const kalimat = ambil.slice(0, ambil.indexOf(";"));
+    expect(kalimat).not.toMatch(/petugas_bencana_id|petugasBencana/);
   });
 });

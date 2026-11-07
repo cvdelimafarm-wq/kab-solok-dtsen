@@ -80,3 +80,15 @@ describe("Beranda: letak sakelar Kartu | Ikon", () => {
     expect(src.indexOf("<PilihTampilan")).toBeLessThan(awal);
   });
 });
+
+describe("PilihTampilan: sakelar ringkas (7 Nov 2026)", () => {
+  const src = baca("app/portal/PilihTampilan.tsx");
+  it("tanpa tulisan 'Tampilan' yang makan tempat, tetapi tetap berlabel untuk pembaca layar", () => {
+    expect(src).toMatch(/aria-label="Tampilan kegiatan"/);
+    expect(src).not.toMatch(/<span[^>]*>\s*Tampilan\s*<\/span>/);
+  });
+  it("tombol tidak lebih tinggi dari 32 px (dulu min-h 44 px)", () => {
+    expect(src).not.toMatch(/min-h-\[44px\]/);
+    expect(src).toMatch(/\bh-8\b/);
+  });
+});

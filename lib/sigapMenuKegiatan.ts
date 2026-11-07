@@ -61,19 +61,32 @@ export function indukMemuatModul(tahap: readonly { isi: readonly string[] }[], m
  */
 export function pakaiTemplateMenu(tahap: readonly { isi: readonly string[] }[]): boolean {
   const semua = tahapMenu(tahap).flatMap((t) => [...t.isi]);
-  return semua.length > 0 && semua.every((m) => (modulRutin(m) && adaBar(m)) || sekali(m) || MODUL_INFO.has(m)) && semua.some((m) => MODUL_BERBAR.has(m));
+  return semua.length > 0 && semua.every((m) => (modulRutin(m) && adaBar(m)) || sekali(m) || MODUL_INFO.has(m)) && (semua.some((m) => MODUL_BERBAR.has(m)) || hanyaTranslok(tahap));
+}
+
+/**
+ * (7 Nov 2026) Bagian Pendataan yang isinya HANYA Transport Lokal (mis. Seruti TW IV: tahap pendataan = ["translok:<id>"]) juga bertemplate: halaman kerjanya
+ * Translok (Hari Ini, hari kerja, kamera) sudah berbar, jadi ikon Pendataan langsung mendarat di Hari Ini seperti Pascabencana, bukan di garis waktu tahap.
+ * Hanya bila SEMUA isinya translok; kegiatan yang punya modul rutin lain yang belum berbar tetap tidak bertemplate.
+ */
+export function hanyaTranslok(tahap: readonly { isi: readonly string[] }[]): boolean {
+  const semua = tahapMenu(tahap).flatMap((t) => [...t.isi]);
+  return semua.length > 0 && semua.every((m) => /^translok:\d+$/.test(m));
 }
 
 /**
  * Peran akun di menu: Supervisor SPDT / PPL / PML SPDT menurut `spdt.peran`; Pascabencana: kortim (korwil) = supervisor, selain itu peran di tim wilayah
  * (pml/ppl). null = akun tidak punya peran di kegiatan ini (halaman memakai tampilan lamanya).
  */
-export function peranMenuDariInduk(i: { spdt?: { peran?: string | null } | null; korwil?: unknown | null; wilayah?: { peran?: string | null } | null }): PeranMenu | null {
+export function peranMenuDariInduk(i: { spdt?: { peran?: string | null } | null; korwil?: unknown | null; wilayah?: { peran?: string | null } | null; peranPenugasan?: string | null }): PeranMenu | null {
   const sah = (p: string | null | undefined): PeranMenu | null => (p === "ppl" || p === "pml" || p === "supervisor" ? p : null);
   const dariSpdt = sah(i.spdt?.peran);
   if (dariSpdt) return dariSpdt;
   if (i.korwil) return "supervisor";
-  return sah(i.wilayah?.peran);
+  const dariWilayah = sah(i.wilayah?.peran);
+  if (dariWilayah) return dariWilayah;
+  // (7 Nov 2026) kegiatan tanpa modul wilayah/SPDT/korwil (Seruti: hanya Transport Lokal): peran dari penugasan akun (korwil dianggap supervisor)
+  return i.peranPenugasan === "korwil" ? "supervisor" : sah(i.peranPenugasan);
 }
 
 export type LangkahSekali = { kode: string; judul: string; ket: string; href: string; aksi: string; mendesak: boolean };
