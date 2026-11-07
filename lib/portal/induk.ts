@@ -10,6 +10,7 @@ import type { AkunPortal } from "@/lib/portal/server";
 import { tentukanTujuan } from "@/lib/undangan";
 import { idPelatihanTahap, type BukaMode, type InfoIdentifikasi, type InfoKorwil, type InfoPendataan, type InfoPerencanaan, type InfoWilayah, type Induk, type TahapDef } from "@/lib/sigapTahap";
 import { pengelolaPelatihan } from "@/lib/portal/pengelolaPelatihan";
+import { indukRelevan } from "@/lib/sigapIndukRelevan";
 import type { InfoSpdt } from "@/lib/spdtNtp";
 import type { InfoSampel } from "@/lib/sampelSls";
 import { ringkasModulSampel } from "@/lib/portal/sampel";
@@ -209,11 +210,11 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     const penInduk = pen.filter((p) => kegIds.includes(p.kegiatan.id));
     const t = tahap.filter((x) => x.induk_kode === i.kode).map(jadiTahap).sort((a, b) => a.urutan - b.urutan);
     if (t.length === 0) continue;
-    // induk SPDT NTP hanya untuk yang bertugas di kegiatannya (jangan ikut muncul bagi seluruh petugas bencana)
-    const indukSpdt = t.some((x) => x.isi.includes("spdt_lembar"));
     const idPelIni = idPelInduk.get(i.kode);
     const pengelolaIni = idPelIni !== undefined && pengelola.has(idPelIni); // (3 Nov 2026) panitia / instruktur pelatihan induk ini
-    const relevan = indukSpdt ? penInduk.length > 0 || supervisorSpdt : !!akun.petugas_bencana_id || penInduk.length > 0 || pengelolaIni;
+    // (7 Nov 2026) aturan lengkap di lib/sigapIndukRelevan.ts: SPDT NTP dan induk non-bencana (Seruti) hanya untuk yang bertugas di kegiatannya;
+    // syarat petugas_bencana_id hanya untuk induk bermodul khas pendataan bencana (dulu berlaku bagi semua induk non-SPDT -> kartu Seruti muncul di semua petugas)
+    const relevan = indukRelevan({ isiModul: t.flatMap((x) => x.isi), petugasBencana: !!akun.petugas_bencana_id, jumlahPenugasan: penInduk.length, pengelola: pengelolaIni, supervisorSpdt });
     if (!relevan) continue;
     terpilih.push({ i, t, isi: new Set(t.flatMap((x) => x.isi)), penInduk });
   }
