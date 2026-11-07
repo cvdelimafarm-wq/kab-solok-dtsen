@@ -21,7 +21,7 @@ import BatangItem from "@/app/sigap/kelola/perencanaan/identifikasi/BatangItem";
 import { bangunLibur, type Libur } from "@/lib/keu/hariKerja";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import type { IsiKebijakan } from "@/lib/keu/kebijakan";
-import { awalLanjutan, jadwalPendataan, normalisasiLanjutan, rincianBiaya, type IsiLanjutan, type StatusLanjutan } from "@/lib/keu/lanjutan";
+import { awalLanjutan, ID_LJ, jadwalPendataan, normalisasiLanjutan, rincianBiaya, type IsiLanjutan, type StatusLanjutan } from "@/lib/keu/lanjutan";
 import { bacaVolume, barisKosong, dataBarisIdent, dataItemRab, jumlahBaris, NAMA_BULAN, periksaBaris, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem } from "@/lib/keu/rab";
 import {
   dataUbahTerpasang, bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, bacaHari, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, KELOMPOK_RINCIAN, keadaanRincian,
@@ -130,10 +130,22 @@ function PenunjukAlur({ langkah, kode, identId }: { langkah: ReturnType<typeof l
   );
 }
 
-function PanelJelas({ id, baris }: { id: string; baris: string[] }) {
+/** Halaman identifikasi lanjutan tempat angka rincian ini diubah (bagian yang relevan ditandai lewat #). */
+function tautAsalAngka(identId: number, r: { kelompok: string; uraian: string }): { href: string; teks: string } {
+  const dasar = `/sigap/kelola/perencanaan/identifikasi/${identId}`;
+  if (r.kelompok === "Rapat") return { href: dasar, teks: "Ubah di identifikasi awal" };
+  const bagian = r.kelompok === "Translok dan penginapan" || /^Honor (PML|PPL|Kortim|Petugas)/.test(r.uraian) ? ID_LJ.peran
+    : r.kelompok === "Pelatihan" || r.kelompok === "Honor" || /pulsa|pelatihan|briefing/i.test(r.uraian) ? ID_LJ.kelas : "";
+  return { href: `${dasar}/lanjutan${bagian ? `#${bagian}` : ""}`, teks: "Ubah di identifikasi lanjutan" };
+}
+
+function PanelJelas({ id, baris, tautan }: { id: string; baris: string[]; tautan: { href: string; teks: string } }) {
   return (
     <div id={id} role="note" className="space-y-0.5 rounded-md bg-[#EAF1FC] px-3 py-1.5 text-[12.5px] leading-relaxed text-[#1B2B4B]">
-      <p className="font-semibold">Asal angka</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold">Asal angka</p>
+        <a href={tautan.href} target="_blank" rel="noopener noreferrer" className="rounded-md border border-[#C5D0E2] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#1F5FD1] hover:bg-[#F4F8FF]">{tautan.teks} ↗<span className="sr-only"> (buka di tab baru)</span></a>
+      </div>
       {baris.map((t) => <p key={t}>{t}</p>)}
       <p className="text-[#5B6B84]">Saran dari identifikasi; boleh diubah.</p>
     </div>
@@ -164,7 +176,7 @@ type PropsBaris = {
   rc: RencanaRincian; terpasang: Terpasang | undefined; ubah: Ubah; setUbah: (u: Ubah) => void; pilihan: PilihanTujuan; isian: IsianBaris; keadaan: KeadaanRincian;
   editable: boolean; peta: PemetaanItem[]; itemBaru: ItemBaruRow[]; jendela: JendelaCair; sibuk: boolean; penjelasan: string[]; sudahAda: BarisRabRow[];
   perbarui: () => void; simpanTerpasang: (barisId: number, data: Record<string, unknown>) => Promise<boolean>;
-  tidak: boolean; setTidak: (v: boolean) => void;
+  tidak: boolean; setTidak: (v: boolean) => void; identId: number;
 };
 
 /** Kolom tabel rincian; jumlah kolom dipakai baris tambahan (colSpan). */
@@ -174,7 +186,7 @@ const sel = "!min-h-[36px] !px-2 !text-[13px]";
 const tombolMini = "rounded-md border border-[#C5D0E2] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#1F5FD1] disabled:opacity-50";
 const teksAngka = (v: number | string): string => String(Number(v)).replace(".", ",");
 
-function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang, tidak, setTidak }: PropsBaris) {
+function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang, tidak, setTidak, identId }: PropsBaris) {
   const id = (s: string) => `rps-${rc.r.kunci}-${s}`.replace(/[^\w-]/g, "_");
   const [detail, setDetail] = useState(false);
   const [ubahJadwal, setUbahJadwal] = useState(false);
@@ -258,8 +270,8 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
             ? <input aria-label={`Harga satuan: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="numeric" value={tampilRibuan(nilai.harga)} onChange={(e) => ubahNilai({ harga: bersihkanRibuan(e.target.value, false) })} />
             : <p className="py-1.5 text-right tabular-nums">{hargaTeks}</p>}
         </td>
-        <td className={`${sel2} w-[104px] text-right`}>
-          <p className="py-1.5 font-bold tabular-nums text-[#0F2A52]" aria-live="polite">{jml === null || Number.isNaN(jml) ? "–" : rupiah(jml)}</p>
+        <td className={`${sel2} w-[128px] text-right`}>
+          <p className="whitespace-nowrap py-1.5 font-bold tabular-nums text-[#0F2A52]" aria-live="polite">{jml === null || Number.isNaN(jml) ? "–" : rupiah(jml)}</p>
         </td>
         <td className={`${sel2} w-[150px]`}>
           {terpasang ? (
@@ -330,7 +342,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
                   {rc.r.hari !== null && rc.r.kelompok === "Translok dan penginapan" && (
                     <p>Alokasi {rc.r.hari} {jenisHari} per petugas{rc.r.hari === 0 ? ": isi volume sendiri atau ubah alokasi di Pengaturan hari." : "."}</p>
                   )}
-                  <PanelJelas id={id("jelas")} baris={penjelasan} />
+                  <PanelJelas id={id("jelas")} baris={penjelasan} tautan={tautAsalAngka(identId, rc.r)} />
                   <p>
                     <span className="font-semibold">Pilihan item</span> berisi butir POK RO ini dengan akun {rc.r.akun} (yang belum «RAB = Item» atau selesai), item baru di RAB, dan opsi tambah item baru. {pilihan.hasil.pesan}
                   </p>
@@ -501,7 +513,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const barisSurvei = (x: typeof baris[number]) => (
     <BarisSurvei
       key={x.rc.r.kunci} rc={x.rc} terpasang={x.ada} ubah={x.u} setUbah={(u) => ubahBaris(x.rc.r.kunci, u)} pilihan={x.pil} isian={x.isian} keadaan={x.keadaan}
-      editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia}
+      editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia} identId={b.ident_id}
       perbarui={() => void perbaruiBaris(x)} simpanTerpasang={simpanTerpasang}
       tidak={x.tidak} setTidak={(v) => setTidakDialokasi((a) => (v ? [...a.filter((k) => k !== x.rc.r.kunci), x.rc.r.kunci] : a.filter((k) => k !== x.rc.r.kunci)))}
     />
@@ -816,7 +828,10 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                 </p>
               )}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1020px] border-collapse text-[13px]">
+                <table className="w-full min-w-[1250px] table-fixed border-collapse text-[13px]">
+                  <colgroup>
+                    <col style={{ width: 250 }} /><col style={{ width: 84 }} /><col style={{ width: 96 }} /><col style={{ width: 116 }} /><col style={{ width: 128 }} /><col style={{ width: 150 }} /><col style={{ width: 232 }} /><col />
+                  </colgroup>
                   <thead>
                     <tr className="bg-[#EEF2F8] text-left text-[11.5px] font-bold uppercase tracking-wide text-[#44546F]">
                       {KOLOM_RINCIAN.map((k, i) => <th key={k} scope="col" className={`px-2 py-1.5 ${i === 1 || i === 3 || i === 4 ? "text-right" : ""}`}>{k}</th>)}
