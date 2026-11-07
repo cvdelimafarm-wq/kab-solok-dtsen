@@ -74,6 +74,8 @@ describe("celah nomor", () => {
     expect(r).toEqual({ celah: [3, 6, 7], total: 3 });
     expect(celahUrut([], 500, 10)).toMatchObject({ total: 500, celah: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] });
     expect(celahUrut([1, 2, 3], 3)).toEqual({ celah: [], total: 0 });
+    // nomor sebelum catatan pertama tidak dihitung terlewat
+    expect(celahUrut([1232, 1233, 1235], 1236, 200, 1232)).toEqual({ celah: [1234, 1236], total: 2 });
   });
   it("ringkasRentang", () => {
     expect(ringkasRentang([3, 4, 5, 9, 11, 12])).toBe("3 s.d. 5, 9, 11 s.d. 12");

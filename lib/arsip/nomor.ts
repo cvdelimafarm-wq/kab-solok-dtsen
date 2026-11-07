@@ -77,13 +77,13 @@ export function uraiNomor(teks: string): NomorUrai | null {
   return null;
 }
 
-/** Nomor yang hilang dari rangkaian 1..terakhir (untuk kartu "nomor terlewat"). Hasil menaik, dipangkas `batas`. */
-export function celahUrut(terpakai: Iterable<number>, terakhir: number, batas = 200): { celah: number[]; total: number } {
+/** Nomor yang hilang dari rangkaian awal..terakhir (untuk kartu "nomor terlewat"). Hasil menaik, dipangkas `batas`. `awal` = nomor tercatat terkecil, agar nomor sebelum buku dimulai tidak dihitung. */
+export function celahUrut(terpakai: Iterable<number>, terakhir: number, batas = 200, awal = 1): { celah: number[]; total: number } {
   const ada = new Set<number>();
   for (const n of terpakai) ada.add(n);
   const celah: number[] = [];
   let total = 0;
-  for (let i = 1; i <= terakhir; i++) {
+  for (let i = Math.max(1, awal); i <= terakhir; i++) {
     if (!ada.has(i)) {
       total += 1;
       if (celah.length < batas) celah.push(i);

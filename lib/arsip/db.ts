@@ -4,7 +4,7 @@
 // Pengambilan nomor memakai fungsi SQL `arsip_ambil_nomor` (atomik; dokumen yang sama selalu mendapat nomor yang sama).
 
 import type { Db } from "@/lib/sigap";
-import { periksaFormat, perluKka, kkaSah, type KategoriArsip } from "@/lib/arsip/nomor";
+import { celahUrut, periksaFormat, perluKka, kkaSah, type KategoriArsip } from "@/lib/arsip/nomor";
 
 export type Galat = { ok: false; status: number; pesan: string };
 const bulat = (x: unknown): number | null => {
@@ -99,24 +99,31 @@ export type Celah = { register: string; tahun: number; total: number; urut: numb
 export type Kembar = { register: string; tahun: number; urut: number; jumlah: number; nomor: string[] };
 
 export async function muatRingkas(db: Db, tahun: number): Promise<{ ok: true; counter: Counter[]; celah: Celah[]; kembar: Kembar[]; tahun_ada: number[] } | Galat> {
-  const [c, g, k, t] = await Promise.all([
+  const [c, n, k, t] = await Promise.all([
     db.from("arsip_counter").select("register, tahun, terakhir").order("tahun", { ascending: false }).order("register"),
-    db.from("arsip_v_celah").select("register, tahun, urut").eq("tahun", tahun).order("urut").limit(5000),
+    db.from("arsip_nomor").select("register, urut").eq("tahun", tahun).eq("status", "terpakai").limit(20000),
     db.from("arsip_v_kembar").select("register, tahun, urut, jumlah, nomor").eq("tahun", tahun).order("urut").limit(500),
     db.from("arsip_counter").select("tahun"),
   ]);
-  const e = c.error ?? g.error ?? k.error ?? t.error;
+  const e = c.error ?? n.error ?? k.error ?? t.error;
   if (e) return { ok: false, status: 500, pesan: pesanDariDb(e.message) };
-  const per = new Map<string, Celah>();
-  for (const x of (g.data ?? []) as { register: string; tahun: number; urut: number }[]) {
-    const kunci = `${x.register}|${x.tahun}`;
-    const cur = per.get(kunci) ?? { register: x.register, tahun: x.tahun, total: 0, urut: [] };
-    cur.total += 1;
-    if (cur.urut.length < 300) cur.urut.push(x.urut);
-    per.set(kunci, cur);
+  // Nomor terlewat dihitung dari nomor tercatat terkecil sampai nomor terakhir; nomor sebelum buku dimulai (surat lama di luar SIGAP) tidak dihitung.
+  const urutPer = new Map<string, number[]>();
+  for (const x of (n.data ?? []) as { register: string; urut: number }[]) {
+    const l = urutPer.get(x.register) ?? [];
+    l.push(Number(x.urut));
+    urutPer.set(x.register, l);
+  }
+  const celah: Celah[] = [];
+  for (const x of (c.data ?? []) as Counter[]) {
+    if (x.tahun !== tahun) continue;
+    const l = urutPer.get(x.register) ?? [];
+    if (l.length === 0) continue;
+    const r = celahUrut(l, x.terakhir, 300, Math.min(...l));
+    if (r.total > 0) celah.push({ register: x.register, tahun, total: r.total, urut: r.celah });
   }
   const tahunAda = Array.from(new Set(((t.data ?? []) as { tahun: number }[]).map((x) => Number(x.tahun)))).sort((a, b) => b - a);
-  return { ok: true, counter: (c.data ?? []) as Counter[], celah: Array.from(per.values()), kembar: (k.data ?? []) as Kembar[], tahun_ada: tahunAda };
+  return { ok: true, counter: (c.data ?? []) as Counter[], celah, kembar: (k.data ?? []) as Kembar[], tahun_ada: tahunAda };
 }
 
 export type KodeArsip = { kode: string; nama: string; kelompok: string; catatan: string | null; aktif: boolean; diverifikasi: boolean };
