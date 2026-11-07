@@ -16,7 +16,7 @@
 // Tidak ada yang tertulis sebelum pengguna menekan Susun RAB. Logika murni: lib/keu/rabPerSurvei.ts, rabSurvei.ts, rab.ts, batangItem.ts.
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import BatangItem from "@/app/sigap/kelola/perencanaan/identifikasi/BatangItem";
 import { bangunLibur, type Libur } from "@/lib/keu/hariKerja";
 import { normalisasi } from "@/lib/keu/identifikasi";
@@ -27,6 +27,7 @@ import {
   dataUbahTerpasang, bacaTujuan, barisSudahAda, barisTanpaPasangan, batangPerItem, berbedaDariSaran, bacaHari, dataAmbilAlih, dataItemBaru, dataPerbarui, hariDariTeks, jelaskanVolume, KELOMPOK_RINCIAN, keadaanRincian,
   kolomHari, komponenUntukAkun, kunciItemBaru, langkahAlur, modeAman, penandaDari, periksaNamaItem, periksaSiapLengkap, pilihanTujuan, rencanaDari, rincianCampuran, ringkasHari, ringkasSurvei,
   selisihSaran, SUB_HONOR, subHonor, terpasangPer, TUJUAN_TAMBAH,
+  DRAF_KOSONG, drafKosong, idBarisRincian, isiDrafKirim, normalisasiDraf, pangkasDraf, sidikDraf, type DrafSurvei,
   type ItemBaruRow, type KeadaanRincian, type KelompokRincian, type Mendatang, type ModeKelompok, type PilihanTujuan, type RencanaRincian, type Terpasang,
 } from "@/lib/keu/rabPerSurvei";
 import { adaBarisStatus, analisisRevisi, CATATAN_JENIS_REVISI, dataStatusBaru, dataStatusUbah, LABEL_STATUS_SURVEI, NAMA_PEMICU, ringkasPemicu, statusDari, type BarisStatusSurvei, type ItemRabLengkap } from "@/lib/keu/rabStatus";
@@ -51,6 +52,17 @@ export type PropsRabSurvei = {
 
 /** Perubahan pengguna atas saran identifikasi (hanya bagian yang diubah). `dobel`/`pakaiId` = keputusan bila item tujuan sudah berisi baris RAB buatan sendiri. */
 type Ubah = Partial<{ volume: string; satuan: string; harga: string; bulan_mulai: number; minggu: number; tujuan: string; nama: string; ubahNama: boolean; dobel: "pakai" | "baru"; pakaiId: number }>;
+
+/** Pesan galat/peringatan dari Susun RAB; `kunci` = rincian yang dimaksud (klik pesan -> layar menuju baris itu). */
+type PesanBaris = { teks: string; kunci?: string };
+/** Draf yang baru saja tersimpan pada sesi ini (menang atas bacaan gerbang yang mungkin masih tersimpan lama saat pindah tab survei). */
+const drafLokal = new Map<string, DrafSurvei>();
+type BarisDraf = { rab_id: number; ident_id: number; isi: unknown; diubah_oleh: number | null; diubah_at: string };
+const jamDari = (iso: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+};
 
 const simpanKunci = (kode: string, identId: number) => `sigap.rabps.${kode}.${identId}`;
 type Simpanan = { hari: Record<string, string>; mode: ModeKelompok; tidak: string[] };
@@ -176,7 +188,7 @@ type PropsBaris = {
   rc: RencanaRincian; terpasang: Terpasang | undefined; ubah: Ubah; setUbah: (u: Ubah) => void; pilihan: PilihanTujuan; isian: IsianBaris; keadaan: KeadaanRincian;
   editable: boolean; peta: PemetaanItem[]; itemBaru: ItemBaruRow[]; jendela: JendelaCair; sibuk: boolean; penjelasan: string[]; sudahAda: BarisRabRow[];
   perbarui: () => void; simpanTerpasang: (barisId: number, data: Record<string, unknown>) => Promise<boolean>;
-  tidak: boolean; setTidak: (v: boolean) => void; identId: number;
+  tidak: boolean; setTidak: (v: boolean) => void; identId: number; kedip: boolean;
 };
 
 /** Kolom tabel rincian; jumlah kolom dipakai baris tambahan (colSpan). */
@@ -186,7 +198,7 @@ const sel = "!min-h-[36px] !px-2 !text-[13px]";
 const tombolMini = "rounded-md border border-[#C5D0E2] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#1F5FD1] disabled:opacity-50";
 const teksAngka = (v: number | string): string => String(Number(v)).replace(".", ",");
 
-function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang, tidak, setTidak, identId }: PropsBaris) {
+function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang, tidak, setTidak, identId, kedip }: PropsBaris) {
   const id = (s: string) => `rps-${rc.r.kunci}-${s}`.replace(/[^\w-]/g, "_");
   const [detail, setDetail] = useState(false);
   const [ubahJadwal, setUbahJadwal] = useState(false);
@@ -246,7 +258,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
 
   return (
     <>
-      <tr className="hover:bg-[#FAFBFE]">
+      <tr id={id("baris")} className={`hover:bg-[#FAFBFE] ${kedip ? "rps-kedip" : ""}`}>
         <td className={`${sel2} min-w-[200px]`}>
           <p className="break-words text-[13px] font-semibold leading-snug text-[#0F2A52]">{rc.r.uraian}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-[#6B7A93]">
@@ -257,7 +269,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
         </td>
         <td className={`${sel2} w-[84px]`}>
           {bisaIsi
-            ? <input aria-label={`Volume: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="decimal" value={tampilRibuan(nilai.volume)} onChange={(e) => ubahNilai({ volume: bersihkanRibuan(e.target.value, true) })} />
+            ? <input id={id("v")} aria-label={`Volume: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="decimal" value={tampilRibuan(nilai.volume)} onChange={(e) => ubahNilai({ volume: bersihkanRibuan(e.target.value, true) })} />
             : <p className="py-1.5 text-right tabular-nums">{nilai.volume || "–"}</p>}
         </td>
         <td className={`${sel2} w-[96px]`}>
@@ -267,7 +279,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
         </td>
         <td className={`${sel2} w-[116px]`}>
           {bisaIsi
-            ? <input aria-label={`Harga satuan: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="numeric" value={tampilRibuan(nilai.harga)} onChange={(e) => ubahNilai({ harga: bersihkanRibuan(e.target.value, false) })} />
+            ? <input id={id("h")} aria-label={`Harga satuan: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="numeric" value={tampilRibuan(nilai.harga)} onChange={(e) => ubahNilai({ harga: bersihkanRibuan(e.target.value, false) })} />
             : <p className="py-1.5 text-right tabular-nums">{hargaTeks}</p>}
         </td>
         <td className={`${sel2} w-[128px] text-right`}>
@@ -354,7 +366,12 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               {editable && !terpasang && !adaOpsiPok && (
                 <p className="min-w-0 flex-1 basis-[320px] rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-1 text-[#5C4300]">
-                  Tidak ada butir POK akun {rc.r.akun} di RO ini, jadi rincian ini masuk sebagai <span className="font-semibold">item baru di RAB</span> (bahan revisi POK).
+                  Tidak ada butir POK akun {rc.r.akun} di RO ini, jadi rincian ini masuk sebagai <span className="font-semibold">item baru akun {rc.r.akun} di RAB</span> (bahan revisi POK).
+                </p>
+              )}
+              {editable && !terpasang && adaOpsiPok && tampilNama && (
+                <p className="min-w-0 flex-1 basis-[320px] rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-1 text-[#5C4300]">
+                  Rincian ini masuk sebagai <span className="font-semibold">item baru akun {rc.r.akun} di RAB</span> (bahan revisi POK).
                 </p>
               )}
               {tampilNama && (
@@ -441,18 +458,27 @@ function bahanDari(b: BarisAcuan): BahanIdent | null {
   }
 }
 
-function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, namaIdent, statusRows, muatStatus }: {
+function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, namaIdent, statusRows, muatStatus, drafBaris, drafGalat }: {
   b: BarisAcuan; bahan: BahanIdent; lembar: IsiKebijakan | null; libur: Libur; props: PropsRabSurvei; itemBaru: ItemBaruRow[]; muatItemBaru: () => Promise<void>; namaIdent: ReadonlyMap<number, string>;
-  statusRows: BarisStatusSurvei[]; muatStatus: () => Promise<void>;
+  statusRows: BarisStatusSurvei[]; muatStatus: () => Promise<void>; drafBaris: BarisDraf | null; drafGalat: string | null;
 }) {
   const kunciSimpan = simpanKunci(props.kode, b.ident_id);
-  const [awal] = useState(() => bacaSimpanan(kunciSimpan));
-  const [hariTeks, setHariTeks] = useState<Record<string, string>>(awal.hari);
-  const [mode, setMode] = useState<ModeKelompok>(awal.mode);
-  // (7 Nov 2026) Rincian yang ditandai «tidak dialokasikan» (kunci rincian); tersimpan di peramban ini, seperti isian hari.
-  const [tidakDialokasi, setTidakDialokasi] = useState<string[]>(awal.tidak);
-  const [ubahPer, setUbahPer] = useState<Record<string, Ubah>>({});
-  const [pesan, setPesan] = useState<string[]>([]);
+  const kunciDraf = `${props.rabId}.${b.ident_id}`;
+  // (7 Nov 2026) Isian layar ini disimpan otomatis sebagai draf di basis data (dibagi pengguna RAB ini). Urutan sumber awal: draf yang baru saja
+  // disimpan pada sesi ini, draf di basis data, lalu simpanan peramban lama (hari, mode, tanda tidak dialokasikan).
+  const [awal] = useState<{ draf: DrafSurvei; dariServer: boolean }>(() => {
+    const lokal = drafLokal.get(kunciDraf);
+    if (lokal) return { draf: lokal, dariServer: true };
+    if (drafBaris) return { draf: normalisasiDraf(drafBaris.isi), dariServer: true };
+    const l = bacaSimpanan(kunciSimpan);
+    return { draf: { ...DRAF_KOSONG, hari: l.hari, mode: l.mode, tidak: l.tidak }, dariServer: false };
+  });
+  const [hariTeks, setHariTeks] = useState<Record<string, string>>(awal.draf.hari);
+  const [mode, setMode] = useState<ModeKelompok>(awal.draf.mode);
+  const [tidakDialokasi, setTidakDialokasi] = useState<string[]>(awal.draf.tidak);
+  const [ubahPer, setUbahPer] = useState<Record<string, Ubah>>(awal.draf.ubah);
+  const [pesan, setPesan] = useState<PesanBaris[]>([]);
+  const [kedip, setKedip] = useState<string | null>(null);
   const muatSemua = async () => { await props.muat(); await muatItemBaru(); await muatStatus(); };
   const { jalankan, mengirim, galat } = useKirim(muatSemua);
 
@@ -510,10 +536,100 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const akanDibuat = baris.filter((x) => x.keadaan !== "sudah" && !x.tidak && x.tujuan === TUJUAN_TAMBAH);
   const nTidak = baris.filter((x) => x.tidak).length;
 
+  // ---- simpan otomatis draf ke basis data (7 Nov 2026)
+  type KeadaanSimpan = "tersimpan" | "menunggu" | "menyimpan" | "gagal";
+  const kunciAda = useMemo(() => new Set(rencana.map((rc) => rc.r.kunci)), [rencana]);
+  const kunciTerpasang = useMemo(() => new Set(terpasang.keys()), [terpasang]);
+  const drafSekarang = useMemo<DrafSurvei>(() => ({ v: 1, hari: hariTeks, mode, tidak: tidakDialokasi, ubah: ubahPer }), [hariTeks, mode, tidakDialokasi, ubahPer]);
+  const bisaSimpanServer = props.editable && drafGalat === null;
+  const [keadaanSimpan, setKeadaanSimpan] = useState<KeadaanSimpan>("tersimpan");
+  const [pesanSimpan, setPesanSimpan] = useState<string | null>(null);
+  const [jamSimpan, setJamSimpan] = useState<string | null>(jamDari(drafBaris?.diubah_at ?? null));
+  const sidikServer = useRef<string>(awal.dariServer ? sidikDraf(awal.draf) : sidikDraf(DRAF_KOSONG));
+  const adaDiServer = useRef<boolean>(awal.dariServer);
+  const sedangKirim = useRef(false);
+  const antrian = useRef<DrafSurvei | null>(null);
+  const terbaru = useRef<DrafSurvei | null>(null);
+  const kirimDraf = async (d: DrafSurvei): Promise<void> => {
+    if (sedangKirim.current) { antrian.current = d; return; }
+    sedangKirim.current = true;
+    let gagal: string | null = null;
+    let giliran: DrafSurvei | null = d;
+    while (giliran) {
+      const cur: DrafSurvei = giliran;
+      antrian.current = null;
+      const sidik = sidikDraf(cur);
+      if (sidik !== sidikServer.current) {
+        setKeadaanSimpan("menyimpan");
+        const isi = isiDrafKirim(cur);
+        const kunci = { rab_id: props.rabId, ident_id: b.ident_id };
+        let r = adaDiServer.current
+          ? await tulisKeuKlien("keu_rab_survei_draf", "update", { isi }, kunci)
+          : await tulisKeuKlien("keu_rab_survei_draf", "insert", { ...kunci, isi });
+        // Baris ternyata sudah ada (dibuat pengguna lain atau bacaan lama): ubah saja.
+        if (!r.ok && !adaDiServer.current) r = await tulisKeuKlien("keu_rab_survei_draf", "update", { isi }, kunci);
+        if (!r.ok) { gagal = r.pesan; break; }
+        adaDiServer.current = true;
+        sidikServer.current = sidik;
+        drafLokal.set(kunciDraf, cur);
+        setJamSimpan(jamDari(new Date().toISOString()));
+      }
+      giliran = antrian.current;
+    }
+    sedangKirim.current = false;
+    if (gagal !== null) { setPesanSimpan(gagal); setKeadaanSimpan("gagal"); return; }
+    setPesanSimpan(null);
+    const akhir = terbaru.current;
+    setKeadaanSimpan(akhir !== null && sidikDraf(akhir) !== sidikServer.current ? "menunggu" : "tersimpan");
+  };
+  const kirimRef = useRef(kirimDraf);
+  kirimRef.current = kirimDraf;
+  const belumTersimpan = useCallback((): boolean => terbaru.current !== null && sidikDraf(terbaru.current) !== sidikServer.current, []);
+
+  useEffect(() => {
+    if (!bisaSimpanServer) return;
+    const d = pangkasDraf(normalisasiDraf(drafSekarang), kunciAda, kunciTerpasang);
+    terbaru.current = d;
+    if (sidikDraf(d) === sidikServer.current || (!adaDiServer.current && drafKosong(d))) { if (!sedangKirim.current) { setKeadaanSimpan("tersimpan"); setPesanSimpan(null); } return; }
+    setKeadaanSimpan((k) => (k === "menyimpan" ? k : "menunggu"));
+    const t = window.setTimeout(() => void kirimRef.current(d), 800);
+    return () => window.clearTimeout(t);
+  }, [bisaSimpanServer, drafSekarang, kunciAda, kunciTerpasang]);
+
+  // Dimuat ulang atau ditutup sebelum sempat tersimpan: coba simpan sekarang dan minta konfirmasi peramban. Pindah halaman di dalam aplikasi: simpan saat keluar.
+  useEffect(() => {
+    const sebelumTutup = (e: BeforeUnloadEvent) => {
+      if (!belumTersimpan()) return;
+      if (terbaru.current) void kirimRef.current(terbaru.current);
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const tersembunyi = () => { if (document.visibilityState === "hidden" && belumTersimpan() && terbaru.current) void kirimRef.current(terbaru.current); };
+    window.addEventListener("beforeunload", sebelumTutup);
+    document.addEventListener("visibilitychange", tersembunyi);
+    return () => {
+      window.removeEventListener("beforeunload", sebelumTutup);
+      document.removeEventListener("visibilitychange", tersembunyi);
+      if (belumTersimpan() && terbaru.current) void kirimRef.current(terbaru.current);
+    };
+  }, [belumTersimpan]);
+
+  // ---- lompat ke rincian yang dimaksud pesan (gulir ke tengah, baris berkedip sebentar, kolom bermasalah difokuskan)
+  const lompatKe = (kunci: string, teks = "") => {
+    const el = document.getElementById(idBarisRincian(kunci));
+    if (!el) return;
+    const kurang = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: kurang ? "auto" : "smooth", block: "center" });
+    setKedip(kunci);
+    window.setTimeout(() => setKedip((k) => (k === kunci ? null : k)), 2400);
+    const bagian = /nama item/i.test(teks) ? "n" : /item tujuan|pilih item|pakai baris/i.test(teks) ? "i" : /volume/i.test(teks) ? "v" : /harga/i.test(teks) ? "h" : "";
+    if (bagian) window.setTimeout(() => document.getElementById(idBarisRincian(kunci, bagian))?.focus({ preventScroll: true }), 450);
+  };
+
   const barisSurvei = (x: typeof baris[number]) => (
     <BarisSurvei
       key={x.rc.r.kunci} rc={x.rc} terpasang={x.ada} ubah={x.u} setUbah={(u) => ubahBaris(x.rc.r.kunci, u)} pilihan={x.pil} isian={x.isian} keadaan={x.keadaan}
-      editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia} identId={b.ident_id}
+      editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia} identId={b.ident_id} kedip={kedip === x.rc.r.kunci}
       perbarui={() => void perbaruiBaris(x)} simpanTerpasang={simpanTerpasang}
       tidak={x.tidak} setTidak={(v) => setTidakDialokasi((a) => (v ? [...a.filter((k) => k !== x.rc.r.kunci), x.rc.r.kunci] : a.filter((k) => k !== x.rc.r.kunci)))}
     />
@@ -523,20 +639,20 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   // ---- tulis
   type Rencana = typeof baris[number];
   const terapkan = async (daftar: Rencana[]) => {
-    const g: string[] = [];
+    const g: PesanBaris[] = [];
     for (const x of daftar) {
       const awalan = `${x.rc.r.uraian}: `;
-      for (const m of periksaBaris(x.isian)) g.push(awalan + m);
+      for (const m of periksaBaris(x.isian)) g.push({ teks: awalan + m, kunci: x.rc.r.kunci });
       const t = bacaTujuan(x.tujuan);
-      if (!t) g.push(`${awalan}pilih item tujuan.`);
+      if (!t) g.push({ teks: `${awalan}pilih item tujuan.`, kunci: x.rc.r.kunci });
       else if (t.jenis === "tambah") {
         const m = periksaNamaItem(x.u.nama ?? x.pil.hasil.saranNama ?? "");
-        if (m) g.push(awalan + m);
-        if (komponenUntukAkun(x.rc.r.akun, props.peta) === null) g.push(`${awalan}tidak ada item POK pada RO ini sebagai acuan komponen untuk item baru.`);
+        if (m) g.push({ teks: awalan + m, kunci: x.rc.r.kunci });
+        if (komponenUntukAkun(x.rc.r.akun, props.peta) === null) g.push({ teks: `${awalan}tidak ada item POK pada RO ini sebagai acuan komponen untuk item baru.`, kunci: x.rc.r.kunci });
       }
       if (x.sudahAda.length > 0) {
-        if (x.u.dobel === undefined) g.push(`${awalan}item tujuan sudah berisi baris RAB: pilih «Pakai baris ini» atau «Tetap tambah baris baru».`);
-        else if (x.u.dobel === "pakai" && !x.tersedia.some((y) => y.baris_id === x.u.pakaiId)) g.push(`${awalan}baris yang dipilih untuk diambil alih tidak tersedia; pilih lagi.`);
+        if (x.u.dobel === undefined) g.push({ teks: `${awalan}item tujuan sudah berisi baris RAB: pilih «Pakai baris ini» atau «Tetap tambah baris baru».`, kunci: x.rc.r.kunci });
+        else if (x.u.dobel === "pakai" && !x.tersedia.some((y) => y.baris_id === x.u.pakaiId)) g.push({ teks: `${awalan}baris yang dipilih untuk diambil alih tidak tersedia; pilih lagi.`, kunci: x.rc.r.kunci });
       }
     }
     setPesan(g);
@@ -614,7 +730,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const perbaruiBaris = async (x: Rencana) => {
     if (!x.ada) return;
     const data = dataPerbarui(x.rc.saran, b.ident_ver, selisihSaran(x.rc.r, x.ada));
-    if (!data) { setPesan(["Saran identifikasi belum punya angka untuk memperbarui rincian ini."]); return; }
+    if (!data) { setPesan([{ teks: "Saran identifikasi belum punya angka untuk memperbarui rincian ini.", kunci: x.rc.r.kunci }]); return; }
     setPesan([]);
     await jalankan(() => tulisKeuKlien("keu_rab_baris", "update", data, { id: x.ada!.baris.baris_id }));
   };
@@ -624,7 +740,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const nTerpasang = terpasang.size;
   const cekSiap = periksaSiapLengkap(nTerpasang, ringkas);
   const ubahStatus = async (baru: "draf" | "siap") => {
-    if (baru === "siap" && cekSiap.galat) { setPesan([cekSiap.galat]); return; }
+    if (baru === "siap" && cekSiap.galat) { setPesan([{ teks: cekSiap.galat }]); return; }
     setPesan([]);
     await jalankan(() => adaBarisStatus(statusRows, b.ident_id)
       ? tulisKeuKlien("keu_rab_survei", "update", dataStatusUbah(baru), { rab_id: props.rabId, ident_id: b.ident_id })
@@ -673,6 +789,28 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
       <p className="text-[12.5px] text-[#44546F]">
         Sumber: <span className="font-semibold text-[#0F2A52]">{sumber.panjang}</span>{lembar ? "" : " · belum ada lembar kebijakan"}{b.lanjutan_status === "draf" ? " · masih Draf, angka bisa berubah" : ""}
       </p>
+
+      <style>{`@keyframes rpsKedip{0%,100%{background-color:transparent}25%,75%{background-color:#FFE49A}}
+.rps-kedip>td{animation:rpsKedip .7s ease-in-out 3}
+.rps-kedip>td:first-child{box-shadow:inset 6px 0 0 #E0A100}
+@media (prefers-reduced-motion:reduce){.rps-kedip>td{animation:none;background-color:#FFE49A}}`}</style>
+
+      {props.editable && (
+        <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-2 rounded-md bg-[#F4F7FC] px-3 py-1.5 text-[12.5px]">
+          {drafGalat !== null ? (
+            <span className="text-[#7A5A00]">Draf belum bisa disimpan di server (tabel draf belum tersedia). Sementara hanya hari dibayar, mode, dan tanda tidak dialokasikan yang tersimpan di peramban ini.</span>
+          ) : keadaanSimpan === "gagal" ? (
+            <>
+              <span className="font-semibold text-[#9B1C23]">Draf belum tersimpan: {pesanSimpan}</span>
+              <button type="button" className={tombolMini} onClick={() => terbaru.current && void kirimDraf(terbaru.current)}>Coba simpan lagi</button>
+            </>
+          ) : keadaanSimpan === "tersimpan" ? (
+            <span className="text-[#14653A]">✓ Draf tersimpan{jamSimpan ? ` pukul ${jamSimpan}` : ""}. Isian dilanjutkan otomatis bila halaman dibuka lagi.</span>
+          ) : (
+            <span className="text-[#5B6B84]">Menyimpan draf…</span>
+          )}
+        </div>
+      )}
 
       <PenunjukAlur langkah={alur} kode={props.kode} identId={b.ident_id} />
 
@@ -865,7 +1003,9 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
           <div className="space-y-1.5 rounded-lg bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
             <p className="font-semibold">Item baru yang akan dibuat di RAB (bahan revisi POK):</p>
             <ul className="list-disc space-y-0.5 pl-5">
-              {[...new Set(akanDibuat.map((x) => `${x.rc.r.akun.slice(0, 6)} · ${(x.u.nama ?? x.pil.hasil.saranNama ?? "").trim()}`))].map((t) => <li key={t}>{t}</li>)}
+              {[...new Map(akanDibuat.map((x) => [`${x.rc.r.akun.slice(0, 6)} · ${(x.u.nama ?? x.pil.hasil.saranNama ?? "").trim()}`, x.rc.r.kunci] as const))].map(([t, k]) => (
+                <li key={t}><button type="button" onClick={() => lompatKe(k, "nama item")} className="text-left underline decoration-dotted underline-offset-2 hover:decoration-solid" title="Klik untuk menuju rincian ini">{t} <span aria-hidden className="font-semibold">→</span></button></li>
+              ))}
             </ul>
           </div>
         )}
@@ -874,7 +1014,14 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
           <div role="status" className="space-y-1 rounded-lg border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-2 text-[12.5px] text-[#5C4300]">
             <p className="font-semibold">{butuhKeputusan.length} rincian butuh keputusan Anda sebelum bisa disusun:</p>
             <ul className="list-disc pl-5">
-              {butuhKeputusan.map((x) => <li key={x.rc.r.kunci} className="break-words">{x.rc.r.uraian}: {x.keadaan === "butuh_item" ? "pilih item tujuan" : "item tujuan sudah berisi baris; pilih Pakai baris ini atau Tetap tambah baris baru"}</li>)}
+              {butuhKeputusan.map((x) => {
+                const teks = x.keadaan === "butuh_item" ? "pilih item tujuan" : "item tujuan sudah berisi baris; pilih Pakai baris ini atau Tetap tambah baris baru";
+                return (
+                  <li key={x.rc.r.kunci} className="break-words">
+                    <button type="button" onClick={() => lompatKe(x.rc.r.kunci, teks)} className="text-left underline decoration-dotted underline-offset-2 hover:decoration-solid" title="Klik untuk menuju rincian ini">{x.rc.r.uraian}: {teks} <span aria-hidden className="font-semibold">→</span></button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         )}
@@ -894,7 +1041,18 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
         ) : (
           <p className="text-[12.5px] text-[#6B7A93]">Hanya ketua tim atau admin RO yang dapat menyusun RAB.</p>
         )}
-        {(pesan.length > 0 || galat) && <Galat pesan={[...pesan, ...(galat ? [galat] : [])]} />}
+        {(pesan.length > 0 || galat) && (
+          <ul role="alert" className="space-y-1 rounded-lg border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">
+            {pesan.map((m) => (
+              <li key={`${m.kunci ?? ""}|${m.teks}`}>
+                {m.kunci
+                  ? <button type="button" onClick={() => lompatKe(m.kunci!, m.teks)} className="text-left underline decoration-dotted underline-offset-2 hover:decoration-solid" title="Klik untuk menuju rincian ini">{m.teks} <span aria-hidden className="font-semibold">→</span></button>
+                  : m.teks}
+              </li>
+            ))}
+            {galat && <li>{galat}</li>}
+          </ul>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[#E6ECF5] pt-3">
           <p className={label}>Status RAB survei ini</p>
@@ -995,7 +1153,8 @@ export function RabPerSurvei(props: PropsRabSurvei) {
   const hariLibur = useBacaKeu<{ tanggal: string; aktif: boolean }>(b ? urlBaca("keu_v_libur", {}, { urut: "tanggal", batas: 2000 }) : null);
   const itemBaru = useBacaKeu<ItemBaruRow>(urlBaca("keu_rab_item", { rab_id: props.rabId, pok_kunci: null }, { batas: 500, kolom: ["id", "akun_kode", "uraian", "satuan", "komponen_kode", "selesai"] }));
   const statusSurvei = useBacaKeu<BarisStatusSurvei>(urlBaca("keu_rab_survei", { rab_id: props.rabId }, { batas: 500, kolom: ["rab_id", "ident_id", "status", "catatan", "diubah_oleh", "diubah_at"] }));
-  const siap = b !== null && (statusSurvei.baris !== null || statusSurvei.galat !== null) && (lembar.baris !== null || lembar.galat !== null) && (hariLibur.baris !== null || hariLibur.galat !== null) && itemBaru.baris !== null;
+  const draf = useBacaKeu<BarisDraf>(b ? urlBaca("keu_rab_survei_draf", { rab_id: props.rabId, ident_id: b.ident_id }, { batas: 1, kolom: ["rab_id", "ident_id", "isi", "diubah_oleh", "diubah_at"] }) : null);
+  const siap = b !== null && (draf.baris !== null || draf.galat !== null) && (statusSurvei.baris !== null || statusSurvei.galat !== null) && (lembar.baris !== null || lembar.galat !== null) && (hariLibur.baris !== null || hariLibur.galat !== null) && itemBaru.baris !== null;
   const bahan = useMemo(() => (b ? bahanDari(b) : null), [b]);
   const libur = useMemo(() => bangunLibur(hariLibur.baris), [hariLibur.baris]);
   const namaIdent = useMemo(() => new Map(daftarIdent.map((x) => [x.ident_id, x.nama] as const)), [daftarIdent]);
@@ -1036,6 +1195,7 @@ export function RabPerSurvei(props: PropsRabSurvei) {
         <IsiSurvei
           key={b.ident_id} b={b} bahan={bahan} lembar={lembar.baris?.[0]?.isi ?? null} libur={libur} props={props}
           itemBaru={itemBaru.baris ?? []} muatItemBaru={itemBaru.muat} namaIdent={namaIdent} statusRows={statusSurvei.baris ?? []} muatStatus={statusSurvei.muat}
+          drafBaris={draf.baris?.[0] ?? null} drafGalat={draf.galat}
         />
       )}
       <BelumTerkaitSurvei peta={props.peta} />

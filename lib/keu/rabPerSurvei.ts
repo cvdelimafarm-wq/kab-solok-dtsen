@@ -515,3 +515,71 @@ export function bersihkanRibuan(teks: string, desimal: boolean): string {
   const k = s.indexOf(",");
   return (k < 0 ? s : `${s.slice(0, k + 1)}${s.slice(k + 1).replace(/,/g, "")}`).slice(0, 15);
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Draf layar RAB per survei (7 Nov 2026): isian yang belum disusun ke RAB disimpan di basis data (keu_rab_survei_draf), dibagi semua pengguna RAB itu.
+// ---------------------------------------------------------------------------------------------------------------------
+/** Perubahan pengguna per rincian yang ikut disimpan sebagai draf (bidang sama dengan `Ubah` di layar). */
+export type UbahDraf = Partial<{ volume: string; satuan: string; harga: string; bulan_mulai: number; minggu: number; tujuan: string; nama: string; ubahNama: boolean; dobel: "pakai" | "baru"; pakaiId: number }>;
+export type DrafSurvei = { v: 1; hari: Record<string, string>; mode: ModeKelompok; tidak: string[]; ubah: Record<string, UbahDraf> };
+export const DRAF_KOSONG: DrafSurvei = { v: 1, hari: {}, mode: modeSemua("periode"), tidak: [], ubah: {} };
+const MAKS_RINCIAN_DRAF = 500;
+
+/** Membersihkan satu `Ubah`: hanya bidang dikenal bertipe benar; bidang tak sah dibuang diam-diam. */
+export function bersihkanUbah(x: unknown): UbahDraf {
+  const o = (x && typeof x === "object" && !Array.isArray(x) ? x : {}) as Record<string, unknown>;
+  const u: UbahDraf = {};
+  const teks = (v: unknown, maks: number): string | undefined => (typeof v === "string" && v.length <= maks ? v : undefined);
+  const bil = (v: unknown, min: number, maks: number): number | undefined => (typeof v === "number" && Number.isInteger(v) && v >= min && v <= maks ? v : undefined);
+  const volume = teks(o.volume, 20); if (volume !== undefined) u.volume = volume;
+  const satuan = teks(o.satuan, 40); if (satuan !== undefined) u.satuan = satuan;
+  const harga = teks(o.harga, 20); if (harga !== undefined) u.harga = harga;
+  const bulan = bil(o.bulan_mulai, 1, 12); if (bulan !== undefined) u.bulan_mulai = bulan;
+  const minggu = bil(o.minggu, 1, 4); if (minggu !== undefined) u.minggu = minggu;
+  const tujuan = teks(o.tujuan, 200); if (tujuan !== undefined) u.tujuan = tujuan;
+  const nama = teks(o.nama, 300); if (nama !== undefined) u.nama = nama;
+  if (typeof o.ubahNama === "boolean") u.ubahNama = o.ubahNama;
+  if (o.dobel === "pakai" || o.dobel === "baru") u.dobel = o.dobel;
+  const pakai = bil(o.pakaiId, 1, Number.MAX_SAFE_INTEGER); if (pakai !== undefined) u.pakaiId = pakai;
+  return u;
+}
+
+/** Isi draf dari basis data (atau simpanan peramban lama) menjadi `DrafSurvei` yang aman; apa pun yang tidak sah dibuang. */
+export function normalisasiDraf(x: unknown): DrafSurvei {
+  const o = (x && typeof x === "object" && !Array.isArray(x) ? x : {}) as Record<string, unknown>;
+  const hari: Record<string, string> = {};
+  if (o.hari && typeof o.hari === "object") for (const [k, v] of Object.entries(o.hari as Record<string, unknown>).slice(0, 200)) if (typeof v === "string" && bacaHari(v) !== null) hari[k] = v.trim();
+  const tidak = Array.isArray(o.tidak) ? [...new Set(o.tidak.filter((t): t is string => typeof t === "string" && t.length <= 300))].slice(0, MAKS_RINCIAN_DRAF) : [];
+  const ubah: Record<string, UbahDraf> = {};
+  if (o.ubah && typeof o.ubah === "object") {
+    for (const [k, v] of Object.entries(o.ubah as Record<string, unknown>).slice(0, MAKS_RINCIAN_DRAF)) {
+      const u = bersihkanUbah(v);
+      if (Object.keys(u).length > 0) ubah[k] = u;
+    }
+  }
+  return { v: 1, hari, mode: modeAman(o.mode), tidak, ubah };
+}
+
+/** Membuang perubahan dan tanda untuk rincian yang tidak ada lagi atau sudah masuk RAB (`terpasang`). */
+export function pangkasDraf(d: DrafSurvei, kunciAda: ReadonlySet<string>, kunciTerpasang: ReadonlySet<string>): DrafSurvei {
+  const ubah: Record<string, UbahDraf> = {};
+  for (const [k, u] of Object.entries(d.ubah)) if (kunciAda.has(k) && !kunciTerpasang.has(k)) ubah[k] = u;
+  return { ...d, ubah, tidak: d.tidak.filter((k) => kunciAda.has(k) && !kunciTerpasang.has(k)) };
+}
+
+/** Sidik jari stabil (urutan kunci tetap) untuk membandingkan draf tanpa memicu simpan ulang yang sia-sia. */
+export function sidikDraf(d: DrafSurvei): string {
+  const urut = (o: Record<string, unknown>): Record<string, unknown> => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
+  return JSON.stringify({
+    v: 1, hari: urut(d.hari), mode: urut(d.mode as Record<string, unknown>), tidak: [...d.tidak].sort(),
+    ubah: urut(Object.fromEntries(Object.entries(d.ubah).map(([k, u]) => [k, urut(u as Record<string, unknown>)]))),
+  });
+}
+/** Draf tanpa isian apa pun (tidak perlu disimpan bila belum pernah disimpan). */
+export const drafKosong = (d: DrafSurvei): boolean => sidikDraf(d) === sidikDraf(DRAF_KOSONG);
+
+/** Isi yang dikirim ke basis data. */
+export const isiDrafKirim = (d: DrafSurvei): Record<string, unknown> => JSON.parse(sidikDraf(d)) as Record<string, unknown>;
+
+/** Id elemen baris rincian di layar (dipakai lompatan dari pesan galat). Sama dengan pola `id()` di BarisSurvei. */
+export const idBarisRincian = (kunci: string, bagian = "baris"): string => `rps-${kunci}-${bagian}`.replace(/[^\w-]/g, "_");
