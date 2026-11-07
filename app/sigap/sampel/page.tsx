@@ -12,6 +12,8 @@ import { kelompokPpl, kelompokSls, rekapSampel, type SampelRow } from "@/lib/sam
 import { useSampelSaya } from "./useSampel";
 import KartuSls from "./KartuSls";
 import SheetGanti from "./SheetGanti";
+import WilayahSaya from "./WilayahSaya";
+import { useAlokasiSaya } from "./useAlokasi";
 
 function Angka({ nilai, label }: { nilai: number; label: string }) {
   return (
@@ -34,6 +36,8 @@ export default function HalamanSampel() {
   }, []);
 
   const { data, galat, luring, memuat, muat, ganti, batal } = useSampelSaya(kegiatan ?? null);
+  // (7 Nov 2026) Wilayah saya: alokasi sub SLS + daftar KK master (tidak bergantung pada ada-tidaknya sampel yang sudah ditandai)
+  const alokasi = useAlokasiSaya(kegiatan ?? null);
   const [diganti, setDiganti] = useState<SampelRow | null>(null);
   const [pesan, setPesan] = useState("");
   const [sibuk, setSibuk] = useState(false);
@@ -66,11 +70,11 @@ export default function HalamanSampel() {
         <div className="mx-auto flex max-w-xl items-center gap-2.5">
           <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Sampel per SLS</h1>
+            <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Wilayah dan sampel</h1>
             <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `${data.kegiatan.nama} · ${peran === "pml" ? "PML" : "PPL"}` : "Memuat…"}</p>
           </div>
-          <button type="button" onClick={() => void muat()} disabled={memuat} className="min-h-[44px] flex-none rounded-[12px] bg-white/15 px-3 text-[12.5px] font-bold text-white active:bg-white/25 disabled:opacity-60">
-            {memuat ? "Memuat…" : "Muat ulang"}
+          <button type="button" onClick={() => { void muat(); void alokasi.muat(); }} disabled={memuat || alokasi.memuat} className="min-h-[44px] flex-none rounded-[12px] bg-white/15 px-3 text-[12.5px] font-bold text-white active:bg-white/25 disabled:opacity-60">
+            {memuat || alokasi.memuat ? "Memuat…" : "Muat ulang"}
           </button>
         </div>
       </header>
@@ -91,6 +95,8 @@ export default function HalamanSampel() {
           </div>
         )}
 
+        {alokasi.data && <WilayahSaya data={alokasi.data} muatKk={alokasi.muatKk} luring={alokasi.luring} />}
+
         {data && (
           <>
             <div className="flex gap-2">
@@ -100,7 +106,7 @@ export default function HalamanSampel() {
               <Angka nilai={rekap.diganti} label="Diganti" />
             </div>
 
-            {rows.length === 0 && <p className="rounded-[18px] bg-white px-4 py-8 text-center text-[13.5px] leading-snug text-[#55657D]">Belum ada sampel yang dialokasikan kepada Anda pada kegiatan ini. Hubungi admin kegiatan bila ini keliru.</p>}
+            {rows.length === 0 && (alokasi.data?.wilayah.length ?? 0) === 0 && <p className="rounded-[18px] bg-white px-4 py-8 text-center text-[13.5px] leading-snug text-[#55657D]">Belum ada wilayah atau sampel yang dialokasikan kepada Anda pada kegiatan ini. Hubungi admin kegiatan bila ini keliru.</p>}
 
             {peran === "ppl" && grupSls.map((g, i) => <KartuSls key={`${g.ppl_akun_id}-${g.kode_sls}`} grup={g} semua={rows} bisaGanti={bisaGanti} tampilPpl={false} terbukaAwal={grupSls.length <= 2 || i === 0} onGanti={setDiganti} onBatal={(c) => void batalkan(c)} />)}
 

@@ -112,7 +112,7 @@ export async function petugasKegiatan(db: Db, kegiatanId: number): Promise<{ ppl
 }
 
 /** Semua akun aktif yang boleh ditugaskan: organik dan Mitra. Dipakai pencocokan nama pada mode "tugaskan otomatis". */
-async function akunBolehDitugaskan(db: Db): Promise<{ semua: Kandidat[]; organik: Kandidat[] }> {
+export async function akunBolehDitugaskan(db: Db): Promise<{ semua: Kandidat[]; organik: Kandidat[] }> {
   const { data, error } = await db.from("sigap_akun").select("id, nama, jenis").eq("aktif", true).in("jenis", ["organik", "mitra"]).range(0, 1999);
   if (error) throw new Error(error.message);
   const semua = (data ?? []).map((a) => ({ id: Number(a.id), nama: String(a.nama), jenis: String(a.jenis) }));
