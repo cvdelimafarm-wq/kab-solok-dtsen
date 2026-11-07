@@ -15,6 +15,7 @@ import {
 import type { Form } from "@/lib/keu/identifikasi";
 import { Bagian, Centang, Poin } from "../../Kontrol";
 import { useUsulan } from "./usePelaksanaan";
+import BlokSamakan from "./BlokSamakan";
 import SelectCari from "@/app/components/SelectCari";
 
 const rp = (n: number): string => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
@@ -110,7 +111,7 @@ export function KartuTautan(p: {
 // ---------------------------------------------------------------------------------------------------------------------
 export function KartuUsulan(p: {
   identId: number; tertaut: KegiatanTertaut[]; bisa: boolean; final: boolean; ada: boolean; versi: number; mengirim: boolean; galat: string | null; hasil: HasilTerap | null;
-  onTerapkan: (kegiatanId: number, kode: string[]) => Promise<boolean>;
+  onTerapkan: (kegiatanId: number, kode: string[]) => Promise<boolean>; onBerubah?: () => void;
 }) {
   const [kid, setKid] = useState<number | null>(null);
   const aktifId = kid !== null && p.tertaut.some((k) => k.kegiatan_id === kid) ? kid : p.tertaut[0]?.kegiatan_id ?? null;
@@ -177,6 +178,7 @@ export function KartuUsulan(p: {
                 </div>
               )}
               {!p.bisa && <p className="m-0 text-[12.5px] text-[#5B6B84]">Menerapkan penugasan hanya untuk ketua tim, admin RO, atau penyusun lain RO ini.</p>}
+              {aktifId !== null && <BlokSamakan identId={p.identId} kegiatanId={aktifId} versi={p.versi} onBerubah={p.onBerubah} />}
             </>
           )}
           {p.hasil && <p role="status" className="m-0 rounded-lg border-l-4 border-[#2E9E63] bg-[#E6F6EC] px-3 py-2 text-[13px] text-[#14653A]">{kalimatHasilTerap(p.hasil)} PPK sudah diberi tahu.</p>}

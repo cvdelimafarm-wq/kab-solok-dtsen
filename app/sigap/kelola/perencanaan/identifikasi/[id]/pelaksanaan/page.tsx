@@ -108,7 +108,7 @@ function Isi() {
               <KartuTautan tertaut={pl.tertaut} calon={pl.calon} bisa={bisa} mengirim={kirim.mengirim} galat={kirim.galat} onTautkan={tautkan} onLepas={lepas} />
               <KartuUsulan
                 identId={row.id} tertaut={pl.tertaut} bisa={bisa} final={tersimpan?.status === "final"} ada={!!tersimpan} versi={versi}
-                mengirim={kirim.mengirim} galat={null} hasil={hasil} onTerapkan={terapkan}
+                mengirim={kirim.mengirim} galat={null} hasil={hasil} onTerapkan={terapkan} onBerubah={muatSemua}
               />
               <KartuLaporan kegiatan={pl.bahan?.kegiatan ?? []} jadwal={jadwal} hariIni={hariIni} />
             </div>
