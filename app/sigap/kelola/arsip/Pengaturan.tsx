@@ -3,13 +3,15 @@
 // app/sigap/kelola/arsip/Pengaturan.tsx
 //
 // (7 Nov 2026) Tab Pengaturan menu Arsip:
-//   Kode unit kerja, nomor terakhir per register (hanya boleh naik), pola nomor per jenis dokumen, kode klasifikasi arsip (KKA), kode arsip per kegiatan.
+//   Kode unit kerja, nomor terakhir per register (hanya boleh naik), pola nomor per jenis dokumen, kode klasifikasi arsip (KKA) menurut Perka BPS 99/2018.
+// Kode arsip berlaku untuk semua kegiatan (dipilih menurut isi surat); tidak ada pengaturan kode per kegiatan.
 // Pola baru hanya berlaku untuk nomor berikutnya; nomor yang sudah terbit tidak berubah.
 
 import { useEffect, useMemo, useState } from "react";
 import { pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import { contohNomor, KATEGORI, periksaFormat, TOKEN_FORMAT } from "@/lib/arsip/nomor";
+import PilihKodeArsip, { kodeTerpilihSah } from "../../arsip/PilihKodeArsip";
 import { aksiA, ambilA, type DataPengaturan, type DataRingkas, type JenisArsip, type KodeArsip } from "./api";
 
 const LABEL = "flex flex-col gap-0.5 text-[12px] font-bold text-[#5B6B84]";
@@ -24,13 +26,12 @@ export default function Pengaturan({ peng, tahun, onUbah }: { peng: DataPengatur
     <>
       {pesan && <Pesan jenis={pesan.jenis} onTutup={() => setPesan(null)}>{pesan.teks}</Pesan>}
       <Pesan jenis="info">
-        Dasar penomoran: Peraturan BPS 1/2023 tentang Pedoman Tata Naskah Dinas (Pasal 63-65). Pola dan kode di bawah dapat diubah bila ada ketentuan baru; perubahan hanya berlaku untuk nomor berikutnya.
+        Dasar penomoran: Peraturan BPS 1/2023 tentang Pedoman Tata Naskah Dinas (Pasal 63-65) dan kode klasifikasi arsip menurut Perka BPS 99/2018. Pola nomor dapat diubah bila ada ketentuan baru; perubahan hanya berlaku untuk nomor berikutnya.
       </Pesan>
       <KartuUnit peng={peng} kabar={kabar} onUbah={onUbah} />
       <KartuCounter peng={peng} tahun={tahun} kabar={kabar} onUbah={onUbah} />
       <KartuJenis peng={peng} kabar={kabar} onUbah={onUbah} />
       <KartuKode peng={peng} kabar={kabar} onUbah={onUbah} />
-      <KartuKegiatan peng={peng} kabar={kabar} onUbah={onUbah} />
     </>
   );
 }
@@ -155,12 +156,9 @@ function BarisJenis({ j, peng, kabar, onUbah }: { j: JenisArsip } & P) {
         <label className={LABEL}>Register (urutan nomor)
           <select className={INPUT} value={register} onChange={(e) => setRegister(e.target.value)}>{peng.register.map((r) => <option key={r.kode} value={r.kode}>{r.nama}</option>)}</select>
         </label>
-        <label className={LABEL}>Kode arsip bawaan
-          <select className={INPUT} value={kka} onChange={(e) => setKka(e.target.value)}>
-            <option value="">Tanpa bawaan</option>
-            {peng.kode.filter((k) => k.aktif || k.kode === kka).map((k) => <option key={k.kode} value={k.kode}>{k.kode} · {k.nama}</option>)}
-          </select>
-        </label>
+        <div className="sm:col-span-2 lg:col-span-4">
+          <PilihKodeArsip kode={peng.kode.filter((k) => k.aktif || k.kode === kka)} fungsi={peng.fungsi} sering={peng.sering} nilai={kka} onUbah={setKka} label="Kode arsip bawaan (kosongkan bila kode dipilih tiap surat)" />
+        </div>
         <label className={LABEL}>Derajat keamanan
           <input className={`${INPUT} w-20 font-mono`} value={keamanan} maxLength={2} onChange={(e) => setKeamanan(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))} />
         </label>
@@ -171,7 +169,7 @@ function BarisJenis({ j, peng, kabar, onUbah }: { j: JenisArsip } & P) {
       </p>
       {ubah && (
         <div className="mt-2 flex gap-2">
-          <button type="button" className={BTN} disabled={sibuk || !!galatFormat || keamanan.length < 1} onClick={() => void simpan({ format: format.trim(), register, kka_bawaan: kka || null, keamanan }, `Pengaturan ${j.nama} disimpan. Berlaku untuk nomor berikutnya.`)}>{sibuk ? "Menyimpan…" : "Simpan perubahan"}</button>
+          <button type="button" className={BTN} disabled={sibuk || !!galatFormat || keamanan.length < 1 || !kodeTerpilihSah(peng.kode, kka)} onClick={() => void simpan({ format: format.trim(), register, kka_bawaan: kka.trim().toUpperCase() || null, keamanan }, `Pengaturan ${j.nama} disimpan. Berlaku untuk nomor berikutnya.`)}>{sibuk ? "Menyimpan…" : "Simpan perubahan"}</button>
           <button type="button" className={BTN_O} onClick={() => { setFormat(j.format); setRegister(j.register); setKka(j.kka_bawaan ?? ""); setKeamanan(j.keamanan); }}>Kembalikan</button>
         </div>
       )}
@@ -189,11 +187,11 @@ function FormJenisBaru({ peng, kabar, onUbah }: P) {
   const [kka, setKka] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const galatFormat = periksaFormat(format);
-  const siap = /^[a-z][a-z0-9_]{1,30}$/.test(kode) && nama.trim().length >= 3 && !galatFormat && !!register;
+  const siap = /^[a-z][a-z0-9_]{1,30}$/.test(kode) && nama.trim().length >= 3 && !galatFormat && !!register && kodeTerpilihSah(peng.kode, kka);
   async function simpan() {
     setSibuk(true);
     try {
-      await aksiA("simpan_jenis", { baru: true, kode, nama: nama.trim(), kategori: kat, format: format.trim(), register, keamanan: "B", kka_bawaan: kka || null });
+      await aksiA("simpan_jenis", { baru: true, kode, nama: nama.trim(), kategori: kat, format: format.trim(), register, keamanan: "B", kka_bawaan: kka.trim().toUpperCase() || null });
       kabar.ok(`Jenis dokumen ${nama.trim()} ditambahkan.`);
       onUbah();
     } catch (e) { kabar.galat(e); } finally { setSibuk(false); }
@@ -212,9 +210,9 @@ function FormJenisBaru({ peng, kabar, onUbah }: P) {
         <label className={LABEL}>Register
           <select className={INPUT} value={register} onChange={(e) => setRegister(e.target.value)}>{peng.register.map((r) => <option key={r.kode} value={r.kode}>{r.nama}</option>)}</select>
         </label>
-        <label className={LABEL}>Kode arsip bawaan
-          <select className={INPUT} value={kka} onChange={(e) => setKka(e.target.value)}><option value="">Tanpa bawaan</option>{peng.kode.filter((k) => k.aktif).map((k) => <option key={k.kode} value={k.kode}>{k.kode} · {k.nama}</option>)}</select>
-        </label>
+        <div className="sm:col-span-2 lg:col-span-3">
+          <PilihKodeArsip kode={peng.kode.filter((k) => k.aktif)} fungsi={peng.fungsi} sering={peng.sering} nilai={kka} onUbah={setKka} label="Kode arsip bawaan (kosongkan bila kode dipilih tiap surat)" />
+        </div>
       </div>
       <p className="mb-0 mt-2 text-[12px] text-[#5B6B84]">Token tersedia: {TOKEN_FORMAT.join(" ")}. {galatFormat ? <span className="font-semibold text-[#B42329]">{galatFormat}</span> : null}</p>
       <div className="mt-2"><button type="button" className={BTN} disabled={!siap || sibuk} onClick={() => void simpan()}>{sibuk ? "Menyimpan…" : "Tambahkan"}</button></div>
@@ -223,101 +221,66 @@ function FormJenisBaru({ peng, kabar, onUbah }: P) {
 }
 
 // ---------------------------------------------------------------------------- kode arsip
-const KOSONG: KodeArsip = { kode: "", nama: "", kelompok: "substantif", catatan: null, aktif: true, diverifikasi: false };
+const KOSONG: KodeArsip = { kode: "", nama: "", kelompok: "substantif", catatan: null, aktif: true, diverifikasi: false, fungsi: null, induk: null, tingkat: null, sumber: "tambahan" };
+const BATAS_TAMPIL = 150;
 
 function KartuKode({ peng, kabar, onUbah }: P) {
   const [ubah, setUbah] = useState<KodeArsip | null>(null);
+  const [baru, setBaru] = useState(false);
   const [sibuk, setSibuk] = useState(false);
   const [cari, setCari] = useState("");
-  const daftar = useMemo(() => peng.kode.filter((k) => !cari || `${k.kode} ${k.nama}`.toLowerCase().includes(cari.toLowerCase())), [peng.kode, cari]);
-  const belum = peng.kode.filter((k) => !k.diverifikasi).length;
+  const [fungsi, setFungsi] = useState("");
+  const daftarSemua = useMemo(() => peng.kode.filter((k) => (!fungsi || k.fungsi === fungsi) && (!cari || `${k.kode} ${k.nama}`.toLowerCase().includes(cari.toLowerCase()))), [peng.kode, cari, fungsi]);
+  const daftar = daftarSemua.slice(0, BATAS_TAMPIL);
+  const resmi = ubah?.sumber === "perka99";
+  const namaFungsi = useMemo(() => new Map(peng.fungsi.map((f) => [f.kode, f.nama])), [peng.fungsi]);
 
   async function simpan(k: KodeArsip, teks: string) {
     setSibuk(true);
-    try { await aksiA("simpan_kode", { ...k }); kabar.ok(teks); setUbah(null); onUbah(); } catch (e) { kabar.galat(e); } finally { setSibuk(false); }
+    try { await aksiA("simpan_kode", { kode: k.kode, nama: k.nama, kelompok: k.kelompok, catatan: k.catatan, aktif: k.aktif }); kabar.ok(teks); setUbah(null); setBaru(false); onUbah(); } catch (e) { kabar.galat(e); } finally { setSibuk(false); }
   }
 
   return (
-    <Kartu judul="Kode klasifikasi arsip (KKA)" ket="Daftar kode yang boleh dipilih di nomor surat. Tandai Terverifikasi setelah dicocokkan dengan tabel resmi klasifikasi arsip BPS." kanan={<button type="button" className={BTN_O} onClick={() => setUbah({ ...KOSONG })}>Tambah kode</button>}>
-      {belum > 0 && <div className="mb-3"><Pesan jenis="peringatan">{belum} kode belum ditandai terverifikasi. Arti kode bawaan (VS.330, SS.330, VS.230) diambil dari pola nomor lama dan belum dicocokkan dengan tabel resmi; mohon cek lalu tandai.</Pesan></div>}
+    <Kartu judul="Kode klasifikasi arsip (Perka BPS 99/2018)" ket="Daftar resmi dari Lampiran Perka BPS 99/2018. Kode berlaku untuk semua kegiatan dan dipilih menurut isi surat. Uraian kode resmi tidak dapat diubah; boleh dinonaktifkan. Kode tambahan hanya untuk kebutuhan yang tidak ada di Perka." kanan={<button type="button" className={BTN_O} onClick={() => { setBaru(true); setUbah({ ...KOSONG }); }}>Tambah kode kantor</button>}>
       {ubah && (
         <div className="mb-3 rounded-lg border border-dashed border-[#1F5FD1] bg-[#F5F8FE] p-3">
           <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-            <label className={LABEL}>Kode<input className={`${INPUT} font-mono`} value={ubah.kode} disabled={peng.kode.some((k) => k.kode === ubah.kode) && !!ubah.nama} maxLength={12} placeholder="VS.330" onChange={(e) => setUbah({ ...ubah, kode: e.target.value.toUpperCase() })} /></label>
-            <label className={`${LABEL} lg:col-span-2`}>Nama / uraian<input className={INPUT} value={ubah.nama} maxLength={200} onChange={(e) => setUbah({ ...ubah, nama: e.target.value })} /></label>
-            <label className={LABEL}>Kelompok<select className={INPUT} value={ubah.kelompok} onChange={(e) => setUbah({ ...ubah, kelompok: e.target.value })}><option value="substantif">Substantif</option><option value="fasilitatif">Fasilitatif</option></select></label>
-            <label className={`${LABEL} lg:col-span-2`}>Catatan<input className={INPUT} value={ubah.catatan ?? ""} maxLength={300} onChange={(e) => setUbah({ ...ubah, catatan: e.target.value })} /></label>
-            <label className="flex items-center gap-2 text-[12.5px] font-semibold text-[#1B2B4B]"><input type="checkbox" checked={ubah.diverifikasi} onChange={(e) => setUbah({ ...ubah, diverifikasi: e.target.checked })} /> Terverifikasi dengan tabel resmi</label>
+            <label className={LABEL}>Kode<input className={`${INPUT} font-mono`} value={ubah.kode} disabled={!baru} maxLength={12} placeholder="VS.330" onChange={(e) => setUbah({ ...ubah, kode: e.target.value.toUpperCase() })} /></label>
+            <label className={`${LABEL} lg:col-span-2`}>Nama / uraian<input className={INPUT} value={ubah.nama} maxLength={200} disabled={resmi} onChange={(e) => setUbah({ ...ubah, nama: e.target.value })} /></label>
+            <label className={LABEL}>Kelompok<select className={INPUT} value={ubah.kelompok} disabled={resmi} onChange={(e) => setUbah({ ...ubah, kelompok: e.target.value })}><option value="substantif">Substantif</option><option value="fasilitatif">Fasilitatif</option></select></label>
+            {!resmi && <label className={`${LABEL} lg:col-span-2`}>Catatan<input className={INPUT} value={ubah.catatan ?? ""} maxLength={300} onChange={(e) => setUbah({ ...ubah, catatan: e.target.value })} /></label>}
             <label className="flex items-center gap-2 text-[12.5px] font-semibold text-[#1B2B4B]"><input type="checkbox" checked={ubah.aktif} onChange={(e) => setUbah({ ...ubah, aktif: e.target.checked })} /> Aktif (muncul di pilihan)</label>
           </div>
+          {baru && <p className="mb-0 mt-2 text-[12px] text-[#5B6B84]">Dua huruf awal harus bidang resmi Perka (mis. VS, KU, KP). Kode tambahan ditandai &quot;Tambahan kantor&quot;.</p>}
           <div className="mt-2 flex gap-2">
             <button type="button" className={BTN} disabled={sibuk || ubah.kode.length < 6 || ubah.nama.trim().length < 3} onClick={() => void simpan(ubah, `Kode ${ubah.kode} disimpan.`)}>{sibuk ? "Menyimpan…" : "Simpan kode"}</button>
-            <button type="button" className={BTN_O} onClick={() => setUbah(null)}>Batal</button>
+            <button type="button" className={BTN_O} onClick={() => { setUbah(null); setBaru(false); }}>Batal</button>
           </div>
         </div>
       )}
-      <input aria-label="Cari kode arsip" className={`${INPUT} mb-2 w-full max-w-sm`} placeholder="Cari kode atau nama" value={cari} onChange={(e) => setCari(e.target.value)} />
+      <div className="mb-2 flex flex-wrap gap-2">
+        <input aria-label="Cari kode arsip" className={`${INPUT} w-full max-w-sm`} placeholder="Cari kode atau uraian" value={cari} onChange={(e) => setCari(e.target.value)} />
+        <select aria-label="Bidang" className={INPUT} value={fungsi} onChange={(e) => setFungsi(e.target.value)}>
+          <option value="">Semua bidang</option>
+          {peng.fungsi.map((f) => <option key={f.kode} value={f.kode}>{f.kode} · {f.nama.length > 60 ? `${f.nama.slice(0, 60)}…` : f.nama}</option>)}
+        </select>
+      </div>
       <TabelKartu>
-        <thead><tr><th className={TH}>Kode</th><th className={TH}>Uraian</th><th className={TH}>Kelompok</th><th className={TH}>Status</th><th className={TH} /></tr></thead>
+        <thead><tr><th className={TH}>Kode</th><th className={TH}>Uraian</th><th className={TH}>Bidang</th><th className={TH}>Status</th><th className={TH} /></tr></thead>
         <tbody>
           {daftar.map((k) => (
             <tr key={k.kode} className={k.aktif ? undefined : "opacity-60"}>
               <td className={`${TD} whitespace-nowrap font-mono font-semibold`}>{k.kode}</td>
               <td className={TD}>{k.nama}{k.catatan ? <span className="block text-[11.5px] text-[#5B6B84]">{k.catatan}</span> : null}</td>
-              <td className={TD}>{k.kelompok === "fasilitatif" ? "Fasilitatif" : "Substantif"}</td>
-              <td className={TD}><span className="flex flex-wrap gap-1">{k.diverifikasi ? <Chip w="ok">Terverifikasi</Chip> : <Chip w="wait">Belum diverifikasi</Chip>}{!k.aktif && <Chip w="mut">Nonaktif</Chip>}</span></td>
-              <td className={TD}><button type="button" className={BTN_O} onClick={() => setUbah({ ...k })}>Ubah</button></td>
+              <td className={TD}>{k.fungsi ? namaFungsi.get(k.fungsi) ?? k.fungsi : "-"}</td>
+              <td className={TD}><span className="flex flex-wrap gap-1">{k.sumber === "perka99" ? <Chip w="ok">Perka 99/2018</Chip> : <Chip w="wait">Tambahan kantor</Chip>}{!k.aktif && <Chip w="mut">Nonaktif</Chip>}</span></td>
+              <td className={TD}><button type="button" className={BTN_O} onClick={() => { setBaru(false); setUbah({ ...k }); }}>{k.sumber === "perka99" ? (k.aktif ? "Nonaktifkan" : "Aktifkan") : "Ubah"}</button></td>
             </tr>
           ))}
           {daftar.length === 0 && <tr><td className={TD} colSpan={5}>Tidak ada kode yang cocok.</td></tr>}
         </tbody>
       </TabelKartu>
-    </Kartu>
-  );
-}
-
-// ---------------------------------------------------------------------------- kode arsip per kegiatan
-function KartuKegiatan({ peng, kabar, onUbah }: P) {
-  const [keg, setKeg] = useState("");
-  const [kka, setKka] = useState("");
-  const [sibuk, setSibuk] = useState(false);
-  async function simpan(kegiatanId: number, kode: string | null, teks: string) {
-    setSibuk(true);
-    try { await aksiA("simpan_kka_kegiatan", { kegiatan_id: kegiatanId, kka: kode }); kabar.ok(teks); setKeg(""); setKka(""); onUbah(); } catch (e) { kabar.galat(e); } finally { setSibuk(false); }
-  }
-  return (
-    <Kartu judul="Kode arsip per kegiatan" ket="Surat tugas dan dokumen kegiatan memakai kode ini lebih dulu; bila kosong dipakai kode bawaan jenis dokumen.">
-      {peng.kegiatan.length > 0 && (
-        <div className="mb-3">
-          <TabelKartu>
-            <thead><tr><th className={TH}>Kegiatan</th><th className={TH}>Kode arsip</th><th className={TH} /></tr></thead>
-            <tbody>
-              {peng.kegiatan.map((k) => (
-                <tr key={k.kegiatan_id}>
-                  <td className={TD}>{k.nama}</td>
-                  <td className={`${TD} font-mono font-semibold`}>{k.kka}</td>
-                  <td className={TD}><button type="button" className={BTN_O} disabled={sibuk} onClick={() => void simpan(k.kegiatan_id, null, `Kode arsip kegiatan ${k.nama} dihapus.`)}>Hapus</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </TabelKartu>
-        </div>
-      )}
-      <div className="flex flex-wrap items-end gap-2">
-        <label className={`${LABEL} min-w-[220px] flex-1`}>Kegiatan
-          <select className={INPUT} value={keg} onChange={(e) => setKeg(e.target.value)}>
-            <option value="">Pilih kegiatan…</option>
-            {peng.kegiatan_semua.map((k) => <option key={k.id} value={k.id}>{k.nama}</option>)}
-          </select>
-        </label>
-        <label className={`${LABEL} min-w-[220px] flex-1`}>Kode arsip
-          <select className={INPUT} value={kka} onChange={(e) => setKka(e.target.value)}>
-            <option value="">Pilih kode…</option>
-            {peng.kode.filter((k) => k.aktif).map((k) => <option key={k.kode} value={k.kode}>{k.kode} · {k.nama}</option>)}
-          </select>
-        </label>
-        <button type="button" className={BTN} disabled={!keg || !kka || sibuk} onClick={() => void simpan(Number(keg), kka, "Kode arsip kegiatan disimpan.")}>{sibuk ? "Menyimpan…" : "Simpan"}</button>
-      </div>
+      {daftarSemua.length > BATAS_TAMPIL && <p className="mb-0 mt-2 text-[12px] text-[#5B6B84]">Menampilkan {BATAS_TAMPIL} dari {daftarSemua.length} kode. Persempit dengan pencarian atau bidang.</p>}
     </Kartu>
   );
 }

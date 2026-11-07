@@ -5,13 +5,17 @@
 // (7 Nov 2026) Tab "Ambil / catat nomor" menu Arsip.
 //   1. Ambil nomor baru dari sistem untuk surat yang dibuat di luar SIGAP (mis. surat dinas, SPK, BAST).
 //   2. Catat nomor yang SUDAH terbit di luar SIGAP supaya nomor berikutnya tidak bentrok (counter hanya naik).
+//   3. Nomor dokumen pengadaan barang/jasa satu paket (kartu PaketPbj).
 // Surat tugas translok dan dokumen lanjutan identifikasi tidak lewat sini: nomornya diambil dari halamannya masing-masing.
+// Kode arsip mengikuti Perka BPS 99/2018 dan dipilih menurut isi surat, bukan menurut kegiatan (kolom Kegiatan hanya penanda).
 
 import { useMemo, useState } from "react";
 import { pesanGalat, SesiBerakhir } from "../../admin/api";
 import { BTN, BTN_O, INPUT, Kartu, Pesan } from "../../admin/ui";
 import { contohNomor, kkaSah, perluKka, tahunDariTanggal, uraiNomor } from "@/lib/arsip/nomor";
+import PilihKodeArsip from "../../arsip/PilihKodeArsip";
 import { aksiA, hariIniWib, type DataPengaturan } from "./api";
+import PaketPbj from "./PaketPbj";
 
 const LABEL = "flex flex-col gap-0.5 text-[12px] font-bold text-[#5B6B84]";
 
@@ -21,8 +25,10 @@ export default function Ambil({ peng, onUbah }: { peng: DataPengaturan; onUbah: 
   return (
     <>
       <Pesan jenis="info">
-        Surat tugas translok diambil dari halaman Penugasan, dan undangan/pengantar/surat tugas identifikasi lanjutan dari halaman dokumennya. Tab ini untuk surat lain (surat dinas, SPK, BAST, dan sebagainya) serta untuk mencatat nomor yang sudah terbit di luar SIGAP.
+        Surat tugas translok diambil dari halaman Penugasan, dan undangan/pengantar/surat tugas identifikasi lanjutan dari halaman dokumennya. Tab ini untuk surat lain (surat dinas, SPK, BAST, dan sebagainya), nomor dokumen pengadaan barang/jasa, serta untuk mencatat nomor yang sudah terbit di luar SIGAP.
+        Kode arsip dipilih menurut isi surat (Perka BPS 99/2018), berlaku untuk semua kegiatan.
       </Pesan>
+      <PaketPbj onUbah={onUbah} />
       <FormAmbil peng={peng} jenisAktif={jenisAktif} kodeAktif={kodeAktif} onUbah={onUbah} />
       <FormLuar peng={peng} jenisAktif={jenisAktif} kodeAktif={kodeAktif} onUbah={onUbah} />
     </>
@@ -31,15 +37,8 @@ export default function Ambil({ peng, onUbah }: { peng: DataPengaturan; onUbah: 
 
 type Prop = { peng: DataPengaturan; jenisAktif: DataPengaturan["jenis"]; kodeAktif: DataPengaturan["kode"]; onUbah: () => void };
 
-function PilihKka({ nilai, onUbah, kode, bawaan, wajib }: { nilai: string; onUbah: (v: string) => void; kode: DataPengaturan["kode"]; bawaan: string | null; wajib: boolean }) {
-  return (
-    <label className={LABEL}>Kode arsip{wajib ? " *" : ""}
-      <select className={INPUT} value={nilai} onChange={(e) => onUbah(e.target.value)}>
-        <option value="">{bawaan ? `Bawaan jenis ini (${bawaan})` : wajib ? "Pilih kode arsip…" : "Tidak dipakai"}</option>
-        {kode.map((k) => <option key={k.kode} value={k.kode}>{k.kode} · {k.nama}{k.diverifikasi ? "" : " (belum diverifikasi)"}</option>)}
-      </select>
-    </label>
-  );
+function PilihKka({ nilai, onUbah, peng, kode, bawaan, wajib }: { nilai: string; onUbah: (v: string) => void; peng: DataPengaturan; kode: DataPengaturan["kode"]; bawaan: string | null; wajib: boolean }) {
+  return <PilihKodeArsip kode={kode} fungsi={peng.fungsi} sering={peng.sering} nilai={nilai} onUbah={onUbah} bawaan={bawaan} wajib={wajib} />;
 }
 
 function FormAmbil({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
@@ -55,10 +54,10 @@ function FormAmbil({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
 
   const j = jenisAktif.find((x) => x.kode === jenis) ?? null;
   const pakaiKka = !!j && perluKka(j.format);
-  const kkaKegiatan = kegiatan ? peng.kegiatan.find((k) => k.kegiatan_id === Number(kegiatan))?.kka ?? null : null;
-  const kkaEfektif = kka || kkaKegiatan || j?.kka_bawaan || null;
+  const kkaEfektif = kka.trim().toUpperCase() || j?.kka_bawaan || null;
+  const kkaSahPilih = !kkaEfektif || kodeAktif.some((k) => k.kode === kkaEfektif);
   const tahun = tahunDariTanggal(tanggal);
-  const siap = !!j && !!tahun && perihal.trim().length >= 3 && (!pakaiKka || !!kkaEfektif);
+  const siap = !!j && !!tahun && perihal.trim().length >= 3 && (!pakaiKka || (!!kkaEfektif && kkaSahPilih));
   const pratinjau = j && tahun ? contohNomor(j.format.split("{urut}").join("NNN").split("{urut3}").join("NNN").split("{urut4}").join("NNNN"), j.keamanan, peng.unit, kkaEfektif, 0, tahun) : null;
 
   async function ambil() {
@@ -66,7 +65,7 @@ function FormAmbil({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
     setSibuk(true);
     setGalat(null);
     try {
-      const r = await aksiA<{ nomor: string }>("ambil", { jenis: j.kode, kka: kka || undefined, tanggal, perihal: perihal.trim(), kegiatan_id: kegiatan ? Number(kegiatan) : undefined });
+      const r = await aksiA<{ nomor: string }>("ambil", { jenis: j.kode, kka: kkaEfektif && pakaiKka ? kkaEfektif : undefined, tanggal, perihal: perihal.trim(), kegiatan_id: kegiatan ? Number(kegiatan) : undefined });
       setHasil({ nomor: r.nomor, perihal: perihal.trim() });
       setTersalin(false);
       setPerihal("");
@@ -96,8 +95,8 @@ function FormAmbil({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
         <label className={LABEL}>Tanggal surat *
           <input type="date" className={INPUT} value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
         </label>
-        {j && pakaiKka && <PilihKka nilai={kka} onUbah={setKka} kode={kodeAktif} bawaan={kkaKegiatan ?? j.kka_bawaan} wajib />}
-        <label className={LABEL}>Kegiatan (bila ada)
+        {j && pakaiKka && <div className="sm:col-span-2"><PilihKka nilai={kka} onUbah={setKka} peng={peng} kode={kodeAktif} bawaan={j.kka_bawaan} wajib={!j.kka_bawaan} /></div>}
+        <label className={LABEL}>Kegiatan (penanda saja, tidak menentukan kode)
           <select className={INPUT} value={kegiatan} onChange={(e) => setKegiatan(e.target.value)}>
             <option value="">Tidak terkait kegiatan</option>
             {peng.kegiatan_semua.map((k) => <option key={k.id} value={k.id}>{k.nama}</option>)}
@@ -200,8 +199,8 @@ function FormLuar({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
         <label className={LABEL}>Nomor urut *
           <input inputMode="numeric" className={INPUT} value={urai ? String(urai.urut) : urut} disabled={!!urai} onChange={(e) => setUrut(e.target.value.replace(/\D/g, "").slice(0, 6))} />
         </label>
-        {j && pakaiKka && <PilihKka nilai={kka} onUbah={setKka} kode={kodeAktif} bawaan={urai?.kka ?? j.kka_bawaan} wajib />}
-        <label className={LABEL}>Kegiatan (bila ada)
+        {j && pakaiKka && <div className="sm:col-span-2"><PilihKka nilai={kka} onUbah={setKka} peng={peng} kode={kodeAktif} bawaan={urai?.kka ?? j.kka_bawaan} wajib={!(urai?.kka ?? j.kka_bawaan)} /></div>}
+        <label className={LABEL}>Kegiatan (penanda saja, tidak menentukan kode)
           <select className={INPUT} value={kegiatan} onChange={(e) => setKegiatan(e.target.value)}>
             <option value="">Tidak terkait kegiatan</option>
             {peng.kegiatan_semua.map((k) => <option key={k.id} value={k.id}>{k.nama}</option>)}

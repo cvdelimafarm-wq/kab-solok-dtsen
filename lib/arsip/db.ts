@@ -14,7 +14,7 @@ const bulat = (x: unknown): number | null => {
 
 function pesanDariDb(msg: string | undefined | null): string {
   const m = msg ?? "";
-  if (/Could not find the function|does not exist|schema cache/i.test(m)) return "Fitur penomoran belum aktif: jalankan SQL 20261107c_arsip_penomoran.sql terlebih dahulu.";
+  if (/Could not find the function|does not exist|schema cache/i.test(m)) return "Fitur penomoran belum lengkap: jalankan SQL 20261107c_arsip_penomoran.sql lalu 20261107e_arsip_kka_perka99.sql terlebih dahulu.";
   if (/arsip_nomor_urut_uq|duplicate key/i.test(m)) return "Nomor bentrok dengan nomor yang sudah tercatat. Muat ulang lalu coba lagi.";
   return m || "Terjadi kesalahan pada basis data.";
 }
@@ -126,27 +126,34 @@ export async function muatRingkas(db: Db, tahun: number): Promise<{ ok: true; co
   return { ok: true, counter: (c.data ?? []) as Counter[], celah, kembar: (k.data ?? []) as Kembar[], tahun_ada: tahunAda };
 }
 
-export type KodeArsip = { kode: string; nama: string; kelompok: string; catatan: string | null; aktif: boolean; diverifikasi: boolean };
+export type KodeArsip = { kode: string; nama: string; kelompok: string; catatan: string | null; aktif: boolean; diverifikasi: boolean; fungsi: string | null; induk: string | null; tingkat: number | null; sumber: string };
+export type FungsiArsip = { kode: string; nama: string; kelompok: string };
 export type JenisArsip = { kode: string; nama: string; kategori: KategoriArsip; register: string; format: string; keamanan: string; kka_bawaan: string | null; aktif: boolean; urutan: number; dasar: string | null };
 export type RegisterArsip = { kode: string; nama: string; catatan: string | null };
-export type KkaKegiatan = { kegiatan_id: number; kka: string; nama: string };
 
-export async function muatPengaturan(db: Db): Promise<{ ok: true; kode: KodeArsip[]; jenis: JenisArsip[]; register: RegisterArsip[]; kegiatan: KkaKegiatan[]; kegiatan_semua: { id: number; nama: string }[]; unit: string } | Galat> {
-  const [k, j, r, kk, keg, u] = await Promise.all([
-    db.from("arsip_kode").select("kode, nama, kelompok, catatan, aktif, diverifikasi").order("kode"),
+/** Kode arsip yang paling sering dipakai pada nomor yang sudah tercatat (untuk pilihan cepat). */
+export async function muatSering(db: Db, batas = 6): Promise<string[]> {
+  const { data } = await db.from("arsip_nomor").select("kka").not("kka", "is", null).eq("status", "terpakai").order("id", { ascending: false }).limit(2000);
+  const hitung = new Map<string, number>();
+  for (const r of (data ?? []) as { kka: string }[]) hitung.set(r.kka, (hitung.get(r.kka) ?? 0) + 1);
+  return Array.from(hitung.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, batas).map(([k]) => k);
+}
+
+export async function muatPengaturan(db: Db): Promise<{ ok: true; kode: KodeArsip[]; fungsi: FungsiArsip[]; sering: string[]; jenis: JenisArsip[]; register: RegisterArsip[]; kegiatan_semua: { id: number; nama: string }[]; unit: string } | Galat> {
+  const [k, f, j, r, keg, u, sering] = await Promise.all([
+    db.from("arsip_kode").select("kode, nama, kelompok, catatan, aktif, diverifikasi, fungsi, induk, tingkat, sumber").order("kode").limit(2000),
+    db.from("arsip_fungsi").select("kode, nama, kelompok").order("kode"),
     db.from("arsip_jenis").select("kode, nama, kategori, register, format, keamanan, kka_bawaan, aktif, urutan, dasar").order("urutan"),
     db.from("arsip_register").select("kode, nama, catatan").order("kode"),
-    db.from("arsip_kegiatan_kka").select("kegiatan_id, kka"),
     db.from("sigap_kegiatan").select("id, nama").order("id").limit(500),
     db.from("arsip_pengaturan").select("nilai").eq("kunci", "kode_unit").maybeSingle(),
+    muatSering(db),
   ]);
-  const e = k.error ?? j.error ?? r.error ?? kk.error ?? keg.error ?? u.error;
+  const e = k.error ?? f.error ?? j.error ?? r.error ?? keg.error ?? u.error;
   if (e) return { ok: false, status: 500, pesan: pesanDariDb(e.message) };
-  const nama = new Map(((keg.data ?? []) as { id: number; nama: string }[]).map((x) => [Number(x.id), x.nama]));
   return {
     ok: true,
-    kode: (k.data ?? []) as KodeArsip[], jenis: (j.data ?? []) as JenisArsip[], register: (r.data ?? []) as RegisterArsip[],
-    kegiatan: ((kk.data ?? []) as { kegiatan_id: number; kka: string }[]).map((x) => ({ kegiatan_id: Number(x.kegiatan_id), kka: x.kka, nama: nama.get(Number(x.kegiatan_id)) ?? `Kegiatan ${x.kegiatan_id}` })),
+    kode: (k.data ?? []) as KodeArsip[], fungsi: (f.data ?? []) as FungsiArsip[], sering, jenis: (j.data ?? []) as JenisArsip[], register: (r.data ?? []) as RegisterArsip[],
     kegiatan_semua: ((keg.data ?? []) as { id: number; nama: string }[]).map((x) => ({ id: Number(x.id), nama: x.nama })),
     unit: ((u.data as { nilai?: string } | null)?.nilai ?? ""),
   };
@@ -155,13 +162,25 @@ export async function muatPengaturan(db: Db): Promise<{ ok: true; kode: KodeArsi
 // ---------------------------------------------------------------------------------------------------------------------
 // Pengaturan (ditulis langsung dengan service role setelah diperiksa)
 // ---------------------------------------------------------------------------------------------------------------------
-export async function simpanKode(db: Db, m: { kode: string; nama: string; kelompok: string; catatan?: string | null; aktif: boolean; diverifikasi: boolean }): Promise<{ ok: true } | Galat> {
+/**
+ * Kode resmi Perka BPS 99/2018 (sumber = perka99) tidak boleh diubah uraiannya; hanya boleh dinonaktifkan agar tidak muncul di pilihan.
+ * Kode tambahan (sumber = tambahan) boleh dibuat untuk kebutuhan kantor yang tidak ada di Perka; dua huruf awalnya harus fungsi resmi.
+ */
+export async function simpanKode(db: Db, m: { kode: string; nama: string; kelompok: string; catatan?: string | null; aktif: boolean }): Promise<{ ok: true } | Galat> {
   const kode = m.kode.trim().toUpperCase();
   if (!kkaSah(kode)) return { ok: false, status: 400, pesan: "Kode harus berbentuk dua huruf, titik, tiga angka (mis. VS.330)." };
+  const { data: ada } = await db.from("arsip_kode").select("kode, sumber").eq("kode", kode).maybeSingle();
+  if ((ada as { sumber?: string } | null)?.sumber === "perka99") {
+    const { error } = await db.from("arsip_kode").update({ aktif: m.aktif, diubah_at: new Date().toISOString() }).eq("kode", kode);
+    return error ? { ok: false, status: 400, pesan: pesanDariDb(error.message) } : { ok: true };
+  }
   const nama = m.nama.trim();
   if (nama.length < 3 || nama.length > 200) return { ok: false, status: 400, pesan: "Nama kode arsip 3 sampai 200 huruf." };
   if (!["substantif", "fasilitatif"].includes(m.kelompok)) return { ok: false, status: 400, pesan: "Kelompok tidak sah." };
-  const { error } = await db.from("arsip_kode").upsert({ kode, nama, kelompok: m.kelompok, catatan: m.catatan?.trim() || null, aktif: m.aktif, diverifikasi: m.diverifikasi, diubah_at: new Date().toISOString() }, { onConflict: "kode" });
+  const fungsi = kode.slice(0, 2);
+  const { data: f } = await db.from("arsip_fungsi").select("kode").eq("kode", fungsi).maybeSingle();
+  if (!f) return { ok: false, status: 400, pesan: `Awalan ${fungsi} bukan bidang resmi pada Perka BPS 99/2018. Gunakan awalan yang ada di daftar.` };
+  const { error } = await db.from("arsip_kode").upsert({ kode, nama, kelompok: m.kelompok, catatan: m.catatan?.trim() || null, aktif: m.aktif, diverifikasi: false, fungsi, sumber: "tambahan", diubah_at: new Date().toISOString() }, { onConflict: "kode" });
   return error ? { ok: false, status: 400, pesan: pesanDariDb(error.message) } : { ok: true };
 }
 
@@ -211,18 +230,6 @@ export async function simpanJenis(db: Db, m: { kode: string; nama?: string; regi
   const { data: j } = await db.from("arsip_jenis").select("kode, format").eq("kode", kode).maybeSingle();
   if (!j) return { ok: false, status: 404, pesan: "Jenis dokumen tidak ditemukan." };
   const { error } = await db.from("arsip_jenis").update(isi).eq("kode", kode);
-  return error ? { ok: false, status: 400, pesan: pesanDariDb(error.message) } : { ok: true };
-}
-
-export async function simpanKkaKegiatan(db: Db, kegiatanId: number, kka: string | null): Promise<{ ok: true } | Galat> {
-  if (!bulat(kegiatanId)) return { ok: false, status: 400, pesan: "Kegiatan tidak valid." };
-  if (!kka) {
-    const { error } = await db.from("arsip_kegiatan_kka").delete().eq("kegiatan_id", kegiatanId);
-    return error ? { ok: false, status: 500, pesan: pesanDariDb(error.message) } : { ok: true };
-  }
-  const { data } = await db.from("arsip_kode").select("kode").eq("kode", kka).maybeSingle();
-  if (!data) return { ok: false, status: 400, pesan: "Kode arsip tidak ada di daftar kode arsip." };
-  const { error } = await db.from("arsip_kegiatan_kka").upsert({ kegiatan_id: kegiatanId, kka, diubah_at: new Date().toISOString() }, { onConflict: "kegiatan_id" });
   return error ? { ok: false, status: 400, pesan: pesanDariDb(error.message) } : { ok: true };
 }
 

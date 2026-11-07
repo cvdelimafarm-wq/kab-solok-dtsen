@@ -2,28 +2,29 @@
 
 // app/sigap/arsip/TombolNomorOtomatis.tsx
 //
-// (7 Nov 2026) Tombol "Nomor otomatis" untuk dokumen turunan identifikasi lanjutan (undangan, surat pengantar ke nagari, surat tugas).
-// Memanggil POST /api/sigap/arsip/ambil { untuk:"lanjutan" } dengan izin yang sama dengan menyusun/menyetujui dokumen itu (ketua tim, admin RO, PPK, TU RO).
+// (7 Nov 2026) Tombol "Nomor otomatis" untuk dokumen yang dibuat di dalam SIGAP: surat tugas translok (halaman Penugasan) dan dokumen turunan
+// identifikasi lanjutan (undangan, surat pengantar ke nagari, surat tugas). Memanggil POST /api/sigap/arsip/ambil dengan izin yang sama dengan mengurus dokumen itu.
 // Idempoten: dokumen yang sama selalu mendapat nomor yang sama selama nomornya belum dibatalkan di menu Arsip.
-// Bila jenis dokumen tidak punya kode arsip bawaan (mis. surat pengantar ke nagari), tombol meminta kode arsip lebih dulu.
 //
-// Pemakaian di halaman dokumen lanjutan (ganti isian "Nomor surat (diisi manual)"):
-//   <TombolNomorOtomatis ident={identId} jenis="pengantar" kunci={kunciDokumen} tanggal={tanggalSurat} bolehUbah={bolehUbah} onNomor={(n) => setNomorSurat(n)} />
+// Kode klasifikasi arsip mengikuti Perka BPS 99/2018 dan dipilih menurut ISI surat (pokok masalah), bukan menurut kegiatan: mis. surat tugas pelatihan petugas
+// memakai VS.220, surat tugas pengumpulan data VS.330. Karena itu pemilih kode selalu tampil untuk pola nomor yang memuat {kka}.
+//
+// Pemakaian:
+//   Penugasan : <TombolNomorOtomatis badan={{ untuk: "st", penugasan_id: id, tanggal }} jenisArsip="st" onNomor={setNomor} />
+//   Lanjutan  : <TombolNomorOtomatis badan={{ untuk: "lanjutan", ident, jenis: "pengantar", kunci, tanggal }} jenisArsip={JENIS_ARSIP_LANJUTAN.pengantar} onNomor={...} />
 
 import { useEffect, useState } from "react";
 import { fetchJson, pesanGalat, SesiBerakhir } from "../admin/api";
-import { BTN_O, INPUT } from "../admin/ui";
-import { JENIS_ARSIP_LANJUTAN } from "@/lib/arsip/nomor";
+import { BTN_O } from "../admin/ui";
+import PilihKodeArsip, { kodeTerpilihSah, type OpsiFungsi, type OpsiKode } from "./PilihKodeArsip";
 
-type Pilihan = { kode: { kode: string; nama: string }[]; jenis: { kode: string; nama: string; kka_bawaan: string | null; format: string }[] };
+type Pilihan = { kode: OpsiKode[]; fungsi: OpsiFungsi[]; sering: string[]; jenis: { kode: string; nama: string; kka_bawaan: string | null; format: string }[] };
 
-export default function TombolNomorOtomatis({ ident, jenis, kunci, tanggal, bolehUbah = true, onNomor }: {
-  ident: number;
-  jenis: keyof typeof JENIS_ARSIP_LANJUTAN;
-  /** Pengenal dokumen yang stabil (mis. id kelas/nagari/penugasan) agar satu dokumen tidak mengambil dua nomor. */
-  kunci: string;
-  /** Tanggal surat (YYYY-MM-DD); kosong = hari ini. Tahun nomor mengikuti tanggal ini. */
-  tanggal?: string | null;
+export default function TombolNomorOtomatis({ badan, jenisArsip, bolehUbah = true, onNomor }: {
+  /** Isi permintaan ke /api/sigap/arsip/ambil (tanpa kka; kka ditambahkan dari pemilih). */
+  badan: Record<string, unknown>;
+  /** Kode jenis arsip yang dipakai (st, undangan, pengantar_nagari, ...), untuk mengetahui apakah polanya memuat {kka}. */
+  jenisArsip: string;
   bolehUbah?: boolean;
   onNomor: (nomor: string) => void;
 }) {
@@ -43,8 +44,10 @@ export default function TombolNomorOtomatis({ ident, jenis, kunci, tanggal, bole
   }, [bolehUbah]);
 
   if (!bolehUbah) return null;
-  const jenisArsip = pilihan?.jenis.find((j) => j.kode === JENIS_ARSIP_LANJUTAN[jenis]) ?? null;
-  const perluPilihKka = !!jenisArsip && jenisArsip.format.includes("{kka}") && !jenisArsip.kka_bawaan;
+  const j = pilihan?.jenis.find((x) => x.kode === jenisArsip) ?? null;
+  const pakaiKka = !!j && j.format.includes("{kka}");
+  const kkaEfektif = kka.trim().toUpperCase() || j?.kka_bawaan || "";
+  const siap = !!pilihan && (!pakaiKka || (!!kkaEfektif && kodeTerpilihSah(pilihan.kode, kkaEfektif)));
 
   async function ambil() {
     setSibuk(true);
@@ -54,7 +57,7 @@ export default function TombolNomorOtomatis({ ident, jenis, kunci, tanggal, bole
       const r = await fetchJson<{ nomor: string; sudah_ada: boolean }>("/api/sigap/arsip/ambil", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ untuk: "lanjutan", ident, jenis, kunci, tanggal: tanggal || undefined, kka: kka || undefined }),
+        body: JSON.stringify({ ...badan, kka: pakaiKka ? kkaEfektif || undefined : undefined }),
       });
       onNomor(r.nomor);
       setInfo(r.sudah_ada ? "Dokumen ini sudah punya nomor; nomor yang sama dipakai." : "Nomor diambil dan tercatat di menu Arsip.");
@@ -66,15 +69,12 @@ export default function TombolNomorOtomatis({ ident, jenis, kunci, tanggal, bole
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2">
-        {perluPilihKka && (
-          <select aria-label="Kode arsip" className={INPUT} value={kka} onChange={(e) => setKka(e.target.value)}>
-            <option value="">Pilih kode arsip…</option>
-            {pilihan?.kode.map((k) => <option key={k.kode} value={k.kode}>{k.kode} · {k.nama}</option>)}
-          </select>
-        )}
-        <button type="button" className={BTN_O} disabled={sibuk || !pilihan || (perluPilihKka && !kka)} onClick={() => void ambil()} title="Ambil nomor berikutnya dari buku nomor (menu Arsip)">
+    <div className="flex flex-col gap-1.5">
+      {pakaiKka && pilihan && (
+        <PilihKodeArsip kode={pilihan.kode} fungsi={pilihan.fungsi} sering={pilihan.sering} nilai={kka} onUbah={setKka} bawaan={j?.kka_bawaan ?? null} wajib={!j?.kka_bawaan} />
+      )}
+      <div>
+        <button type="button" className={BTN_O} disabled={sibuk || !siap} onClick={() => void ambil()} title="Ambil nomor berikutnya dari buku nomor (menu Arsip)">
           {sibuk ? "Mengambil…" : "Nomor otomatis"}
         </button>
       </div>

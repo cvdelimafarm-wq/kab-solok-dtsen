@@ -42,11 +42,11 @@ describe("kode arsip dan pemilihan", () => {
     for (const k of ["VS.330", "SS.330", "VS.230", "KU.200", "KA.410.1"]) expect(kkaSah(k)).toBe(true);
     for (const k of ["vs.330", "VS330", "V.330", "VS.33", ""]) expect(kkaSah(k)).toBe(false);
   });
-  it("pilihKka: eksplisit mengalahkan kegiatan, kegiatan mengalahkan bawaan", () => {
-    expect(pilihKka("SS.330", "VS.330", "VS.230")).toBe("SS.330");
-    expect(pilihKka("", "VS.330", "VS.230")).toBe("VS.330");
-    expect(pilihKka(null, undefined, "VS.230")).toBe("VS.230");
-    expect(pilihKka(" ", null, null)).toBeNull();
+  it("pilihKka: pilihan eksplisit mengalahkan bawaan jenis; tidak ada kode per kegiatan (Perka BPS 99/2018)", () => {
+    expect(pilihKka("SS.330", "VS.230")).toBe("SS.330");
+    expect(pilihKka("", "VS.230")).toBe("VS.230");
+    expect(pilihKka(null, undefined)).toBeNull();
+    expect(pilihKka(" ", null)).toBeNull();
   });
 });
 

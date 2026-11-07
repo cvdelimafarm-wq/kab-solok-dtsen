@@ -54,9 +54,13 @@ export const perluUnit = (format: string): boolean => format.includes("{unit}");
 export const KKA_SAH = /^[A-Z]{2}\.[0-9]{3}(\.[0-9]+)?$/;
 export const kkaSah = (k: string): boolean => KKA_SAH.test(k.trim());
 
-/** Urutan pemilihan kode arsip: pilihan eksplisit, lalu kode kegiatan, lalu bawaan jenis (sama dengan fungsi SQL arsip_ambil_nomor). */
-export function pilihKka(eksplisit: string | null | undefined, kegiatan: string | null | undefined, bawaan: string | null | undefined): string | null {
-  for (const k of [eksplisit, kegiatan, bawaan]) {
+/**
+ * Urutan pemilihan kode arsip: pilihan eksplisit, lalu bawaan jenis (sama dengan fungsi SQL arsip_ambil_nomor).
+ * Menurut Perka BPS 99/2018 kode klasifikasi ditentukan oleh pokok masalah (isi surat), bukan oleh kegiatan atau survei,
+ * sehingga tidak ada kode bawaan per kegiatan.
+ */
+export function pilihKka(eksplisit: string | null | undefined, bawaan: string | null | undefined): string | null {
+  for (const k of [eksplisit, bawaan]) {
     const v = (k ?? "").trim();
     if (v) return v;
   }
@@ -73,6 +77,9 @@ export function uraiNomor(teks: string): NomorUrai | null {
   m = /^(\d{1,6})\/(\d{5})\/([A-Z]{2}\.\d{3}(?:\.\d+)?)\/(\d{4})$/.exec(t);
   if (m) return { keamanan: null, urut: Number(m[1]), unit: m[2], kka: m[3], tahun: Number(m[4]) };
   m = /^(\d{1,6})\/(\d{4})$/.exec(t);
+  if (m) return { keamanan: null, urut: Number(m[1]), unit: null, kka: null, tahun: Number(m[2]) };
+  // Dokumen pengadaan: 074/PPK-BPSKAB/SOLOK/K/2026 (nomor, kode tetap bergaris miring, tahun)
+  m = /^(\d{1,6})(?:\/[A-Za-z0-9-]+)+\/(\d{4})$/.exec(t);
   if (m) return { keamanan: null, urut: Number(m[1]), unit: null, kka: null, tahun: Number(m[2]) };
   return null;
 }

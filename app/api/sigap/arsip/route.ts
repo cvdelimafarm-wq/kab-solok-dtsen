@@ -1,25 +1,27 @@
 // app/api/sigap/arsip/route.ts
 //
 // (7 Nov 2026) Menu Arsip: buku nomor surat, kode klasifikasi arsip, format nomor. Izin: menu `arsip.kelola` (lihat untuk membaca, kelola untuk mengubah).
-// Logika: lib/arsip/nomor.ts (murni) dan lib/arsip/db.ts (basis data). SQL: 20261107c_arsip_penomoran.sql.
+// Logika: lib/arsip/nomor.ts (murni), lib/arsip/pbj.ts (murni) dan lib/arsip/db.ts (basis data). SQL: 20261107c_arsip_penomoran.sql, 20261107e_arsip_kka_perka99.sql.
+// Kode klasifikasi arsip mengikuti Perka BPS 99/2018: dipilih menurut isi surat, tidak melekat pada kegiatan atau survei.
 //
 // GET  ?bagian=buku&tahun=&jenis=&status=&sumber=&cari=   -> { baris[], terpotong }
 // GET  ?bagian=ringkas&tahun=                              -> { counter[], celah[], kembar[], tahun_ada[] }
-// GET  ?bagian=pengaturan                                  -> { kode[], jenis[], register[], kegiatan[], kegiatan_semua[], unit }
+// GET  ?bagian=pengaturan                                  -> { kode[], fungsi[], sering[], jenis[], register[], kegiatan_semua[], unit }
 // POST { aksi:"ambil", jenis, kka?, tanggal?, perihal?, kegiatan_id? }                 -> { nomor, ... }  (mengambil nomor untuk surat yang dibuat di luar SIGAP)
+// POST { aksi:"ambil_paket", paket, butir:[{kode, tanggal}] }                           -> { hasil[] }     (nomor dokumen pengadaan barang/jasa satu paket; idempoten per paket+butir)
 // POST { aksi:"catat_luar", jenis, urut, tanggal, perihal?, kka?, kegiatan_id?, nomor? } -> { nomor }      (mencatat nomor yang sudah terbit di luar SIGAP)
 // POST { aksi:"batalkan", id, alasan }                     -> { nomor }
 // POST { aksi:"atur_awal", register, tahun, terakhir }     -> { sebelumnya }   (hanya naik)
-// POST { aksi:"simpan_kode", kode, nama, kelompok, catatan?, aktif, diverifikasi }
+// POST { aksi:"simpan_kode", kode, nama, kelompok, catatan?, aktif }   (kode resmi Perka hanya bisa dinonaktifkan; kode tambahan boleh dibuat)
 // POST { aksi:"simpan_jenis", kode, ...bagian yang diubah | baru:true + kategori }
-// POST { aksi:"simpan_kka_kegiatan", kegiatan_id, kka|null }
 // POST { aksi:"simpan_unit", unit }
 // Tindakan menulis tidak berlaku untuk sesi "masuk sebagai".
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import { boleh, catatAudit, izinAkun, sesiLengkapDariHeader } from "@/lib/sigapAkses";
-import { aturAwal, ambilNomor, batalkanNomor, catatLuar, muatBuku, muatPengaturan, muatRingkas, simpanJenis, simpanKkaKegiatan, simpanKode, simpanUnit } from "@/lib/arsip/db";
+import { DAFTAR_PBJ, KODE_JENIS_PBJ, KODE_PBJ_SAH, rujukanPbj, slugPaket } from "@/lib/arsip/pbj";
+import { aturAwal, ambilNomor, batalkanNomor, catatLuar, muatBuku, muatPengaturan, muatRingkas, simpanJenis, simpanKode, simpanUnit } from "@/lib/arsip/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,7 +62,7 @@ export async function GET(req: NextRequest) {
     }
     if (bagian === "pengaturan") {
       const r = await muatPengaturan(db);
-      return r.ok ? NextResponse.json({ kode: r.kode, jenis: r.jenis, register: r.register, kegiatan: r.kegiatan, kegiatan_semua: r.kegiatan_semua, unit: r.unit }) : galat(r.pesan, r.status);
+      return r.ok ? NextResponse.json({ kode: r.kode, fungsi: r.fungsi, sering: r.sering, jenis: r.jenis, register: r.register, kegiatan_semua: r.kegiatan_semua, unit: r.unit }) : galat(r.pesan, r.status);
     }
     return galat("Bagian tidak dikenal.");
   } catch (e) {
@@ -90,6 +92,31 @@ export async function POST(req: NextRequest) {
       if (!r.ok) return galat(r.pesan, r.status);
       await catatAudit(db, sesi.akunId, "arsip.ambil", { id: r.id, nomor: r.nomor, jenis });
       return NextResponse.json({ ok: true, id: r.id, nomor: r.nomor, urut: r.urut, tahun: r.tahun, kka: r.kka });
+    }
+
+    if (aksi === "ambil_paket") {
+      const paket = teks(b.paket, 120);
+      if (!paket || paket.length < 5 || !slugPaket(paket)) return galat("Nama paket pengadaan wajib diisi (minimal 5 huruf).");
+      if (!Array.isArray(b.butir) || b.butir.length === 0 || b.butir.length > DAFTAR_PBJ.length) return galat("Pilih dokumen yang akan diberi nomor.");
+      const daftar: { kode: string; tanggal: string }[] = [];
+      for (const x of b.butir as unknown[]) {
+        const o = (x ?? {}) as Record<string, unknown>;
+        const kode = typeof o.kode === "string" ? o.kode : "";
+        const tanggal = typeof o.tanggal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.tanggal) ? o.tanggal : "";
+        if (!KODE_PBJ_SAH.has(kode) || !tanggal) return galat("Dokumen atau tanggal tidak valid.");
+        if (daftar.some((d) => d.kode === kode)) return galat("Dokumen yang sama dipilih dua kali.");
+        daftar.push({ kode, tanggal });
+      }
+      // Nomor diambil berurutan sesuai urutan daftar, supaya urutan nomor mengikuti urutan dokumen.
+      const hasil: { kode: string; nama: string; nomor: string; sudah_ada: boolean }[] = [];
+      for (const d of daftar) {
+        const butir = DAFTAR_PBJ.find((x) => x.kode === d.kode)!;
+        const r = await ambilNomor(db, { jenis: KODE_JENIS_PBJ, tanggal: d.tanggal, perihal: `${paket}: ${butir.nama}`, rujukan: rujukanPbj(paket, d.kode), akunId: sesi.akunId, nama });
+        if (!r.ok) return NextResponse.json({ error: `${butir.nama}: ${r.pesan}`, hasil }, { status: r.status });
+        hasil.push({ kode: d.kode, nama: butir.nama, nomor: r.nomor, sudah_ada: r.sudah_ada });
+      }
+      await catatAudit(db, sesi.akunId, "arsip.ambil_paket", { paket, jumlah: hasil.length, baru: hasil.filter((h) => !h.sudah_ada).length });
+      return NextResponse.json({ ok: true, hasil });
     }
 
     if (aksi === "catat_luar") {
@@ -125,9 +152,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (aksi === "simpan_kode") {
-      const r = await simpanKode(db, { kode: String(b.kode ?? ""), nama: String(b.nama ?? ""), kelompok: String(b.kelompok ?? "substantif"), catatan: teks(b.catatan, 300), aktif: b.aktif !== false, diverifikasi: b.diverifikasi === true });
+      const r = await simpanKode(db, { kode: String(b.kode ?? ""), nama: String(b.nama ?? ""), kelompok: String(b.kelompok ?? "substantif"), catatan: teks(b.catatan, 300), aktif: b.aktif !== false });
       if (!r.ok) return galat(r.pesan, r.status);
-      await catatAudit(db, sesi.akunId, "arsip.kode", { kode: b.kode, aktif: b.aktif !== false, diverifikasi: b.diverifikasi === true });
+      await catatAudit(db, sesi.akunId, "arsip.kode", { kode: b.kode, aktif: b.aktif !== false });
       return NextResponse.json({ ok: true });
     }
 
@@ -144,15 +171,6 @@ export async function POST(req: NextRequest) {
       });
       if (!r.ok) return galat(r.pesan, r.status);
       await catatAudit(db, sesi.akunId, "arsip.jenis", { kode: b.kode, format: b.format, aktif: b.aktif, baru: b.baru === true });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (aksi === "simpan_kka_kegiatan") {
-      const kid = bulat(b.kegiatan_id);
-      if (!kid) return galat("Kegiatan tidak valid.");
-      const r = await simpanKkaKegiatan(db, kid, teks(b.kka, 20));
-      if (!r.ok) return galat(r.pesan, r.status);
-      await catatAudit(db, sesi.akunId, "arsip.kka_kegiatan", { kegiatan_id: kid, kka: b.kka ?? null });
       return NextResponse.json({ ok: true });
     }
 

@@ -3,13 +3,13 @@
 // (7 Nov 2026) Helper fetch menu Arsip (sesi SIGAP yang sama dengan halaman kelola lain) dan bentuk data jawaban API /api/sigap/arsip.
 
 import { fetchJson } from "../../admin/api";
-import type { BarisNomor, Celah, Counter, JenisArsip, KkaKegiatan, KodeArsip, Kembar, RegisterArsip } from "@/lib/arsip/db";
+import type { BarisNomor, Celah, Counter, FungsiArsip, JenisArsip, KodeArsip, Kembar, RegisterArsip } from "@/lib/arsip/db";
 
-export type { BarisNomor, Celah, Counter, JenisArsip, KkaKegiatan, KodeArsip, Kembar, RegisterArsip };
+export type { BarisNomor, Celah, Counter, FungsiArsip, JenisArsip, KodeArsip, Kembar, RegisterArsip };
 
 export type DataBuku = { baris: BarisNomor[]; terpotong: boolean; boleh_kelola: boolean };
 export type DataRingkas = { counter: Counter[]; celah: Celah[]; kembar: Kembar[]; tahun_ada: number[]; tahun: number };
-export type DataPengaturan = { kode: KodeArsip[]; jenis: JenisArsip[]; register: RegisterArsip[]; kegiatan: KkaKegiatan[]; kegiatan_semua: { id: number; nama: string }[]; unit: string };
+export type DataPengaturan = { kode: KodeArsip[]; fungsi: FungsiArsip[]; sering: string[]; jenis: JenisArsip[]; register: RegisterArsip[]; kegiatan_semua: { id: number; nama: string }[]; unit: string };
 
 export function ambilA<T>(param: Record<string, string | number | null | undefined>): Promise<T> {
   const q = new URLSearchParams();

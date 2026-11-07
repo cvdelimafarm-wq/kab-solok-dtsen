@@ -14,6 +14,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { aksi, ambil, bukaUrlAsync, fetchJson, pesanGalat, rentangPendek, SesiBerakhir } from "./api";
 import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TabelKartu, TD, TH } from "./ui";
 import UnggahSt from "./UnggahSt";
+import TombolNomorOtomatis from "../arsip/TombolNomorOtomatis";
 import SelectCari from "@/app/components/SelectCari";
 import PeringatanBeban from "./PeringatanBeban"; // (1 Nov 2026) peringatan beban calon (Delego + penugasan lain)
 
@@ -205,7 +206,6 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
   const [tujuan, setTujuan] = useState((b.st?.tujuan ?? []).join(", "));
   const [busy, setBusy] = useState<"pen" | "st" | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
-  const [ambilNo, setAmbilNo] = useState(false);
   const opsi = opsiPeran.includes(b.peran) ? opsiPeran : [b.peran, ...opsiPeran];
 
   async function simpanPen() {
@@ -220,19 +220,6 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
     } finally {
       setBusy(null);
-    }
-  }
-  // (7 Nov 2026) Nomor ST otomatis dari menu Arsip (Peraturan BPS 1/2023 Pasal 63). Idempoten: menekan lagi untuk penugasan yang sama mengembalikan nomor yang sama.
-  async function ambilNomorOtomatis() {
-    setAmbilNo(true);
-    setGalat(null);
-    try {
-      const r = await fetchJson<{ nomor: string }>("/api/sigap/arsip/ambil", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ untuk: "st", penugasan_id: b.id, tanggal: tglSt || undefined }) });
-      setNomor(r.nomor);
-    } catch (e) {
-      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
-    } finally {
-      setAmbilNo(false);
     }
   }
   async function simpanSt() {
@@ -301,13 +288,13 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
               <span className={label}>Nomor ST</span>
               <div className="flex gap-2">
                 <input value={nomor} onChange={(e) => setNomor(e.target.value)} placeholder="mis. B-1285/13030/VS.330/2026" className={`${INPUT} min-w-0 flex-1`} disabled={!kelola} />
-                {kelola && !b.st?.nomor && (
-                  <button type="button" className={BTN_O} disabled={ambilNo} onClick={() => void ambilNomorOtomatis()} title="Ambil nomor berikutnya dari buku nomor (menu Arsip)">
-                    {ambilNo ? "Mengambil…" : "Nomor otomatis"}
-                  </button>
-                )}
               </div>
-              {kelola && !b.st?.nomor && <span className="text-[11.5px] text-[#5B6B84]">Isi tanggal terbit lebih dulu bila bukan hari ini; nomor mengikuti tahun tanggal itu.</span>}
+              {kelola && !b.st?.nomor && (
+                <div className="mt-1 rounded-lg border border-dashed border-[#C9D5EA] bg-[#F7F9FD] p-2">
+                  <TombolNomorOtomatis badan={{ untuk: "st", penugasan_id: b.id, tanggal: tglSt || undefined }} jenisArsip="st" onNomor={setNomor} />
+                  <span className="mt-1 block text-[11.5px] text-[#5B6B84]">Pilih kode arsip sesuai isi surat tugas (Perka BPS 99/2018): mis. VS.220 untuk pelatihan petugas, VS.330 untuk pengumpulan data. Isi tanggal terbit lebih dulu bila bukan hari ini; nomor mengikuti tahun tanggal itu.</span>
+                </div>
+              )}
             </label>
             <label className="flex flex-col gap-0.5">
               <span className={label}>Tanggal terbit</span>

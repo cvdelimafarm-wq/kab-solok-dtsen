@@ -3,8 +3,9 @@
 // (7 Nov 2026) Pintu pengambilan nomor untuk dokumen yang dibuat di dalam SIGAP (bukan dari menu Arsip). Tiap dokumen yang bernomor memanggil pintu ini
 // dengan izin yang SAMA dengan izin mengurus dokumen itu sendiri; nomor lalu tercatat di buku (menu Arsip).
 //
-// GET                                                       -> { kode[] aktif, jenis[] aktif }   (untuk pilihan kode arsip; semua akun yang masuk)
-// POST { untuk:"st", penugasan_id, tanggal?, kka? }          -> { nomor }  Surat tugas translok. Izin: Kelola menu `translok.penugasan` pada kegiatannya (sama dengan menyimpan ST).
+// GET                                                       -> { kode[] aktif, fungsi[], sering[], jenis[] aktif }   (untuk pilihan kode arsip Perka BPS 99/2018; semua akun yang masuk)
+// POST { untuk:"st", penugasan_id, tanggal?, kka }            -> { nomor }  (kka wajib: kode arsip menurut isi surat, mis. VS.220 pelatihan petugas, VS.330 pengumpulan data)
+//                                                                Surat tugas translok. Izin: Kelola menu `translok.penugasan` pada kegiatannya (sama dengan menyimpan ST).
 //                                                              Ditolak bila penugasan sudah punya ST bernomor (tidak menimpa nomor yang ada).
 // POST { untuk:"lanjutan", ident, jenis, kunci, tanggal?, kka? } -> { nomor }  Dokumen turunan identifikasi lanjutan (undangan, pengantar, surat tugas/SPK).
 //                                                              Izin: hak susun atau hak setuju identifikasi RO itu (keu_boleh ident_susun / ident_setuju).
@@ -14,7 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
 import { boleh, catatAudit, izinAkun, sesiLengkapDariHeader } from "@/lib/sigapAkses";
 import { panggilKeu } from "@/lib/keu/gerbang";
-import { ambilNomor } from "@/lib/arsip/db";
+import { ambilNomor, muatSering } from "@/lib/arsip/db";
 import { JENIS_ARSIP_LANJUTAN, rujukanLanjutan, rujukanPenugasan } from "@/lib/arsip/nomor";
 import { NAMA_DOKUMEN } from "@/lib/keu/lanjutan";
 
@@ -39,12 +40,14 @@ export async function GET(req: NextRequest) {
     const db = dbServer();
     if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
     if (!sesiLengkapDariHeader(req.headers)) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
-    const [k, j] = await Promise.all([
-      db.from("arsip_kode").select("kode, nama").eq("aktif", true).order("kode"),
+    const [k, f, j, sering] = await Promise.all([
+      db.from("arsip_kode").select("kode, nama, fungsi").eq("aktif", true).order("kode").limit(2000),
+      db.from("arsip_fungsi").select("kode, nama").order("kode"),
       db.from("arsip_jenis").select("kode, nama, kka_bawaan, format").eq("aktif", true).order("urutan"),
+      muatSering(db),
     ]);
-    if (k.error || j.error) return galat("Fitur penomoran belum aktif: jalankan SQL 20261107c_arsip_penomoran.sql terlebih dahulu.", 500);
-    return NextResponse.json({ kode: k.data ?? [], jenis: j.data ?? [] });
+    if (k.error || f.error || j.error) return galat("Fitur penomoran belum lengkap: jalankan SQL 20261107c_arsip_penomoran.sql lalu 20261107e_arsip_kka_perka99.sql terlebih dahulu.", 500);
+    return NextResponse.json({ kode: k.data ?? [], fungsi: f.data ?? [], sering, jenis: j.data ?? [] });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }
