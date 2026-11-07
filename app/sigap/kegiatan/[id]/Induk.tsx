@@ -158,13 +158,22 @@ function HariIniSederhana({ kode, items, peran, langkah }: { kode: string; items
         {awas && <BarisPengawasan kode={kode} peran={peran} label={awas.label} href={awas.href} />}
         <section aria-label="Menu kegiatan" className="space-y-2.5 rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)]">
           <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Menu kegiatan</h2>
-          {pintasan.map((i) => (
-            <Link key={i.kunci} href={i.href} className="flex min-h-[52px] items-center justify-between gap-2 rounded-[14px] border border-[#DCE5F2] bg-[#F8FAFE] px-4 text-[14px] font-extrabold text-[#0F2A52] active:bg-[#EAF1FC]">
-              {i.label}
-              <IkonMenu n="panah" className="h-4 w-4" />
-            </Link>
-          ))}
-          {kamera && (
+          {pintasan.map((i) =>
+            i.nonaktif ? (
+              <div key={i.kunci} className="flex min-h-[52px] items-center justify-between gap-2 rounded-[14px] border border-dashed border-[#DCE5F2] bg-[#F8FAFE] px-4 text-[14px] font-extrabold text-[#8B99AE]">
+                <span className="min-w-0">
+                  {i.label}
+                  <small className="block text-[11.5px] font-medium leading-snug">{i.nonaktif}</small>
+                </span>
+              </div>
+            ) : (
+              <Link key={i.kunci} href={i.href} className="flex min-h-[52px] items-center justify-between gap-2 rounded-[14px] border border-[#DCE5F2] bg-[#F8FAFE] px-4 text-[14px] font-extrabold text-[#0F2A52] active:bg-[#EAF1FC]">
+                {i.label}
+                <IkonMenu n="panah" className="h-4 w-4" />
+              </Link>
+            ),
+          )}
+          {kamera && !kamera.nonaktif && (
             <Link href={kamera.href} className="flex min-h-[52px] items-center justify-between gap-2 rounded-[14px] bg-[#0F2A52] px-4 text-[14px] font-extrabold text-white">
               Buka Kamera SIGAP
               <IkonMenu n="panah" className="h-4 w-4" />

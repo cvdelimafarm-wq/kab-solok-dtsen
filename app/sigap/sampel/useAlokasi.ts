@@ -39,7 +39,11 @@ type RespKk = { kk: KkMaster[] } & Partial<DataTagSub>;
 export type AksiTag =
   | { aksi: "tag"; s: string; kk: number; peran: "utama" | "cadangan" }
   | { aksi: "lepas"; kk: number }
-  | { aksi: "hasil"; kk: number; hasil: "didata" | "menolak" | "tidak_ditemukan" | null };
+  | { aksi: "hasil"; kk: number; hasil: "didata" | "menolak" | "tidak_ditemukan" | null }
+  // tahap B: penggantian sampel utama dengan cadangan (diajukan PPL, diputus PML)
+  | { aksi: "ganti_ajukan"; utama: number; cadangan: number; alasan: string; catatan?: string }
+  | { aksi: "ganti_batal"; id: number }
+  | { aksi: "ganti_putus"; id: number; setuju: boolean; catatan?: string };
 
 export function useAlokasiSaya(kegiatanId: number | null) {
   const [data, setData] = useState<DataAlokasiSaya | null>(null);
@@ -93,12 +97,12 @@ export function useAlokasiSaya(kegiatanId: number | null) {
       try {
         const r = await apiPortal<RespKk>(`${API_ALOKASI}?k=${kegiatanId}&s=${idsubsls}`);
         tulis(kunciKk(kegiatanId, idsubsls), r);
-        return { kk: r.kk, salinan: false, tag: r.jendela ? { jendela: r.jendela, target: r.target ?? 0, cadangan: r.cadangan ?? 0, tag: r.tag ?? [] } : null };
+        return { kk: r.kk, salinan: false, tag: r.jendela ? { jendela: r.jendela, target: r.target ?? 0, cadangan: r.cadangan ?? 0, tag: r.tag ?? [], ganti: r.ganti ?? [], boleh_ganti: r.boleh_ganti ?? true } : null };
       } catch (e) {
         const simpan = baca<RespKk | KkMaster[]>(kunciKk(kegiatanId, idsubsls));
         if (simpan) {
           const kk = Array.isArray(simpan) ? simpan : simpan.kk;
-          const tag = !Array.isArray(simpan) && simpan.jendela ? { jendela: simpan.jendela, target: simpan.target ?? 0, cadangan: simpan.cadangan ?? 0, tag: simpan.tag ?? [] } : null;
+          const tag = !Array.isArray(simpan) && simpan.jendela ? { jendela: simpan.jendela, target: simpan.target ?? 0, cadangan: simpan.cadangan ?? 0, tag: simpan.tag ?? [], ganti: simpan.ganti ?? [], boleh_ganti: simpan.boleh_ganti ?? true } : null;
           return { kk, salinan: true, tag };
         }
         throw e;

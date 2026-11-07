@@ -7,6 +7,8 @@ import type { Db } from "@/lib/sigap";
 import type { AkunPortal } from "@/lib/portal/server";
 import { GalatSampel, peranSampel } from "@/lib/portal/sampel";
 import { bacaAlokasi, muatKonfigAlokasi } from "@/lib/portal/alokasiWilayah";
+import { bacaGanti, bacaSetelanGanti, dataGantiAdmin } from "@/lib/portal/gantiSampel";
+import { GANTI_KOSONG, type DataGantiAdmin } from "@/lib/gantiSampel";
 import { bacaKodeSubsls, type DataAlokasiSaya, type KonfigAlokasi, type WilayahAlokasi } from "@/lib/alokasiWilayah";
 import {
   JENDELA_AWAL, MAKS_BARIS_TAG, periksaTagUnggah, petaKolomTag, rekapTagSub,
@@ -129,8 +131,8 @@ export async function dataTagSub(db: Db, akun: AkunPortal, kegiatanId: number, i
   if (!al) throw new GalatSampel("Sub SLS ini bukan bagian dari alokasi Anda.", 403);
   const konfig = await muatKonfigAlokasi(db, kegiatanId);
   const target = typeof (al as { target_sampel: unknown }).target_sampel === "number" ? ((al as { target_sampel: number }).target_sampel) : konfig.target_per_sls;
-  const [{ jendela }, tag] = await Promise.all([infoJendela(db, kegiatanId), tagAktif(db, kegiatanId, [idsubsls])]);
-  return { jendela, target, cadangan: konfig.cadangan_per_sls, tag: tag.map((t): TagKk => ({ kk_id: t.kk_id, peran: t.peran, hasil: t.hasil, via: t.via })) };
+  const [{ jendela }, tag, ganti, setelan] = await Promise.all([infoJendela(db, kegiatanId), tagAktif(db, kegiatanId, [idsubsls]), bacaGanti(db, kegiatanId, { idsubsls, batas: 100 }), bacaSetelanGanti(db, kegiatanId)]);
+  return { jendela, target, cadangan: konfig.cadangan_per_sls, tag: tag.map((t): TagKk => ({ kk_id: t.kk_id, peran: t.peran, hasil: t.hasil, via: t.via })), ganti: ganti.daftar, boleh_ganti: setelan.boleh_ganti };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -182,6 +184,8 @@ export type DataTagAdmin = {
   konfig: KonfigAlokasi;
   progres: BarisProgresTag[];
   total: { subsls: number; target: number; utama: number; cadangan: number; didata: number; selesai_ditag: number };
+  /** tahap B */
+  ganti: DataGantiAdmin;
 };
 
 export async function dataTagAdmin(db: Db, kegiatanId: number, bolehKelola: boolean): Promise<DataTagAdmin> {
@@ -201,7 +205,7 @@ export async function dataTagAdmin(db: Db, kegiatanId: number, bolehKelola: bool
     nks: w.nks, kecamatan: w.kecamatan, nagari: w.nagari, sls: w.sls, sub_sls: w.sub_sls, ppl_nama: w.ppl_nama, pml_nama: w.pml_nama, jumlah_kk: w.jumlah_kk,
   }));
   const total = progres.reduce((a, p) => ({ subsls: a.subsls + 1, target: a.target + p.target, utama: a.utama + p.utama, cadangan: a.cadangan + p.cad, didata: a.didata + p.didata, selesai_ditag: a.selesai_ditag + (p.utama >= p.target && p.target > 0 ? 1 : 0) }), { subsls: 0, target: 0, utama: 0, cadangan: 0, didata: 0, selesai_ditag: 0 });
-  return { sekarang: new Date().toISOString(), kegiatan: { id: kegiatanId, nama: String(keg.nama) }, boleh_kelola: bolehKelola, siap, jendela, riwayat: siap ? await riwayatJendela(db, kegiatanId) : [], konfig, progres, total };
+  return { sekarang: new Date().toISOString(), kegiatan: { id: kegiatanId, nama: String(keg.nama) }, boleh_kelola: bolehKelola, siap, jendela, riwayat: siap ? await riwayatJendela(db, kegiatanId) : [], konfig, progres, total, ganti: siap ? await dataGantiAdmin(db, kegiatanId, wilayah) : GANTI_KOSONG };
 }
 
 type KkRow = { id: number; idsubsls: string; nama_kk: string; anggota_lain: string | null; patokan: string | null };

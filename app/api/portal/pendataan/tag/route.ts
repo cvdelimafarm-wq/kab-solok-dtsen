@@ -9,6 +9,8 @@
 // POST { aksi: "tutup", k }                                 -> { ok, jendela }
 // POST { aksi: "pratinjau", k, baris, mode }                -> PratinjauTag (tidak menyimpan)
 // POST { aksi: "impor", k, baris, mode, nama_berkas }       -> { ok, ditambah, diganti, dilepas, sama }
+// POST { aksi: "ganti_putus", k, id, setuju, catatan? }     -> { ok, status }  (tahap B: admin memutus pengajuan penggantian atas nama PML; tercatat sebagai admin)
+// POST { aksi: "sinkron", k, nilai: "tidak"|"usulan" }      -> { ok, nilai }   (tahap B: setelan sinkron ke master KK)
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
@@ -16,6 +18,7 @@ import { aktorDariHeader, boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
 import { GalatSampel } from "@/lib/portal/sampel";
 import { bukaJendela, dataTagAdmin, imporTag, pratinjauTag, templatTagData, tutupJendela } from "@/lib/portal/tagSampel";
+import { putusGanti, simpanSinkronMaster } from "@/lib/portal/gantiSampel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,6 +73,16 @@ export async function POST(req: NextRequest) {
       const jendela = await tutupJendela(db, akun, k);
       await catatAudit(db, akun.id, "sampel_jendela_tutup", { kegiatan_id: k });
       return NextResponse.json({ ok: true, jendela });
+    }
+    if (body.aksi === "ganti_putus") {
+      const status = await putusGanti(db, akun, k, body.id, body.setuju, body.catatan, true);
+      await catatAudit(db, akun.id, "sampel_ganti_putus_admin", { kegiatan_id: k, pengajuan_id: Number(body.id) || null, status });
+      return NextResponse.json({ ok: true, status });
+    }
+    if (body.aksi === "sinkron") {
+      const nilai = await simpanSinkronMaster(db, k, body.nilai, akun.nama);
+      await catatAudit(db, akun.id, "sampel_sinkron_master", { kegiatan_id: k, nilai });
+      return NextResponse.json({ ok: true, nilai });
     }
     const mode = body.mode === "ganti" ? "ganti" : "tambah";
     if (body.aksi === "pratinjau") return NextResponse.json(await pratinjauTag(db, k, body.baris, mode));

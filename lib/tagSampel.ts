@@ -10,6 +10,7 @@
 
 import { bacaKodeSubsls, PANJANG_SUBSLS } from "@/lib/alokasiWilayah";
 import type { GalatBaris } from "@/lib/sampelSls";
+import type { GantiRow } from "@/lib/gantiSampel";
 
 export const API_TAG_ADMIN = "/api/portal/pendataan/tag";
 export const MAKS_BARIS_TAG = 20000;
@@ -54,7 +55,7 @@ export function rekapTagSub(idsubsls: string, target: number, cadangan: number, 
 }
 
 /** Data satu sub SLS di HP: jendela, batas jumlah, dan tag aktif. */
-export type DataTagSub = { jendela: InfoJendela; target: number; cadangan: number; tag: TagKk[] };
+export type DataTagSub = { jendela: InfoJendela; target: number; cadangan: number; tag: TagKk[]; /** tahap B: pengajuan penggantian sub SLS ini (terbaru dulu) */ ganti?: GantiRow[]; /** setelan kegiatan: PPL boleh mengajukan penggantian */ boleh_ganti?: boolean };
 
 // ---------------------------------------------------------------------------------------------------------------------------------
 // Hitung mundur

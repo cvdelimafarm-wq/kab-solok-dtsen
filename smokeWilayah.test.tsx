@@ -14,6 +14,10 @@ import WilayahSaya, { BarisKk, type AksiBaris } from "@/app/sigap/sampel/Wilayah
 import TagSampel from "@/app/sigap/kelola/pendataan/TagSampel";
 import type { InfoJendela, TagKk } from "@/lib/tagSampel";
 import AlokasiWilayah from "@/app/sigap/kelola/pendataan/AlokasiWilayah";
+import PetaSubSls from "@/app/sigap/sampel/PetaSubSls";
+import { BarisGanti, FormGanti } from "@/app/sigap/sampel/WilayahSaya";
+import { GantiAdmin } from "@/app/sigap/kelola/pendataan/TagSampel";
+import { GANTI_KOSONG, type GantiRow } from "@/lib/gantiSampel";
 
 const teksDari = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const w = (id: number, o: Partial<WilayahAlokasi> = {}): WilayahAlokasi => ({
@@ -138,5 +142,71 @@ describe("TagSampel (Kelola)", () => {
     expect(t).toContain("Tag Sampel Stage 2");
     expect(t).toContain("Jendela Rilis");
     expect(t).toContain("Memuat");
+  });
+});
+
+describe("PetaSubSls (A1b)", () => {
+  it("render awal: memuat peta (batas diambil setelah mount)", () => {
+    const t = teksDari(renderToString(<PetaSubSls idsubsls="1303040001000100" kk={[{ id: 1, nama_kk: "Pak Budi", anggota_lain: null, patokan: null, lat: -0.795, lng: 100.605 }]} peran={new Map()} />));
+    expect(t).toContain("Memuat peta");
+  });
+});
+
+const gantiBaris = (o: Partial<GantiRow> = {}): GantiRow => ({
+  id: 1, idsubsls: "1303110005000101", utama_kk_id: 1, cadangan_kk_id: 3, utama_nama: "Pak Budi", cadangan_nama: "Bu Sari", alasan: "menolak", catatan: "Menolak dua kali", status: "menunggu",
+  usul_master: false, diajukan_oleh: 7, diajukan_nama: "Ani", diajukan_at: "2026-11-10T01:00:00.000Z", diputus_nama: null, diputus_at: null, putus_sebagai: null, catatan_putus: null, ...o,
+});
+
+describe("Penggantian cadangan (tahap B)", () => {
+  it("BarisKk: tombol 'Ganti dengan cadangan' hanya bila boleh; menunggu tampil sebagai chip", () => {
+    const utama: TagKk = { kk_id: 5, peran: "utama", hasil: null, via: "hp" };
+    const bisa = baris(utama, aksi({ ganti: { bisa: true, keterangan: null, menunggu: false, onAjukan: () => {} } }));
+    expect(bisa).toContain("Ganti dengan cadangan");
+    const tunggu = baris(utama, aksi({ ganti: { bisa: false, keterangan: null, menunggu: true, onAjukan: () => {} } }));
+    expect(tunggu).toContain("Penggantian menunggu PML");
+    expect(tunggu).not.toContain("Ganti dengan cadangan");
+    const alasan = baris(utama, aksi({ ganti: { bisa: false, keterangan: "Tidak ada cadangan yang tersedia.", menunggu: false, onAjukan: () => {} } }));
+    expect(alasan).toContain("Tidak ada cadangan yang tersedia.");
+    expect(baris({ kk_id: 5, peran: "cadangan", hasil: null, via: "hp" }, aksi({ ganti: { bisa: true, keterangan: null, menunggu: false, onAjukan: () => {} } }))).not.toContain("Ganti dengan cadangan");
+  });
+
+  it("BarisGanti: PML melihat Setujui/Tolak, pengaju melihat Batalkan, yang sudah diputus tanpa tombol", () => {
+    const pml = teksDari(renderToString(<ul><BarisGanti g={gantiBaris()} bisaPutus bisaBatal={false} sibuk={false} onPutus={() => {}} onBatal={() => {}} /></ul>));
+    expect(pml).toContain("Pak Budi");
+    expect(pml).toContain("Bu Sari");
+    expect(pml).toContain("Menunggu PML");
+    expect(pml).toContain("Setujui");
+    expect(pml).toContain("Tolak");
+    expect(pml).not.toContain("Batalkan pengajuan");
+    const ppl = teksDari(renderToString(<ul><BarisGanti g={gantiBaris()} bisaPutus={false} bisaBatal sibuk={false} onPutus={() => {}} onBatal={() => {}} /></ul>));
+    expect(ppl).toContain("Batalkan pengajuan");
+    expect(ppl).not.toContain("Setujui");
+    const selesai = teksDari(renderToString(<ul><BarisGanti g={gantiBaris({ status: "disetujui", diputus_nama: "Budi", putus_sebagai: "pml", diputus_at: "2026-11-10T02:00:00.000Z" })} bisaPutus bisaBatal sibuk={false} onPutus={() => {}} onBatal={() => {}} /></ul>));
+    expect(selesai).toContain("Disetujui");
+    expect(selesai).toContain("Diputus PML Budi");
+    expect(selesai).not.toContain("Setujui");
+    expect(selesai).not.toContain("Batalkan pengajuan");
+  });
+
+  it("FormGanti: pilihan cadangan dan alasan baku; tombol ajukan nonaktif sebelum lengkap", () => {
+    const h = renderToString(<FormGanti utama={{ id: 1, nama_kk: "Pak Budi", anggota_lain: null, patokan: null, lat: null, lng: null }} pilihan={[{ kk_id: 3, nama: "Bu Sari" }, { kk_id: 4, nama: "Pak Joko" }]} sibuk={false} onKirim={() => {}} onTutup={() => {}} />);
+    const t = teksDari(h);
+    expect(t).toContain("Ganti Pak Budi dengan cadangan");
+    expect(t).toContain("Bu Sari");
+    expect(t).toContain("Pak Joko");
+    expect(t).toContain("Menolak diwawancarai");
+    expect(t).toContain("Lainnya (wajib catatan)");
+    expect(h).toMatch(/disabled=""[^>]*>Ajukan ke PML/);
+  });
+
+  it("GantiAdmin: rekap, tingkat tinggi memunculkan peringatan, tombol keputusan hanya untuk yang boleh kelola", () => {
+    const g = { ...GANTI_KOSONG, siap: true, rekap: { menunggu: 1, disetujui: 3, ditolak: 0, dibatalkan: 0, usul_master: 0 }, tingkat: 0.3, daftar: [gantiBaris()], per_ppl: [{ ppl_nama: "Ani", pml_nama: "Budi", target: 10, disetujui: 3, menunggu: 1, ditolak: 0 }] };
+    const kelola = teksDari(renderToString(<GantiAdmin g={g} kelola kirim={async () => ({})} selesai={async () => {}} lapor={() => {}} />));
+    expect(kelola).toContain("Tingkat penggantian 30%");
+    expect(kelola).toContain("Tingkat penggantian tinggi");
+    expect(kelola).toContain("Setujui (atas nama PML)");
+    const lihat = teksDari(renderToString(<GantiAdmin g={g} kelola={false} kirim={async () => ({})} selesai={async () => {}} lapor={() => {}} />));
+    expect(lihat).not.toContain("Setujui (atas nama PML)");
+    expect(teksDari(renderToString(<GantiAdmin g={GANTI_KOSONG} kelola kirim={async () => ({})} selesai={async () => {}} lapor={() => {}} />))).toContain("Belum ada pengajuan penggantian");
   });
 });

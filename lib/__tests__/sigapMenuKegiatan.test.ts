@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hanyaTranslok, alamatHariIni, alamatPengawasan, alamatSampel, idTranslokMenu, indukMemuatModul, langkahSekali, modulRutin, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok, tahapMenu } from "../sigapMenuKegiatan";
+import { PESAN_BELUM_ALOKASI_TRANSLOK, hanyaTranslok, alamatHariIni, alamatPengawasan, alamatSampel, idTranslokMenu, indukMemuatModul, langkahSekali, modulRutin, pakaiTemplateMenu, peranMenuDariInduk, putuskanTab, selaraskanTumpuk, susunBar, tabBarDariTranslok, tahapMenu } from "../sigapMenuKegiatan";
 
 const TL = { href: "/sigap/translok/tok123?p=7", kegiatanId: 2 };
 
@@ -89,14 +89,24 @@ describe("template menu kegiatan", () => {
     const pml = susunBar({ kode: "spdt_ntp", peran: "pml", modul: ["spdt_lembar", "translok:2"], translok: TL });
     expect(pml.map((x) => x.label)).toEqual(["Hari Ini", "Sampel", "Pengawasan", "Kamera", "Translok"]);
     const sv = susunBar({ kode: "spdt_ntp", peran: "supervisor", modul: ["spdt_lembar"], translok: null });
-    expect(sv.map((x) => x.label)).toEqual(["Hari Ini", "Sampel", "Supervisi"]);
+    expect(sv.map((x) => x.label)).toEqual(["Hari Ini", "Sampel", "Supervisi", "Kamera", "Translok"]); // (7 Nov 2026) Kamera/Translok tetap ada, redup bila belum ada alokasi
+    expect(sv.filter((x) => x.nonaktif).map((x) => x.kunci)).toEqual(["kamera", "translok"]);
     expect(sv[0].href).toBe("/sigap/kegiatan/spdt_ntp");
     expect(sv[2].href).toBe("/sigap/spdt?tab=pengawasan&k=spdt_ntp");
   });
 
-  it("tanpa penugasan Translok: tidak ada Kamera dan Translok", () => {
+  it("tanpa penugasan Translok: Kamera dan Translok tetap ada tetapi nonaktif dengan alasan (7 Nov 2026)", () => {
     const b = susunBar({ kode: "x", peran: "ppl", modul: ["spdt_lembar"], translok: null });
-    expect(b.map((x) => x.kunci)).toEqual(["hari_ini", "sampel"]);
+    expect(b.map((x) => x.kunci)).toEqual(["hari_ini", "sampel", "kamera", "translok"]);
+    for (const k of ["kamera", "translok"]) {
+      const it = b.find((x) => x.kunci === k);
+      expect(it?.nonaktif).toBe(PESAN_BELUM_ALOKASI_TRANSLOK);
+      expect(it?.href).toBe("");
+    }
+    expect(b.filter((x) => x.kunci === "hari_ini" || x.kunci === "sampel").every((x) => !x.nonaktif && x.href !== "")).toBe(true);
+  });
+  it("dengan penugasan Translok tidak ada item nonaktif", () => {
+    expect(susunBar({ kode: "x", peran: "ppl", modul: ["spdt_lembar"], translok: TL }).some((x) => x.nonaktif)).toBe(false);
   });
 
   it("istilah bisa diganti per kegiatan", () => {

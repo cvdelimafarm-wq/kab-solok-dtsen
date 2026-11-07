@@ -108,6 +108,13 @@ export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = tru
   // (/api/sigap/foto/mode, sama dengan halaman Kamera); belum termuat/gagal = langsung buka kamera.
   const dMode = useData<{ kegiatan: { kegiatan_id: number; hari_kerja_hari_ini?: boolean }[] }>("/api/sigap/foto/mode");
   const [tanyaKamera, setTanyaKamera] = useState<string | null>(null);
+  // (7 Nov 2026) item redup (belum ada alokasi Translok): ketukan menampilkan alasannya sebentar
+  const [pesanBar, setPesanBar] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pesanBar) return;
+    const w = setTimeout(() => setPesanBar(null), 3500);
+    return () => clearTimeout(w);
+  }, [pesanBar]);
   // selaraskan tumpukan dengan tab yang tampil (Back sistem bisa mengubahnya tanpa lewat bar)
   // `sinkron=false` selama halaman belum menentukan tab awalnya (Translok: tab dari tautan baru dipakai setelah data masuk); tanpa itu tab sementara "Hari Ini"
   // memotong tumpukan yang baru disimpan ketuk() dan Back antar tab berikutnya salah arah.
@@ -117,6 +124,7 @@ export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = tru
   }, [kode, aktif, sinkron]);
 
   function ketuk(it: ItemBar) {
+    if (it.nonaktif) return setPesanBar(it.nonaktif);
     if (it.kunci === "kamera") {
       const id = Number(/kegiatan=(\d+)/.exec(it.href)?.[1]);
       const m = (dMode.data?.kegiatan ?? []).filter((x) => x.kegiatan_id === id);
@@ -137,7 +145,7 @@ export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = tru
       <div className="mx-auto flex max-w-lg">
         {items.map((it) =>
           it.kunci === "kamera" ? (
-            <button key={it.kunci} type="button" onClick={() => ketuk(it)} aria-label="Buka Kamera SIGAP" className="flex flex-1 flex-col items-center gap-0.5 pb-2 text-[11px] font-bold text-[#0F3D7A]">
+            <button key={it.kunci} type="button" onClick={() => ketuk(it)} aria-label="Buka Kamera SIGAP" aria-disabled={it.nonaktif ? true : undefined} className={`flex flex-1 flex-col items-center gap-0.5 pb-2 text-[11px] font-bold text-[#0F3D7A] ${it.nonaktif ? "opacity-45" : ""}`}>
               <span className="-mt-4 grid h-[52px] w-[52px] place-items-center rounded-full bg-[#0F3D7A] text-white shadow-[0_6px_16px_rgba(15,42,82,.35)] ring-4 ring-white active:scale-95">
                 <Ikon k="kamera" />
               </span>
@@ -149,7 +157,8 @@ export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = tru
               type="button"
               onClick={() => ketuk(it)}
               aria-current={aktif === it.kunci ? "page" : undefined}
-              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 border-t-[3px] pb-2.5 pt-2 text-[11.5px] font-bold ${aktif === it.kunci ? "border-[#F5B841] text-[#0F3D7A]" : "border-transparent text-[#8592A8]"}`}
+              aria-disabled={it.nonaktif ? true : undefined}
+              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 border-t-[3px] pb-2.5 pt-2 text-[11.5px] font-bold ${aktif === it.kunci ? "border-[#F5B841] text-[#0F3D7A]" : "border-transparent text-[#8592A8]"} ${it.nonaktif ? "opacity-45" : ""}`}
             >
               <Ikon k={it.kunci} />
               <span className="max-w-full truncate px-0.5">{it.label}</span>
@@ -159,6 +168,11 @@ export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = tru
       </div>
     </nav>
     {/* di luar <nav>: backdrop-blur membuat nav menjadi acuan posisi "fixed" anaknya */}
+    {pesanBar && (
+      <div role="status" className="fixed inset-x-0 z-40 mx-auto w-fit max-w-[92vw] rounded-[12px] bg-[#0F2A52] px-3.5 py-2 text-center text-[12.5px] font-semibold text-white shadow-lg" style={{ bottom: "calc(env(safe-area-inset-bottom) + 76px)" }}>
+        {pesanBar}
+      </div>
+    )}
     {tanyaKamera && <ModalKameraTanpaJadwal onBatal={() => setTanyaKamera(null)} onYa={() => { const h = tanyaKamera; setTanyaKamera(null); setelahLapisanTutup(() => router.push(h)); }} />}
     </>
   );

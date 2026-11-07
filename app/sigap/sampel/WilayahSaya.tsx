@@ -12,6 +12,11 @@ import { LABEL_MODEL, kodeSubslsPendek, type DataAlokasiSaya, type KkMaster, typ
 import { tautanLihatSampel, tautanPetaSampel } from "@/lib/sampelSls";
 import { KET_JENDELA, LABEL_HASIL, formatSisa, selisihJam, sisaDetik, statusEfektif, type DataTagSub, type HasilTag, type InfoJendela, type PeranTag, type TagKk } from "@/lib/tagSampel";
 import type { AksiTag, HasilMuatKk } from "./useAlokasi";
+import PetaSubSls from "./PetaSubSls";
+import {
+  ALASAN_GANTI, LABEL_ALASAN, LABEL_STATUS_GANTI, MAKS_CATATAN, MIN_CATATAN_TOLAK, bisaMengajukanGanti, cadanganTersedia, menunggu as gantiMenunggu, periksaIsianGanti,
+  type AlasanGanti, type GantiRow,
+} from "@/lib/gantiSampel";
 
 /** Waktu sekarang (ms) yang diperbarui berkala, untuk hitung mundur jendela. */
 function useSekarang(selangMs = 30_000): number {
@@ -50,6 +55,8 @@ export type AksiBaris = {
   onTag: (peran: PeranTag) => void;
   onLepas: () => void;
   onHasil: (h: HasilTag | null) => void;
+  /** tahap B (opsional): penggantian sampel utama dengan cadangan */
+  ganti?: { bisa: boolean; keterangan: string | null; menunggu: boolean; onAjukan: () => void };
 };
 
 const TOMBOL = "grid min-h-[40px] place-items-center rounded-[10px] px-3 text-[12.5px] font-bold disabled:opacity-50";
@@ -103,8 +110,147 @@ export function BarisKk({ k, no, tag, aksi }: { k: KkMaster; no: number; tag: Ta
             ))}
           </span>
         )}
+        {tag?.peran === "utama" && aksi.ganti && (
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {aksi.ganti.menunggu ? (
+              <span className="rounded-full bg-[#FFF4D6] px-2.5 py-1 text-[11.5px] font-extrabold text-[#8A6200]">Penggantian menunggu PML</span>
+            ) : aksi.ganti.bisa ? (
+              <button type="button" disabled={aksi.sibuk} onClick={aksi.ganti.onAjukan} className={`${TOMBOL} border border-[#C9B5EE] bg-white text-[#6B3FB8] active:bg-[#F5EFFD]`} aria-label={`Ganti ${k.nama_kk} dengan cadangan`}>
+                Ganti dengan cadangan
+              </button>
+            ) : (
+              aksi.ganti.keterangan && <span className="text-[11.5px] text-[#55657D]">{aksi.ganti.keterangan}</span>
+            )}
+          </span>
+        )}
       </div>
     </li>
+  );
+}
+
+const tglPendek = (iso: string | null): string => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
+/** Satu pengajuan penggantian beserta tombol sesuai peran (PML: setujui/tolak; pengaju: batalkan). */
+export function BarisGanti({
+  g, bisaPutus, bisaBatal, sibuk, onPutus, onBatal,
+}: {
+  g: GantiRow;
+  bisaPutus: boolean;
+  bisaBatal: boolean;
+  sibuk: boolean;
+  onPutus: (setuju: boolean, catatan: string) => void;
+  onBatal: () => void;
+}) {
+  const [tolak, setTolak] = useState(false);
+  const [cat, setCat] = useState("");
+  const warna = g.status === "disetujui" ? "bg-[#E8F6EE] text-[#13794B]" : g.status === "menunggu" ? "bg-[#FFF4D6] text-[#8A6200]" : "bg-[#EEF2F7] text-[#44546F]";
+  return (
+    <li className="border-t border-[#EEF2F7] px-3.5 py-2 first:border-t-0">
+      <p className="text-[13px] font-bold leading-snug text-[#0F2A52]">
+        {g.utama_nama} <span aria-hidden="true">→</span> {g.cadangan_nama}
+        <span className={`ml-2 rounded-full px-2 py-0.5 align-middle text-[10.5px] font-extrabold ${warna}`}>{LABEL_STATUS_GANTI[g.status]}</span>
+      </p>
+      <p className="text-[12px] leading-snug text-[#55657D]">
+        {LABEL_ALASAN[g.alasan]}
+        {g.catatan ? ` · ${g.catatan}` : ""} · diajukan {g.diajukan_nama ?? "PPL"} {tglPendek(g.diajukan_at)}
+      </p>
+      {g.status !== "menunggu" && g.diputus_nama && g.status !== "dibatalkan" && (
+        <p className="text-[12px] leading-snug text-[#55657D]">
+          Diputus {g.putus_sebagai === "admin" ? "admin" : "PML"} {g.diputus_nama} {tglPendek(g.diputus_at)}
+          {g.catatan_putus ? ` · ${g.catatan_putus}` : ""}
+        </p>
+      )}
+      {g.status === "menunggu" && (bisaPutus || bisaBatal) && (
+        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {bisaPutus && !tolak && (
+            <>
+              <button type="button" disabled={sibuk} onClick={() => onPutus(true, "")} className={`${TOMBOL} bg-[#13794B] text-white`} aria-label={`Setujui penggantian ${g.utama_nama}`}>
+                Setujui
+              </button>
+              <button type="button" disabled={sibuk} onClick={() => setTolak(true)} className={`${TOMBOL} border border-[#F0C4C6] bg-white text-[#B42329]`} aria-label={`Tolak penggantian ${g.utama_nama}`}>
+                Tolak…
+              </button>
+            </>
+          )}
+          {bisaPutus && tolak && (
+            <span className="flex w-full flex-wrap items-center gap-1.5">
+              <input value={cat} onChange={(e) => setCat(e.target.value)} maxLength={MAKS_CATATAN} placeholder="Alasan penolakan (wajib)" aria-label="Alasan penolakan" className="min-h-[44px] min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-[#F7FAFF] px-3 text-[14px] text-[#0F2A52] outline-none focus:border-[#1F5FD1]" />
+              <button type="button" disabled={sibuk || cat.trim().length < MIN_CATATAN_TOLAK} onClick={() => onPutus(false, cat)} className={`${TOMBOL} bg-[#B42329] text-white`}>
+                Kirim penolakan
+              </button>
+              <button type="button" disabled={sibuk} onClick={() => setTolak(false)} className={`${TOMBOL} border border-[#DCE5F2] bg-white text-[#44546F]`}>
+                Batal
+              </button>
+            </span>
+          )}
+          {bisaBatal && (
+            <button type="button" disabled={sibuk} onClick={onBatal} className={`${TOMBOL} border border-[#DCE5F2] bg-white text-[#44546F]`} aria-label={`Batalkan pengajuan ${g.utama_nama}`}>
+              Batalkan pengajuan
+            </button>
+          )}
+        </span>
+      )}
+    </li>
+  );
+}
+
+/** Formulir pengajuan: pilih cadangan pengganti, alasan baku, catatan. */
+export function FormGanti({
+  utama, pilihan, sibuk, onKirim, onTutup,
+}: {
+  utama: KkMaster;
+  pilihan: ReadonlyArray<{ kk_id: number; nama: string }>;
+  sibuk: boolean;
+  onKirim: (cadangan: number, alasan: AlasanGanti, catatan: string) => void;
+  onTutup: () => void;
+}) {
+  const [cad, setCad] = useState<number | null>(pilihan.length === 1 ? pilihan[0].kk_id : null);
+  const [alasan, setAlasan] = useState<AlasanGanti | "">("");
+  const [catatan, setCatatan] = useState("");
+  const galat = periksaIsianGanti(alasan, catatan, cad);
+  return (
+    <div className="mx-3 mt-2 rounded-[14px] border border-[#C9B5EE] bg-[#FAF7FE] p-3" role="group" aria-label={`Ganti ${utama.nama_kk} dengan cadangan`}>
+      <p className="text-[13px] font-extrabold text-[#0F2A52]">Ganti {utama.nama_kk} dengan cadangan</p>
+      <label className="mt-2 block text-[12px] font-semibold text-[#44546F]">
+        Cadangan pengganti
+        <select value={cad ?? ""} onChange={(e) => setCad(e.target.value ? Number(e.target.value) : null)} className="mt-1 min-h-[44px] w-full rounded-[12px] border border-[#DCE5F2] bg-white px-3 text-[14px] text-[#0F2A52]">
+          <option value="">Pilih cadangan…</option>
+          {pilihan.map((p) => (
+            <option key={p.kk_id} value={p.kk_id}>
+              {p.nama}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mt-2 block text-[12px] font-semibold text-[#44546F]">
+        Alasan
+        <select value={alasan} onChange={(e) => setAlasan(e.target.value as AlasanGanti | "")} className="mt-1 min-h-[44px] w-full rounded-[12px] border border-[#DCE5F2] bg-white px-3 text-[14px] text-[#0F2A52]">
+          <option value="">Pilih alasan…</option>
+          {ALASAN_GANTI.map((a) => (
+            <option key={a.kode} value={a.kode}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mt-2 block text-[12px] font-semibold text-[#44546F]">
+        Catatan{alasan === "lainnya" ? " (wajib)" : " (boleh kosong)"}
+        <textarea value={catatan} onChange={(e) => setCatatan(e.target.value)} maxLength={MAKS_CATATAN} rows={2} className="mt-1 w-full rounded-[12px] border border-[#DCE5F2] bg-white px-3 py-2 text-[14px] text-[#0F2A52]" />
+      </label>
+      {galat && (cad || alasan) && <p className="mt-1 text-[11.5px] text-[#8A6200]">{galat}</p>}
+      <span className="mt-2 flex flex-wrap gap-1.5">
+        <button type="button" disabled={sibuk || !!galat} onClick={() => cad && alasan && onKirim(cad, alasan, catatan.trim())} className={`${TOMBOL} bg-[#6B3FB8] text-white`}>
+          Ajukan ke PML
+        </button>
+        <button type="button" disabled={sibuk} onClick={onTutup} className={`${TOMBOL} border border-[#DCE5F2] bg-white text-[#44546F]`}>
+          Batal
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -127,6 +273,8 @@ function KartuWilayah({
   const [galat, setGalat] = useState("");
   const [cari, setCari] = useState("");
   const [lihat, setLihat] = useState<"semua" | "sampel">("semua");
+  const [peta, setPeta] = useState(false);
+  const [formGanti, setFormGanti] = useState<KkMaster | null>(null);
   const [td, setTd] = useState<Sudah | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [pesan, setPesan] = useState("");
@@ -167,6 +315,21 @@ function KartuWilayah({
   const status = td ? statusEfektif(td.dt.jendela, td.selisih, sekarang) : "belum";
   const bisaTandai = peran === "ppl" && !salinan && !!aksiTag && status === "terbuka";
   const bisaHasil = peran === "ppl" && !salinan && !!aksiTag;
+  const gantiDaftar: GantiRow[] = td?.dt.ganti ?? [];
+  const bolehGanti = td?.dt.boleh_ganti ?? true;
+  const bisaPutus = peran === "pml" && !salinan && !!aksiTag;
+  const bisaAjukan = peran === "ppl" && !salinan && !!aksiTag;
+  const pilihanCadangan = useMemo(() => {
+    const nama = new Map((kk ?? []).map((k) => [k.id, k.nama_kk]));
+    return cadanganTersedia(td?.dt.tag ?? [], gantiDaftar).map((t) => ({ kk_id: t.kk_id, nama: nama.get(t.kk_id) ?? `KK ${t.kk_id}` }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kk, td]);
+
+  const petaPeran = useMemo(() => {
+    const m = new Map<number, "utama" | "cadangan">();
+    for (const t of td?.dt.tag ?? []) m.set(t.kk_id, t.peran);
+    return m;
+  }, [td]);
 
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase();
@@ -179,6 +342,7 @@ function KartuWilayah({
     setPesan("");
     try {
       await aksiTag(a);
+      setFormGanti(null);
       await muatUlang();
     } catch (e) {
       setPesan(e instanceof Error ? e.message : "Aksi gagal. Coba lagi.");
@@ -224,6 +388,33 @@ function KartuWilayah({
           {!galat && kk === null && <p className="px-3.5 py-3 text-[13px] text-[#55657D]" aria-busy="true">Memuat daftar KK…</p>}
           {kk !== null && kk.length === 0 && <p className="px-3.5 py-3 text-[13px] text-[#55657D]">Daftar KK sub SLS ini belum ada di master. Hubungi admin kegiatan.</p>}
           {td && <p className="px-3.5 pt-2 text-[11.5px] font-semibold text-[#55657D]">{status === "terbuka" ? `Penandaan dibuka · sisa ${formatSisa(sisaDetik(td.dt.jendela, td.selisih, sekarang))}` : KET_JENDELA[status]}</p>}
+          {(gantiDaftar.length > 0 || formGanti) && (
+            <div className="mt-2">
+              <p className="px-3.5 text-[11.5px] font-extrabold uppercase tracking-[0.1em] text-[#6B7A90]">Penggantian sampel{gantiMenunggu(gantiDaftar).length > 0 ? ` · ${gantiMenunggu(gantiDaftar).length} menunggu` : ""}</p>
+              <ul>
+                {gantiDaftar.slice(0, 8).map((g) => (
+                  <BarisGanti
+                    key={g.id}
+                    g={g}
+                    sibuk={sibuk}
+                    bisaPutus={bisaPutus}
+                    bisaBatal={bisaAjukan && g.diajukan_oleh != null && g.status === "menunggu"}
+                    onPutus={(setuju, catatan) => void kirim({ aksi: "ganti_putus", id: g.id, setuju, catatan })}
+                    onBatal={() => void kirim({ aksi: "ganti_batal", id: g.id })}
+                  />
+                ))}
+              </ul>
+              {formGanti && (
+                <FormGanti
+                  utama={formGanti}
+                  pilihan={pilihanCadangan}
+                  sibuk={sibuk}
+                  onTutup={() => setFormGanti(null)}
+                  onKirim={(cadangan, alasan, catatan) => void kirim({ aksi: "ganti_ajukan", utama: formGanti.id, cadangan, alasan, catatan })}
+                />
+              )}
+            </div>
+          )}
           {bisaTandai && nUtama >= target && <p className="px-3.5 pt-1 text-[11.5px] text-[#55657D]">Sampel utama sudah penuh ({nUtama}/{target}). Lepas satu bila ingin menggantinya.</p>}
           {pesan && <p role="alert" className="mx-3 mt-2 rounded-[10px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-2.5 py-1.5 text-[12.5px] text-[#7A1D22]">{pesan}</p>}
           {kk !== null && kk.length > 0 && (
@@ -232,6 +423,9 @@ function KartuWilayah({
                 {kk.length > 12 && (
                   <input type="search" value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama KK…" aria-label="Cari nama KK" className="min-h-[44px] min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-[#F7FAFF] px-3 text-[14px] text-[#0F2A52] outline-none focus:border-[#1F5FD1]" />
                 )}
+                <button type="button" onClick={() => setPeta((v) => !v)} aria-pressed={peta} className={`min-h-[40px] rounded-[10px] px-3 text-[12.5px] font-bold ${peta ? "bg-[#1F5FD1] text-white" : "bg-[#EAF1FC] text-[#1F5FD1]"}`}>
+                  {peta ? "Tutup peta" : "Lihat peta"}
+                </button>
                 {tagPerKk.size > 0 && (
                   <span className="flex gap-1" role="group" aria-label="Tampilan daftar">
                     {(["semua", "sampel"] as const).map((v) => (
@@ -242,6 +436,7 @@ function KartuWilayah({
                   </span>
                 )}
               </div>
+              {peta && <PetaSubSls idsubsls={w.idsubsls} kk={kk} peran={petaPeran} />}
               <ol>
                 {tampil.map((k, i) => (
                   <BarisKk
@@ -259,6 +454,13 @@ function KartuWilayah({
                       onTag: (p) => void kirim({ aksi: "tag", s: w.idsubsls, kk: k.id, peran: p }),
                       onLepas: () => void kirim({ aksi: "lepas", kk: k.id }),
                       onHasil: (h) => void kirim({ aksi: "hasil", kk: k.id, hasil: h }),
+                      ganti: bisaAjukan && tagPerKk.get(k.id)?.peran === "utama"
+                        ? (() => {
+                            const tg = tagPerKk.get(k.id);
+                            const c = bisaMengajukanGanti({ tag: tg, jendela: status, bolehGanti, daftar: gantiDaftar, tag_sub: td?.dt.tag ?? [] });
+                            return { bisa: c.bisa, keterangan: c.alasan, menunggu: gantiMenunggu(gantiDaftar).some((x) => x.utama_kk_id === k.id), onAjukan: () => setFormGanti(k) };
+                          })()
+                        : undefined,
                     }}
                   />
                 ))}
@@ -318,7 +520,7 @@ export default function WilayahSaya({
           <div key={id} className="space-y-2">
             <p className="px-1 pt-1 text-[13px] font-extrabold text-[#0F2A52]">{g.nama}</p>
             {g.sub.map((w) => (
-              <KartuWilayah key={w.id} w={w} tampilPpl={false} terbukaAwal={false} peran="pml" cadanganKonfig={cad} muatKk={muatKk} />
+              <KartuWilayah key={w.id} w={w} tampilPpl={false} terbukaAwal={false} peran="pml" cadanganKonfig={cad} muatKk={muatKk} aksiTag={aksiTag} />
             ))}
           </div>
         ))}

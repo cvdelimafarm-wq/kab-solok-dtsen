@@ -12,6 +12,7 @@ import { apiPortal } from "@/app/portal/sesi";
 import { API_ALOKASI_ADMIN, kodeSubslsPendek } from "@/lib/alokasiWilayah";
 import { API_TAG_ADMIN, KOLOM_TEMPLAT_TAG, MAKS_BARIS_TAG, PETUNJUK_TEMPLAT_TAG, formatSisa, selisihJam, sisaDetik, statusEfektif, templatTag, type BarisTemplatTag, type ModeTag } from "@/lib/tagSampel";
 import type { DataTagAdmin, HasilImporTag, PratinjauTag } from "@/lib/portal/tagSampel";
+import { LABEL_ALASAN, LABEL_SINKRON, LABEL_STATUS_GANTI, MAKS_CATATAN, MIN_CATATAN_TOLAK, persen, type DataGantiAdmin, type SinkronMaster } from "@/lib/gantiSampel";
 import { BTN, BTN_O, Chip, Kartu, Memuat, Pesan, TD, TH } from "../../admin/ui";
 
 const fmt = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
@@ -37,6 +38,120 @@ async function unduhDaftar(kegiatanId: number, baris: BarisTemplatTag[]) {
   XLSX.utils.book_append_sheet(wb, ws, "Daftar KK");
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Petunjuk"], ...PETUNJUK_TEMPLAT_TAG.map((t) => [t])]), "Petunjuk");
   XLSX.writeFile(wb, `tag_sampel_kegiatan_${kegiatanId}.xlsx`);
+}
+
+/** Tahap B: pemantauan penggantian cadangan, keputusan atas nama PML, dan setelan sinkron ke master. */
+export function GantiAdmin({ g, kelola, kirim, selesai, lapor }: { g: DataGantiAdmin; kelola: boolean; kirim: (body: Record<string, unknown>) => Promise<unknown>; selesai: () => Promise<void>; lapor: (i: Info) => void }) {
+  const [sibuk, setSibuk] = useState("");
+  const [tolakId, setTolakId] = useState<number | null>(null);
+  const [cat, setCat] = useState("");
+  async function jalan(kunci: string, body: Record<string, unknown>, ok: string) {
+    setSibuk(kunci);
+    try {
+      await kirim(body);
+      lapor({ jenis: "ok", teks: ok });
+      setTolakId(null);
+      setCat("");
+      await selesai();
+    } catch (e) {
+      lapor({ jenis: "galat", teks: e instanceof Error ? e.message : "Aksi gagal." });
+    } finally {
+      setSibuk("");
+    }
+  }
+  const adaData = g.daftar.length > 0;
+  return (
+    <div className="mt-4 border-t border-[#E3EAF5] pt-3" aria-label="Penggantian cadangan">
+      <p className="text-[13px] font-extrabold text-[#12305E]">Penggantian sampel utama dengan cadangan</p>
+      <p className="mt-0.5 text-[12px] leading-snug text-[#55657D]">Diajukan PPL sesudah daftar dikunci, diputus PML. Ketua/Wakil dapat memutus atas nama PML bila PML berhalangan (tercatat sebagai admin).</p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <Chip w={g.rekap.menunggu > 0 ? "wait" : "mut"}>{fmt(g.rekap.menunggu)} menunggu</Chip>
+        <Chip w="ok">{fmt(g.rekap.disetujui)} disetujui</Chip>
+        <Chip w="mut">{fmt(g.rekap.ditolak)} ditolak</Chip>
+        <Chip w={g.tingkat >= 0.2 ? "wait" : "mut"}>Tingkat penggantian {persen(g.tingkat)}</Chip>
+        {g.rekap.usul_master > 0 && <Chip w="navy">{fmt(g.rekap.usul_master)} usulan pembaruan master</Chip>}
+      </div>
+      {g.tingkat >= 0.2 && <p className="mt-1.5 text-[12px] font-semibold text-[#8A6200]">Tingkat penggantian tinggi (≥ 20% dari target sampel utama). Periksa alasan dan sebaran per PPL di bawah.</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px]">
+        <label className="font-semibold text-[#12305E]" htmlFor={`sinkron-${g.siap}`}>Sinkron ke master KK</label>
+        <select id={`sinkron-${g.siap}`} value={g.sinkron_ke_master} disabled={!kelola || sibuk !== ""} onChange={(e) => void jalan("sinkron", { aksi: "sinkron", nilai: e.target.value as SinkronMaster }, "Setelan sinkron ke master disimpan.")} className="min-h-[36px] rounded-lg border border-[#C9D6EA] bg-white px-2 text-[12.5px]">
+          {(Object.keys(LABEL_SINKRON) as SinkronMaster[]).map((k) => (
+            <option key={k} value={k}>
+              {LABEL_SINKRON[k]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {!adaData && <p className="mt-2 text-[12.5px] text-[#55657D]">Belum ada pengajuan penggantian.</p>}
+      {g.per_ppl.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr>
+                <th className={TH}>PPL</th>
+                <th className={TH}>PML</th>
+                <th className={TH}>Disetujui</th>
+                <th className={TH}>Menunggu</th>
+                <th className={TH}>Ditolak</th>
+              </tr>
+            </thead>
+            <tbody>
+              {g.per_ppl.map((b) => (
+                <tr key={b.ppl_nama}>
+                  <td className={TD}>{b.ppl_nama}</td>
+                  <td className={TD}>{b.pml_nama ?? "-"}</td>
+                  <td className={TD}>{b.disetujui}/{b.target}</td>
+                  <td className={TD}>{b.menunggu}</td>
+                  <td className={TD}>{b.ditolak}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {adaData && (
+        <ul className="mt-2 divide-y divide-[#EEF2F7] rounded-xl border border-[#E3EAF5]">
+          {g.daftar.slice(0, 30).map((x) => (
+            <li key={x.id} className="px-3 py-2 text-[12.5px]">
+              <p className="font-semibold text-[#0F2A52]">
+                {x.utama_nama} → {x.cadangan_nama} <span className="ml-1 text-[#55657D]">({kodeSubslsPendek(x.idsubsls)})</span>
+                <span className="ml-2 text-[11.5px] text-[#55657D]">{LABEL_STATUS_GANTI[x.status]}{x.usul_master ? " · usulan master" : ""}</span>
+              </p>
+              <p className="text-[#55657D]">
+                {LABEL_ALASAN[x.alasan]}
+                {x.catatan ? ` · ${x.catatan}` : ""} · {x.diajukan_nama ?? "PPL"} {waktu(x.diajukan_at)}
+                {x.status !== "menunggu" && x.diputus_nama && x.status !== "dibatalkan" ? ` · diputus ${x.putus_sebagai === "admin" ? "admin" : "PML"} ${x.diputus_nama}${x.catatan_putus ? ` (${x.catatan_putus})` : ""}` : ""}
+              </p>
+              {kelola && x.status === "menunggu" && (
+                <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                  {tolakId !== x.id ? (
+                    <>
+                      <button type="button" className={BTN} disabled={sibuk !== ""} onClick={() => void jalan(`s${x.id}`, { aksi: "ganti_putus", id: x.id, setuju: true }, "Penggantian disetujui atas nama PML.")}>
+                        Setujui (atas nama PML)
+                      </button>
+                      <button type="button" className={BTN_O} disabled={sibuk !== ""} onClick={() => { setTolakId(x.id); setCat(""); }}>
+                        Tolak…
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <input value={cat} maxLength={MAKS_CATATAN} onChange={(e) => setCat(e.target.value)} placeholder="Alasan penolakan (wajib)" aria-label="Alasan penolakan" className="min-h-[36px] min-w-[200px] flex-1 rounded-lg border border-[#C9D6EA] px-2 text-[12.5px]" />
+                      <button type="button" className={BTN} disabled={sibuk !== "" || cat.trim().length < MIN_CATATAN_TOLAK} onClick={() => void jalan(`t${x.id}`, { aksi: "ganti_putus", id: x.id, setuju: false, catatan: cat }, "Pengajuan ditolak.")}>
+                        Kirim penolakan
+                      </button>
+                      <button type="button" className={BTN_O} onClick={() => setTolakId(null)}>
+                        Batal
+                      </button>
+                    </>
+                  )}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default function TagSampel({ kegiatanId, nama }: { kegiatanId: number; nama: string }) {
@@ -400,6 +515,8 @@ export default function TagSampel({ kegiatanId, nama }: { kegiatanId: number; na
           })}
         </div>
       )}
+
+      {data && data.siap && data.ganti && <GantiAdmin g={data.ganti} kelola={kelola} kirim={(b) => kirim(b)} selesai={muat} lapor={setInfo} />}
 
       {data && data.siap && data.riwayat.length > 0 && (
         <details className="mt-3 text-[12.5px]">

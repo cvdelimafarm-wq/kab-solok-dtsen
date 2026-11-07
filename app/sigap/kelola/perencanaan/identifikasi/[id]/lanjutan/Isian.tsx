@@ -6,6 +6,7 @@
 // Hanya tampilan; aturan (pemeriksa, status Draf atau Final) ada di lib/keu/lanjutan.ts dan basis data.
 
 import { type Dispatch, type ReactNode } from "react";
+import Link from "next/link";
 import { kolom, label as kelasLabel, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
 import { JABATAN } from "@/lib/keu/kebijakan";
 import {
@@ -20,6 +21,7 @@ import PilihNama from "../../PilihNama";
 import { Angka, Bagian, Cat, Centang, FixPerk, Isian, Pilihan, Tgl } from "../../Kontrol";
 import { ketRentang } from "@/lib/keu/isianTanggal";
 import SelectCari from "@/app/components/SelectCari";
+import { samaDenganAlokasi, teksSuratAman, type DataWilayahSampel } from "@/lib/wilayahSampelIdent";
 
 export type Ubah = (fn: (g: IsiLanjutan) => void) => void;
 type Props = { isi: IsiLanjutan; ubah: Ubah; mati: boolean };
@@ -39,15 +41,70 @@ const Kol = ({ judul, children, className = "" }: { judul: string; children: Rea
 );
 
 // ---------------------------------------------------------------------------------------------------------------------
-export function KartuWilayah({ isi, ubah, mati }: Props) {
+/** Hasil baca daftar nagari sampel dari alokasi Kelola Pendataan (GET /api/sigap/keu/wilayah-sampel). */
+export type WilayahSampelLayar = { data: DataWilayahSampel | null; memuat: boolean; galat: string | null; terpotong: number; tersimpan: string | null };
+
+/**
+ * (7 Nov 2026) Wilayah tugas merujuk ke wilayah sampel pada Kelola Pendataan (alokasi sub SLS), bukan diketik. Bila alokasi sudah ada, daftar nagari
+ * hanya-baca dan otomatis menjadi tujuan surat pengantar saat disimpan (lihat page.tsx). Bila belum ada alokasi tertaut, isian manual lama tetap tersedia.
+ */
+export function KartuWilayah({ isi, ubah, mati, sampel }: Props & { sampel?: WilayahSampelLayar }) {
+  const d = sampel?.data ?? null;
+  const ada = !!d && d.nagari.length > 0;
+  const berbeda = ada && sampel?.tersimpan != null && !samaDenganAlokasi(sampel.tersimpan, teksSuratAman(d.nagari).teks);
   return (
     <Bagian huruf="1" judul="Wilayah tugas" id={ID_LJ.wilayah}>
-      <Isian judul="Nagari atau wilayah tujuan surat pengantar" ket="Satu nagari atau wilayah per baris. Dipakai sebagai alamat surat pengantar kegiatan ke nagari.">
-        <textarea
-          aria-label="Wilayah tugas" className={`${kolom} min-h-[84px] py-2`} rows={4} maxLength={2000} disabled={mati} value={isi.wilayah}
-          onChange={(e) => ubah((g) => { g.wilayah = e.target.value; })}
-        />
-      </Isian>
+      {ada ? (
+        <div className="flex flex-col gap-2.5">
+          <p className="m-0 text-[12.5px] text-[#44546F]">
+            Wilayah tugas mengikuti <b>wilayah sampel</b> pada Kelola Pendataan (alokasi sub SLS{d.kegiatan.length > 0 ? `: ${d.kegiatan.map((k) => k.nama).join(", ")}` : ""}) dan otomatis menjadi
+            tujuan surat pengantar ke nagari saat disimpan.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+            <span className="rounded-full bg-[#E9F0FB] px-2.5 py-0.5 font-semibold text-[#0F3D7A]">{d.nagari.length} nagari</span>
+            <span className="rounded-full bg-[#E9F0FB] px-2.5 py-0.5 font-semibold text-[#0F3D7A]">{d.total_sub_sls} sub SLS</span>
+            <span className="rounded-full bg-[#E9F0FB] px-2.5 py-0.5 font-semibold text-[#0F3D7A]">target {d.total_target} sampel</span>
+            <Link href="/sigap/kelola/pendataan" className="font-bold text-[#1F5FD1] underline">Ubah alokasi di Kelola Pendataan</Link>
+          </div>
+          <div className="max-h-[260px] overflow-auto rounded-[10px] border border-[#D9E3F2]">
+            <table className="w-full border-collapse text-left text-[12.5px]">
+              <thead className="sticky top-0 bg-[#F4F7FC] text-[11.5px] text-[#44546F]">
+                <tr><th className="px-2.5 py-1.5">Kecamatan</th><th className="px-2.5 py-1.5">Nagari</th><th className="px-2.5 py-1.5 text-right">Sub SLS</th><th className="px-2.5 py-1.5 text-right">Target</th></tr>
+              </thead>
+              <tbody>
+                {d.nagari.map((n) => (
+                  <tr key={`${n.kecamatan}|${n.nagari}`} className="border-t border-[#EEF2F9]">
+                    <td className="px-2.5 py-1.5">{n.kecamatan}</td><td className="px-2.5 py-1.5 font-semibold">{n.nagari}</td>
+                    <td className="px-2.5 py-1.5 text-right tabular-nums">{n.sub_sls}</td><td className="px-2.5 py-1.5 text-right tabular-nums">{n.target}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {d.tanpa_master > 0 && <Cat>{d.tanpa_master} sub SLS beralokasi belum punya nama kecamatan/nagari di master wilayah, sehingga tidak masuk daftar nagari.</Cat>}
+          {(sampel?.terpotong ?? 0) > 0 && <Cat>Daftar terlalu panjang untuk satu isian (maks 2000 huruf): {sampel?.terpotong} nagari terakhir tidak ikut teks surat. Pisahkan surat per kecamatan bila perlu.</Cat>}
+          {berbeda && !mati && <Cat>Daftar yang tersimpan berbeda dengan alokasi terbaru; menyimpan sekarang akan memperbarui tujuan surat pengantar.</Cat>}
+          {berbeda && mati && <Cat>Daftar yang tersimpan berbeda dengan alokasi terbaru. Tekan Revisi lalu simpan untuk memperbarui tujuan surat pengantar.</Cat>}
+        </div>
+      ) : sampel?.memuat ? (
+        <p className="m-0 text-[12.5px] text-[#44546F]">Memuat wilayah sampel dari Kelola Pendataan…</p>
+      ) : (
+        <>
+          <p className="m-0 mb-2 text-[12.5px] text-[#44546F]">
+            {d && !d.tertaut
+              ? "Identifikasi ini belum tertaut ke kegiatan pendataan."
+              : "Alokasi sub SLS belum diunggah pada kegiatan pendataan tertaut."}{" "}
+            Wilayah tugas seharusnya mengikuti wilayah sampel: unggah alokasi di <Link href="/sigap/kelola/pendataan" className="font-bold text-[#1F5FD1] underline">Kelola Pendataan</Link>, Persiapan.
+            Sementara itu daftar nagari boleh diisi manual.
+          </p>
+          <Isian judul="Nagari atau wilayah tujuan surat pengantar" ket="Satu nagari atau wilayah per baris. Dipakai sebagai alamat surat pengantar kegiatan ke nagari.">
+            <textarea
+              aria-label="Wilayah tugas" className={`${kolom} min-h-[84px] py-2`} rows={4} maxLength={2000} disabled={mati} value={isi.wilayah}
+              onChange={(e) => ubah((g) => { g.wilayah = e.target.value; })}
+            />
+          </Isian>
+        </>
+      )}
     </Bagian>
   );
 }

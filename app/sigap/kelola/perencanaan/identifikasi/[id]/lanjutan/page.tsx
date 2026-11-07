@@ -24,11 +24,13 @@ import { peringatanDikecualikan } from "@/lib/keu/notifikasi";
 import LencanaNotif from "../../../notifikasi/LencanaNotif";
 import { hariIniWib, useIdent } from "../../useIdent";
 import { KartuAcuan, KartuPengecualian } from "./Pengecualian";
-import { KartuWilayah } from "./Isian";
+import { KartuWilayah, type WilayahSampelLayar } from "./Isian";
 import { TabelKelas, TabelPeran, TabelPetugas } from "./TabelLanjutan";
 import { DaftarDampak, ModalKeluar, ModalTerapkan, type PilihanSimpan } from "./ModalTerapkan";
 import { KartuDokumen, KartuRincian, KartuStatusLj, KartuVersiLj } from "./Ringkasan";
 import { useLanjutan } from "./useLanjutan";
+import { useData } from "@/app/portal/dataBersama";
+import { teksSuratAman, type DataWilayahSampel } from "@/lib/wilayahSampelIdent";
 
 function Isi() {
   const { id: idParam } = useParams<{ id: string }>();
@@ -40,7 +42,15 @@ function Isi() {
   const muatSemua = useCallback(async () => { await Promise.all([ident.muatSemua(), lj.muatSemua()]); }, [ident, lj]);
   const kirim = useKirim(muatSemua);
 
-  const [isi, setIsi] = useState<IsiLanjutan | null>(null);
+  // (7 Nov 2026) Wilayah tugas dibaca dari alokasi sub SLS Kelola Pendataan; bila ada, teks surat pengantar nagari DISUSUN dari situ dan ikut tersimpan.
+  const ws = useData<DataWilayahSampel>(id ? `/api/sigap/keu/wilayah-sampel?ident=${id}` : "/api/sigap/keu/wilayah-sampel", { aktif: id !== null });
+  const wilayahSampel = ws.data ?? null;
+  const alokasiTeks = useMemo(() => (wilayahSampel && wilayahSampel.nagari.length > 0 ? teksSuratAman(wilayahSampel.nagari) : null), [wilayahSampel]);
+  const [isiMentah, setIsi] = useState<IsiLanjutan | null>(null);
+  const isi = useMemo<IsiLanjutan | null>(
+    () => (isiMentah && alokasiTeks && alokasiTeks.teks !== "" && isiMentah.wilayah !== alokasiTeks.teks ? { ...isiMentah, wilayah: alokasiTeks.teks } : isiMentah),
+    [isiMentah, alokasiTeks],
+  );
   const [dirty, setDirty] = useState(false);
   const [alasan, setAlasan] = useState("");
   const dimuat = useRef<string | null>(null);
@@ -214,7 +224,10 @@ function Isi() {
         {row && formSah && isi && (
           <div className="grid min-w-0 items-start gap-3.5 xl:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
             <div className="flex min-w-0 flex-col gap-3.5">
-              <KartuWilayah isi={isi} ubah={ubah} mati={matiForm} />
+              <KartuWilayah
+                isi={isi} ubah={ubah} mati={matiForm}
+                sampel={{ data: wilayahSampel, memuat: id !== null && !ws.data && !ws.galat, galat: ws.galat === "SESI_BERAKHIR" ? null : ws.galat, terpotong: alokasiTeks?.terpotong ?? 0, tersimpan: tersimpan ? normalisasiLanjutan(tersimpan.isi).wilayah : null } satisfies WilayahSampelLayar}
+              />
               <TabelKelas isi={isi} ubah={ubah} mati={matiForm} form={formSah} organik={lj.organik} tahun={tahun} />
               <TabelPeran isi={isi} ubah={ubah} mati={matiForm} form={formSah} tahun={tahun} />
               <TabelPetugas isi={isi} ubah={ubah} mati={matiForm} organik={lj.organik} mitra={lj.mitra} galatDaftar={lj.daftarNamaGalat} tugasTerbit={tugasTerbit} hrefTim={`/sigap/kelola/perencanaan/identifikasi/${row.id}/tim`} />

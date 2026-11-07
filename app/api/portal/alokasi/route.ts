@@ -6,6 +6,9 @@
 // POST { aksi: "tag", k, s, kk, peran: "utama"|"cadangan" }   -> { ok }   (PPL, hanya saat jendela terbuka; ditegakkan di basis data)
 // POST { aksi: "lepas", k, kk }                                -> { ok }   (PPL, hanya saat jendela terbuka)
 // POST { aksi: "hasil", k, kk, hasil: "didata"|"menolak"|"tidak_ditemukan"|null } -> { ok }  (PPL, sampel utama)
+// POST { aksi: "ganti_ajukan", k, utama, cadangan, alasan, catatan? } -> { ok, id }  (PPL, sesudah jendela terkunci; tahap B)
+// POST { aksi: "ganti_batal", k, id }                          -> { ok }   (pengaju, selama menunggu)
+// POST { aksi: "ganti_putus", k, id, setuju, catatan? }        -> { ok, status }  (PML sub SLS itu; penolakan wajib catatan)
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
@@ -14,6 +17,7 @@ import { galatServer } from "@/lib/sigapGalat";
 import { GalatSampel } from "@/lib/portal/sampel";
 import { dataAlokasiSaya, kkSubslsSaya } from "@/lib/portal/alokasiWilayah";
 import { dataTagSub, isiHasilTag, lengkapiTagSaya, lepasTag, tandaiTag } from "@/lib/portal/tagSampel";
+import { ajukanGanti, batalGanti, putusGanti } from "@/lib/portal/gantiSampel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +69,18 @@ export async function POST(req: NextRequest) {
     if (body.aksi === "hasil") {
       await isiHasilTag(db, akun, k, body.kk, body.hasil === undefined ? null : body.hasil);
       return NextResponse.json({ ok: true });
+    }
+    if (body.aksi === "ganti_ajukan") {
+      const { id } = await ajukanGanti(db, akun, k, body.utama, body.cadangan, body.alasan, body.catatan);
+      return NextResponse.json({ ok: true, id });
+    }
+    if (body.aksi === "ganti_batal") {
+      await batalGanti(db, akun, k, body.id);
+      return NextResponse.json({ ok: true });
+    }
+    if (body.aksi === "ganti_putus") {
+      const status = await putusGanti(db, akun, k, body.id, body.setuju, body.catatan, false);
+      return NextResponse.json({ ok: true, status });
     }
     return galat("Aksi tidak dikenal.");
   } catch (e) {

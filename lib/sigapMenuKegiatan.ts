@@ -109,7 +109,11 @@ export function langkahSekali(
     });
 }
 
-export type ItemBar = { kunci: KunciItem; label: string; href: string };
+/** `nonaktif` = alasan item tidak bisa dibuka (tampil redup; ketukan menampilkan alasan itu). href kosong. */
+export type ItemBar = { kunci: KunciItem; label: string; href: string; nonaktif?: string };
+
+/** (7 Nov 2026) Kamera dan Translok selalu ada di bar; bila akun belum punya penugasan Transport Lokal pada kegiatan ini, keduanya redup dengan pesan ini. */
+export const PESAN_BELUM_ALOKASI_TRANSLOK = "Belum ada alokasi Transport Lokal untuk Anda di kegiatan ini.";
 
 export type BahanBar = {
   kode: string; // kode kegiatan induk
@@ -161,6 +165,10 @@ export function susunBar(b: BahanBar): ItemBar[] {
   if (b.translok) {
     item.push({ kunci: "kamera", label: "Kamera", href: `/sigap/foto?kegiatan=${b.translok.kegiatanId}` });
     item.push({ kunci: "translok", label: ist.translok ?? "Translok", href: tambahParam(b.translok.href, { k: b.kode, tab: "hari_kerja" }) });
+  } else {
+    // (7 Nov 2026) tombol tetap ada, berstatus "belum ada alokasi" (permintaan user) -- bar seragam di semua kegiatan dan petugas tahu sebabnya
+    item.push({ kunci: "kamera", label: "Kamera", href: "", nonaktif: PESAN_BELUM_ALOKASI_TRANSLOK });
+    item.push({ kunci: "translok", label: ist.translok ?? "Translok", href: "", nonaktif: PESAN_BELUM_ALOKASI_TRANSLOK });
   }
   return item;
 }
