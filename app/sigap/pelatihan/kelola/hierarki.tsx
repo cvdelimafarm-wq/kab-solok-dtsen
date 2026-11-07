@@ -12,12 +12,14 @@ import { BTN, BTN_O, Chip, INPUT, Kartu, Memuat, Pesan, TD, TH } from "../../adm
 import { Toast, useToast } from "../../admin/Toast";
 import { LABEL_PERAN_PELATIHAN, periksaHierarki, type PeranPelatihan, type SimpulHierarki } from "@/lib/hierarkiPelatihan";
 import { PETUNJUK_TEMPLATE, bacaImpor, barisTemplate, type HasilImpor } from "@/lib/hierarkiImpor";
+import type { SelisihTim } from "@/lib/hierarkiSelaras";
 import KelasIdentKelola from "./kelasIdent";
 import InstrukturKelola from "./instruktur";
 import { ChipSetelan, PilihSub, useSub, type ItemSub } from "./GrupTab";
 import SelectCari from "@/app/components/SelectCari";
 
-type Data = { tersedia: boolean; simpul: SimpulHierarki[]; boleh_kelola: boolean };
+// (7 Nov 2026) `tim` = kegiatan saudara sumber alokasi Stage 1; `selisih_tim` = peserta yang atasannya di sini berbeda dari Tim
+type Data = { tersedia: boolean; simpul: SimpulHierarki[]; boleh_kelola: boolean; tim: { kegiatan_id: number; nama: string } | null; selisih_tim: SelisihTim[] };
 
 const URUT_PERAN: Record<PeranPelatihan, number> = { korwil: 0, pml: 1, ppl: 2 };
 const ASAL: Record<NonNullable<SimpulHierarki["asal"]>, { teks: string; w: "mut" | "ok" | "wait" }> = {
@@ -42,6 +44,7 @@ function KartuHierarki() {
   const [menyalin, setMenyalin] = useState(false);
   const [impor, setImpor] = useState<(HasilImpor & { nama: string }) | null>(null);
   const [menerapkan, setMenerapkan] = useState(false);
+  const [menyamakan, setMenyamakan] = useState(false);
 
   // nilai terakhir yang SUDAH tersimpan di server, per akun (untuk mengembalikan baris bila gagal); antrean simpan per akun
   const tersimpan = useRef(new Map<number, SimpulHierarki>());
@@ -52,7 +55,7 @@ function KartuHierarki() {
   const muat = useCallback(async () => {
     try {
       const r = await fetchJson<Data & { masalah?: unknown }>(urlPelatihan("/api/sigap/pelatihan/hierarki"));
-      setD({ tersedia: r.tersedia, simpul: r.simpul, boleh_kelola: r.boleh_kelola });
+      setD({ tersedia: r.tersedia, simpul: r.simpul, boleh_kelola: r.boleh_kelola, tim: r.tim ?? null, selisih_tim: r.selisih_tim ?? [] });
       setSimpul(r.simpul);
       tersimpan.current = new Map(r.simpul.map((s) => [s.akun_id, s]));
       setGalat(null);
@@ -142,6 +145,21 @@ function KartuHierarki() {
     }
   }
 
+  async function samakanTim() {
+    setMenyamakan(true);
+    setGalat(null);
+    setOk(null);
+    try {
+      const r = await fetchJson<{ diterapkan?: number; dilewati?: number }>(urlPelatihan("/api/sigap/pelatihan/hierarki"), { method: "POST", body: JSON.stringify({ aksi: "samakan_tim" }) });
+      setOk(`Atasan disamakan dengan Tim: ${Number(r.diterapkan ?? 0)} peserta diperbarui${Number(r.dilewati ?? 0) > 0 ? `, ${Number(r.dilewati)} dilewati (atasan Tim bukan peserta pelatihan ini)` : ""}.`);
+      await muat();
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    } finally {
+      setMenyamakan(false);
+    }
+  }
+
   async function unduhTemplate() {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
@@ -212,6 +230,28 @@ function KartuHierarki() {
           {masalah.atasan_asing.length > 0 && `${masalah.atasan_asing.length} peserta memiliki atasan yang bukan peserta pelatihan ini.`}
         </Pesan>
       )}
+      {d.tim && d.selisih_tim.length > 0 && (
+        <div className="mb-3 rounded-xl border border-[#F0D58A] bg-[#FFF8E6] p-3" aria-label="Selisih dengan Tim">
+          <b className="text-[13.5px] text-[#7A5B00]">
+            {d.selisih_tim.length} peserta atasannya berbeda dari Tim (alokasi Stage 1: {d.tim.nama})
+          </b>
+          <ul className="mt-1.5 max-h-48 space-y-1 overflow-y-auto text-[12.5px] text-[#4D3B00]">
+            {d.selisih_tim.map((x) => (
+              <li key={x.akun_id}>
+                <b>{x.nama}</b> · di sini: {x.atasan_sekarang_nama ?? "tanpa atasan"} → menurut Tim: {x.atasan_tim_nama ?? "bukan peserta pelatihan ini"}
+                {!x.bisa && <span className="text-[#B42329]"> (tidak bisa diterapkan)</span>}
+                {x.bisa && x.atasan_ppl && <span className="text-[#B45A00]"> (atasan itu berperan PPL di pelatihan ini, periksa perannya)</span>}
+              </li>
+            ))}
+          </ul>
+          {bisa && d.selisih_tim.some((x) => x.bisa) && (
+            <button type="button" className={`${BTN} mt-2`} disabled={menyamakan} onClick={samakanTim}>
+              {menyamakan ? "Menyamakan…" : `Samakan ${d.selisih_tim.filter((x) => x.bisa).length} atasan dengan Tim`}
+            </button>
+          )}
+        </div>
+      )}
+      {d.tim && d.selisih_tim.length === 0 && simpul.length > 0 && <p className="mb-2 text-[12.5px] text-[#2E7D32]">Atasan sudah sama dengan Tim (alokasi Stage 1: {d.tim.nama}).</p>}
       {masalah.tanpa_atasan.length > 0 && <p className="mb-2 text-[12.5px] text-[#6B7A90]">{masalah.tanpa_atasan.length} PML/PPL belum punya atasan: hanya instruktur dan panitia yang melihat progres mereka.</p>}
 
       {bisa && (
@@ -231,10 +271,14 @@ function KartuHierarki() {
               }}
             />
           </label>
-          <button type="button" className={BTN_O} disabled={menyalin} onClick={salin}>
-            {menyalin ? "Menyalin…" : "Salin atasan dari data PSP"}
-          </button>
-          <span className="text-[12px] text-[#6B7A90]">Salinan PSP hanya titik awal (untuk Seruti sering belum lengkap). Perubahan di tabel tersimpan otomatis.</span>
+          {!d.tim && (
+            <button type="button" className={BTN_O} disabled={menyalin} onClick={salin}>
+              {menyalin ? "Menyalin…" : "Salin atasan dari data PSP"}
+            </button>
+          )}
+          <span className="text-[12px] text-[#6B7A90]">
+            {d.tim ? `Acuan atasan: Tim (alokasi Stage 1) ${d.tim.nama}; selisihnya ditandai di atas.` : "Salinan PSP hanya titik awal (untuk Seruti sering belum lengkap)."} Perubahan di tabel tersimpan otomatis.
+          </span>
         </div>
       )}
 

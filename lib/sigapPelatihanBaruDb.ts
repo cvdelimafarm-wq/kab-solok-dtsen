@@ -11,6 +11,7 @@ import { gerbangDari, type Gerbang, type PenolakBaris } from "@/lib/gerbangUndan
 import { bacaKetentuan, bersihkanButir, hariIniWib, kegiatanSudahSelesai, KETENTUAN_BAWAAN, tampilanBaruAktif, type Ketentuan, type ResponsUndangan } from "@/lib/ketentuanPelatihan";
 import { periksaPerubahan, type MasukanPerubahan } from "@/lib/hierarkiImpor";
 import type { Pengguna, PeranPelatihan, SimpulHierarki } from "@/lib/hierarkiPelatihan";
+import { saringHierarkiAktif, type BarisTim } from "@/lib/hierarkiSelaras";
 
 const PERAN_SAH: PeranPelatihan[] = ["ppl", "pml", "korwil"];
 const jadiPeran = (x: unknown): PeranPelatihan | null => (PERAN_SAH.includes(x as PeranPelatihan) ? (x as PeranPelatihan) : null);
@@ -176,8 +177,10 @@ export async function muatSimpulHierarki(db: Db, kegiatanId: number): Promise<Da
   } catch {
     /* tabel belum ada */
   }
-  const { data: pen } = await db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(5000);
+  const { data: pen, error: galatPen } = await db.from("sigap_penugasan").select("akun_id, peran, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).or(FILTER_BUKAN_ADMINISTRASI).limit(5000);
   const penugasan = (pen ?? []) as { akun_id: number; peran: string; kelas: number | null }[];
+  // (7 Nov 2026) baris hierarki yatim (penugasannya sudah dinonaktifkan) tidak lagi tampil: Jihan tetap muncul di Hierarki walau penugasannya dicabut
+  baris = saringHierarkiAktif(baris, galatPen ? null : new Set(penugasan.map((p) => p.akun_id)));
   const kelasPer = new Map<number, number | null>();
   for (const p of penugasan) kelasPer.set(p.akun_id, p.kelas === null || p.kelas === undefined ? null : Number(p.kelas));
 
@@ -216,6 +219,40 @@ export async function muatSimpulHierarki(db: Db, kegiatanId: number): Promise<Da
     asal: asalPer.get(id) ?? "bawaan",
   }));
   return { tersedia, simpul };
+}
+
+/**
+ * Data Tim (sigap_tim, alokasi Stage 1) dari kegiatan SAUDARA: kegiatan lain dalam induk yang sama (sigap_induk.kegiatan_ids memuat kegiatan ini).
+ * Bila ada beberapa saudara dipilih yang barisnya beratasan terbanyak (seri: id terkecil). null = tidak ada induk/saudara/Tim.
+ */
+export async function muatTimSaudara(db: Db, kegiatanId: number): Promise<{ kegiatan_id: number; nama: string; baris: BarisTim[] } | null> {
+  try {
+    const { data: induk, error } = await db.from("sigap_induk").select("kegiatan_ids").eq("aktif", true).contains("kegiatan_ids", [kegiatanId]);
+    if (error) return null;
+    const saudara = new Set<number>();
+    for (const i of (induk ?? []) as { kegiatan_ids: number[] | null }[]) for (const k of i.kegiatan_ids ?? []) if (Number(k) !== kegiatanId) saudara.add(Number(k));
+    if (saudara.size === 0) return null;
+    const { data: tim, error: galatTim } = await db.from("sigap_tim").select("kegiatan_id, akun_id, atasan_akun_id").in("kegiatan_id", Array.from(saudara)).limit(5000);
+    if (galatTim) return null;
+    const per = new Map<number, BarisTim[]>();
+    for (const t of (tim ?? []) as { kegiatan_id: number; akun_id: number; atasan_akun_id: number | null }[]) {
+      per.set(t.kegiatan_id, [...(per.get(t.kegiatan_id) ?? []), { akun_id: t.akun_id, atasan_akun_id: t.atasan_akun_id ?? null }]);
+    }
+    let pilih: number | null = null;
+    let terbanyak = 0;
+    for (const [k, b] of Array.from(per.entries()).sort((x, y) => x[0] - y[0])) {
+      const n = b.filter((x) => x.atasan_akun_id !== null).length;
+      if (n > terbanyak) {
+        terbanyak = n;
+        pilih = k;
+      }
+    }
+    if (pilih === null) return null;
+    const { data: keg } = await db.from("sigap_kegiatan").select("nama").eq("id", pilih).maybeSingle();
+    return { kegiatan_id: pilih, nama: (keg as { nama?: string } | null)?.nama ?? `Kegiatan ${pilih}`, baris: per.get(pilih) ?? [] };
+  } catch {
+    return null;
+  }
 }
 
 /** Akun yang menolak undangan kegiatan ini (kosong bila tabel belum ada). */

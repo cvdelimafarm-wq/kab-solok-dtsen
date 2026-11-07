@@ -80,6 +80,8 @@ export type IzinMenuSidebar = {
   delego: boolean;
   /** (28 Okt 2026) "Usulan perbaikan": admin aplikasi (portal.kelola = kelola) membaca masukan pengguna. */
   usulan: boolean;
+  /** (7 Nov 2026) Menu Master (wilayah, peta, KK): izin master.wilayah, khusus Ketua. Opsional agar pemanggil lama tetap sah. */
+  masterWilayah?: boolean;
 };
 
 function jika(syarat: boolean, ...item: ItemMenu[]): ItemMenu[] {
@@ -190,6 +192,8 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
         { id: "pedia", ikon: "pedia", label: "SIGAP PEDIA", href: "/sigap/pedia", aktifKode: "pedia", title: "Ensiklopedia konsultasi resmi", ketPalet: "ensiklopedia konsultasi" },
         { id: "kantor", ikon: "kantor", label: "Kantor", status: "segera" },
         { id: "diseminasi", ikon: "siaran", label: "Diseminasi", status: "segera" },
+        // (7 Nov 2026, tahap C1) Master: wilayah, peta, dan keluarga (KK) lintas kegiatan. Hanya pemegang izin master.wilayah (Ketua); tidak ditampilkan "nonaktif" bagi yang lain.
+        ...jika(!!i.masterWilayah, { id: "master-wilayah", ikon: "arsip", label: "Master wilayah", href: "/sigap/kelola/master", aktifKode: "master_wilayah", title: "Master wilayah, peta, dan keluarga (KK) lintas kegiatan", ketPalet: "wilayah, peta, shapefile, KK master" }),
         ...jika(i.akses, { id: "peran-akses", ikon: "gembok", label: "Peran dan akses", href: "/sigap/kelola/akses", aktifKode: "akses" }),
         ...jika(i.aplikasi, {
           id: "aplikasi-periode",

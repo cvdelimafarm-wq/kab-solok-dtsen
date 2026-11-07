@@ -4,6 +4,8 @@
 //
 // GET                                  -> { tersedia, simpul[], masalah:{siklus,atasan_asing,tanpa_atasan}, boleh_kelola }
 // POST {aksi:"salin"}                  -> menyalin atasan awal dari PSP (fungsi SQL sigap_pelatihan_salin_hierarki; hanya mengisi yang belum ada) -> { ok, ditambah }
+// (7 Nov 2026) GET juga memuat `tim` ({kegiatan_id,nama} kegiatan saudara sumber alokasi Stage 1) dan `selisih_tim` (atasan Hierarki != atasan Tim).
+// POST {aksi:"samakan_tim"}            -> atasan peserta yang berbeda disamakan dengan Tim (peran tidak diubah; hanya yang bisa diterapkan) -> { ok, diterapkan, dilewati }
 // POST {aksi:"atur", akun_id, atasan_akun_id|null, peran?}   -> ubah manual -> { ok }
 // POST {aksi:"impor", perubahan:[{akun_id, atasan_akun_id|null, peran}]}  -> terapkan hasil impor template (semua atau tidak sama sekali) -> { ok, diterapkan }
 
@@ -11,7 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { periksaHierarki, type PeranPelatihan } from "@/lib/hierarkiPelatihan";
-import { aturAtasan, muatSimpulHierarki, terapkanPerubahan } from "@/lib/sigapPelatihanBaruDb";
+import { aturAtasan, muatSimpulHierarki, muatTimSaudara, terapkanPerubahan } from "@/lib/sigapPelatihanBaruDb";
+import { selisihDenganTim } from "@/lib/hierarkiSelaras";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +38,9 @@ export async function GET(req: NextRequest) {
     const p = await siapkan(req);
     if ("err" in p) return p.err;
     const { tersedia, simpul } = await muatSimpulHierarki(p.db, p.kegiatanId);
-    return NextResponse.json({ kegiatan_id: p.kegiatanId, tersedia, simpul, masalah: periksaHierarki(simpul), boleh_kelola: p.bisaKelola });
+    const tim = await muatTimSaudara(p.db, p.kegiatanId);
+    const selisih_tim = tim ? selisihDenganTim(simpul, tim.baris) : [];
+    return NextResponse.json({ kegiatan_id: p.kegiatanId, tersedia, simpul, masalah: periksaHierarki(simpul), boleh_kelola: p.bisaKelola, tim: tim ? { kegiatan_id: tim.kegiatan_id, nama: tim.nama } : null, selisih_tim });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }
@@ -54,6 +59,19 @@ export async function POST(req: NextRequest) {
       if (error) return galat("Penyalinan belum dapat dijalankan. Pastikan SQL 20261102zh_pelatihan_hierarki sudah dijalankan.", 500);
       await catatAudit(p.db, p.akun.id, "pelatihan_hierarki_salin", { kegiatan_id: p.kegiatanId, ditambah: data });
       return NextResponse.json({ ok: true, ditambah: Number(data ?? 0) });
+    }
+
+    if (body.aksi === "samakan_tim") {
+      const { simpul } = await muatSimpulHierarki(p.db, p.kegiatanId);
+      const tim = await muatTimSaudara(p.db, p.kegiatanId);
+      if (!tim) return galat("Tidak ada data Tim (alokasi Stage 1) pada kegiatan saudara untuk dijadikan acuan.", 404);
+      const selisih = selisihDenganTim(simpul, tim.baris);
+      const terap = selisih.filter((x) => x.bisa);
+      const peranDari = new Map(simpul.map((s) => [s.akun_id, s.peran]));
+      const hasil = await terapkanPerubahan(p.db, p.kegiatanId, terap.map((x) => ({ akun_id: x.akun_id, atasan_akun_id: x.atasan_tim, peran: peranDari.get(x.akun_id)! })), p.akun.nama, simpul);
+      if (!hasil.ok) return galat(hasil.pesan);
+      await catatAudit(p.db, p.akun.id, "pelatihan_hierarki_samakan_tim", { kegiatan_id: p.kegiatanId, sumber_kegiatan_id: tim.kegiatan_id, diterapkan: terap.map((x) => ({ akun_id: x.akun_id, dari: x.atasan_sekarang, ke: x.atasan_tim })), dilewati: selisih.length - terap.length });
+      return NextResponse.json({ ok: true, diterapkan: terap.length, dilewati: selisih.length - terap.length });
     }
 
     if (body.aksi === "atur") {
