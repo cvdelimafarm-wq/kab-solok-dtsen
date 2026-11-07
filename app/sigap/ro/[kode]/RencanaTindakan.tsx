@@ -107,6 +107,16 @@ export function RencanaTindakan({ kode, item, baru }: { kode: string; item: SelI
     );
   }
 
+  // selama data pilihan belum datang, jangan tampilkan kontrol (klik awal bisa menimpa pilihan tersimpan)
+  if (baca.memuat) {
+    return (
+      <section className={`${kartu} flex flex-col gap-1`} aria-label="Rencana tindakan">
+        <h2 className={judulKartu}>Rencana tindakan per butir</h2>
+        <p className="m-0 text-[12.5px] text-[#5B6B7B]">Memuat rencana tindakan…</p>
+      </section>
+    );
+  }
+
   const bisa = boleh === true;
   const warnaPagu = neraca.status === "tetap" ? "hj" : "kn";
   const kurang = rencana.filter((r) => r.golongan === "kurang");
