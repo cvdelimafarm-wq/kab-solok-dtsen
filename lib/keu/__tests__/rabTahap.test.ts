@@ -87,3 +87,25 @@ describe("alokasi hari translok", () => {
     expect(t).toEqual({ maksRupiah: 15750000 + 300, isiRupiah: 750000, kolomTanpaTarif: 1 });
   });
 });
+
+import { bersihkanRibuan, tampilRibuan } from "../rabPerSurvei";
+describe("pemisah ribuan isian (7 Nov 2026)", () => {
+  it("tampil: titik ribuan, koma desimal dipertahankan", () => {
+    expect(tampilRibuan("56000")).toBe("56.000");
+    expect(tampilRibuan("1250000")).toBe("1.250.000");
+    expect(tampilRibuan("2,5")).toBe("2,5");
+    expect(tampilRibuan("12500,25")).toBe("12.500,25");
+    expect(tampilRibuan("")).toBe("");
+    expect(tampilRibuan("12,")).toBe("12,");
+  });
+  it("bersihkan: titik dibuang; volume boleh satu koma", () => {
+    expect(bersihkanRibuan("1.250.000", false)).toBe("1250000");
+    expect(bersihkanRibuan("12a3", false)).toBe("123");
+    expect(bersihkanRibuan("1.250,5", true)).toBe("1250,5");
+    expect(bersihkanRibuan("1,2,3", true)).toBe("1,23");
+  });
+  it("ketik bolak-balik stabil", () => {
+    expect(bersihkanRibuan(tampilRibuan("56000"), false)).toBe("56000");
+    expect(bersihkanRibuan(tampilRibuan("12500,25"), true)).toBe("12500,25");
+  });
+});

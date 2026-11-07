@@ -448,6 +448,12 @@ export function jelaskanVolume(r: RincianSurvei, isi: IsiLanjutan): string[] {
     if (ins.length > 0) return [...ins.map((i) => `${i.nama.trim() || "Instruktur"} (${i.level || "level ?"}${i.asal ? `, ${i.asal}` : ""}): ${i.jam} JP`), "Volume = jumlah JP instruktur kelompok ini; harga = tarif per JP."];
     return ["Jumlah jam (JP) dan tarif mengikuti ketentuan honor yang berlaku; isi sendiri."];
   }
+  if (r.kelompok === "Honor" && /^Honor (PML|PPL) \(mitra\)/.test(r.uraian)) {
+    const ppl = r.uraian.includes("PPL");
+    return [r.volume === null
+      ? `Volume belum ada: isi beban tugas (jumlah sampel dan pembagian mitra atau organik) pada identifikasi lanjutan. Harga satuan diisi sendiri (tarif per satuan mengikuti SPKL).`
+      : `Volume = jumlah ${r.satuan} yang ${ppl ? "didata" : "diperiksa"} mitra, dari beban tugas pada identifikasi lanjutan. Tarif per ${r.satuan} mengikuti SPKL, jadi harga satuan diisi sendiri.`, "Honor pendataan dibayarkan ke mitra."];
+  }
   if (r.kelompok === "Honor") return ["Volume = jumlah petugas pada identifikasi awal. Tarif honor mengikuti SPKL, jadi harga satuan diisi sendiri."];
   if (r.kelompok === "Rapat") return ["Jumlah peserta rapat belum diidentifikasi; isi volume sendiri sesuai perkiraan peserta."];
   return [r.catatan || (vol !== null ? `Volume ${vol} ${r.satuan} dari identifikasi.` : "Volume belum ada pada identifikasi.")];
@@ -489,4 +495,23 @@ export function langkahAlur(o: { lanjutanAda: boolean; lanjutanVer: number | nul
     { no: 3, judul: "Identifikasi lanjutan", keadaan: o.lanjutanAda ? "selesai" : "menunggu", ket: lanj, tautan: "lanjutan" },
     { no: 4, judul: "Perbarui RAB", keadaan: o.berubah > 0 ? "berjalan" : o.lanjutanAda && rabSelesai ? "selesai" : "menunggu", ket: o.berubah > 0 ? `${o.berubah} rincian berbeda dari identifikasi terbaru; perbarui di bagian Susun RAB.` : "Tidak ada rincian yang berbeda dari identifikasi terbaru.", tautan: null },
   ];
+}
+
+/**
+ * (7 Nov 2026) Tampilan angka pada kolom isian dengan pemisah titik ribuan (gaya Indonesia: 1.250.000 dan 2,5).
+ * Nilai yang disimpan tetap tanpa pemisah ribuan (desimal memakai koma), jadi pembaca angka (bacaVolume, bacaRupiah) tidak berubah.
+ */
+export function tampilRibuan(teks: string): string {
+  const [bulat, desimal, ...sisa] = teks.split(",");
+  if (!/^\d+$/.test(bulat) || sisa.length > 0) return teks;
+  const g = bulat.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return desimal === undefined ? g : `${g},${desimal}`;
+}
+
+/** Ketikan pengguna -> nilai tersimpan: titik dibuang (pemisah ribuan); untuk volume satu koma desimal boleh. */
+export function bersihkanRibuan(teks: string, desimal: boolean): string {
+  if (!desimal) return teks.replace(/\D/g, "").slice(0, 18);
+  const s = teks.replace(/[^\d,]/g, "");
+  const k = s.indexOf(",");
+  return (k < 0 ? s : `${s.slice(0, k + 1)}${s.slice(k + 1).replace(/,/g, "")}`).slice(0, 15);
 }

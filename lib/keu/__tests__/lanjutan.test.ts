@@ -9,7 +9,7 @@ import { awalForm, instrukturKosong, normalisasi, type Form } from "../identifik
 import { isiPredefined } from "../kebijakan";
 import {
   ID_LJ, KODE_PERAN, MAKS_INSTRUKTUR, alasanDraf, awalLanjutan, hariKelas, idBaru, jadwalPendataan, jumlahPetugas, jumlahRincian, normalisasiLanjutan, periksaLanjutan,
-  pesertaKelas, peringatanLanjutan, instrukturLengkap, rincianBiaya, statusLanjutan, tglValid, tujuanLanjutan, tarifHonor, TARIF_HONOR_BAWAAN, type IsiLanjutan,
+  pesertaKelas, peringatanLanjutan, instrukturLengkap, rincianBiaya, adaBeban, bebanOrganik, statusLanjutan, tglValid, tujuanLanjutan, tarifHonor, TARIF_HONOR_BAWAAN, type IsiLanjutan,
 } from "../lanjutan";
 
 type Op = { op: "set" | "del" | "tambah" | "ganti"; path?: (string | number)[]; value?: unknown };
@@ -358,13 +358,32 @@ describe("instruktur kelas (28 Okt 2026)", () => {
     const f = formIns(); f.peran.pml.honor = true; f.peran.ppl.honor = true;
     const i = salin(vektor.base) as IsiLanjutan; // pml 1 organik + 1 mitra, ppl 2 mitra
     const honor = rincianBiaya(i, f, isiPredefined()).filter((b) => b.akun === "521213");
+    // (7 Nov 2026) PML dan PPL: hanya mitra, satuan dokumen, volume menunggu beban tugas.
     expect(honor.map((b) => [b.uraian, b.volume, b.satuan, b.tarif, b.jumlah])).toEqual([
-      ["Honor PML (mitra)", 1, "orang", null, null], ["Honor PML (organik)", 1, "orang", null, null], ["Honor PPL (mitra)", 2, "orang", null, null],
+      ["Honor PML (mitra)", null, "dokumen", null, null], ["Honor PPL (mitra)", null, "dokumen", null, null],
     ]);
     expect(honor.every((b) => b.kelompok === "Honor")).toBe(true);
     f.peran.pml.honor = false; f.peran.ppl.honor = false;
     expect(rincianBiaya(i, f, isiPredefined()).filter((b) => b.akun === "521213")).toEqual([]);
     expect(rincianBiaya(i, null, null).filter((b) => b.akun === "521213")).toEqual([]);
+  });
+  it("beban tugas (7 Nov 2026): volume honor PML = diperiksa mitra, PPL = didata mitra, satuan dari beban; organik tidak dibayar", () => {
+    const f = formIns(); f.peran.pml.honor = true; f.peran.ppl.honor = true;
+    const i = salin(vektor.base) as IsiLanjutan;
+    i.beban = { satuan: "ruta", sampel: 1000, dataMitra: 700, periksaMitra: 400 };
+    const honor = rincianBiaya(i, f, isiPredefined()).filter((b) => b.akun === "521213");
+    expect(honor.map((b) => [b.uraian, b.volume, b.satuan])).toEqual([["Honor PML (mitra)", 400, "ruta"], ["Honor PPL (mitra)", 700, "ruta"]]);
+    i.beban = { satuan: "usaha", sampel: 50, dataMitra: 0, periksaMitra: 50 };
+    expect(rincianBiaya(i, f, isiPredefined()).filter((b) => b.akun === "521213").map((b) => b.uraian)).toEqual(["Honor PML (mitra)"]);
+    expect(bebanOrganik(i.beban)).toEqual({ data: 50, periksa: 0 });
+  });
+  it("beban tugas: normalisasi menjepit angka dan tidak menambah bidang bila kosong", () => {
+    const n = normalisasiLanjutan({ ...salin(vektor.base), beban: { satuan: "xx", sampel: 10, dataMitra: 99, periksaMitra: -3 } });
+    expect(n.beban).toEqual({ satuan: "dokumen", sampel: 10, dataMitra: 10, periksaMitra: 0 });
+    expect("beban" in normalisasiLanjutan(salin(vektor.base))).toBe(false);
+    expect("beban" in normalisasiLanjutan({ ...salin(vektor.base), beban: { satuan: "dokumen", sampel: 0, dataMitra: 5, periksaMitra: 5 } })).toBe(false);
+    expect(adaBeban(n.beban)).toBe(true);
+    expect(adaBeban(undefined)).toBe(false);
   });
   it("peringatan: belum diisi pada kelas, dan instruktur belum lengkap", () => {
     const f = formIns();

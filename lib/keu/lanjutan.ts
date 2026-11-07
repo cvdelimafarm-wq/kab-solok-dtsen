@@ -94,7 +94,27 @@ export type Petugas = {
   /** (2 Nov 2026) id akun SIGAP bila nama dipilih dari daftar pegawai organik atau mitra (tertaut); kosong = nama di luar daftar atau data lama (dicocokkan lewat nama). */
   akun?: number;
 };
-export type IsiLanjutan = { v: 1; wilayah: string; kelas: Kelas[]; peran: Record<KodePeran, PeranLanjutan>; petugas: Petugas[] };
+/**
+ * (7 Nov 2026) Beban tugas lapangan per survei: berapa sampel, berapa yang didata dan diperiksa mitra. Sisanya (sampel dikurangi bagian mitra) dikerjakan organik.
+ * Dasar honor PML (jumlah dokumen diperiksa mitra) dan honor PPL (jumlah dokumen didata mitra). Boleh tidak ada pada isi lama.
+ */
+export const SATUAN_BEBAN = ["dokumen", "ruta", "usaha"] as const;
+export type SatuanBeban = (typeof SATUAN_BEBAN)[number];
+export type BebanTugas = { satuan: SatuanBeban; sampel: number; dataMitra: number; periksaMitra: number };
+export const MAKS_SAMPEL = 1000000;
+export const BEBAN_KOSONG: BebanTugas = { satuan: "dokumen", sampel: 0, dataMitra: 0, periksaMitra: 0 };
+/** Bagian organik = sampel dikurangi bagian mitra. */
+export const bebanOrganik = (b: BebanTugas): { data: number; periksa: number } => ({ data: Math.max(0, b.sampel - b.dataMitra), periksa: Math.max(0, b.sampel - b.periksaMitra) });
+export const adaBeban = (b: BebanTugas | undefined): b is BebanTugas => b !== undefined && b.sampel > 0;
+function normalisasiBeban(x: unknown): BebanTugas | undefined {
+  if (!adalahObjek(x)) return undefined;
+  const n = (v: unknown, maks: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(maks, Math.max(0, Math.trunc(v))) : 0);
+  const sampel = n(x.sampel, MAKS_SAMPEL);
+  const satuan = (SATUAN_BEBAN as readonly string[]).includes(String(x.satuan)) ? (x.satuan as SatuanBeban) : "dokumen";
+  const hasil: BebanTugas = { satuan, sampel, dataMitra: n(x.dataMitra, sampel), periksaMitra: n(x.periksaMitra, sampel) };
+  return sampel === 0 && hasil.dataMitra === 0 && hasil.periksaMitra === 0 && satuan === "dokumen" ? undefined : hasil;
+}
+export type IsiLanjutan = { v: 1; wilayah: string; kelas: Kelas[]; peran: Record<KodePeran, PeranLanjutan>; petugas: Petugas[]; beban?: BebanTugas };
 export type StatusLanjutan = "draf" | "final";
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -383,7 +403,9 @@ export function normalisasiLanjutan(masuk: unknown): IsiLanjutan {
     jabatan: Array.isArray(e.jabatan) ? (e.jabatan.filter((x, j, arr) => (KODE_JABATAN as readonly string[]).includes(String(x)) && arr.indexOf(x) === j) as KodeJabatan[]) : [],
     ...idAkun(e.akun),
   }));
-  return { v: 1, wilayah: adalahTeks(a.wilayah) ? a.wilayah : "", kelas, peran, petugas };
+  const beban = normalisasiBeban(a.beban);
+  // Hanya ditulis bila ada (isi lama tanpa bidang ini tetap sama setelah normalisasi).
+  return { v: 1, wilayah: adalahTeks(a.wilayah) ? a.wilayah : "", kelas, peran, petugas, ...(beban ? { beban } : {}) };
 }
 
 /** ID baru yang belum dipakai ("k3", "p17", ...). */
@@ -436,6 +458,7 @@ export function peringatanLanjutan(isi: IsiLanjutan, ktx: KonteksPeringatan): st
     }
   }
   if (isi.wilayah.trim() === "") w.push("Wilayah tugas belum diisi (dibutuhkan surat pengantar ke nagari).");
+  if (ktx.form && (ktx.form.peran.pml?.honor || ktx.form.peran.ppl?.honor) && (isi.peran.pml.on || isi.peran.ppl.on) && !adaBeban(isi.beban)) w.push("Beban tugas belum diisi (jumlah sampel dan pembagian mitra atau organik); honor PML dan PPL belum bisa dihitung.");
   for (const k of isi.kelas) {
     const ins = k.instruktur ?? [];
     const sesiForm = ktx.form?.sesi[k.sesi];
@@ -487,6 +510,7 @@ export function peringatanLanjutan(isi: IsiLanjutan, ktx: KonteksPeringatan): st
 /** Id kartu tujuan untuk butir peringatan atau alasan Draf (supaya dapat diklik). */
 export function tujuanLanjutan(teks: string): string | null {
   const t = teks.toLowerCase();
+  if (t.includes("beban tugas")) return ID_LJ.peran;
   if (t.includes("wilayah tugas")) return ID_LJ.wilayah;
   if (t.includes("kelas") || t.includes("briefing") || t.includes("pelatihan") || t.includes("hotel") || t.includes("peserta")) return ID_LJ.kelas;
   if (t.includes("jumlah") && t.includes("perkiraan") || t.includes("organik tercatat") || t.includes("mitra tercatat")) return ID_LJ.peran;
@@ -572,8 +596,8 @@ export function rincianBiaya(isi: IsiLanjutan, f: Form | null, lembar: IsiKebija
       if (bp.transportLokal) {
         const tarifTl = angkaKeb(lembar, "translok_kurang_8");
         tambah({
-          kelompok: "Pelatihan", uraian: `${nama}: transport lokal peserta`, akun: "524113", volume: oh || null, satuan: "orang-hari", tarif: tarifTl, perk: !k.fix,
-          catatan: tarifTl === null ? "Tarif translok belum ada pada lembar kebijakan." : "Dibayar per hari kelas untuk pelatihan dalam kota atau luar kota paket fullday (cek aturan).",
+          kelompok: "Pelatihan", uraian: `${nama}: transport lokal peserta`, akun: akunPaket, volume: oh || null, satuan: "orang-hari", tarif: tarifTl, perk: !k.fix,
+          catatan: tarifTl === null ? "Tarif translok belum ada pada lembar kebijakan." : "Dibayar per hari kelas; akun sama dengan paket meeting (524114 dalam kota, 524119 luar kota).",
         });
       }
       const hp = bp.hariPerjalanan;
@@ -628,6 +652,21 @@ export function rincianBiaya(isi: IsiLanjutan, f: Form | null, lembar: IsiKebija
     if (x.penginapan) out.push({ kelompok: "Translok dan penginapan", uraian: `Penginapan ${NAMA_PERAN[kode]}`, akun: "524111", volume: orang || null, satuan: "orang (jumlah malam menyusul)", tarif: null, jumlah: null, perk: !x.fix, catatan: "Tarif mengacu SBM penginapan; tabel rujukan belum diunggah." });
     // (29 Okt 2026) honor petugas lapangan (identifikasi awal: peran bertanda honor). Hanya jumlah petugas; tarif mengikuti SPKL sehingga harga satuan diisi sendiri pada RAB.
     if (f?.peran[kode]?.honor) {
+      // (7 Nov 2026) Honor PML dan PPL hanya untuk mitra, dihitung per dokumen (atau ruta atau usaha): PML = diperiksa mitra, PPL = didata mitra (beban tugas).
+      if (kode === "pml" || kode === "ppl") {
+        const bb = isi.beban;
+        const punya = adaBeban(bb);
+        const vol = punya ? (kode === "ppl" ? bb.dataMitra : bb.periksaMitra) : null;
+        if (punya && !(vol !== null && vol > 0)) continue; // semua dikerjakan organik: tidak ada honor mitra
+        const sat = punya ? bb.satuan : "dokumen";
+        out.push({
+          kelompok: "Honor", uraian: `Honor ${NAMA_PERAN[kode]} (mitra)`, akun: "521213", volume: vol, satuan: sat, tarif: null, jumlah: null, perk: !x.fix || !punya,
+          catatan: punya
+            ? `Volume = jumlah ${sat} yang ${kode === "ppl" ? "didata" : "diperiksa"} mitra (dari beban tugas). Tarif per ${sat} mengikuti SPKL, isi harga satuan sendiri. (cek aturan)`
+            : `Isi dulu beban tugas (jumlah sampel dan pembagian mitra atau organik) pada identifikasi lanjutan; volume = jumlah ${kode === "ppl" ? "dokumen yang didata" : "dokumen yang diperiksa"} mitra.`,
+        });
+        continue;
+      }
       const bagian: [string, number][] = [["mitra", x.nMit], ["organik", x.nOrg]];
       const ada = bagian.filter(([, n]) => n > 0);
       for (const [jenis, n] of ada.length > 0 ? ada : [bagian[0]]) {

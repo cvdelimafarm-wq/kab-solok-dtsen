@@ -14,8 +14,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { kolom, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
 import {
-  ID_LJ, KODE_PERAN, NAMA_PERAN, NAMA_SUMBER, awalLanjutan, hariKelas, jumlahPetugas, pesertaKelas,
-  type IsiLanjutan, type Kelas, type KodePeran, type Petugas,
+  BEBAN_KOSONG, ID_LJ, KODE_PERAN, MAKS_SAMPEL, NAMA_PERAN, NAMA_SUMBER, SATUAN_BEBAN, awalLanjutan, bebanOrganik, hariKelas, jumlahPetugas, pesertaKelas,
+  type IsiLanjutan, type SatuanBeban, type Kelas, type KodePeran, type Petugas,
 } from "@/lib/keu/lanjutan";
 import { daftarPeriode, type Form } from "@/lib/keu/identifikasi";
 import { kelasAwal, samakanDenganAwal, tambahDariAwal, tautkanKelas } from "@/lib/keu/tautAwal";
@@ -24,6 +24,7 @@ import {
   bolehTurunkanJumlah, hapusAlokasi, hapusNama, jumlahBernama, jumlahSlot, selisihDariAwal, slotKosong, teksJabatan, teksSelisihPeran, type StatusPetugas,
 } from "@/lib/keu/selisihLanjutan";
 import { idBaru } from "@/lib/keu/lanjutan";
+import { bersihkanRibuan, tampilRibuan } from "@/lib/keu/rabPerSurvei";
 import PilihNama from "../../PilihNama";
 import ImporPetugas from "./ImporPetugas";
 import { Bagian, Cat } from "../../Kontrol";
@@ -205,7 +206,73 @@ export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan;
       )}
       {tolak && <Pesan>{tolak}</Pesan>}
       <TabelSaring label="Jumlah petugas per peran" kols={kols} data={data} kunci={(r) => r.kode} />
+      {(isi.peran.pml.on || isi.peran.ppl.on) && <BebanTugasBlok isi={isi} ubah={ubah} mati={mati} />}
     </Bagian>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Beban tugas lapangan (dasar volume honor PML dan PPL mitra)
+// ---------------------------------------------------------------------------------------------------------------------
+function AngkaBeban({ nilai, maks, mati, nama, onUbah }: { nilai: number; maks: number; mati: boolean; nama: string; onUbah: (v: number) => void }) {
+  return (
+    <input
+      aria-label={nama} inputMode="numeric" className={`${kolom} w-28 text-right tabular-nums`} disabled={mati} placeholder="0"
+      value={nilai === 0 ? "" : tampilRibuan(String(nilai))}
+      onChange={(e) => { const n = parseInt(bersihkanRibuan(e.target.value, false) || "0", 10); onUbah(Math.min(maks, Number.isNaN(n) ? 0 : n)); }}
+    />
+  );
+}
+
+function BebanTugasBlok({ isi, ubah, mati }: { isi: IsiLanjutan; ubah: Ubah; mati: boolean }) {
+  const b = isi.beban ?? BEBAN_KOSONG;
+  const org = bebanOrganik(b);
+  const fmt = (n: number) => tampilRibuan(String(n));
+  const set = (u: Partial<typeof b>) => ubah((g) => {
+    const baru = { ...(g.beban ?? BEBAN_KOSONG), ...u };
+    baru.dataMitra = Math.min(baru.dataMitra, baru.sampel);
+    baru.periksaMitra = Math.min(baru.periksaMitra, baru.sampel);
+    g.beban = baru;
+  });
+  const th = "px-2 py-1.5 text-left text-[11.5px] font-bold uppercase tracking-wide text-[#44546F]";
+  const td = "px-2 py-1.5 align-middle";
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-[#DCE3EE] bg-[#FAFBFD] p-3" aria-label="Beban tugas lapangan">
+      <div className="flex flex-wrap items-center gap-2">
+        <strong className="text-[13.5px] text-[#0F2A52]">Beban tugas lapangan</strong>
+        <span className="text-[12.5px] text-[#5B6B84]">Dasar volume honor mitra PML dan PPL di RAB</span>
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#44546F]">Satuan
+          <SelectCari aria-label="Satuan beban tugas" className={`${kolom} w-28`} disabled={mati} value={b.satuan} onChange={(e) => set({ satuan: e.target.value as SatuanBeban })}>
+            {SATUAN_BEBAN.map((x) => <option key={x} value={x}>{x}</option>)}
+          </SelectCari>
+        </label>
+        <label className="flex flex-col gap-1 text-[12px] font-semibold text-[#44546F]">Jumlah sampel
+          <AngkaBeban nilai={b.sampel} maks={MAKS_SAMPEL} mati={mati} nama="Jumlah sampel" onUbah={(v) => set({ sampel: v })} />
+        </label>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[460px] border-collapse text-[13px]">
+          <thead><tr className="bg-[#EEF2F8]"><th scope="col" className={th}>Pekerjaan</th><th scope="col" className={`${th} text-right`}>Mitra</th><th scope="col" className={`${th} text-right`}>Organik</th><th scope="col" className={`${th} text-right`}>Total</th></tr></thead>
+          <tbody>
+            <tr className="border-b border-[#E6ECF5]">
+              <th scope="row" className={`${td} text-left font-semibold text-[#0F2A52]`}>Didata (PPL)</th>
+              <td className={`${td} text-right`}><AngkaBeban nilai={b.dataMitra} maks={b.sampel} mati={mati || b.sampel === 0} nama="Jumlah didata mitra" onUbah={(v) => set({ dataMitra: v })} /></td>
+              <td className={`${td} text-right tabular-nums`}>{fmt(org.data)}</td>
+              <td className={`${td} text-right font-bold tabular-nums`}>{fmt(b.sampel)}</td>
+            </tr>
+            <tr>
+              <th scope="row" className={`${td} text-left font-semibold text-[#0F2A52]`}>Diperiksa (PML)</th>
+              <td className={`${td} text-right`}><AngkaBeban nilai={b.periksaMitra} maks={b.sampel} mati={mati || b.sampel === 0} nama="Jumlah diperiksa mitra" onUbah={(v) => set({ periksaMitra: v })} /></td>
+              <td className={`${td} text-right tabular-nums`}>{fmt(org.periksa)}</td>
+              <td className={`${td} text-right font-bold tabular-nums`}>{fmt(b.sampel)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <Cat>Bagian organik terisi otomatis (sampel dikurangi bagian mitra). Honor pendataan hanya dibayarkan ke mitra, jadi volume honor PPL mitra = didata mitra dan honor PML mitra = diperiksa mitra.</Cat>
+    </div>
   );
 }
 

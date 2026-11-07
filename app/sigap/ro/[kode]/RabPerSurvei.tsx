@@ -31,7 +31,7 @@ import {
 } from "@/lib/keu/rabPerSurvei";
 import { adaBarisStatus, analisisRevisi, CATATAN_JENIS_REVISI, dataStatusBaru, dataStatusUbah, LABEL_STATUS_SURVEI, NAMA_PEMICU, ringkasPemicu, statusDari, type BarisStatusSurvei, type ItemRabLengkap } from "@/lib/keu/rabStatus";
 import { periksaHariBayar, type PeriodeJadwal } from "@/lib/keu/rabSurvei";
-import { alokasiHari, totalAlokasi } from "@/lib/keu/rabPerSurvei";
+import { alokasiHari, bersihkanRibuan, tampilRibuan, totalAlokasi } from "@/lib/keu/rabPerSurvei";
 import { infoTahap, itemBelumTerkaitSurvei, kelompokkanTahap, KET_TAHAP, NAMA_TAHAP, ringkasBarisSurvei, tahapRincian, teksMingguCair, teksSelesai, type Tahap } from "@/lib/keu/rabTahap";
 import { rupiah, urlBaca } from "@/lib/keu/ro";
 import { jendelaCair, labelSumber, periksaCair, periksaHarga, type JendelaCair } from "@/lib/keu/usulanRab";
@@ -245,7 +245,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
         </td>
         <td className={`${sel2} w-[84px]`}>
           {bisaIsi
-            ? <input aria-label={`Volume: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="decimal" value={nilai.volume} onChange={(e) => ubahNilai({ volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
+            ? <input aria-label={`Volume: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="decimal" value={tampilRibuan(nilai.volume)} onChange={(e) => ubahNilai({ volume: bersihkanRibuan(e.target.value, true) })} />
             : <p className="py-1.5 text-right tabular-nums">{nilai.volume || "–"}</p>}
         </td>
         <td className={`${sel2} w-[96px]`}>
@@ -255,7 +255,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
         </td>
         <td className={`${sel2} w-[116px]`}>
           {bisaIsi
-            ? <input aria-label={`Harga satuan: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="numeric" value={nilai.harga} onChange={(e) => ubahNilai({ harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
+            ? <input aria-label={`Harga satuan: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="numeric" value={tampilRibuan(nilai.harga)} onChange={(e) => ubahNilai({ harga: bersihkanRibuan(e.target.value, false) })} />
             : <p className="py-1.5 text-right tabular-nums">{hargaTeks}</p>}
         </td>
         <td className={`${sel2} w-[104px] text-right`}>
