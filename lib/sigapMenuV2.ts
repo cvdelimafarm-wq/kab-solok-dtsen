@@ -82,6 +82,8 @@ export type IzinMenuSidebar = {
   usulan: boolean;
   /** (7 Nov 2026) Menu Master (wilayah, peta, KK): izin master.wilayah, khusus Ketua. Opsional agar pemanggil lama tetap sah. */
   masterWilayah?: boolean;
+  /** (7 Nov 2026) Menu Arsip & penomoran surat: izin arsip.kelola. Opsional agar pemanggil lama tetap sah. */
+  arsip?: boolean;
 };
 
 function jika(syarat: boolean, ...item: ItemMenu[]): ItemMenu[] {
@@ -194,6 +196,8 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
         { id: "diseminasi", ikon: "siaran", label: "Diseminasi", status: "segera" },
         // (7 Nov 2026, tahap C1) Master: wilayah, peta, dan keluarga (KK) lintas kegiatan. Hanya pemegang izin master.wilayah (Ketua); tidak ditampilkan "nonaktif" bagi yang lain.
         ...jika(!!i.masterWilayah, { id: "master-wilayah", ikon: "arsip", label: "Master wilayah", href: "/sigap/kelola/master", aktifKode: "master_wilayah", title: "Master wilayah, peta, dan keluarga (KK) lintas kegiatan", ketPalet: "wilayah, peta, shapefile, KK master" }),
+        // (7 Nov 2026) Arsip: buku nomor surat, kode klasifikasi arsip, pola nomor (Peraturan BPS 1/2023). Hanya pemegang izin arsip.kelola.
+        ...jika(!!i.arsip, { id: "arsip", ikon: "arsip", label: "Arsip & penomoran", href: "/sigap/kelola/arsip", aktifKode: "arsip", title: "Buku nomor surat, kode arsip, pola nomor", ketPalet: "nomor surat, kode arsip, buku agenda" }),
         ...jika(i.akses, { id: "peran-akses", ikon: "gembok", label: "Peran dan akses", href: "/sigap/kelola/akses", aktifKode: "akses" }),
         ...jika(i.aplikasi, {
           id: "aplikasi-periode",

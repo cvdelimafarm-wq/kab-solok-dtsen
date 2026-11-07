@@ -205,6 +205,7 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
   const [tujuan, setTujuan] = useState((b.st?.tujuan ?? []).join(", "));
   const [busy, setBusy] = useState<"pen" | "st" | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
+  const [ambilNo, setAmbilNo] = useState(false);
   const opsi = opsiPeran.includes(b.peran) ? opsiPeran : [b.peran, ...opsiPeran];
 
   async function simpanPen() {
@@ -219,6 +220,19 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
     } finally {
       setBusy(null);
+    }
+  }
+  // (7 Nov 2026) Nomor ST otomatis dari menu Arsip (Peraturan BPS 1/2023 Pasal 63). Idempoten: menekan lagi untuk penugasan yang sama mengembalikan nomor yang sama.
+  async function ambilNomorOtomatis() {
+    setAmbilNo(true);
+    setGalat(null);
+    try {
+      const r = await fetchJson<{ nomor: string }>("/api/sigap/arsip/ambil", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ untuk: "st", penugasan_id: b.id, tanggal: tglSt || undefined }) });
+      setNomor(r.nomor);
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+    } finally {
+      setAmbilNo(false);
     }
   }
   async function simpanSt() {
@@ -285,7 +299,15 @@ function PanelUbah({ b, kelola, opsiPeran, onTersimpan }: { b: BarisPen; kelola:
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="flex flex-col gap-0.5 sm:col-span-2">
               <span className={label}>Nomor ST</span>
-              <input value={nomor} onChange={(e) => setNomor(e.target.value)} placeholder="mis. B-1285/13030/VS.330/2026" className={INPUT} disabled={!kelola} />
+              <div className="flex gap-2">
+                <input value={nomor} onChange={(e) => setNomor(e.target.value)} placeholder="mis. B-1285/13030/VS.330/2026" className={`${INPUT} min-w-0 flex-1`} disabled={!kelola} />
+                {kelola && !b.st?.nomor && (
+                  <button type="button" className={BTN_O} disabled={ambilNo} onClick={() => void ambilNomorOtomatis()} title="Ambil nomor berikutnya dari buku nomor (menu Arsip)">
+                    {ambilNo ? "Mengambil…" : "Nomor otomatis"}
+                  </button>
+                )}
+              </div>
+              {kelola && !b.st?.nomor && <span className="text-[11.5px] text-[#5B6B84]">Isi tanggal terbit lebih dulu bila bukan hari ini; nomor mengikuti tahun tanggal itu.</span>}
             </label>
             <label className="flex flex-col gap-0.5">
               <span className={label}>Tanggal terbit</span>
