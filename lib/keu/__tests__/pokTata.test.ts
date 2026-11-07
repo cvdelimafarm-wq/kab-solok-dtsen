@@ -26,15 +26,19 @@ describe("hitungItem", () => {
   it("RAB berstatus belum (baris RAB kosong) dianggap belum ber-RAB", () => {
     expect(hitungItem({ ...dasar, rab: 0, statusRab: "belum" })).toMatchObject({ sisa: null, gap: null });
   });
-  it("RAB di bawah pagu: sisa = RAB - realisasi, gap positif", () => {
-    expect(hitungItem({ ...dasar, rab: 800, statusRab: "sama" })).toMatchObject({ sisa: 400, gap: 200 });
+  it("RAB = kebutuhan belum dibayar: sisa kebutuhan = RAB, gap = pagu - realisasi - RAB", () => {
+    expect(hitungItem({ ...dasar, rab: 500, statusRab: "sama" })).toMatchObject({ sisa: 500, gap: 100 });
+    expect(hitungItem({ ...dasar, rab: 800, statusRab: "sama" })).toMatchObject({ sisa: 800, gap: -200 });
   });
   it("RAB melebihi pagu: gap negatif", () => {
-    expect(hitungItem({ ...dasar, rab: 1500, statusRab: "rinci" })).toMatchObject({ sisa: 1100, gap: -500 });
+    expect(hitungItem({ ...dasar, rab: 1500, statusRab: "rinci" })).toMatchObject({ sisa: 1500, gap: -900 });
   });
-  it("realisasi melebihi RAB: sisa kebutuhan 0, gap = sisa pagu", () => {
-    expect(hitungItem({ ...dasar, realisasi: 900, rab: 800, statusRab: "sama" })).toMatchObject({ sisa: 0, gap: 100 });
-    expect(hitungItem({ ...dasar, realisasi: 1200, rab: 800, statusRab: "sama" })).toMatchObject({ sisa: 0, gap: -200 });
+  it("realisasi tidak mengurangi RAB (RAB periode lain yang belum dibayar)", () => {
+    expect(hitungItem({ ...dasar, realisasi: 900, rab: 800, statusRab: "sama" })).toMatchObject({ sisa: 800, gap: -700 });
+    expect(hitungItem({ ...dasar, realisasi: 1200, rab: 800, statusRab: "sama" })).toMatchObject({ sisa: 800, gap: -1000 });
+  });
+  it("RAB berjumlah 0 pada butir yang sudah ber-RAB: sisa 0, gap = sisa pagu", () => {
+    expect(hitungItem({ ...dasar, rab: 0, statusRab: "rinci" })).toMatchObject({ sisa: 0, gap: 600 });
   });
   it("selesai: sisa kebutuhan 0 walau tanpa RAB; gap = sisa pagu", () => {
     expect(hitungItem({ ...dasar, selesai: true, statusRab: "selesai" })).toMatchObject({ sisa: 0, gap: 600 });
@@ -58,11 +62,11 @@ describe("susunPohon", () => {
   });
   it("sisa kebutuhan dan gap tingkat atas hanya bila semua item di bawahnya ber-RAB", () => {
     const sebagian = susunPohon(susunAnggaran(LEMBAR, REAL, [rabItem("K1", 800, "sama"), rabItem("K2", 500, "sama")]), STRUKTUR, NAMA, RO);
-    expect(sebagian.komponen[0].total).toMatchObject({ nBerRab: 2, rab: 1300, sisa: 400 + 500, gap: (600 - 400) + (500 - 500) });
+    expect(sebagian.komponen[0].total).toMatchObject({ nBerRab: 2, rab: 1300, sisa: 800 + 500, gap: (600 - 800) + (500 - 500) });
     expect(sebagian.komponen[1].total).toMatchObject({ nBerRab: 0, sisa: null, gap: null });
     expect(sebagian.total).toMatchObject({ nItem: 3, nBerRab: 2, sisa: null, gap: null });
     const penuh = susunPohon(susunAnggaran(LEMBAR, REAL, [rabItem("K1", 800, "sama"), rabItem("K2", 500, "sama"), rabItem("K3", 2000, "sama")]), STRUKTUR, NAMA, RO);
-    expect(penuh.total).toMatchObject({ nBerRab: 3, sisa: 400 + 500 + 0, gap: 200 + 0 + (-500 - 0) });
+    expect(penuh.total).toMatchObject({ nBerRab: 3, sisa: 800 + 500 + 2000, gap: (600 - 800) + 0 + (-500 - 2000) });
   });
 });
 

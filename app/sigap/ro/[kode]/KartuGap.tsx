@@ -44,7 +44,7 @@ export function KartuGap({ r }: { r: RingkasGapRo }) {
       <div className="flex flex-col gap-1">
         <h2 className={judulKartu}>Gap anggaran RO</h2>
         <p className="m-0 text-[12.5px] text-[#5B6B84]">
-          Dihitung per butir: Gap = Pagu dikurangi Kebutuhan (Realisasi ditambah sisa kebutuhan menurut RAB). Butir yang belum ber-RAB dipisah dan pagunya tidak dianggap berlebih.
+          Dihitung per butir: Gap = Pagu dikurangi Kebutuhan, dengan Kebutuhan = Realisasi ditambah RAB yang belum dibayar. Butir yang belum ber-RAB dipisah dan pagunya tidak dianggap berlebih.
         </p>
       </div>
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))]">
@@ -54,10 +54,17 @@ export function KartuGap({ r }: { r: RingkasGapRo }) {
           anak={<Daftar judul="Terbesar" butir={r.teratasLebih} />}
         />
         <Blok
-          judul="Kurang" kelas="border-[#F3C2C2] bg-[#FEF3F3] text-[#9B1C23]" nilai={rupiah(r.kurang)}
+          judul="Kurang (butir POK)" kelas="border-[#F3C2C2] bg-[#FEF3F3] text-[#9B1C23]" nilai={rupiah(r.kurang)}
           sub={r.nKurang === 0 ? "tidak ada butir kurang" : `${angka(r.nKurang)} butir · perlu ditambal, ditunda, atau diminta tambahan`}
           anak={<Daftar judul="Terbesar" butir={r.teratasKurang} />}
         />
+        {r.nBaru > 0 && (
+          <Blok
+            judul="Item baru di RAB" kelas="border-[#F5D9A8] bg-[#FFF8EA] text-[#8A6200]" nilai={rupiah(r.baru)}
+            sub={`${angka(r.nBaru)} item belum ada di POK · seluruhnya butuh sumber (bahan revisi POK)`}
+            anak={<Daftar judul="Terbesar" butir={r.teratasBaru} />}
+          />
+        )}
         <Blok
           judul="Belum dikaji" kelas="border-[#DCE3EE] bg-[#F7F9FC] text-[#44546F]" nilai={`${angka(r.nBelum)} butir`}
           sub={r.nBelum === 0 ? "semua butir sudah ber-RAB" : `sisa pagu ${rupiah(r.belumSisaPagu)} · belum ber-RAB, tidak dihitung sebagai berlebih`}
@@ -66,6 +73,9 @@ export function KartuGap({ r }: { r: RingkasGapRo }) {
       <p className="m-0 text-[13px] text-[#1B2B4B]">
         <span className="font-semibold">Neraca RO: </span>{kalimatNeraca(r)}
         {r.nCukup > 0 && <span className="text-[#5B6B84]"> {angka(r.nCukup)} butir cukup.</span>}
+      </p>
+      <p className="m-0 text-[12px] text-[#5B6B84]">
+        Catatan: RAB yang sudah dibayar baru dikeluarkan dari kebutuhan setelah ditutup oleh catatan pembayaran PJ Administrasi (belum tersedia). Sampai itu ada, RAB yang jatuh temponya sudah lewat dapat terhitung ganda dengan realisasi.
       </p>
     </section>
   );

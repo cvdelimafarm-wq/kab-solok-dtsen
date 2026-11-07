@@ -2,9 +2,11 @@
 //
 // (7 Nov 2026, langkah 1 rancangan "Kebutuhan, neraca RO, revisi") Golongan butir dan ringkasan Gap satu RO. MURNI (tanpa React dan basis data).
 //
-// Kebutuhan butir = Realisasi + Sisa kebutuhan, dengan Sisa kebutuhan = max(RAB - Realisasi, 0) (pokTata.hitungItem); butir Selesai = Realisasi saja.
-// Untuk sementara ini setara max(RAB, Realisasi): belum ada catatan pembayaran yang menutup baris RAB, jadi RAB penuh TIDAK boleh ditambahkan ke Realisasi
-// (akan terhitung dua kali). Rumus penuh "Realisasi + Catatan SIGAP belum tercermin + RAB sisa" menyusul bersama catatan PJ Administrasi (langkah 3).
+// Kebutuhan butir = Realisasi + Sisa kebutuhan, dengan Sisa kebutuhan = RAB butir (kebutuhan ke depan yang belum dibayar; pokTata.hitungItem); butir Selesai = Realisasi saja.
+// (7 Nov 2026, koreksi) Rumus awal max(RAB, Realisasi) keliru: RAB per survei berisi kebutuhan periode yang BELUM dibayar (mis. Seruti TW IV bulan 11-12), jadi
+// realisasi periode lain tidak boleh mengurangi RAB. Konsekuensi: RAB yang sudah dibayar dan sudah masuk Realisasi dapat terhitung ganda sampai barisnya ditutup
+// oleh catatan PJ Administrasi; rumus penuh "Realisasi + Catatan SIGAP belum tercermin + RAB sisa" menyusul di langkah 3. Item baru di RAB (belum ada di POK)
+// tidak punya pagu, jadi seluruh jumlahnya adalah kekurangan yang butuh sumber.
 //
 // Golongan (berdasarkan Gap butir = Pagu - Kebutuhan):
 //   Belum dikaji : butir belum ber-RAB (gap tidak diketahui). Pagunya TIDAK dianggap lebih.
@@ -43,23 +45,27 @@ export function semuaItem(p: Pohon): SelItem[] {
 }
 
 export type ButirGap = { detail_id: number; akun: string; uraian: string; gap: number };
+/** Item RAB yang belum ada di POK (bahan revisi). */
+export type ItemBaruRab = { akun_kode?: string; uraian?: string; jumlah_rab: number | string };
 export type RingkasGapRo = {
   nItem: number; nDikaji: number; nCukup: number; nLebih: number; nKurang: number; nBelum: number;
   /** jumlah gap butir Lebih (positif) dan jumlah kekurangan butir Kurang (positif) */
   lebih: number; kurang: number;
   /** sisa pagu (Pagu - Realisasi) butir yang belum dikaji; tidak ikut dihitung sebagai lebih */
   belumSisaPagu: number;
-  /** jumlah gap semua butir yang sudah dikaji (termasuk Cukup); null bila belum ada butir yang dikaji */
+  /** jumlah gap semua butir yang sudah dikaji (termasuk Cukup) dikurangi item baru di RAB; null bila belum ada butir dikaji maupun item baru */
   bersih: number | null;
   paguDikaji: number; kebutuhanDikaji: number;
   /** butir Lebih dan Kurang terbesar (paling banyak `n`), urut menurun menurut besar selisih */
   teratasLebih: ButirGap[]; teratasKurang: ButirGap[];
+  /** item baru di RAB (di luar POK): banyaknya, jumlahnya (seluruhnya kekurangan), dan yang terbesar */
+  nBaru: number; baru: number; teratasBaru: ButirGap[];
 };
 
-export function ringkasGapRo(item: readonly SelItem[], n = 3): RingkasGapRo {
+export function ringkasGapRo(item: readonly SelItem[], n = 3, baru: readonly ItemBaruRab[] = []): RingkasGapRo {
   const r: RingkasGapRo = {
     nItem: item.length, nDikaji: 0, nCukup: 0, nLebih: 0, nKurang: 0, nBelum: 0, lebih: 0, kurang: 0, belumSisaPagu: 0, bersih: null, paguDikaji: 0, kebutuhanDikaji: 0,
-    teratasLebih: [], teratasKurang: [],
+    teratasLebih: [], teratasKurang: [], nBaru: 0, baru: 0, teratasBaru: [],
   };
   const lebih: ButirGap[] = []; const kurang: ButirGap[] = [];
   let bersih = 0;
@@ -75,13 +81,20 @@ export function ringkasGapRo(item: readonly SelItem[], n = 3): RingkasGapRo {
   r.bersih = r.nDikaji === 0 ? null : bersih;
   r.teratasLebih = lebih.sort((a, b) => b.gap - a.gap || a.detail_id - b.detail_id).slice(0, n);
   r.teratasKurang = kurang.sort((a, b) => a.gap - b.gap || a.detail_id - b.detail_id).slice(0, n);
+  const baruBerjumlah = baru.map((b, idx) => ({ detail_id: -(idx + 1), akun: b.akun_kode ?? "", uraian: b.uraian ?? "", gap: -Number(b.jumlah_rab) })).filter((b) => Number.isFinite(b.gap) && b.gap < 0);
+  r.nBaru = baruBerjumlah.length; r.baru = baruBerjumlah.reduce((s, b) => s - b.gap, 0);
+  r.teratasBaru = [...baruBerjumlah].sort((a, b) => a.gap - b.gap || b.detail_id - a.detail_id).slice(0, n);
+  // item baru tidak punya pagu: seluruh jumlahnya menambah kebutuhan dan mengurangi gap bersih
+  if (r.nBaru > 0) { r.bersih = (r.bersih ?? 0) - r.baru; r.kebutuhanDikaji += r.baru; }
   return r;
 }
 
-/** Kalimat neraca: apakah kelebihan cukup menutup kekurangan di dalam RO ini (butir yang sudah dikaji saja). */
-export function kalimatNeraca(r: Pick<RingkasGapRo, "lebih" | "kurang" | "nDikaji" | "nBelum">): string {
+/** Kalimat neraca: apakah kelebihan cukup menutup kekurangan di dalam RO ini (butir yang sudah dikaji, ditambah item baru di RAB yang tidak punya pagu). */
+export function kalimatNeraca(r: Pick<RingkasGapRo, "lebih" | "kurang" | "nDikaji" | "nBelum"> & { baru?: number }): string {
   const rp = (v: number) => `Rp ${Math.round(v).toLocaleString("id-ID")}`;
-  if (r.nDikaji === 0) return "Belum ada butir yang ber-RAB, jadi belum ada kelebihan atau kekurangan yang dapat dihitung.";
+  const kurang = r.kurang + (r.baru ?? 0);
+  if (r.nDikaji === 0 && !(r.baru && r.baru > 0)) return "Belum ada butir yang ber-RAB, jadi belum ada kelebihan atau kekurangan yang dapat dihitung.";
+  r = { ...r, kurang };
   const sisa = r.lebih - r.kurang;
   const akhir = r.nBelum > 0 ? ` ${r.nBelum} butir belum dikaji tidak ikut dihitung.` : "";
   if (r.kurang === 0 && r.lebih === 0) return `Semua butir yang sudah ber-RAB cukup.${akhir}`;

@@ -23,16 +23,22 @@ describe("golongan", () => {
     expect(golongan(-100_001, 10_000_000)).toBe("kurang");
     expect(golongan(0, 0)).toBe("cukup");
   });
-  it("gap butir = pagu - kebutuhan (RAB menutup realisasi, tanpa hitung ganda)", () => {
-    // pagu 1.000, realisasi 400, RAB 800 -> kebutuhan 800 (bukan 1.200) -> gap +200
+  it("kebutuhan = realisasi + RAB belum dibayar", () => {
+    // pagu 1.000, realisasi 400, RAB 800 -> kebutuhan 1.200 -> gap -200
     const i = sel(1, 1000, 400, 800);
-    expect(kebutuhan(i.realisasi, i.sisa)).toBe(800);
-    expect(i.gap).toBe(200);
+    expect(kebutuhan(i.realisasi, i.sisa)).toBe(1200);
+    expect(i.gap).toBe(-200);
   });
-  it("realisasi melebihi RAB: kebutuhan = realisasi", () => {
+  it("kasus produksi: honor PPL Seruti, realisasi 18,6 jt + RAB TW IV 19,2 jt melebihi pagu 27,28 jt = Kurang", () => {
+    const i = sel(1, 27_280_000, 18_600_000, 19_200_000);
+    expect(kebutuhan(i.realisasi, i.sisa)).toBe(37_800_000);
+    expect(i.gap).toBe(-10_520_000);
+    expect(golongan(i.gap, i.pok)).toBe("kurang");
+  });
+  it("realisasi melebihi RAB tidak menghapus RAB", () => {
     const i = sel(1, 1000, 900, 500);
-    expect(kebutuhan(i.realisasi, i.sisa)).toBe(900);
-    expect(i.gap).toBe(100);
+    expect(kebutuhan(i.realisasi, i.sisa)).toBe(1400);
+    expect(i.gap).toBe(-400);
   });
   it("butir selesai: kebutuhan = realisasi, sisa pagu menjadi lebih", () => {
     const i = sel(1, 5_000_000, 3_000_000, 4_000_000, { selesai: true });
@@ -46,28 +52,39 @@ describe("golongan", () => {
 
 describe("ringkasGapRo", () => {
   const daftar = [
-    sel(1, 10_000_000, 2_000_000, 6_000_000),      // gap +4.000.000 lebih
-    sel(2, 8_000_000, 1_000_000, 11_000_000),      // gap -3.000.000 kurang
+    sel(1, 10_000_000, 2_000_000, 6_000_000),      // kebutuhan 8.000.000, gap +2.000.000 lebih
+    sel(2, 8_000_000, 1_000_000, 11_000_000),      // kebutuhan 12.000.000, gap -4.000.000 kurang
     sel(3, 5_000_000, 0, 5_000_000),               // gap 0 cukup
     sel(4, 3_000_000, 500_000, null),              // belum dikaji, sisa pagu 2.500.000
     sel(5, 2_000_000, 0, 2_900_000),               // gap -900.000 kurang
-    sel(6, 6_000_000, 6_000_000, 6_000_000),       // gap 0 cukup
+    sel(6, 6_000_000, 6_000_000, 0),               // sudah ber-RAB tanpa kebutuhan baru, gap 0 cukup
   ];
   const r = ringkasGapRo(daftar);
   it("hitung per golongan", () => {
     expect([r.nItem, r.nDikaji, r.nLebih, r.nKurang, r.nCukup, r.nBelum]).toEqual([6, 5, 1, 2, 2, 1]);
-    expect(r.lebih).toBe(4_000_000);
-    expect(r.kurang).toBe(3_900_000);
+    expect(r.lebih).toBe(2_000_000);
+    expect(r.kurang).toBe(4_900_000);
   });
   it("belum dikaji tidak dianggap lebih; sisa pagunya dicatat terpisah", () => {
     expect(r.belumSisaPagu).toBe(2_500_000);
-    expect(r.bersih).toBe(100_000);
+    expect(r.bersih).toBe(-2_900_000);
     expect(r.paguDikaji).toBe(31_000_000);
-    expect(r.kebutuhanDikaji).toBe(30_900_000);
+    expect(r.kebutuhanDikaji).toBe(33_900_000);
   });
   it("butir terbesar urut menurut besar selisih", () => {
     expect(r.teratasLebih.map((b) => b.detail_id)).toEqual([1]);
     expect(r.teratasKurang.map((b) => b.detail_id)).toEqual([2, 5]);
+  });
+  it("item baru di RAB (tanpa pagu) seluruhnya kekurangan", () => {
+    const k = ringkasGapRo(daftar, 3, [
+      { akun_kode: "524114", uraian: "paket fullday", jumlah_rab: "4715000" }, { akun_kode: "524114", uraian: "transport peserta", jumlah_rab: 3_910_000 }, { jumlah_rab: 0 },
+    ]);
+    expect(k.nBaru).toBe(2);
+    expect(k.baru).toBe(8_625_000);
+    expect(k.teratasBaru.map((b) => b.gap)).toEqual([-4_715_000, -3_910_000]);
+    expect(k.bersih).toBe(-2_900_000 - 8_625_000);
+    expect(k.kebutuhanDikaji).toBe(33_900_000 + 8_625_000);
+    expect(k.kurang).toBe(4_900_000); // kurang butir POK tidak bercampur dengan item baru
   });
   it("tanpa butir dikaji: bersih null", () => {
     const k = ringkasGapRo([sel(1, 100, 0, null)]);
@@ -77,10 +94,12 @@ describe("ringkasGapRo", () => {
   });
   it("kalimat neraca: lebih menutup, atau kurang dari luar RO", () => {
     expect(kalimatNeraca({ lebih: 5_000_000, kurang: 3_000_000, nDikaji: 3, nBelum: 0 })).toContain("masih tersisa Rp 2.000.000");
+    expect(kalimatNeraca({ lebih: 5_000_000, kurang: 3_000_000, nDikaji: 3, nBelum: 0, baru: 1_000_000 })).toContain("kekurangan Rp 4.000.000; masih tersisa Rp 1.000.000");
     expect(kalimatNeraca({ lebih: 1_000_000, kurang: 3_000_000, nDikaji: 3, nBelum: 1 })).toMatch(/melebihi kelebihan .* sebesar Rp 2\.000\.000.*luar RO.*1 butir belum dikaji/);
     expect(kalimatNeraca({ lebih: 3_000_000, kurang: 3_000_000, nDikaji: 2, nBelum: 0 })).toContain("dan pas");
     expect(kalimatNeraca({ lebih: 0, kurang: 0, nDikaji: 2, nBelum: 0 })).toContain("cukup");
     expect(kalimatNeraca({ lebih: 2_000_000, kurang: 0, nDikaji: 2, nBelum: 0 })).toContain("Tidak ada kekurangan");
+    expect(kalimatNeraca({ lebih: 0, kurang: 0, nDikaji: 0, nBelum: 3, baru: 2_000_000 })).toContain("melebihi kelebihan Rp 0");
   });
 });
 

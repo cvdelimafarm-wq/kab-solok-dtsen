@@ -55,6 +55,8 @@ export function useAnggaranRo(kode: string) {
   const galat = lembar.galat ?? real.galat ?? rabR.galat ?? rabItem.galat;
   return {
     anggaran,
+    /** Item RAB yang belum ada di POK (bahan revisi); kebutuhannya tidak punya pagu. */
+    itemBaru: (rabItem.baris ?? []).filter((x) => x.baru && !x.selesai && Number(x.jumlah_rab) > 0),
     rab: rabPilih,
     sampaiTanggal: real.baris?.[0]?.sampai_tanggal ?? null,
     memuat: !galat && !anggaran,

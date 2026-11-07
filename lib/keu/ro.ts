@@ -65,7 +65,7 @@ export function pilihRab(daftar: BarisRabRingkas[], ro: string): BarisRabRingkas
 // ---------- Anggaran ----------
 export type BarisLembar = { detail_id: number; ro_kode: string; komponen_kode: string; akun_kode: string; kunci_stabil: string; nomor_item: string | null; uraian: string; volume: number | string; satuan: string; jumlah: number | string };
 export type BarisRealisasi = { detail_id: number | null; real_sd: number | string; pagu: number | string };
-export type BarisRabItem = { pok_kunci: string | null; baru: boolean; status: string; jumlah_rab: number | string; selesai: boolean };
+export type BarisRabItem = { pok_kunci: string | null; baru: boolean; status: string; jumlah_rab: number | string; selesai: boolean; uraian?: string; akun_kode?: string };
 
 export type ItemAnggaran = { detail_id: number; kunci: string; komponen: string; akun: string; nomor_item: string | null; uraian: string; volume: number; satuan: string; pok: number; realisasi: number; rab: number | null; statusRab: string | null; selesai: boolean };
 export type AkunAnggaran = { akun: string; item: ItemAnggaran[]; pok: number; realisasi: number; rab: number };
