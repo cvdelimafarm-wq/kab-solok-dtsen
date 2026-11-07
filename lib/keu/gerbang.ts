@@ -27,6 +27,8 @@ export const FUNGSI_BACA: readonly string[] = [
   "keu_dlg_hak", "keu_dlg_saya", "keu_dlg_bahan", "keu_dlg_calon",
   // (1 Nov 2026) Delego perangkum: bahan tinjau, katalog skor, rekap beban, monitoring Kepala (hanya membaca).
   "keu_dlg_tinjau_bahan", "keu_dlg_katalog_skor", "keu_dlg_rekap", "keu_dlg_monitor", "keu_dlg_kalibrasi",
+  // (7 Nov 2026) Siklus revisi: tanggapan RO milik akun ini (hanya membaca; modal memanggilnya berkala).
+  "keu_tanggapan_saya",
 ];
 
 const RE_FUNGSI = /^keu_[a-z0-9_]{1,60}$/;

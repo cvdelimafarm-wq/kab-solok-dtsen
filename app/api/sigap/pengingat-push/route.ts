@@ -41,6 +41,7 @@ import { bacaPengaturanSemua, catatDenyut, klaimTahap, selesaiKlaim } from "@/li
 import { bacaTranslok, kunciKlaimTranslok, tahapJatuhTempo, tanggalWib, type SetelanTranslok, type TahapTranslok } from "@/lib/pushPengaturan";
 import { kunciKirimTranslok, putusanTranslok } from "@/lib/pushTranslok";
 import { jalankanPengingatVanguard } from "@/lib/vanguardPengingatDb"; // (2 Nov 2026) pengingat urgent Vanguard N hari berturut-turut
+import { kirimPushRevisi } from "@/lib/keu/pushRevisi"; // (7 Nov 2026) push siklus revisi (keu_notifikasi revisi_buka / revisi_ingat)
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -204,10 +205,12 @@ async function jalankan(req: NextRequest) {
     // (2 Nov 2026) pengingat Vanguard berjalan di cron yang sama (hanya bekerja di jendela 07.00 / 16.00 WIB dan untuk kegiatan bermode "wajib"); galatnya tidak boleh mengganggu pengingat biasa
     const jv = req.nextUrl.searchParams.get("vg");
     const vg = await jalankanPengingatVanguard(db, mulai, uji, uji && (jv === "pagi" || jv === "sore") ? jv : null).catch((e) => ({ galat: e instanceof Error ? e.message : String(e) }));
+    // (7 Nov 2026) push siklus revisi di cron yang sama; galatnya (mis. SQL 20261107l belum dijalankan) tidak boleh mengganggu pengingat biasa
+    const rv = await kirimPushRevisi(db, mulai, uji).catch((e) => ({ galat: e instanceof Error ? e.message : String(e) }));
     const resp = await jalankanAuto(db, uji, mulai, uji && (t === 1 || t === 2 || t === 3) ? t : null);
     try {
       const badan = (await resp.json()) as Record<string, unknown>;
-      return NextResponse.json({ ...badan, vanguard: vg }, { status: resp.status });
+      return NextResponse.json({ ...badan, vanguard: vg, revisi: rv }, { status: resp.status });
     } catch {
       return resp;
     }
