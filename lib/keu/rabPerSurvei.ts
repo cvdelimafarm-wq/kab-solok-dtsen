@@ -11,7 +11,7 @@
 
 import { bacaRupiah } from "./kekurangan";
 import type { Libur } from "./hariKerja";
-import { NAMA_PERAN, pesertaKelas, type BarisRincian, type IsiLanjutan, type Kelas } from "./lanjutan";
+import { hariPerjalanan, NAMA_PERAN, NAMA_PERJALANAN, pesertaKelas, type BarisRincian, type IsiLanjutan, type Kelas } from "./lanjutan";
 import { sumbanganDariBaris, type KapasitasItem, type Sumbangan } from "./batangItem";
 import { jumlahBaris, bacaVolume, barisKosong, dariIdent, dataBaris, dataBarisIdent, periksaBaris, diubahDariIdent, type BarisRabRow, type IsianBaris, type ItemRabRow, type PemetaanItem, type PenandaIdent } from "./rab";
 import { hariJadwal, rincianSurvei, saranNamaItem, tautkan, type HariBayar, type HasilTautan, type ModePecah, type PeriodeJadwal, type RincianSurvei } from "./rabSurvei";
@@ -421,6 +421,13 @@ export function jelaskanVolume(r: RincianSurvei, isi: IsiLanjutan): string[] {
     if (r.hari === null) return [`Volume = jumlah petugas × jumlah ${pen ? "malam" : "hari"} dibayar per petugas. Isi alokasi ${pen ? "malam" : "hari"} dibayar pada bagian A di atas; volume baru muncul setelah alokasi lebih dari 0.`];
     if (r.periode !== null && r.hari > 0 && vol !== null) return [ringkasHari(vol / r.hari, r.hari, pen), `Dihitung per HARI KALENDER, bukan hari kerja${pen ? " (penginapan = malam)" : ""}.`];
     return [`Dijumlahkan dari tiap periode: petugas × ${pen ? "malam" : "hari"} dibayar di periode itu${vol !== null ? ` = ${vol} orang-${pen ? "malam" : "hari"}` : ""}.`];
+  }
+  if (r.kelompok === "Pelatihan" && /uang harian perjalanan/.test(r.uraian)) {
+    const ks = kelasDari(r.uraian, isi);
+    if (ks.length === 1) {
+      const k = ks[0]; const n = pesertaKelas(isi, k); const h = hariPerjalanan(k);
+      return [`Peserta kelas «${namaKelas(k)}»: ${n} orang.`, `Hari perjalanan: ${NAMA_PERJALANAN[k.perjalanan ?? ""].toLowerCase()} = ${h} hari per peserta.`, `Volume = ${n} × ${h} = ${n * h} orang-hari. Harga = uang harian, maksimal sesuai kebijakan; kurangi volume bila ada peserta yang tidak bepergian.`];
+    }
   }
   if (r.kelompok === "Pelatihan") {
     const ks = kelasDari(r.uraian, isi);

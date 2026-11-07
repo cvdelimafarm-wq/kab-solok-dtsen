@@ -9,8 +9,8 @@ import { type Dispatch, type ReactNode } from "react";
 import { kolom, label as kelasLabel, tombolBahaya, tombolKecil } from "@/app/sigap/keu-ui";
 import { JABATAN } from "@/lib/keu/kebijakan";
 import {
-  idBaru, ID_LJ, KODE_PERAN, MAKS_INSTRUKTUR, METODE_KELAS, NAMA_PERAN, NAMA_SUMBER, PAKET_KELAS, TEMPAT_KELAS, hariKelas, instrukturKosongLj, instrukturLengkap, jumlahPetugas, pesertaKelas,
-  type IsiLanjutan, type KodePeran, type Kelas, type Petugas,
+  biayaPerjalananKelas, idBaru, ID_LJ, KODE_PERAN, MAKS_INSTRUKTUR, METODE_KELAS, NAMA_PERAN, NAMA_PERJALANAN, NAMA_SUMBER, PAKET_KELAS, PERJALANAN_KELAS, TEMPAT_KELAS, hariKelas, instrukturKosongLj, instrukturLengkap, jumlahPetugas, pesertaKelas,
+  type IsiLanjutan, type KodePeran, type Kelas, type PerjalananKelas, type Petugas,
 } from "@/lib/keu/lanjutan";
 import { ASAL_INSTRUKTUR, LEVEL_INSTRUKTUR, NAMA_LEVEL, daftarPeriode, type Form } from "@/lib/keu/identifikasi";
 import { kelasAwal, samakanDenganAwal, tambahDariAwal, tautkanKelas, type TautKelas } from "@/lib/keu/tautAwal";
@@ -137,10 +137,20 @@ export function KelasSatu({ k, i, isi, ubah, mati, periode, organik, taut, onSam
           </Isian>
         )}
         {hotel && <Isian judul="Paket hotel">{opsiKolom(k.paket, (s) => set("paket", s as Kelas["paket"]), mati, `Paket kelas ${i + 1}`, PAKET_KELAS)}</Isian>}
+        {luring && (
+          <Isian judul="Hari perjalanan peserta" ket="Uang harian perjalanan, maks Rp 380.000 per hari. Lazimnya pada paket fullboard.">
+            {opsiKolom(k.perjalanan ?? "", (s) => set("perjalanan", s as PerjalananKelas), mati, `Hari perjalanan kelas ${i + 1}`, PERJALANAN_KELAS, "Tidak ada", (o) => NAMA_PERJALANAN[o as PerjalananKelas])}
+          </Isian>
+        )}
         <Isian judul="Tanggal mulai"><Tgl nama={`Mulai kelas ${i + 1}`} nilai={k.mulai} mati={mati} onUbah={(v) => setTgl("mulai", v)} /></Isian>
         <Isian judul="Tanggal selesai" ket={ketHari.teks ? <span role={ketHari.galat ? "alert" : undefined} className={ketHari.galat ? "font-semibold text-[#9B1C23]" : "font-semibold text-[#44546F]"}>{ketHari.teks}</span> : undefined}><Tgl nama={`Selesai kelas ${i + 1}`} nilai={k.selesai} min={k.mulai || undefined} mati={mati} onUbah={(v) => setTgl("selesai", v)} /></Isian>
         <Isian judul="Jumlah OH (hari)" ket="Orang-hari per peserta."><Angka nama={`OH kelas ${i + 1}`} nilai={k.oh} maks={60} mati={mati} onUbah={(v) => set("oh", v)} /></Isian>
       </div>
+      {luring && k.tempat !== "" && (() => {
+        const b = biayaPerjalananKelas(k);
+        const ada = [b.uhFullboard && "uang harian fullboard", b.transportLokal && "transport lokal", b.hariPerjalanan > 0 && `uang harian perjalanan (${b.hariPerjalanan} hari)`].filter((x): x is string => !!x);
+        return <Cat>Biaya perjalanan peserta yang dihitung: {ada.length > 0 ? ada.join(", ") : "belum ada"}. Aturan: uang harian fullboard hanya paket fullboard; transport lokal untuk pelatihan dalam kota atau luar kota paket fullday.</Cat>;
+      })()}
       <div>
         <span className={kelasLabel}>Peserta</span>
         <div className="flex flex-wrap gap-1.5">

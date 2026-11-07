@@ -27,6 +27,33 @@ export const SUMBER_MITRA = ["", "kepka", "seleksi"] as const;
 export type SumberMitra = (typeof SUMBER_MITRA)[number];
 export const NAMA_SUMBER: Record<string, string> = { "": "—", kepka: "Langsung dari kepka", seleksi: "Lewat seleksi" };
 
+/**
+ * (7 Nov 2026) Hari perjalanan peserta untuk kelas luar kota: 1 hari sebelum kegiatan efektif, 1 hari sesudahnya, atau keduanya (2 hari).
+ * Dibayar sebagai uang harian perjalanan (maksimal sesuai parameter uang_harian); lazimnya pada paket fullboard.
+ */
+export const PERJALANAN_KELAS = ["", "sebelum", "sesudah", "keduanya"] as const;
+export type PerjalananKelas = (typeof PERJALANAN_KELAS)[number];
+export const NAMA_PERJALANAN: Record<PerjalananKelas, string> = { "": "Tidak ada", sebelum: "1 hari sebelum kegiatan", sesudah: "1 hari sesudah kegiatan", keduanya: "Sebelum dan sesudah (2 hari)" };
+export const hariPerjalanan = (k: Pick<Kelas, "perjalanan">): number => (k.perjalanan === "keduanya" ? 2 : k.perjalanan === "sebelum" || k.perjalanan === "sesudah" ? 1 : 0);
+/**
+ * (7 Nov 2026) Biaya perjalanan peserta pelatihan luring yang berlaku untuk satu kelas (aturan pengguna):
+ *  - uang harian fullboard: hanya bila paket fullboard di hotel (paket fullday tidak ada uang harian);
+ *  - transport lokal: pelatihan dalam kota (kantor, hotel, atau lokasi lain) atau luar kota dengan paket fullday; tidak untuk fullboard luar kota;
+ *  - uang harian perjalanan: sebanyak hari perjalanan yang dipilih (0, 1, atau 2 hari).
+ * Tempat yang belum dipilih belum menghasilkan biaya perjalanan apa pun.
+ */
+export function biayaPerjalananKelas(k: Pick<Kelas, "tempat" | "paket" | "perjalanan">): { uhFullboard: boolean; transportLokal: boolean; hariPerjalanan: number } {
+  const hotel = k.tempat === "Hotel dalam kota" || k.tempat === "Hotel luar kota";
+  const luarKota = k.tempat === "Hotel luar kota";
+  return {
+    uhFullboard: hotel && k.paket === "fullboard",
+    transportLokal: k.tempat !== "" && (!luarKota || k.paket === "fullday"),
+    hariPerjalanan: hariPerjalanan(k),
+  };
+}
+/** Batas uang harian perjalanan bila lembar kebijakan belum memuatnya (Rp per hari; cek aturan). */
+export const UANG_HARIAN_BAWAAN = 380000;
+
 export type Kelas = {
   id: string;
   nama: string;
@@ -44,6 +71,8 @@ export type Kelas = {
   fix: boolean;
   /** (28 Okt 2026) Instruktur (pengajar atau narasumber) kelas ini. Boleh tidak ada pada isi lama; normalisasiLanjutan selalu mengisinya (daftar kosong). */
   instruktur?: Instruktur[];
+  /** (7 Nov 2026) Hari perjalanan peserta; boleh tidak ada pada isi lama (dianggap tidak ada). */
+  perjalanan?: PerjalananKelas;
 };
 /** Satu instruktur pada satu kelas: nama, level pasti (Innas atau Inda), asal, dan jam mengajar PER INSTRUKTUR pada kelas itu (cek aturan untuk tarif). */
 /** `akun` (2 Nov 2026) = id akun SIGAP bila namanya dipilih dari daftar pegawai organik (tertaut); kosong = nama di luar daftar atau data lama. */
@@ -344,6 +373,8 @@ export function normalisasiLanjutan(masuk: unknown): IsiLanjutan {
     mulai: adalahTeks(e.mulai) ? e.mulai : "", selesai: adalahTeks(e.selesai) ? e.selesai : "",
     untuk: Array.isArray(e.untuk) ? (e.untuk.filter((x) => (KODE_PERAN as readonly string[]).includes(String(x))) as KodePeran[]) : [], fix: e.fix === true,
     instruktur: normalisasiInstruktur(e.instruktur),
+    // Hanya ditulis bila ada (isi lama tanpa bidang ini tetap sama setelah normalisasi).
+    ...((PERJALANAN_KELAS as readonly string[]).includes(String(e.perjalanan)) && e.perjalanan !== "" ? { perjalanan: e.perjalanan as PerjalananKelas } : {}),
   }));
   const petugas: Petugas[] = (Array.isArray(a.petugas) ? a.petugas : []).filter(adalahObjek).map((e, i) => ({
     id: adalahTeks(e.id) ? e.id : `p${i + 1}`, nama: adalahTeks(e.nama) ? e.nama : "", menyusul: e.menyusul === true,
@@ -524,6 +555,35 @@ export function rincianBiaya(isi: IsiLanjutan, f: Form | null, lembar: IsiKebija
         });
       } else {
         out.push({ kelompok: "Pelatihan", uraian: `${nama}: konsumsi tanpa paket`, akun: "521211", volume: oh || null, satuan: "orang-hari", tarif: null, jumlah: null, perk: !k.fix, catatan: "Tarif konsumsi pelatihan belum diatur pada lembar kebijakan." });
+      }
+      // (7 Nov 2026) Biaya perjalanan peserta pelatihan luring, menurut ketentuan pengguna:
+      //  - uang harian fullboard: hanya bila paket fullboard (paket fullday tidak ada uang harian);
+      //  - transport lokal: pelatihan dalam kota (kantor atau hotel) atau luar kota dengan paket fullday, tidak untuk fullboard luar kota;
+      //  - uang harian perjalanan: bila perlu 1 hari perjalanan sebelum dan atau sesudah kegiatan efektif, maksimal parameter uang_harian (380 ribu).
+      const luarKota = k.tempat === "Hotel luar kota";
+      const akunPaket = luarKota ? "524119" : "524114";
+      const bp = biayaPerjalananKelas(k);
+      if (bp.uhFullboard) {
+        out.push({
+          kelompok: "Pelatihan", uraian: `${nama}: uang harian fullboard`, akun: akunPaket, volume: oh || null, satuan: "orang-hari", tarif: null, jumlah: null, perk: !k.fix,
+          catatan: "Hanya untuk paket fullboard. Tarif mengacu SBM uang harian paket meeting (tabel rujukan belum diunggah); isi harga satuan sendiri.",
+        });
+      }
+      if (bp.transportLokal) {
+        const tarifTl = angkaKeb(lembar, "translok_kurang_8");
+        tambah({
+          kelompok: "Pelatihan", uraian: `${nama}: transport lokal peserta`, akun: "524113", volume: oh || null, satuan: "orang-hari", tarif: tarifTl, perk: !k.fix,
+          catatan: tarifTl === null ? "Tarif translok belum ada pada lembar kebijakan." : "Dibayar per hari kelas untuk pelatihan dalam kota atau luar kota paket fullday (cek aturan).",
+        });
+      }
+      const hp = bp.hariPerjalanan;
+      if (hp > 0) {
+        const uh = angkaKeb(lembar, "uang_harian") ?? UANG_HARIAN_BAWAAN;
+        tambah({
+          kelompok: "Pelatihan", uraian: `${nama}: uang harian perjalanan (${NAMA_PERJALANAN[k.perjalanan ?? ""].toLowerCase()})`, akun: "524111",
+          volume: peserta * hp || null, satuan: "orang-hari", tarif: uh, perk: !k.fix,
+          catatan: `${hp} hari perjalanan per peserta, maksimal Rp ${uh.toLocaleString("id-ID")} per hari. Kurangi volume bila ada peserta yang tidak bepergian.`,
+        });
       }
     }
     const sesiForm = f?.sesi[k.sesi];
