@@ -22,6 +22,7 @@ import { caps, Catatan, Chip, Galat, HalamanKeu, judulKartu, kartu, kisi, kolom,
 import { aksiKeu, tulisKeuKlien, useBacaKeu, useBoleh, useKirim } from "../../ro/useKeu";
 import { FormBaru, FormPenggenap, KartuGeseran, KartuKecukupan, KartuPeriksa, PanelPasangan, type AkunMaster, type KeputusanRow } from "./Bagian";
 import Matriks, { type RincianRab } from "./Matriks";
+import KartuJaga from "./KartuJaga";
 import { bukuDariSandingan } from "@/lib/keu/kecukupan";
 import { PanelKecukupan, type ParamMaster } from "./Kecukupan";
 import { PanelPerkiraan, PerubahanPok, SubBulanan, type StateBulanan } from "./Rab";
@@ -176,6 +177,7 @@ function Isi() {
   const izin = useIzinBanyak(roKro, jid, ulang);
   const bisaUbah = useCallback((ro: string) => izin[ro] === "ok", [izin]);
   const bolehSahkan = useBoleh("sahkan", null) === true;
+  const bolehJadwal = useBoleh("jadwal", null) === true;
 
   const siap = jid !== null && kro !== null;
   const u = (t: string, saring: Record<string, string | number | (string | number)[]>, opsi: { batas?: number; urut?: string; kolom?: string[] } = {}) => (siap ? urlBaca(t, { jadwal_id: jid!, ...saring }, { batas: 5000, ...opsi }) : null);
@@ -356,6 +358,7 @@ function Isi() {
           </section>
 
           <KartuPeriksa p={periksa.baris ?? []} />
+          <KartuJaga key={jd.id} jadwal={jd.id} jenis={jd.jenis} status={jd.status} bolehJadwal={bolehJadwal} />
           {sandingan && <PanelKecukupan baris={sandingan.baris} kro={kro} param={param.baris ?? []} prioritas={prioritas.baris ?? []} buku={bukuKlien} jenisJadwal={jd.jenis} />}
           <KartuKecukupan jadwal={jd.id} ro={roKro.join(", ")} kro={kro} kec={kec.baris ?? []} keputusan={putus.baris ?? []} bolehPutus={bolehSahkan} sesudah={segarkan} />
           <BukuSelisih item={kecItem.baris ?? []} baris={rows ?? []} prioritas={prioritas.baris ?? []} />

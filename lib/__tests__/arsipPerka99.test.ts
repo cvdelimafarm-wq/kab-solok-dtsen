@@ -29,6 +29,14 @@ describe("kode klasifikasi arsip Perka BPS 99/2018", () => {
     expect(kode.length).toBe(barisMentah); // setiap baris nilai terbaca oleh pola (tidak ada baris yang lolos diam-diam)
   });
 
+  it("nama kode memenuhi batas tabel arsip_kode (3 sampai 200 karakter), uraian panjang dipindah ke catatan", () => {
+    for (const k of kode) {
+      const n = k.nama.trim().length;
+      expect(n >= 3 && n <= 200, `${k.kode} (${n} karakter)`).toBe(true);
+    }
+    expect(peta.get("KU.830")?.nama.endsWith("SPDR")).toBe(true);
+  });
+
   it("setiap kode sah menurut pola dua huruf, titik, tiga angka (paling banyak 5 digit)", () => {
     for (const k of kode) expect(kkaSah(k.kode), k.kode).toBe(true);
   });

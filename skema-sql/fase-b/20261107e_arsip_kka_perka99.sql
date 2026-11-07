@@ -244,7 +244,7 @@ from (values
   ('KU.800', 'Sistem Akuntansi Instansi (SAI)', 'KU', null, 1, 'fasilitatif', null),
   ('KU.810', 'Manual Implementasi Sistem Akuntansi Instansi (SAI)', 'KU', 'KU.800', 2, 'fasilitatif', null),
   ('KU.820', 'Arsip Data Komputer dan Berita Acara Rekonsiliasi', 'KU', 'KU.800', 2, 'fasilitatif', null),
-  ('KU.830', 'Daftar Transaksi (DT), Pengeluaran (PK), Penerimaan (PN); Dokumen Sumber (DS), Bukti Jurnal (BJ), Surat Tanda Setor (STS); SSBP, SP2D; SPM dalam Daftar Ringkasan Pengembalian dan Potongan dari Pengeluaran (SPDR)', 'KU', 'KU.800', 2, 'fasilitatif', null),
+  ('KU.830', 'Daftar Transaksi (DT), Pengeluaran (PK), Penerimaan (PN); Dokumen Sumber (DS), Bukti Jurnal (BJ), Surat Tanda Setor (STS); SSBP, SP2D; SPDR', 'KU', 'KU.800', 2, 'fasilitatif', 'Uraian lengkap Perka 99/2018: Daftar Transaksi (DT), Pengeluaran (PK), Penerimaan (PN); Dokumen Sumber (DS), Bukti Jurnal (BJ), Surat Tanda Setor (STS); SSBP, SP2D; SPM dalam Daftar Ringkasan Pengembalian dan Potongan dari Pengeluaran (SPDR)'),
   ('KU.840', 'Listing (Daftar Rekaman Penerimaan) Buku Temuan dan Tindakan Lain (SAI)', 'KU', 'KU.800', 2, 'fasilitatif', null),
   ('KU.850', 'Laporan Realisasi Bulanan SAI', 'KU', 'KU.800', 2, 'fasilitatif', null),
   ('KU.860', 'Laporan Realisasi Triwulanan SAI dari Unit Akuntansi Wilayah (UAW) dan Gabungan semua UAW/Unit Akuntansi Kantor Pusat Instansi (UAKPI)', 'KU', 'KU.800', 2, 'fasilitatif', null),
