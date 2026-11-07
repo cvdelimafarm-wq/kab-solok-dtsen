@@ -60,7 +60,7 @@ export default function WilayahPeta() {
               <Chip w="navy">{fmt(rekap.sub_sls)} sub SLS</Chip>
               <Chip w={rekap.tanpa_kk > 0 ? "wait" : "ok"}>{fmt(rekap.dengan_kk)} punya KK · {fmt(rekap.total_kk)} KK</Chip>
               <Chip w="mut">{fmt(rekap.dengan_gambar)} punya gambar peta</Chip>
-              {rekap.dengan_batas !== null && <Chip w={rekap.dengan_batas < rekap.sub_sls ? "wait" : "ok"}>{fmt(rekap.dengan_batas)} punya batas{data.batas.versi ? ` (versi ${data.batas.versi})` : ""}</Chip>}
+              {rekap.dengan_batas !== null && <Chip w={rekap.dengan_batas < rekap.sub_sls ? "wait" : "ok"}>{fmt(rekap.dengan_batas)} punya batas{data.batas.versi ? ` (versi ${data.batas.versi}${data.batas.sumber === "unggahan" ? ", unggahan" : data.batas.sumber === "bawaan" ? ", bawaan" : ""})` : ""}</Chip>}
               <Chip w="navy">{fmt(rekap.dipakai_survei)} dipakai survei</Chip>
               {rekap.multi_survei > 0 && <Chip w="wait">{fmt(rekap.multi_survei)} dipakai lebih dari 1 survei</Chip>}
             </div>

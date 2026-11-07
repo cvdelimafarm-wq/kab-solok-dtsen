@@ -6,7 +6,8 @@
 
 import type { Db } from "@/lib/sigap";
 import { MASTER_KOSONG, bacaBarisMaster, type BarisMaster, type DataMasterWilayah, type UsulanMaster } from "@/lib/masterWilayah";
-import { muatIdBatas, RINGKAS_BATAS_KOSONG } from "@/lib/portal/batasServer";
+import { RINGKAS_BATAS_KOSONG } from "@/lib/portal/batasServer";
+import { muatIdBatasUntuk } from "@/lib/portal/batasVersi";
 
 const HALAMAN = 1000;
 const belumAda = (e: { code?: string; message?: string } | null | undefined) =>
@@ -69,7 +70,7 @@ async function bacaUsulan(db: Db, baris: readonly BarisMaster[]): Promise<Usulan
 
 export async function dataMasterWilayah(db: Db, sekarang = new Date()): Promise<DataMasterWilayah> {
   const tahun = tahunWib(sekarang);
-  const [{ siap, mentah }, batas] = await Promise.all([bacaTampilan(db), muatIdBatas()]);
+  const [{ siap, mentah }, batas] = await Promise.all([bacaTampilan(db), muatIdBatasUntuk(db)]);
   if (!siap) return { ...MASTER_KOSONG, tahun, sekarang: sekarang.toISOString() };
   const baris = mentah.map((m) => bacaBarisMaster(m, batas?.ids ?? null)).filter((b): b is BarisMaster => b !== null);
   const kegiatan = new Map<number, { id: number; nama: string; sub_sls: number }>();

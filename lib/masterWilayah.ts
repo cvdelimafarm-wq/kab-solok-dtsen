@@ -6,6 +6,7 @@
 export const API_MASTER_WILAYAH = "/api/portal/master/wilayah";
 /** Izin menu (sigap_menu.kode): khusus Ketua, diberikan lewat peran `admin_master`. */
 export const MENU_MASTER_WILAYAH = "master.wilayah";
+export const API_MASTER_BATAS = "/api/portal/master/batas";
 
 export type SurveiSub = { kegiatan_id: number; kegiatan: string; nks: string | null; target: number | null; ppl: string | null; pml: string | null };
 
@@ -40,7 +41,7 @@ export type UsulanMaster = {
   diajukan_at: string;
 };
 
-export type RingkasBatas = { versi: string | null; dibuat: string | null; dibaca: boolean; kecamatan: number; poligon: number };
+export type RingkasBatas = { versi: string | null; dibuat: string | null; dibaca: boolean; kecamatan: number; poligon: number; sumber?: "bawaan" | "unggahan" };
 
 export type DataMasterWilayah = {
   /** tampilan master_v_subsls_status ada (SQL 20261107h sudah dijalankan) */

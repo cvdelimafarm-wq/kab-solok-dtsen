@@ -15,7 +15,8 @@ import SelectCari from "@/app/components/SelectCari";
 type InfoInduk = { kode: string; nama: string; pendek: string; ikon: string; kegiatan_ids: number[]; urutan: number; aktif: boolean };
 type BarisTahap = { induk_kode: string; kode: string; urutan: number; nama: string; uraian: string | null; isi: string[]; buka_mode: BukaMode; buka_tanggal: string | null; aktif: boolean };
 type Kegiatan = { id: number; nama: string; jenis?: string | null };
-type Data = { induk: InfoInduk[]; tahap: BarisTahap[]; kegiatan: Kegiatan[] };
+// (7 Nov 2026) `tanpa_induk`: kegiatan aktif yang sudah punya penugasan tetapi belum punya induk (petugasnya tidak melihat kartu kegiatan)
+type Data = { induk: InfoInduk[]; tahap: BarisTahap[]; kegiatan: Kegiatan[]; tanpa_induk?: { id: number; nama: string; jenis: string | null; penugasan: number }[] };
 type Edit = { kode: string; baru: boolean; nama: string; uraian: string; isi: string[]; buka_mode: BukaMode; buka_tanggal: string; aktif: boolean };
 
 const KARTU = "rounded-xl border border-[#E3E8EE] bg-white";
@@ -86,6 +87,23 @@ export default function AturTahapPage() {
     const dasar = ["konfirmasi", "pelatihan", "wilayah_tim"];
     return [...dasar, ...(induk?.kegiatan_ids ?? []).map((id) => `translok:${id}`), ...(induk?.kegiatan_ids ?? []).map((id) => `sampel:${id}`)];
   }, [induk]);
+
+  const [membuat, setMembuat] = useState<number | null>(null);
+  async function buatInduk(kegiatanId: number) {
+    setMembuat(kegiatanId);
+    setGalat(null);
+    setPesan(null);
+    try {
+      const r = await apiPortal<{ kode: string }>("/api/portal/admin/tahap", { method: "POST", body: JSON.stringify({ aksi: "buat_induk", kegiatan_id: kegiatanId }) });
+      kodeRef.current = r.kode; // muat ulang langsung memilih induk yang baru dibuat
+      setPesan("Induk dibuat dengan isi awal Transport Lokal. Atur tahap dan isinya di bawah, lalu simpan.");
+      await muat();
+    } catch (e) {
+      setGalat(e instanceof Error ? e.message : "Gagal membuat induk.");
+    } finally {
+      setMembuat(null);
+    }
+  }
 
   const ubah = (i: number, p: Partial<Edit>) => {
     setDaftar((d) => d.map((x, j) => (j === i ? { ...x, ...p } : x)));
@@ -161,6 +179,26 @@ export default function AturTahapPage() {
         {galat && <p className="rounded-lg border-l-4 border-[#C2412D] bg-[#FDECEA] px-3 py-2 text-[13px] text-[#8A2B1D]">{galat}</p>}
         {pesan && <p className="rounded-lg border-l-4 border-[#1E7A5E] bg-[#E3F4EE] px-3 py-2 text-[13px] text-[#14532D]">{pesan}</p>}
         {!data && !galat && <p className="text-[13.5px] text-[#7B8794]">Memuat…</p>}
+
+        {data && (data.tanpa_induk?.length ?? 0) > 0 && (
+          <section className="rounded-xl border border-[#F0D58A] bg-[#FFF8E6] p-4" aria-label="Kegiatan tanpa induk">
+            <h2 className="text-[14px] font-bold text-[#7A5B00]">{data.tanpa_induk!.length} kegiatan sudah punya penugasan tetapi belum punya induk</h2>
+            <p className="mt-1 text-[12.5px] leading-snug text-[#4D3B00]">Petugas kegiatan ini belum melihat kartu kegiatan di aplikasi sampai induknya dibuat. Isi awalnya hanya Transport Lokal; tahap lain bisa ditambah sesudahnya.</p>
+            <ul className="mt-2 space-y-2">
+              {data.tanpa_induk!.map((k) => (
+                <li key={k.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-3 py-2 text-[13.5px]">
+                  <span>
+                    <b>{k.nama}</b> <span className="text-[#7B8794]">· {k.penugasan} petugas ditugaskan{k.jenis ? ` · ${k.jenis}` : ""}</span>
+                  </span>
+                  <button type="button" disabled={membuat !== null || kotor} onClick={() => buatInduk(k.id)} className={`${TOMBOL} bg-[#1F6FD1] text-white`}>
+                    {membuat === k.id ? "Membuat…" : "Buat induk"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {kotor && <p className="mt-2 text-[12px] text-[#8A5A0B]">Simpan atau batalkan perubahan tahap dulu sebelum membuat induk.</p>}
+          </section>
+        )}
 
         {data && (
           <div className="flex flex-wrap gap-2">

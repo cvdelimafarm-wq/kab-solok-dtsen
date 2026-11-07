@@ -42,7 +42,13 @@ const nextConfig = {
     return [...PETA_KELOLA, ...ALIAS_LAMA.map(([lama, baru]) => [baru, lama])].map(([baru, lama]) => ({ source: `${lama}/:path*`, destination: `${baru}/:path*`, permanent: false }));
   },
   async rewrites() {
-    return PETA_KELOLA.map(([baru, lama]) => ({ source: `${baru}/:path*`, destination: `${lama}/:path*` }));
+    return {
+      // (7 Nov 2026, tahap C2) Batas sub SLS dilayani rute yang membaca versi aktif dari Storage (diunggah di Master) dan jatuh ke berkas bawaan public/peta/batas.
+      // `beforeFiles` supaya mengalahkan berkas statis dengan nama yang sama; pemuat peta di HP tetap memanggil /peta/batas/... seperti sebelumnya.
+      beforeFiles: [{ source: "/peta/batas/:nama", destination: "/api/peta/batas/:nama" }],
+      afterFiles: PETA_KELOLA.map(([baru, lama]) => ({ source: `${baru}/:path*`, destination: `${lama}/:path*` })),
+      fallback: [],
+    };
   },
   // (8 Okt 2026) PWA: sw.js jangan di-cache browser supaya versi service worker baru cepat terpakai
   async headers() {

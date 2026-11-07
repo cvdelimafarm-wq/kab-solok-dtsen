@@ -17,15 +17,17 @@ type Muat = { status: "memuat" } | { status: "ada"; fitur: FiturBatas } | { stat
 let cacheManifest: Promise<ManifestBatas | null> | null = null;
 const cacheBerkas = new Map<string, Promise<FiturBatas[] | null>>();
 
-async function ambilJson(url: string): Promise<unknown> {
-  const r = await fetch(url, { cache: "force-cache" });
+// (7 Nov 2026, C2) Batas bisa diperbarui dari Master: manifest selalu diperiksa ulang (no-cache; 304 murah), berkas kecamatan diminta dengan ?v=<versi manifest>
+// sehingga alamatnya unik per versi dan boleh disimpan lama oleh peramban.
+async function ambilJson(url: string, cache: RequestCache = "force-cache"): Promise<unknown> {
+  const r = await fetch(url, { cache });
   if (!r.ok) throw new Error(String(r.status));
   return r.json();
 }
 
 function muatManifest(): Promise<ManifestBatas | null> {
   if (!cacheManifest) {
-    cacheManifest = ambilJson(`${JALUR_BATAS}/${NAMA_MANIFEST_BATAS}`).then(bacaManifestBatas).catch(() => null);
+    cacheManifest = ambilJson(`${JALUR_BATAS}/${NAMA_MANIFEST_BATAS}`, "no-cache").then(bacaManifestBatas).catch(() => null);
     cacheManifest.then((m) => {
       if (!m) cacheManifest = null; // gagal/tak ada: boleh dicoba lagi lain kali
     });
@@ -33,15 +35,16 @@ function muatManifest(): Promise<ManifestBatas | null> {
   return cacheManifest;
 }
 
-function muatBerkas(berkas: string): Promise<FiturBatas[] | null> {
-  let p = cacheBerkas.get(berkas);
+function muatBerkas(berkas: string, versi: string): Promise<FiturBatas[] | null> {
+  const kunci = `${versi}/${berkas}`;
+  let p = cacheBerkas.get(kunci);
   if (!p) {
-    p = ambilJson(`${JALUR_BATAS}/${encodeURIComponent(berkas)}`)
+    p = ambilJson(`${JALUR_BATAS}/${encodeURIComponent(berkas)}?v=${encodeURIComponent(versi)}`)
       .then((j) => bacaBerkasBatas(j)?.fitur ?? null)
       .catch(() => null);
-    cacheBerkas.set(berkas, p);
+    cacheBerkas.set(kunci, p);
     p.then((f) => {
-      if (!f) cacheBerkas.delete(berkas);
+      if (!f) cacheBerkas.delete(kunci);
     });
   }
   return p;
@@ -58,7 +61,7 @@ function useBatasSub(idsubsls: string): Muat {
       if (!m) return setS({ status: "tiada", alasan: "Batas wilayah belum tersedia di server." });
       const berkas = berkasUntukSub(m, idsubsls);
       if (!berkas) return setS({ status: "tiada", alasan: "Batas sub SLS ini belum ada di berkas peta." });
-      const daftar = await muatBerkas(berkas);
+      const daftar = await muatBerkas(berkas, m.versi);
       if (batal) return;
       const f = daftar?.find((x) => x.id === idsubsls);
       setS(f ? { status: "ada", fitur: f } : { status: "tiada", alasan: "Batas sub SLS ini belum ada di berkas peta." });

@@ -4,13 +4,18 @@ import type { BarisMaster } from "@/lib/masterWilayah";
 
 vi.mock("@/app/portal/sesi", () => ({ apiPortal: async () => ({}), pemilikSesi: () => 1 }));
 vi.mock("@/app/sigap/admin/ui", () => ({
-  BTN: "b", BTN_O: "bo", BTN_R: "br", BTN_T: "bt", TD: "td", TH: "th",
+  BTN: "b", BTN_G: "bg", INPUT: "in", BTN_O: "bo", BTN_R: "br", BTN_T: "bt", TD: "td", TH: "th",
   Chip: ({ children }: { children: unknown }) => <span>{children as never}</span>,
   Kartu: ({ judul, children }: { judul?: unknown; children?: unknown }) => <section><h3>{judul as never}</h3>{children as never}</section>,
   Memuat: () => <span>Memuat…</span>,
   Pesan: ({ children }: { children: unknown }) => <div>{children as never}</div>,
+  BarisTab: ({ tab, aktif }: { tab: { kode: string; label: string }[]; aktif: string }) => <nav>{tab.map((t) => <button key={t.kode} aria-selected={t.kode === aktif}>{t.label}</button>)}</nav>,
 }));
+vi.mock("@/app/sigap/admin/api", () => ({ bacaSesi: () => ({}), keMasuk: () => {} }));
+vi.mock("@/app/sigap/kontrak/Bingkai", () => ({ default: ({ jejak, children }: { jejak: string[]; children: unknown }) => <main><p>{jejak.join(" > ")}</p>{children as never}</main> }));
 import WilayahPeta, { Baris } from "@/app/sigap/kelola/master/WilayahPeta";
+import BatasShapefile from "@/app/sigap/kelola/master/BatasShapefile";
+import MasterHalaman from "@/app/sigap/kelola/master/page";
 
 const teksDari = (h: string) => h.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const b = (o: Partial<BarisMaster> = {}): BarisMaster => ({
@@ -53,3 +58,20 @@ describe("Master > Wilayah dan Peta", () => {
     expect(teksDari(tabel(<Baris b={b({ jumlah_survei: 0, daftar_survei: [] })} sekarang="2026-11-07T10:00:00Z" terbuka onKlik={() => {}} />))).toContain("Belum dipakai survei tahun ini");
   });
 });
+
+describe("Master > Batas wilayah (C2)", () => {
+  it("keadaan awal: kartu unggah dan riwayat memuat", () => {
+    const t = teksDari(renderToString(<BatasShapefile />));
+    expect(t).toContain("Unggah shapefile batas");
+    expect(t).toContain("Pilih berkas");
+    expect(t).toContain("Riwayat versi");
+    expect(t).toContain("Memuat");
+  });
+  it("halaman master memuat dua tab dan tab pertama aktif", () => {
+    const t = teksDari(renderToString(<MasterHalaman />));
+    expect(t).toContain("Wilayah dan peta");
+    expect(t).toContain("Batas wilayah");
+    expect(t).toContain("Pengelolaan &gt; Master &gt; Wilayah dan peta");
+  });
+});
+
