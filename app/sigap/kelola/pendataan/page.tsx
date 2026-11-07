@@ -119,7 +119,16 @@ export default function KelolaPendataan() {
           {f.persiapan_lembar && <PengaturanLembar />}
           {f.persiapan_sampel && <AlokasiWilayah key={`w${kegId}`} kegiatanId={kegId} nama={nama} />}
           {f.persiapan_sampel && <TagSampel key={`t${kegId}`} kegiatanId={kegId} nama={nama} />}
-          {f.persiapan_sampel && <AlokasiSampel key={kegId} kegiatanId={kegId} nama={nama} />}
+          {f.persiapan_sampel && (
+            // (7 Nov 2026) Cara LAMA: unggah KK sampel lengkap (utama + cadangan + koordinat) per baris. Digantikan alur 2 stage di atas
+            // (stage 1 daftar sub SLS + plotting petugas, stage 2 tag KK dari master). Disimpan tertutup agar tidak membingungkan.
+            <details className="rounded-2xl border border-dashed border-[#DCE5F2] bg-[#F7F9FD] px-3 py-2">
+              <summary className="cursor-pointer text-[12.5px] font-bold text-[#55657D]">Cara lama: unggah KK sampel lengkap (tidak dipakai untuk alur 2 stage)</summary>
+              <div className="mt-2">
+                <AlokasiSampel key={kegId} kegiatanId={kegId} nama={nama} />
+              </div>
+            </details>
+          )}
           {f.persiapan_laporan_spj && <IsiLaporanSpj />}
           <Seleksi key={kegId} kegiatanId={kegId} nama={nama} />
           <Kartu judul="Anomali petugas" ket="impor anomali, antrean pencocokan nama, rekap konfirmasi">
