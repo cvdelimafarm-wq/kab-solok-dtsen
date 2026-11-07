@@ -5,9 +5,9 @@
 // Sumber data (semua lewat GET /api/sigap/keu/baca): keu_v_adm_lembar (item POK berlaku per RO), keu_v_realisasi_terbaru,
 // keu_v_rab_ringkas + keu_v_rab_item, keu_v_adm_ringkas + keu_v_adm_item, keu_v_kekurangan(_ro), keu_v_skor_ro, keu_v_penugasan_ro.
 
-export const TAB_RO = ["ringkasan", "anggaran", "rab", "administrasi", "revisi", "kertas", "kekurangan", "tim"] as const;
+export const TAB_RO = ["ringkasan", "anggaran", "rab", "administrasi", "pembayaran", "revisi", "kertas", "kekurangan", "tim"] as const;
 export type TabRo = (typeof TAB_RO)[number];
-export const LABEL_TAB: Record<TabRo, string> = { ringkasan: "Ringkasan", anggaran: "Anggaran", rab: "RAB", administrasi: "Administrasi", revisi: "Revisi", kertas: "Kertas kerja", kekurangan: "Kekurangan RAB", tim: "Tim dan akses" };
+export const LABEL_TAB: Record<TabRo, string> = { ringkasan: "Ringkasan", anggaran: "Anggaran", rab: "RAB", administrasi: "Administrasi", pembayaran: "Pembayaran", revisi: "Revisi", kertas: "Kertas kerja", kekurangan: "Kekurangan RAB", tim: "Tim dan akses" };
 
 /** Alamat GET /api/sigap/keu/baca. `saring` = pasangan kolom->nilai (larik = salah satu dari; null = kosong). Urutan kunci dibuat tetap supaya simpanan klien konsisten. */
 export function urlBaca(tampilan: string, saring: Record<string, string | number | null | (string | number)[]> = {}, opsi: { urut?: string; batas?: number; kolom?: string[] } = {}): string {
@@ -65,9 +65,11 @@ export function pilihRab(daftar: BarisRabRingkas[], ro: string): BarisRabRingkas
 // ---------- Anggaran ----------
 export type BarisLembar = { detail_id: number; ro_kode: string; komponen_kode: string; akun_kode: string; kunci_stabil: string; nomor_item: string | null; uraian: string; volume: number | string; satuan: string; jumlah: number | string };
 export type BarisRealisasi = { detail_id: number | null; real_sd: number | string; pagu: number | string };
-export type BarisRabItem = { pok_kunci: string | null; baru: boolean; status: string; jumlah_rab: number | string; selesai: boolean; uraian?: string; akun_kode?: string };
+export type BarisRabItem = { pok_kunci: string | null; baru: boolean; status: string; jumlah_rab: number | string; selesai: boolean; uraian?: string; akun_kode?: string; item_id?: number | string };
 
-export type ItemAnggaran = { detail_id: number; kunci: string; komponen: string; akun: string; nomor_item: string | null; uraian: string; volume: number; satuan: string; pok: number; realisasi: number; rab: number | null; statusRab: string | null; selesai: boolean };
+export type ItemAnggaran = { detail_id: number; kunci: string; komponen: string; akun: string; nomor_item: string | null; uraian: string; volume: number; satuan: string; pok: number; realisasi: number; rab: number | null; statusRab: string | null; selesai: boolean;
+  /** (langkah 3) bagian RAB yang sudah tertutup catatan pembayaran PJ Administrasi, dan catatan SIGAP yang belum tercermin di SAKTI; kosong = 0 */
+  rabTutup?: number; dicatat?: number };
 export type AkunAnggaran = { akun: string; item: ItemAnggaran[]; pok: number; realisasi: number; rab: number };
 export type KomponenAnggaran = { komponen: string; akun: AkunAnggaran[]; pok: number; realisasi: number; rab: number };
 
@@ -76,7 +78,7 @@ export const STATUS_ADM: Record<string, string> = { tanpa_dokumen: "Tanpa dokume
 export const STATUS_KEK: Record<string, string> = { tercatat: "Tercatat", ditunda: "Ditunda", dipenuhi: "Dipenuhi", ditolak: "Ditolak", ditarik: "Ditarik" };
 
 /** Susun POK berlaku RO menjadi Komponen -> Akun -> Item (urut kode), dengan realisasi (per detail_id) dan RAB (per kunci stabil). */
-export function susunAnggaran(lembar: BarisLembar[], realisasi: BarisRealisasi[], rab: BarisRabItem[]): KomponenAnggaran[] {
+export function susunAnggaran(lembar: BarisLembar[], realisasi: BarisRealisasi[], rab: BarisRabItem[], pengaruh?: ReadonlyMap<string, { tutup: number; dicatat: number }>): KomponenAnggaran[] {
   const real = new Map<number, number>();
   for (const r of realisasi) if (r.detail_id != null) real.set(r.detail_id, (real.get(r.detail_id) ?? 0) + num(r.real_sd));
   const rabPer = new Map<string, BarisRabItem>();
@@ -87,6 +89,7 @@ export function susunAnggaran(lembar: BarisLembar[], realisasi: BarisRealisasi[]
     const item: ItemAnggaran = {
       detail_id: b.detail_id, kunci: b.kunci_stabil, komponen: b.komponen_kode, akun: b.akun_kode, nomor_item: b.nomor_item, uraian: b.uraian, volume: num(b.volume), satuan: b.satuan, pok: num(b.jumlah),
       realisasi: real.get(b.detail_id) ?? 0, rab: r ? num(r.jumlah_rab) : null, statusRab: r ? r.status : null, selesai: r?.selesai ?? false,
+      rabTutup: pengaruh?.get(b.kunci_stabil)?.tutup ?? 0, dicatat: pengaruh?.get(b.kunci_stabil)?.dicatat ?? 0,
     };
     const akunPeta = peta.get(b.komponen_kode) ?? new Map<string, ItemAnggaran[]>();
     const daftar = akunPeta.get(b.akun_kode) ?? [];

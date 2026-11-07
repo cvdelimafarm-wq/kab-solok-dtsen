@@ -11,6 +11,7 @@ import { useData } from "@/app/portal/dataBersama";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { FUNGSI_BACA } from "@/lib/keu/gerbang";
 import type { BarisRabRow, ItemRabRow } from "@/lib/keu/rab";
+import { antreanJatuhTempo, aktif as bayarAktif, hariIniWib, hitungPengaruh, type BarisBayar, type BarisRabLepas, type JadwalRabLepas } from "@/lib/keu/pembayaran";
 import { pilihRab, susunAnggaran, urlBaca, type BarisLembar, type BarisPenugasan, type BarisRabItem, type BarisRabRingkas, type BarisRealisasi } from "@/lib/keu/ro";
 
 type Balasan<T> = { data: T[]; jumlah: number; terpotong: boolean };
@@ -47,23 +48,43 @@ export function useAnggaranRo(kode: string) {
   const rabPilih = useMemo(() => (rabR.baris ? pilihRab(rabR.baris, kode) : null), [rabR.baris, kode]);
   const rabItem = useBacaKeu<BarisRabItem>(rabPilih ? urlBaca("keu_v_rab_item", { rab_id: rabPilih.rab_id }, { batas: 5000 }) : null);
 
-  const rabSiap = rabR.baris !== null && (rabPilih === null || rabItem.baris !== null);
+  // (langkah 3) catatan pembayaran PJ Administrasi: baris RAB, jadwal cair, dan catatan. Bila tabelnya belum ada (SQL 20261107d belum dijalankan) atau gagal
+  // dibaca, dianggap kosong supaya halaman tetap tampil; `bayarTersedia` memberi tahu tampilan.
+  const barisRab = useBacaKeu<BarisRabLepas>(rabPilih ? urlBaca("keu_v_rab_baris", { rab_id: rabPilih.rab_id }, { batas: 5000, kolom: ["baris_id", "item_id", "rab_id", "pok_kunci", "ket", "jumlah"] }) : null);
+  const jadwal = useBacaKeu<JadwalRabLepas>(rabPilih ? urlBaca("keu_v_rab_jadwal_item", { rab_id: rabPilih.rab_id }, { batas: 5000, kolom: ["baris_id", "bulan", "minggu", "nilai"] }) : null);
+  const bayarR = useBacaKeu<BarisBayar>(urlBaca("keu_pembayaran", { ro_kode: kode }, { urut: "-tanggal", batas: 5000, kolom: KOLOM_BAYAR }));
+  const bayarTersedia = bayarR.baris !== null;
+  const bayar = useMemo(() => bayarR.baris ?? [], [bayarR.baris]);
+  const pelengkapSiap = (rabPilih === null || ((barisRab.baris !== null || barisRab.galat !== null) && (jadwal.baris !== null || jadwal.galat !== null))) && (bayarR.baris !== null || bayarR.galat !== null);
+  const pengaruh = useMemo(() => hitungPengaruh(barisRab.baris ?? [], bayar), [barisRab.baris, bayar]);
+
+  const rabSiap = rabR.baris !== null && (rabPilih === null || rabItem.baris !== null) && pelengkapSiap;
   const anggaran = useMemo(
-    () => (lembar.baris && real.baris && rabSiap ? susunAnggaran(lembar.baris, real.baris, rabItem.baris ?? []) : null),
-    [lembar.baris, real.baris, rabItem.baris, rabSiap],
+    () => (lembar.baris && real.baris && rabSiap ? susunAnggaran(lembar.baris, real.baris, rabItem.baris ?? [], pengaruh) : null),
+    [lembar.baris, real.baris, rabItem.baris, rabSiap, pengaruh],
   );
+  const sampaiTanggal = real.baris?.[0]?.sampai_tanggal ?? null;
+  const hariIni = hariIniWib();
+  const antrean = useMemo(() => {
+    const selesai = new Set((rabItem.baris ?? []).filter((x) => x.selesai && x.item_id !== undefined).map((x) => Number(x.item_id)));
+    return antreanJatuhTempo(barisRab.baris ?? [], jadwal.baris ?? [], bayar.filter(bayarAktif), hariIni, Number((sampaiTanggal ?? hariIni).slice(0, 4)), selesai);
+  }, [barisRab.baris, jadwal.baris, bayar, rabItem.baris, hariIni, sampaiTanggal]);
   const galat = lembar.galat ?? real.galat ?? rabR.galat ?? rabItem.galat;
   return {
     anggaran,
     /** Item RAB yang belum ada di POK (bahan revisi); kebutuhannya tidak punya pagu. */
     itemBaru: (rabItem.baris ?? []).filter((x) => x.baru && !x.selesai && Number(x.jumlah_rab) > 0),
     rab: rabPilih,
-    sampaiTanggal: real.baris?.[0]?.sampai_tanggal ?? null,
+    sampaiTanggal,
+    /** catatan pembayaran RO ini (semua, termasuk yang dibatalkan), baris RAB aktif, dan antrean jatuh tempo belum dicatat */
+    bayar, bayarTersedia, barisRab: barisRab.baris ?? [], antrean, hariIni, muatBayar: bayarR.muat,
     memuat: !galat && !anggaran,
     galat,
     terpotong: lembar.terpotong || real.terpotong || rabItem.terpotong,
   };
 }
+
+const KOLOM_BAYAR = ["id", "ro_kode", "rab_id", "rab_item_id", "rab_baris_id", "pok_kunci", "jenis", "tanggal", "jumlah", "menutup", "status", "nomor_ref", "tautan", "catatan", "dicatat_oleh", "tercermin_at", "dibatalkan_at", "alasan_batal"];
 
 export type HasilAksi<T = unknown> = { ok: true; data: T } | { ok: false; pesan: string };
 

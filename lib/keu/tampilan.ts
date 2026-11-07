@@ -34,6 +34,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_rab_survei: ["rab_id", "ident_id", "status", "catatan", "diubah_oleh", "dibuat_at", "diubah_at"],
   keu_rab_survei_draf: ["rab_id", "ident_id", "isi", "diubah_oleh", "dibuat_at", "diubah_at"],
   keu_niat_butir: ["ro_kode", "pok_kunci", "niat", "jumlah", "catatan", "diubah_oleh", "dibuat_at", "diubah_at"],
+  keu_pembayaran: ["id", "ro_kode", "rab_id", "rab_item_id", "rab_baris_id", "pok_kunci", "jenis", "tanggal", "jumlah", "menutup", "status", "nomor_ref", "tautan", "catatan", "dicatat_oleh", "tercermin_oleh", "tercermin_at", "dibatalkan_at", "dibatalkan_oleh", "alasan_batal", "dibuat_at", "diubah_at"],
   keu_realisasi_unggah: ["id", "tahun", "sampai_tanggal", "bulan", "nama_berkas", "hash_berkas", "pok_versi_id", "n_item", "total_pagu", "total_lock", "total_sd", "status", "alasan_batal", "diunggah_oleh", "dibuat_at", "diubah_at"],
   keu_revisi_jadwal: ["id", "tahun", "jenis", "judul", "buka", "tutup", "ulang", "status", "catatan", "dibuat_oleh", "dibuat_at", "diubah_at"],
   keu_revisi_sah: ["id", "jadwal_id", "versi_sistem", "nomor_dokumen", "tanggal_dokumen", "pok_versi_dasar_id", "pok_versi_hasil_id", "dicatat_oleh", "dicatat_at"],

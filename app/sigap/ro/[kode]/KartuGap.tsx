@@ -3,6 +3,7 @@
 // (7 Nov 2026, langkah 1 rancangan Kebutuhan dan revisi) Kartu Gap tab Anggaran RO: berapa anggaran berlebih dan berapa kurang menurut Realisasi + RAB,
 // butir yang belum dikaji (belum ber-RAB) dipisah supaya pagunya tidak dianggap lebih. Hanya baca. Logika di lib/keu/kebutuhan.ts.
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { judulKartu, kartu } from "../../keu-ui";
 import { angka, rupiah } from "@/lib/keu/ro";
@@ -38,13 +39,15 @@ function Blok({ judul, nilai, sub, kelas, anak }: { judul: string; nilai: ReactN
   );
 }
 
-export function KartuGap({ r }: { r: RingkasGapRo }) {
+export type TunggakBayar = { n: number; jumlah: number; tersedia: boolean; kode: string };
+
+export function KartuGap({ r, tunggak }: { r: RingkasGapRo; tunggak?: TunggakBayar }) {
   return (
     <section className={`${kartu} flex flex-col gap-3`} aria-label="Kartu Gap anggaran RO">
       <div className="flex flex-col gap-1">
         <h2 className={judulKartu}>Gap anggaran RO</h2>
         <p className="m-0 text-[12.5px] text-[#5B6B84]">
-          Dihitung per butir: Gap = Pagu dikurangi Kebutuhan, dengan Kebutuhan = Realisasi ditambah RAB yang belum dibayar. Butir yang belum ber-RAB dipisah dan pagunya tidak dianggap berlebih.
+          Dihitung per butir: Gap = Pagu dikurangi Kebutuhan, dengan Kebutuhan = Realisasi ditambah catatan pembayaran yang belum tampak di SAKTI ditambah RAB yang belum dibayar. Butir yang belum ber-RAB dipisah dan pagunya tidak dianggap berlebih.
         </p>
       </div>
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))]">
@@ -74,8 +77,19 @@ export function KartuGap({ r }: { r: RingkasGapRo }) {
         <span className="font-semibold">Neraca RO: </span>{kalimatNeraca(r)}
         {r.nCukup > 0 && <span className="text-[#5B6B84]"> {angka(r.nCukup)} butir cukup.</span>}
       </p>
+      {tunggak && !tunggak.tersedia && (
+        <p className="m-0 rounded-md bg-[#FFF4D6] px-3 py-2 text-[12.5px] text-[#8A6200]">
+          Catatan pembayaran belum tersedia (berkas 20261107d_catat_pembayaran.sql belum dijalankan). Selama itu, RAB yang sudah dibayar dapat terhitung ganda dengan realisasi.
+        </p>
+      )}
+      {tunggak && tunggak.tersedia && tunggak.n > 0 && (
+        <p className="m-0 rounded-md bg-[#FFF4D6] px-3 py-2 text-[12.5px] text-[#8A6200]">
+          Angka sementara: {angka(tunggak.n)} baris RAB sudah jatuh tempo tetapi belum dicatat pembayarannya ({rupiah(tunggak.jumlah)}). Bila sudah dibayar, RAB itu masih terhitung sebagai kebutuhan di samping realisasi.{" "}
+          <Link href={`/sigap/ro/${encodeURIComponent(tunggak.kode)}?tab=pembayaran`} className="font-semibold underline">Catat di tab Pembayaran</Link>
+        </p>
+      )}
       <p className="m-0 text-[12px] text-[#5B6B84]">
-        Catatan: RAB yang sudah dibayar baru dikeluarkan dari kebutuhan setelah ditutup oleh catatan pembayaran PJ Administrasi (belum tersedia). Sampai itu ada, RAB yang jatuh temponya sudah lewat dapat terhitung ganda dengan realisasi.
+        RAB yang sudah dibayar keluar dari RAB sisa setelah PJ Administrasi mencatat pembayarannya (tab Pembayaran). Catatan yang belum tampak di realisasi SAKTI tetap dihitung sebagai kebutuhan; setelah tercermin di SAKTI tidak dihitung lagi.
       </p>
     </section>
   );

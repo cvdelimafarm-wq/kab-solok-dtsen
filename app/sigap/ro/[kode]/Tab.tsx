@@ -87,7 +87,8 @@ export function TabRingkasan({ kode }: { kode: string }) {
 
 // ---------------------------------------------------------------- Anggaran
 // (7 Nov 2026, permintaan Iqbal) Tata letak seperti POK: RO > Komponen > Sub komponen > Akun > Item, ditambah kolom Realisasi, RAB belum dibayar, Kebutuhan, dan Gap.
-// Rumus ada di lib/keu/pokTata.ts dan lib/keu/kebutuhan.ts: RAB = kebutuhan ke depan yang belum dibayar; Kebutuhan = Realisasi + RAB; Gap = Pagu - Kebutuhan.
+// Rumus ada di lib/keu/pokTata.ts, lib/keu/kebutuhan.ts, dan lib/keu/pembayaran.ts: RAB = kebutuhan ke depan yang belum dibayar (dikurangi baris yang ditutup catatan pembayaran);
+// Kebutuhan = Realisasi + catatan pembayaran belum tercermin + RAB; Gap = Pagu - Kebutuhan.
 // (7 Nov 2026, langkah 1 Kebutuhan; dikoreksi dari RAB - Realisasi) Golongan butir (Cukup/Lebih/Kurang/Belum dikaji) dan Kartu Gap: lib/keu/kebutuhan.ts.
 type KolomAngka = { pok: ReactNode; real: ReactNode; rab: ReactNode; keb: ReactNode; gap: ReactNode };
 const sel = "whitespace-nowrap px-2.5 py-1.5 text-right tabular-nums";
@@ -97,9 +98,9 @@ const teksGap = (g: number | null) => {
   const kelas = arah === "kurang" ? "font-bold text-[#B42318]" : arah === "lebih" ? "font-bold text-[#1B7A3E]" : "text-[#44546F]";
   return <span className={kelas}>{g !== null && g > 0 ? "+" : ""}{angka(g)}</span>;
 };
-const angkaKebutuhan = (realisasi: number, sisa: number | null) => { const k = kebutuhan(realisasi, sisa); return k === null ? <span className="text-[#8A97AD]">-</span> : angka(k); };
+const angkaKebutuhan = (realisasi: number, sisa: number | null, dicatat = 0) => { const k = kebutuhan(realisasi, sisa, dicatat); return k === null ? <span className="text-[#8A97AD]">-</span> : angka(k); };
 const dariTotal = (t: Total): KolomAngka => ({
-  pok: angka(t.pok), real: angka(t.realisasi), rab: t.nBerRab === 0 ? <span className="text-[#8A97AD]">-</span> : angka(t.rab), keb: angkaKebutuhan(t.realisasi, t.sisa), gap: teksGap(t.gap),
+  pok: angka(t.pok), real: angka(t.realisasi), rab: t.nBerRab === 0 ? <span className="text-[#8A97AD]">-</span> : angka(t.rab), keb: angkaKebutuhan(t.realisasi, t.sisa, t.dicatat), gap: teksGap(t.gap),
 });
 
 function BarisPok({ kelas, kiri, vol, harga, k, kelasTd = "" }: { kelas: string; kiri: ReactNode; vol?: ReactNode; harga?: ReactNode; k: KolomAngka; kelasTd?: string }) {
@@ -120,7 +121,7 @@ function BarisItem({ i }: { i: SelItem }) {
       kelas="border-t border-[#EEF2F7]" kelasTd="pl-9 text-[#1B2B4B]"
       kiri={<span className="break-words">- {i.nomor_item ? `${i.nomor_item}. ` : ""}{i.uraian}{i.selesai && <span className="ml-1.5 rounded-full bg-[#EEF2F7] px-1.5 text-[11px] text-[#44546F]">selesai</span>}<span className="ml-1.5 align-middle"><Chip warna={WARNA_GOLONGAN[golonganItem(i)]}>{LABEL_GOLONGAN[golonganItem(i)]}</Chip></span></span>}
       vol={`${teksVolume(i.volume)} ${i.satuan}`} harga={angka(i.harga)}
-      k={{ pok: angka(i.pok), real: angka(i.realisasi), rab, keb: angkaKebutuhan(i.realisasi, i.sisa), gap: teksGap(i.gap) }}
+      k={{ pok: angka(i.pok), real: angka(i.realisasi), rab, keb: angkaKebutuhan(i.realisasi, i.sisa, i.dicatat), gap: teksGap(i.gap) }}
     />
   );
 }
@@ -175,19 +176,19 @@ export function TabAnggaran({ kode }: { kode: string }) {
       <div className={kisi}>
         <Kpi label="Pagu POK" nilai={rupiah(t.pok)} sub={`${angka(t.nItem)} butir`} />
         <Kpi label="Realisasi" nilai={rupiah(t.realisasi)} sub={`${persen(t.realisasi, t.pok)} dari pagu`} />
-        <Kpi label="Kebutuhan" nilai={rupiah(rg.kebutuhanDikaji)} sub={`realisasi + RAB belum dibayar${rg.nBaru > 0 ? " + item baru" : ""}${belumRab > 0 ? ` · ${angka(belumRab)} butir belum ber-RAB tidak ikut` : ""}`} />
+        <Kpi label="Kebutuhan" nilai={rupiah(rg.kebutuhanDikaji)} sub={`realisasi + catatan belum tercermin + RAB belum dibayar${rg.nBaru > 0 ? " + item baru" : ""}${belumRab > 0 ? ` · ${angka(belumRab)} butir belum ber-RAB tidak ikut` : ""}`} />
         <Kpi
           label="Gap" nilai={rg.bersih === null ? "-" : `${rg.bersih > 0 ? "+" : ""}${rupiah(rg.bersih)}`}
           sub={rg.bersih === null ? "terhitung bila ada butir yang ber-RAB" : `${belumRab > 0 ? `butir yang sudah ber-RAB · ` : ""}${rg.bersih < 0 ? "kebutuhan melebihi pagu" : "pagu mencukupi"}`} warna={rg.bersih === null ? undefined : rg.bersih < 0 ? "mr" : "hj"}
         />
       </div>
-      <KartuGap r={rg} />
+      <KartuGap r={rg} tunggak={{ n: ang.antrean.length, jumlah: ang.antrean.reduce((s, x) => s + x.tunggak, 0), tersedia: ang.bayarTersedia, kode }} />
       <RencanaTindakan kode={kode} item={semuaItem(pohon)} baru={rg.baru} />
       {ang.terpotong && <Potong />}
       <div className={`${kartu} flex flex-col gap-2 !p-3`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="m-0 text-[12px] text-[#5B6B84]">
-            RAB = kebutuhan ke depan yang belum dibayar. Kebutuhan = realisasi + RAB. Gap = pagu dikurangi kebutuhan (positif: pagu masih lebih; negatif: kurang). Butir yang belum ber-RAB ditandai “-” dan “Belum dikaji”.
+            RAB = kebutuhan ke depan yang belum dibayar (setelah dikurangi baris yang sudah ditutup di tab Pembayaran). Kebutuhan = realisasi + catatan pembayaran belum tercermin + RAB. Gap = pagu dikurangi kebutuhan (positif: pagu masih lebih; negatif: kurang). Butir yang belum ber-RAB ditandai “-” dan “Belum dikaji”.
           </p>
           <div className="flex gap-2">
             <button type="button" className={tombolKecil} onClick={() => setTutup(new Set())}>Buka semua akun</button>

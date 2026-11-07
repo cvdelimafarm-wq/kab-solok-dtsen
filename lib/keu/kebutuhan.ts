@@ -2,10 +2,10 @@
 //
 // (7 Nov 2026, langkah 1 rancangan "Kebutuhan, neraca RO, revisi") Golongan butir dan ringkasan Gap satu RO. MURNI (tanpa React dan basis data).
 //
-// Kebutuhan butir = Realisasi + Sisa kebutuhan, dengan Sisa kebutuhan = RAB butir (kebutuhan ke depan yang belum dibayar; pokTata.hitungItem); butir Selesai = Realisasi saja.
+// Kebutuhan butir = Realisasi + Catatan SIGAP belum tercermin + Sisa kebutuhan, dengan Sisa kebutuhan = RAB butir (kebutuhan ke depan yang belum dibayar) dikurangi bagian yang sudah ditutup catatan pembayaran (pokTata.hitungItem); butir Selesai = Realisasi saja.
 // (7 Nov 2026, koreksi) Rumus awal max(RAB, Realisasi) keliru: RAB per survei berisi kebutuhan periode yang BELUM dibayar (mis. Seruti TW IV bulan 11-12), jadi
 // realisasi periode lain tidak boleh mengurangi RAB. Konsekuensi: RAB yang sudah dibayar dan sudah masuk Realisasi dapat terhitung ganda sampai barisnya ditutup
-// oleh catatan PJ Administrasi; rumus penuh "Realisasi + Catatan SIGAP belum tercermin + RAB sisa" menyusul di langkah 3. Item baru di RAB (belum ada di POK)
+// oleh catatan PJ Administrasi. Langkah 3 (7 Nov 2026) menerapkan rumus penuh "Realisasi + Catatan SIGAP belum tercermin + RAB sisa" (lib/keu/pembayaran.ts). Item baru di RAB (belum ada di POK)
 // tidak punya pagu, jadi seluruh jumlahnya adalah kekurangan yang butuh sumber.
 //
 // Golongan (berdasarkan Gap butir = Pagu - Kebutuhan):
@@ -35,8 +35,8 @@ export function golongan(gap: number | null, pok: number): Golongan {
   return "cukup";
 }
 
-/** Kebutuhan butir = realisasi + sisa kebutuhan; kosong bila sisa kebutuhan tidak diketahui (belum ber-RAB). */
-export const kebutuhan = (realisasi: number, sisa: number | null): number | null => (sisa === null ? null : realisasi + sisa);
+/** Kebutuhan butir = realisasi + catatan SIGAP belum tercermin + sisa kebutuhan; kosong bila sisa kebutuhan tidak diketahui (belum ber-RAB). */
+export const kebutuhan = (realisasi: number, sisa: number | null, dicatat = 0): number | null => (sisa === null ? null : realisasi + dicatat + sisa);
 
 export const golonganItem = (i: Pick<SelItem, "gap" | "pok">): Golongan => golongan(i.gap, i.pok);
 

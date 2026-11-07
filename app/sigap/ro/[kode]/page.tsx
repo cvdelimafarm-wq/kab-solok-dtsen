@@ -3,7 +3,7 @@
 // app/sigap/ro/[kode]/page.tsx
 //
 // (24 Okt 2026) Ruang kerja satu Rincian Output (RO) -- Kertas Kerja Revisi POK, papan 9 mockup. Satu alamat per RO dan per tab (aturan D-24):
-// /sigap/ro/<KODE>?tab=ringkasan|anggaran|rab|administrasi|revisi|kertas|kekurangan|tim[&dari=<alamat asal>]. Tanpa ?tab=, tab terakhir yang dibuka
+// /sigap/ro/<KODE>?tab=ringkasan|anggaran|rab|administrasi|pembayaran|revisi|kertas|kekurangan|tim[&dari=<alamat asal>]. Tanpa ?tab=, tab terakhir yang dibuka
 // pada RO itu dipulihkan (disimpan di peramban, boleh gagal). dari= (hanya jalur /sigap/...) menentukan tujuan dan nama tombol Kembali. Bilah tab menempel di atas saat menggulir; lencana oranye menandai
 // pekerjaan yang menunggu (dokumen belum ada, RAB menunggu persetujuan, catatan kekurangan terbuka). "Pindah RO" mempertahankan tab.
 // Semua pegawai organik boleh melihat; mengubah mengikuti hak (ditegakkan basis data).
@@ -18,6 +18,7 @@ import { useBacaKeu, usePenugasan } from "../useKeu";
 import { TabKekurangan } from "./Kekurangan";
 import { TabRab } from "./Rab";
 import { TabAdministrasi } from "./Administrasi";
+import { TabPembayaran } from "./Pembayaran";
 import { TabKertas } from "./Kertas";
 import { TabRevisi, useHakUsulan, useUsulanRo } from "./Revisi";
 import { TabTim } from "./Tim";
@@ -117,6 +118,7 @@ function Isi() {
           {tab === "anggaran" && <TabAnggaran kode={kode} />}
           {tab === "rab" && <TabRab kode={kode} />}
           {tab === "administrasi" && <TabAdministrasi kode={kode} />}
+          {tab === "pembayaran" && <TabPembayaran kode={kode} />}
           {tab === "revisi" && <TabRevisi kode={kode} />}
           {tab === "kertas" && <TabKertas kode={kode} />}
           {tab === "kekurangan" && <TabKekurangan kode={kode} />}

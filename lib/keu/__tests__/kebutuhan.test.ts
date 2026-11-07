@@ -116,3 +116,11 @@ describe("semuaItem dari pohon", () => {
     expect(r.nDikaji).toBe(2);
   });
 });
+
+describe("kebutuhan dengan catatan belum tercermin", () => {
+  it("realisasi + dicatat + sisa; kosong bila sisa tidak diketahui", () => {
+    expect(kebutuhan(1000, 300, 250)).toBe(1550);
+    expect(kebutuhan(1000, 300)).toBe(1300);
+    expect(kebutuhan(1000, null, 250)).toBeNull();
+  });
+});

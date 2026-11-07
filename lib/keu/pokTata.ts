@@ -8,10 +8,11 @@
 //   Sisa kebutuhan  = RAB (kebutuhan ke depan yang BELUM dibayar); item yang ditandai Selesai = 0 (tidak ada kebutuhan lagi).
 //                     (7 Nov 2026, koreksi) Sebelumnya RAB - Realisasi; keliru karena RAB per survei berisi kebutuhan periode yang belum dibayar
 //                     (mis. Seruti TW IV, bulan 11-12), bukan total kebutuhan butir. Realisasi periode lain tidak boleh mengurangi RAB.
-//   Kebutuhan       = Realisasi + Sisa kebutuhan (lib/keu/kebutuhan.ts).
-//   Gap             = Sisa pagu - Sisa kebutuhan = Pagu - Kebutuhan. Positif = pagu masih lebih (dana dapat dialihkan); negatif = kebutuhan melebihi pagu (kurang).
-//   Catatan: RAB yang sudah dibayar baru dikeluarkan dari Sisa kebutuhan bila ditutup lewat catatan PJ Administrasi (langkah 3). Sampai itu ada, RAB yang
-//   jatuh temponya sudah lewat dapat terhitung ganda dengan Realisasi.
+//   Kebutuhan       = Realisasi + Catatan SIGAP belum tercermin + Sisa kebutuhan (lib/keu/kebutuhan.ts).
+//                     (langkah 3) Sisa kebutuhan = RAB dikurangi bagian yang sudah ditutup catatan pembayaran PJ Administrasi (lib/keu/pembayaran.ts).
+//   Gap             = Sisa pagu - Catatan belum tercermin - Sisa kebutuhan = Pagu - Kebutuhan. Positif = pagu masih lebih (dana dapat dialihkan); negatif = kebutuhan melebihi pagu (kurang).
+//   Catatan: RAB yang sudah dibayar baru dikeluarkan dari Sisa kebutuhan bila ditutup lewat catatan PJ Administrasi (tab Pembayaran). Selama belum dicatat,
+//   RAB yang jatuh temponya sudah lewat dapat terhitung ganda dengan Realisasi; jumlahnya ditampilkan di Kartu Gap sebagai angka sementara.
 // Item yang belum ber-RAB tidak punya sisa kebutuhan dan gap (tidak diketahui, bukan nol). Pada tingkat di atas item, sisa kebutuhan dan gap hanya
 // dihitung bila SEMUA item di bawahnya diketahui; bila tidak, nilainya kosong dan jumlah item belum ber-RAB ditampilkan.
 
@@ -19,9 +20,9 @@ import type { ItemAnggaran, KomponenAnggaran } from "./ro";
 
 export type Struktur = { detail_id: number; komponen_kode: string; komponen_nama: string; sub_kode: string; sub_nama: string };
 
-export type SelItem = ItemAnggaran & { harga: number; sisaPagu: number; sisa: number | null; gap: number | null };
+export type SelItem = ItemAnggaran & { harga: number; sisaPagu: number; sisa: number | null; gap: number | null; dicatat: number };
 /** `rab` = jumlah RAB belum dibayar butir yang sudah ber-RAB (butir selesai = 0); nBerRab = 0 berarti belum ada yang ber-RAB. */
-export type Total = { pok: number; realisasi: number; sisaPagu: number; rab: number; nItem: number; nBerRab: number; sisa: number | null; gap: number | null };
+export type Total = { pok: number; realisasi: number; sisaPagu: number; rab: number; nItem: number; nBerRab: number; sisa: number | null; gap: number | null; dicatat: number };
 export type NodeAkun = { kode: string; nama: string; item: SelItem[]; total: Total };
 export type NodeSub = { kode: string; nama: string; akun: NodeAkun[]; total: Total };
 export type NodeKomponen = { kode: string; nama: string; sub: NodeSub[]; total: Total };
@@ -38,22 +39,24 @@ export const adaKebutuhan = (i: Pick<ItemAnggaran, "rab" | "statusRab" | "selesa
 export function hitungItem(i: ItemAnggaran): SelItem {
   const sisaPagu = i.pok - i.realisasi;
   const tahu = adaKebutuhan(i);
-  const sisa = !tahu ? null : i.selesai ? 0 : (i.rab ?? 0);
+  // (langkah 3) RAB sisa = RAB dikurangi bagian yang sudah tertutup catatan pembayaran; catatan SIGAP yang belum tercermin di SAKTI ikut menjadi kebutuhan.
+  const dicatat = i.dicatat ?? 0;
+  const sisa = !tahu ? null : i.selesai ? 0 : Math.max(0, (i.rab ?? 0) - (i.rabTutup ?? 0));
   const harga = i.volume > 0 ? i.pok / i.volume : 0;
-  return { ...i, harga, sisaPagu, sisa, gap: sisa === null ? null : sisaPagu - sisa };
+  return { ...i, harga, sisaPagu, sisa, dicatat, gap: sisa === null ? null : sisaPagu - dicatat - sisa };
 }
 
 export function jumlahkan(bagian: readonly Total[]): Total {
-  const t: Total = { pok: 0, realisasi: 0, sisaPagu: 0, rab: 0, nItem: 0, nBerRab: 0, sisa: 0, gap: 0 };
+  const t: Total = { pok: 0, realisasi: 0, sisaPagu: 0, rab: 0, nItem: 0, nBerRab: 0, sisa: 0, gap: 0, dicatat: 0 };
   for (const b of bagian) {
-    t.pok += b.pok; t.realisasi += b.realisasi; t.sisaPagu += b.sisaPagu; t.rab += b.rab; t.nItem += b.nItem; t.nBerRab += b.nBerRab;
+    t.pok += b.pok; t.realisasi += b.realisasi; t.sisaPagu += b.sisaPagu; t.rab += b.rab; t.nItem += b.nItem; t.nBerRab += b.nBerRab; t.dicatat += b.dicatat;
     t.sisa = t.sisa === null || b.sisa === null ? null : t.sisa + b.sisa;
     t.gap = t.gap === null || b.gap === null ? null : t.gap + b.gap;
   }
   return t;
 }
 const totalItem = (item: readonly SelItem[]): Total => jumlahkan(item.map((i) => ({
-  pok: i.pok, realisasi: i.realisasi, sisaPagu: i.sisaPagu, rab: i.sisa ?? 0, nItem: 1, nBerRab: i.sisa === null ? 0 : 1, sisa: i.sisa, gap: i.gap,
+  pok: i.pok, realisasi: i.realisasi, sisaPagu: i.sisaPagu, rab: i.sisa ?? 0, nItem: 1, nBerRab: i.sisa === null ? 0 : 1, sisa: i.sisa, gap: i.gap, dicatat: i.dicatat,
 })));
 
 /**
