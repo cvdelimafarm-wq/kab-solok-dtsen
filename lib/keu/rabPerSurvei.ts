@@ -308,7 +308,7 @@ export function dataUbahTerpasang(b: BarisRabRow, f: { volume: string; satuan: s
 // ---------------------------------------------------------------------------------------------------------------------
 // Ringkasan keadaan
 // ---------------------------------------------------------------------------------------------------------------------
-export type KeadaanRincian = "sudah" | "siap" | "isi_hari" | "belum_angka" | "butuh_item" | "cek_dobel";
+export type KeadaanRincian = "sudah" | "tidak" | "siap" | "isi_hari" | "belum_angka" | "butuh_item" | "cek_dobel";
 /** Pilihan tujuan dan keputusan dobel satu rincian (opsional; tanpa ini keadaan hanya dinilai dari angka). */
 export type TujuanRincian = { tujuan: string; dobel: boolean };
 /**

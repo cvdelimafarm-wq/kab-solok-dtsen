@@ -53,23 +53,24 @@ export type PropsRabSurvei = {
 type Ubah = Partial<{ volume: string; satuan: string; harga: string; bulan_mulai: number; minggu: number; tujuan: string; nama: string; ubahNama: boolean; dobel: "pakai" | "baru"; pakaiId: number }>;
 
 const simpanKunci = (kode: string, identId: number) => `sigap.rabps.${kode}.${identId}`;
-type Simpanan = { hari: Record<string, string>; mode: ModeKelompok };
+type Simpanan = { hari: Record<string, string>; mode: ModeKelompok; tidak: string[] };
 function bacaSimpanan(kunci: string): Simpanan {
   try {
     const t = typeof window === "undefined" ? null : window.localStorage.getItem(kunci);
-    const o = t ? (JSON.parse(t) as { hari?: unknown; mode?: unknown }) : {};
+    const o = t ? (JSON.parse(t) as { hari?: unknown; mode?: unknown; tidak?: unknown }) : {};
     const hari: Record<string, string> = {};
     if (o.hari && typeof o.hari === "object") for (const [k, v] of Object.entries(o.hari as Record<string, unknown>)) if (typeof v === "string" && bacaHari(v) !== null) hari[k] = v;
-    return { hari, mode: modeAman(o.mode) };
+    const tidak = Array.isArray(o.tidak) ? o.tidak.filter((x): x is string => typeof x === "string").slice(0, 500) : [];
+    return { hari, mode: modeAman(o.mode), tidak };
   } catch {
-    return { hari: {}, mode: modeAman(null) };
+    return { hari: {}, mode: modeAman(null), tidak: [] };
   }
 }
 
 const NAMA_MODE: Record<string, string> = { periode: "Pecah per periode", gabung: "Gabung semua periode" };
-const WARNA_KEADAAN: Record<KeadaanRincian, "hijau" | "biru" | "kuning" | "abu"> = { sudah: "hijau", siap: "biru", isi_hari: "kuning", belum_angka: "abu", butuh_item: "kuning", cek_dobel: "kuning" };
+const WARNA_KEADAAN: Record<KeadaanRincian, "hijau" | "biru" | "kuning" | "abu"> = { sudah: "hijau", tidak: "abu", siap: "biru", isi_hari: "kuning", belum_angka: "abu", butuh_item: "kuning", cek_dobel: "kuning" };
 const TEKS_KEADAAN: Record<KeadaanRincian, string> = {
-  sudah: "Sudah di RAB", siap: "Siap disusun", isi_hari: "Isi hari dibayar", belum_angka: "Volume atau harga belum ada", butuh_item: "Pilih item tujuan", cek_dobel: "Butuh keputusan: baris sudah ada",
+  sudah: "Sudah di RAB", tidak: "Tidak dialokasikan", siap: "Siap disusun", isi_hari: "Isi hari dibayar", belum_angka: "Volume atau harga belum ada", butuh_item: "Pilih item tujuan", cek_dobel: "Butuh keputusan: baris sudah ada",
 };
 
 /** Warna dan keterangan tiap jenis belanja supaya antar topik jelas berbeda. */
@@ -163,6 +164,7 @@ type PropsBaris = {
   rc: RencanaRincian; terpasang: Terpasang | undefined; ubah: Ubah; setUbah: (u: Ubah) => void; pilihan: PilihanTujuan; isian: IsianBaris; keadaan: KeadaanRincian;
   editable: boolean; peta: PemetaanItem[]; itemBaru: ItemBaruRow[]; jendela: JendelaCair; sibuk: boolean; penjelasan: string[]; sudahAda: BarisRabRow[];
   perbarui: () => void; simpanTerpasang: (barisId: number, data: Record<string, unknown>) => Promise<boolean>;
+  tidak: boolean; setTidak: (v: boolean) => void;
 };
 
 /** Kolom tabel rincian; jumlah kolom dipakai baris tambahan (colSpan). */
@@ -172,7 +174,7 @@ const sel = "!min-h-[36px] !px-2 !text-[13px]";
 const tombolMini = "rounded-md border border-[#C5D0E2] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#1F5FD1] disabled:opacity-50";
 const teksAngka = (v: number | string): string => String(Number(v)).replace(".", ",");
 
-function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang }: PropsBaris) {
+function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, editable, peta, itemBaru, jendela, sibuk, penjelasan, sudahAda, perbarui, simpanTerpasang, tidak, setTidak }: PropsBaris) {
   const id = (s: string) => `rps-${rc.r.kunci}-${s}`.replace(/[^\w-]/g, "_");
   const [detail, setDetail] = useState(false);
   const [ubahJadwal, setUbahJadwal] = useState(false);
@@ -211,66 +213,87 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
 
   const adaBarisTambahan = detail || tampilNama || tawarNama || pesanDobel || peringatan.length > 0 || edit !== null || sink?.berubah === true
     || (editable && !terpasang && !adaOpsiPok) || (g !== null && g.length > 0 && keadaan !== "isi_hari" && keadaan !== "siap");
-  const sel2 = "align-top border-b border-[#E6ECF5] px-2 py-2";
+  const sel2 = "align-top border-b border-[#E6ECF5] px-2 py-1.5";
+
+  if (tidak) {
+    return (
+      <tr className="bg-[#F6F7F9] text-[#7A869B]">
+        <td colSpan={KOLOM_RINCIAN.length - 1} className={sel2}>
+          <p className="break-words text-[13px] leading-snug line-through">{rc.r.uraian}</p>
+          <p className="mt-0.5 text-[11.5px]">Akun {rc.r.akun} · tidak ikut RAB dan tidak menghalangi «Tandai Siap».</p>
+        </td>
+        <td className={`${sel2} w-[150px]`}>
+          <div className="flex flex-col items-start gap-1.5">
+            <Chip warna="abu">Tidak dialokasikan</Chip>
+            {editable && <button type="button" className={tombolMini} onClick={() => setTidak(false)}>Batalkan tanda</button>}
+          </div>
+        </td>
+      </tr>
+    );
+  }
 
   return (
     <>
       <tr className="hover:bg-[#FAFBFE]">
-        <td className={`${sel2} min-w-[220px]`}>
+        <td className={`${sel2} min-w-[200px]`}>
           <p className="break-words text-[13px] font-semibold leading-snug text-[#0F2A52]">{rc.r.uraian}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[#6B7A93]">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11.5px] text-[#6B7A93]">
             <span>Akun {rc.r.akun}</span>
             {rc.r.perk && <span className="font-semibold text-[#8A6200]">Perkiraan</span>}
             <button type="button" aria-expanded={detail} aria-controls={id("detail")} onClick={() => setDetail(!detail)} className="font-semibold text-[#1F5FD1] underline">{detail ? "Tutup detail" : "Detail"}</button>
           </div>
         </td>
-        <td className={`${sel2} w-[96px]`}>
+        <td className={`${sel2} w-[84px]`}>
           {bisaIsi
             ? <input aria-label={`Volume: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="decimal" value={nilai.volume} onChange={(e) => ubahNilai({ volume: e.target.value.replace(/[^\d.,]/g, "").slice(0, 15) })} />
             : <p className="py-1.5 text-right tabular-nums">{nilai.volume || "–"}</p>}
         </td>
-        <td className={`${sel2} w-[110px]`}>
+        <td className={`${sel2} w-[96px]`}>
           {bisaIsi
             ? <input aria-label={`Satuan: ${rc.r.uraian}`} className={inp} maxLength={20} value={nilai.satuan} onChange={(e) => ubahNilai({ satuan: e.target.value })} />
             : <p className="py-1.5">{nilai.satuan || "–"}</p>}
         </td>
-        <td className={`${sel2} w-[130px]`}>
+        <td className={`${sel2} w-[116px]`}>
           {bisaIsi
             ? <input aria-label={`Harga satuan: ${rc.r.uraian}`} className={`${inp} text-right tabular-nums`} inputMode="numeric" value={nilai.harga} onChange={(e) => ubahNilai({ harga: e.target.value.replace(/[^\d.]/g, "").slice(0, 18) })} />
             : <p className="py-1.5 text-right tabular-nums">{hargaTeks}</p>}
         </td>
-        <td className={`${sel2} w-[120px] text-right`}>
+        <td className={`${sel2} w-[104px] text-right`}>
           <p className="py-1.5 font-bold tabular-nums text-[#0F2A52]" aria-live="polite">{jml === null || Number.isNaN(jml) ? "–" : rupiah(jml)}</p>
         </td>
         <td className={`${sel2} w-[150px]`}>
           {terpasang ? (
-            <p className="py-1.5 text-[12.5px]">{NAMA_BULAN[Number(terpasang.baris.bulan_mulai) - 1] ?? "–"} · mgg {terpasang.baris.minggu}</p>
+            <p className="whitespace-nowrap py-1.5 text-[12.5px]">{NAMA_BULAN[Number(terpasang.baris.bulan_mulai) - 1] ?? "–"} · mgg {terpasang.baris.minggu}</p>
           ) : !editable ? (
-            <p className="py-1.5 text-[12.5px]">{NAMA_BULAN[isian.bulan_mulai - 1]} · mgg {isian.minggu}</p>
+            <p className="whitespace-nowrap py-1.5 text-[12.5px]">{NAMA_BULAN[isian.bulan_mulai - 1]} · mgg {isian.minggu}</p>
           ) : jadwalManual ? (
-            <div className="space-y-1">
-              <SelectCari id={id("b")} aria-label="Bulan cair" className={`${kolom} ${sel}`} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
-                {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
-              </SelectCari>
-              <SelectCari id={id("m")} aria-label="Minggu cair" className={`${kolom} ${sel}`} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
-                {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Minggu {m}</option>)}
-              </SelectCari>
+            <div className="flex flex-wrap items-center gap-1">
+              <div className="w-[68px]">
+                <SelectCari id={id("b")} aria-label="Bulan cair" className={`${kolom} ${sel}`} value={isian.bulan_mulai} onChange={(e) => setUbah({ bulan_mulai: Number(e.target.value) })}>
+                  {NAMA_BULAN.map((b, i) => <option key={b} value={i + 1}>{b}</option>)}
+                </SelectCari>
+              </div>
+              <div className="w-[62px]">
+                <SelectCari id={id("m")} aria-label="Minggu cair" className={`${kolom} ${sel}`} value={isian.minggu} onChange={(e) => setUbah({ minggu: Number(e.target.value) })}>
+                  {[1, 2, 3, 4].map((m) => <option key={m} value={m}>Mgg {m}</option>)}
+                </SelectCari>
+              </div>
               {rc.selesai !== null && <button type="button" className="text-[12px] font-semibold text-[#1F5FD1] underline" onClick={() => { setUbah({ bulan_mulai: undefined, minggu: undefined }); setUbahJadwal(false); }}>Otomatis</button>}
             </div>
           ) : (
-            <div className="py-1" title={`Otomatis: akhir kegiatan ${rc.selesai} + 1 minggu`}>
-              <p className="text-[12.5px] font-semibold text-[#0F2A52]">{NAMA_BULAN[isian.bulan_mulai - 1]} · mgg {isian.minggu}</p>
+            <div className="flex items-center gap-2 whitespace-nowrap py-1.5" title={`Otomatis: akhir kegiatan ${rc.selesai} + 1 minggu`}>
+              <span className="text-[12.5px] font-semibold text-[#0F2A52]">{NAMA_BULAN[isian.bulan_mulai - 1]} · mgg {isian.minggu}</span>
               <button type="button" className="text-[12px] font-semibold text-[#1F5FD1] underline" onClick={() => setUbahJadwal(true)}>Ubah</button>
             </div>
           )}
         </td>
-        <td className={`${sel2} w-[262px]`}>
+        <td className={`${sel2} w-[232px]`}>
           {terpasang ? (
             <p className="break-words py-1.5 text-[12.5px]">{namaTujuan}{terpasang.itemRab.pok_kunci ? "" : <span className="text-[#6B7A93]"> (item baru)</span>}</p>
           ) : !editable ? (
             <p className="py-1.5 text-[12.5px] text-[#6B7A93]">–</p>
           ) : (
-            <div className="w-[250px] max-w-full">
+            <div className="w-[220px] max-w-full">
               <SelectCari id={id("i")} aria-label={`Masuk ke item: ${rc.r.uraian}`} className={`${kolom} ${sel}`} value={tujuan} onChange={(e) => setUbah({ tujuan: e.target.value, dobel: undefined, pakaiId: undefined })}>
                 <option value="">Pilih item…</option>
                 {pilihan.opsi.map((o) => <option key={o.nilai} value={o.nilai}>{o.label}</option>)}
@@ -278,10 +301,15 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
             </div>
           )}
         </td>
-        <td className={`${sel2} w-[150px]`}>
-          <div className="flex flex-col items-start gap-1.5">
+        <td className={`${sel2} w-[170px]`}>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Chip warna={WARNA_KEADAAN[keadaan]}>{TEKS_KEADAAN[keadaan]}</Chip>
             {(terpasang?.diubah || diubahSebelum) && <span className="text-[11.5px] font-semibold text-[#5B3A8C]">Diubah dari saran</span>}
+            {!terpasang && editable && (
+              <button type="button" className={tombolMini} onClick={() => setTidak(true)} title="Biaya ini memang tidak ada pada survei ini; rincian tidak ikut RAB">
+                Tidak dialokasikan
+              </button>
+            )}
             {terpasang && editable && edit === null && (
               <button type="button" disabled={sibuk} className={tombolMini}
                 onClick={() => { setGalatEdit([]); setEdit({ volume: teksAngka(terpasang.baris.volume), satuan: terpasang.baris.satuan, harga: String(Math.round(Number(terpasang.baris.harga_satuan))) }); }}>
@@ -294,8 +322,8 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
 
       {adaBarisTambahan && (
         <tr>
-          <td colSpan={KOLOM_RINCIAN.length} className="border-b border-[#E6ECF5] bg-[#F8FAFD] px-3 py-2">
-            <div id={id("detail")} className="space-y-2 text-[12.5px] text-[#44546F]">
+          <td colSpan={KOLOM_RINCIAN.length} className="border-b border-[#E6ECF5] bg-[#F8FAFD] px-3 py-1.5">
+            <div id={id("detail")} className="space-y-1.5 text-[12.5px] text-[#44546F]">
               {detail && (
                 <div className="space-y-1">
                   {rc.r.catatan && <p>{rc.r.catatan}</p>}
@@ -311,17 +339,19 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
                 </div>
               )}
 
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
               {editable && !terpasang && !adaOpsiPok && (
-                <p className="rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-1.5 text-[#5C4300]">
+                <p className="min-w-0 flex-1 basis-[320px] rounded-md border-l-4 border-[#C98A00] bg-[#FFF8E6] px-3 py-1 text-[#5C4300]">
                   Tidak ada butir POK akun {rc.r.akun} di RO ini, jadi rincian ini masuk sebagai <span className="font-semibold">item baru di RAB</span> (bahan revisi POK).
                 </p>
               )}
               {tampilNama && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-1 basis-[320px] items-center gap-2">
                   <label className="text-[12px] font-semibold text-[#5B6B84]" htmlFor={id("n")}>Nama item baru</label>
-                  <input id={id("n")} className={`${inp} max-w-[520px] flex-1`} maxLength={200} value={ubah.nama ?? saranNama ?? ""} onChange={(e) => setUbah({ nama: e.target.value })} />
+                  <input id={id("n")} className={`${inp} flex-1`} maxLength={200} value={ubah.nama ?? saranNama ?? ""} onChange={(e) => setUbah({ nama: e.target.value })} />
                 </div>
               )}
+              </div>
               {tawarNama && (
                 <label className="flex items-start gap-2">
                   <input type="checkbox" className="mt-1" checked={ubah.ubahNama ?? false} onChange={(e) => setUbah({ ubahNama: e.target.checked })} />
@@ -351,7 +381,7 @@ function BarisSurvei({ rc, terpasang, ubah, setUbah, pilihan, isian, keadaan, ed
                   {peringatan.map((x) => <li key={x}>{x}</li>)}
                 </ul>
               )}
-              {g && g.length > 0 && keadaan !== "isi_hari" && keadaan !== "siap" && <p className="text-[#6B7A93]">Belum bisa disusun: {g.join(" ")}</p>}
+              {g && g.length > 0 && keadaan !== "isi_hari" && keadaan !== "siap" && <p className="text-[#6B7A93]">Belum bisa disusun: {g.join(" ")} Bila biaya ini memang tidak ada, klik «Tidak dialokasikan» di kolom Status.</p>}
 
               {edit !== null && terpasang && (
                 <div className="space-y-1.5">
@@ -407,14 +437,16 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const [awal] = useState(() => bacaSimpanan(kunciSimpan));
   const [hariTeks, setHariTeks] = useState<Record<string, string>>(awal.hari);
   const [mode, setMode] = useState<ModeKelompok>(awal.mode);
+  // (7 Nov 2026) Rincian yang ditandai «tidak dialokasikan» (kunci rincian); tersimpan di peramban ini, seperti isian hari.
+  const [tidakDialokasi, setTidakDialokasi] = useState<string[]>(awal.tidak);
   const [ubahPer, setUbahPer] = useState<Record<string, Ubah>>({});
   const [pesan, setPesan] = useState<string[]>([]);
   const muatSemua = async () => { await props.muat(); await muatItemBaru(); await muatStatus(); };
   const { jalankan, mengirim, galat } = useKirim(muatSemua);
 
   useEffect(() => {
-    try { window.localStorage.setItem(kunciSimpan, JSON.stringify({ hari: hariTeks, mode })); } catch { /* simpanan peramban tidak wajib */ }
-  }, [kunciSimpan, hariTeks, mode]);
+    try { window.localStorage.setItem(kunciSimpan, JSON.stringify({ hari: hariTeks, mode, tidak: tidakDialokasi })); } catch { /* simpanan peramban tidak wajib */ }
+  }, [kunciSimpan, hariTeks, mode, tidakDialokasi]);
 
   const jendela = useMemo(() => jendelaCair(lembar), [lembar]);
   const sumber = labelSumber({ lanjutanAda: b.lanjutan_ada, lanjutanVer: b.lanjutan_ver, lanjutanStatus: b.lanjutan_status });
@@ -443,14 +475,15 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
     const ada = terpasang.get(rc.r.kunci);
     const tujuan = u.tujuan ?? pilihan[i].awal;
     const sudahAda = ada ? [] : barisSudahAda(tujuan, props.peta, props.barisRab);
-    const keadaan = keadaanRincian(rc, ada !== undefined, isian, { tujuan, dobel: sudahAda.length > 0 && u.dobel === undefined });
-    return { rc, u, isian, ada, keadaan, pil: pilihan[i], tujuan, sudahAda, penjelasan: jelaskanVolume(rc.r, bahan.isi) };
+    const tidak = ada === undefined && tidakDialokasi.includes(rc.r.kunci);
+    const keadaan: KeadaanRincian = tidak ? "tidak" : keadaanRincian(rc, ada !== undefined, isian, { tujuan, dobel: sudahAda.length > 0 && u.dobel === undefined });
+    return { rc, u, isian, ada, keadaan, tidak, pil: pilihan[i], tujuan, sudahAda, penjelasan: jelaskanVolume(rc.r, bahan.isi) };
   });
   // Satu baris lama hanya boleh diambil alih oleh satu rincian.
   const diambil = new Map<number, string>();
-  for (const x of baris0) if (x.u.dobel === "pakai" && x.u.pakaiId !== undefined) diambil.set(x.u.pakaiId, x.rc.r.kunci);
+  for (const x of baris0) if (!x.tidak && x.u.dobel === "pakai" && x.u.pakaiId !== undefined) diambil.set(x.u.pakaiId, x.rc.r.kunci);
   const baris = baris0.map((x) => ({ ...x, tersedia: x.sudahAda.filter((y) => !diambil.has(y.baris_id) || diambil.get(y.baris_id) === x.rc.r.kunci) }));
-  const ringkas = ringkasSurvei(baris.map((x) => ({ k: x.keadaan, jumlah: x.ada ? Number(x.ada.baris.jumlah) : jumlahBaris(x.isian) })));
+  const ringkas = ringkasSurvei(baris.filter((x) => !x.tidak).map((x) => ({ k: x.keadaan, jumlah: x.ada ? Number(x.ada.baris.jumlah) : jumlahBaris(x.isian) })));
 
   const mendatang: Mendatang[] = baris
     .filter((x) => x.keadaan === "siap" || x.keadaan === "belum_angka" || x.keadaan === "cek_dobel")
@@ -462,13 +495,15 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
   const petaBatang = props.peta.map((p) => ({ ...p, baris: p.baris.filter((y) => !diambil.has(y.baris_id)) }));
   const barisBatang = props.barisRab.filter((y) => !diambil.has(y.baris_id));
   const batang = batangPerItem(petaBatang, itemBaru, barisBatang, namaIdent, mendatang);
-  const akanDibuat = baris.filter((x) => x.keadaan !== "sudah" && x.tujuan === TUJUAN_TAMBAH);
+  const akanDibuat = baris.filter((x) => x.keadaan !== "sudah" && !x.tidak && x.tujuan === TUJUAN_TAMBAH);
+  const nTidak = baris.filter((x) => x.tidak).length;
 
   const barisSurvei = (x: typeof baris[number]) => (
     <BarisSurvei
       key={x.rc.r.kunci} rc={x.rc} terpasang={x.ada} ubah={x.u} setUbah={(u) => ubahBaris(x.rc.r.kunci, u)} pilihan={x.pil} isian={x.isian} keadaan={x.keadaan}
       editable={props.editable} peta={props.peta} itemBaru={itemBaru} jendela={jendela} sibuk={mengirim} penjelasan={x.penjelasan} sudahAda={x.tersedia}
       perbarui={() => void perbaruiBaris(x)} simpanTerpasang={simpanTerpasang}
+      tidak={x.tidak} setTidak={(v) => setTidakDialokasi((a) => (v ? [...a.filter((k) => k !== x.rc.r.kunci), x.rc.r.kunci] : a.filter((k) => k !== x.rc.r.kunci)))}
     />
   );
   const ubahBaris = (kunci: string, u: Ubah) => setUbahPer((a) => ({ ...a, [kunci]: { ...a[kunci], ...u } }));
@@ -631,7 +666,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
 
       <PanduanLangkah langkah={[
         { judul: "Isi hari dibayar", ket: "Berapa hari tiap petugas dibayar (Pengaturan hari).", selesai: kolHari.length === 0 || kolHari.some((k) => (bacaHari(hariEfektif[k.kunci]) ?? 0) > 0) },
-        { judul: "Periksa rincian", ket: "Volume, harga, jadwal cair, dan item tujuan.", selesai: baris.length > 0 && baris.every((x) => x.keadaan === "sudah" || x.keadaan === "siap") },
+        { judul: "Periksa rincian", ket: "Volume, harga, jadwal cair, dan item tujuan.", selesai: baris.length > 0 && baris.every((x) => x.keadaan === "sudah" || x.keadaan === "siap" || x.keadaan === "tidak") },
         { judul: "Susun RAB", ket: "Satu tombol untuk semua rincian yang lengkap.", selesai: ringkas.jumlah > 0 && ringkas.sudah === ringkas.jumlah },
         { judul: "Tandai Siap", ket: "Nyatakan RAB survei ini siap diajukan.", selesai: status === "siap" },
       ]} />
@@ -683,7 +718,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                           const al = alokasiHari(k, n);
                           const idIsi = `rps-h-${k.kunci}`.replace(/[^\w-]/g, "_");
                           const satuanHari = k.penginapan ? "malam" : "hari";
-                          const td = "border-b border-[#E6ECF5] px-2 py-2 align-top";
+                          const td = "border-b border-[#E6ECF5] px-2 py-1.5 align-top";
                           return (
                             <tr key={k.kunci} className="hover:bg-[#FAFBFE]">
                               <td className={`${td} min-w-[220px]`}>
@@ -745,7 +780,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
           const w = WARNA_TAHAP[g.tahap];
           const info = infoPerTahap.get(g.tahap)!;
           const belumDisusun = g.isi.filter((x) => x.keadaan !== "sudah");
-          const jmlX = (x: typeof baris[number]): number => (x.ada ? Number(x.ada.baris.jumlah) || 0 : jumlahBaris(x.isian) ?? 0);
+          const jmlX = (x: typeof baris[number]): number => (x.tidak ? 0 : x.ada ? Number(x.ada.baris.jumlah) || 0 : jumlahBaris(x.isian) ?? 0);
           const totalTahap = g.isi.reduce((t, x) => t + jmlX(x), 0);
           const grup = KELOMPOK_RINCIAN.flatMap((k) => {
             const rk = g.isi.filter((x) => x.rc.r.kelompok === k);
@@ -762,7 +797,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                 <span aria-hidden className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-white text-[16px] font-bold" style={{ color: w.garis }}>{urutTahap + 1}</span>
                 <div className="min-w-0 flex-1 basis-[200px]">
                   <h4 className="text-[16px] font-bold leading-snug">{NAMA_TAHAP[g.tahap]}</h4>
-                  <p className="text-[12.5px] opacity-90">{g.isi.length} rincian · {rupiah(totalTahap)}</p>
+                  <p className="text-[12.5px] opacity-90">{g.isi.length} rincian{g.isi.some((x) => x.tidak) ? ` (${g.isi.filter((x) => x.tidak).length} tidak dialokasikan)` : ""} · {rupiah(totalTahap)}</p>
                 </div>
                 <dl className="space-y-0.5 text-[12.5px] leading-snug">
                   <div><dt className="inline opacity-85">Pekerjaan selesai: </dt><dd className="inline font-bold">{teksSelesai(info.selesai)}</dd></div>
@@ -781,17 +816,18 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                 </p>
               )}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1100px] border-collapse text-[13px]">
+                <table className="w-full min-w-[1020px] border-collapse text-[13px]">
                   <thead>
                     <tr className="bg-[#EEF2F8] text-left text-[11.5px] font-bold uppercase tracking-wide text-[#44546F]">
-                      {KOLOM_RINCIAN.map((k, i) => <th key={k} scope="col" className={`px-2 py-2 ${i === 1 || i === 3 || i === 4 ? "text-right" : ""}`}>{k}</th>)}
+                      {KOLOM_RINCIAN.map((k, i) => <th key={k} scope="col" className={`px-2 py-1.5 ${i === 1 || i === 3 || i === 4 ? "text-right" : ""}`}>{k}</th>)}
                     </tr>
                   </thead>
                   {grup.map((gr) => (
                     <tbody key={gr.kunci}>
                       <tr>
-                        <th colSpan={KOLOM_RINCIAN.length} scope="colgroup" className="border-y border-[#D5DDEB] bg-[#F1F4F9] px-3 py-1.5 text-left text-[12.5px] font-bold text-[#0F2A52]" style={{ borderLeft: `6px solid ${gr.warna}` }}>
-                          {gr.judul} <span className="font-normal text-[#5B6B84]">· {gr.isi.length} rincian · {rupiah(gr.isi.reduce((t, x) => t + jmlX(x), 0))}</span>
+                        <th colSpan={KOLOM_RINCIAN.length} scope="colgroup" className="border-b px-3 py-2 text-left text-[13px] font-bold text-[#0F2A52]" style={{ background: `color-mix(in srgb, ${gr.warna} 16%, white)`, borderLeft: `8px solid ${gr.warna}`, borderTop: `3px solid ${gr.warna}`, borderBottomColor: gr.warna }}>
+                          <span aria-hidden className="mr-2 inline-block h-2.5 w-2.5 rounded-sm align-baseline" style={{ background: gr.warna }} />
+                          {gr.judul} <span className="font-medium text-[#44546F]">· {gr.isi.length} rincian · {rupiah(gr.isi.reduce((t, x) => t + jmlX(x), 0))}</span>
                         </th>
                       </tr>
                       {gr.isi.map(barisSurvei)}
@@ -807,7 +843,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
 
       <Bagian huruf="C" judul="Susun RAB dan status" ket="Susun semua rincian yang lengkap sekaligus, lalu tandai Siap." garis="#0F2A52">
         <p className="text-[12.5px] text-[#44546F]">
-          {ringkas.jumlah} rincian: {ringkas.sudah} sudah di RAB ({rupiah(ringkas.totalSudah)}), {ringkas.siap} siap disusun ({rupiah(ringkas.totalSiap)}), {ringkas.butuh} butuh keputusan, {ringkas.isiHari} menunggu hari dibayar, {ringkas.belumAngka} menunggu volume atau harga.
+          {ringkas.jumlah} rincian{nTidak > 0 ? ` (+${nTidak} tidak dialokasikan)` : ""}: {ringkas.sudah} sudah di RAB ({rupiah(ringkas.totalSudah)}), {ringkas.siap} siap disusun ({rupiah(ringkas.totalSiap)}), {ringkas.butuh} butuh keputusan, {ringkas.isiHari} menunggu hari dibayar, {ringkas.belumAngka} menunggu volume atau harga.
         </p>
 
         {akanDibuat.length > 0 && (
