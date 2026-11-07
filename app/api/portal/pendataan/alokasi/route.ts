@@ -5,7 +5,7 @@
 // GET  ?k=<kegiatan>                                      -> DataAlokasiAdmin
 // POST { aksi: "pratinjau", k, baris: [...], otomatis? }   -> PratinjauAlokasi (tidak menyimpan)
 // POST { aksi: "impor", k, baris, nama_berkas, otomatis? } -> { ok, unggah_id, jumlah, dengan_petugas, penugasan_baru, tim }
-// POST { aksi: "model", k, dengan_updating }               -> { ok, konfig }  (model 1 dengan/tanpa updating)
+// POST { aksi: "model", k, dengan_updating, cadangan_per_sls? } -> { ok, konfig }  (model 1 dengan/tanpa updating; jatah cadangan per sub SLS)
 
 import { NextRequest, NextResponse } from "next/server";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, ...hasil });
     }
     if (body.aksi === "model") {
-      const konfig = await simpanModelAlokasi(db, k, body.dengan_updating, akun.nama);
-      await catatAudit(db, akun.id, "alokasi_subsls_model", { kegiatan_id: k, dengan_updating: konfig.dengan_updating });
+      const konfig = await simpanModelAlokasi(db, k, body.dengan_updating, akun.nama, body.cadangan_per_sls);
+      await catatAudit(db, akun.id, "alokasi_subsls_model", { kegiatan_id: k, dengan_updating: konfig.dengan_updating, cadangan_per_sls: konfig.cadangan_per_sls });
       return NextResponse.json({ ok: true, konfig });
     }
     return galat("Aksi tidak dikenal.");

@@ -15,6 +15,7 @@ import {
   type BarisSampel, type GalatBaris, type Kandidat, type Pemetaan,
 } from "@/lib/sampelSls";
 import { cocokkanAtasan, susunTim, type PemetaanAtasan, type SusunanTim } from "@/lib/timSampel";
+import type { InfoJendela } from "@/lib/tagSampel";
 
 export const API_ALOKASI_ADMIN = "/api/portal/pendataan/alokasi";
 export const API_ALOKASI = "/api/portal/alokasi";
@@ -304,12 +305,14 @@ export type WilayahAlokasi = {
   ppl_nama: string | null;
   pml_nama: string | null;
   jumlah_kk: number;
+  /** rekap tag sampel (stage 2); hanya ada pada data HP sesudah migrasi 20261107f */
+  tag?: { utama: number; cadangan: number; hasil: number };
 };
 
 /** KK master seperti dikirim ke HP petugas sub SLS terkait. */
 export type KkMaster = { id: number; nama_kk: string; anggota_lain: string | null; patokan: string | null; lat: number | null; lng: number | null };
 
-export type KonfigAlokasi = { target_per_sls: number; maks_sls_per_ppl: number; dengan_updating: boolean };
+export type KonfigAlokasi = { target_per_sls: number; maks_sls_per_ppl: number; dengan_updating: boolean; /** jatah sampel cadangan per sub SLS (0 = tanpa cadangan); migrasi 20261107f */ cadangan_per_sls: number };
 
 export type RiwayatAlokasi = { id: number; nama_berkas: string | null; diunggah_at: string; oleh: string | null; jumlah: number; dengan_petugas: number; aktif: boolean };
 
@@ -333,6 +336,8 @@ export type DataAlokasiSaya = {
   saya: { id: number; nama: string };
   konfig: KonfigAlokasi;
   wilayah: WilayahAlokasi[];
+  /** status jendela rilis sampel tahap 2; tidak ada pada salinan lama di HP */
+  jendela?: InfoJendela;
 };
 
 export const LABEL_MODEL: Record<"dengan" | "tanpa", { judul: string; ket: string }> = {

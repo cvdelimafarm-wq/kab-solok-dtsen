@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import { setelahLapisanTutup } from "@/app/portal/lapisan";
 import PilihSebagai, { type HasilSebagai } from "@/app/portal/PilihSebagai";
 import { bacaLihatSebagai, bacaSesiAsli, kembaliKeAkunSaya, mulaiLihatSebagai, type LihatSebagai } from "@/app/portal/sesi";
 import { EVENT_SIMULASI } from "@/app/portal/simulasi"; // memasang penahan penulisan sejak modul dimuat
@@ -60,9 +61,11 @@ export default function BannerLihatSebagai() {
 
   if (!info) return null;
 
+  // (7 Nov 2026) Tutup pemilih dulu (history.back() tak sinkron), baru muat ulang -- agar muat ulang tidak dikalahkan mundur itu.
   function kembali() {
     kembaliKeAkunSaya();
-    window.location.replace("/");
+    setGanti(false);
+    setelahLapisanTutup(() => window.location.replace("/"));
   }
 
   function pilih(h: HasilSebagai) {
@@ -70,7 +73,8 @@ export default function BannerLihatSebagai() {
     const asli = bacaSesiAsli();
     if (!asli) return kembali();
     mulaiLihatSebagai({ sesi: asli, sampai: "" }, { sesi: h.sesi, sampai: h.sampai, token: h.token, id: h.id, nama: h.nama, aktor: h.aktor });
-    window.location.replace("/");
+    setGanti(false);
+    setelahLapisanTutup(() => window.location.replace("/"));
   }
 
   const asli = bacaSesiAsli();

@@ -15,8 +15,8 @@ import {
 } from "@/lib/alokasiWilayah";
 import type { PemetaanAtasan } from "@/lib/timSampel";
 
-const PESAN_BELUM_MIGRASI = "Alokasi sub SLS belum aktif di basis data (migrasi 20261107e belum dijalankan).";
-export const KONFIG_ALOKASI_AWAL: KonfigAlokasi = { target_per_sls: 10, maks_sls_per_ppl: 2, dengan_updating: true };
+const PESAN_BELUM_MIGRASI = "Alokasi sub SLS belum aktif di basis data (migrasi 20261107e dan 20261107f belum seluruhnya dijalankan).";
+export const KONFIG_ALOKASI_AWAL: KonfigAlokasi = { target_per_sls: 10, maks_sls_per_ppl: 2, dengan_updating: true, cadangan_per_sls: 0 };
 
 const belumMigrasi = (e: { code?: string; message?: string } | null | undefined): boolean =>
   !!e && (e.code === "42P01" || e.code === "42883" || e.code === "42703" || e.code === "PGRST205" || e.code === "PGRST202" || /does not exist|schema cache|Could not find/i.test(e.message ?? ""));
@@ -45,41 +45,48 @@ const bulat = (v: unknown, min: number, maks: number, awal: number): number => {
   return Number.isInteger(n) && n >= min && n <= maks ? n : awal;
 };
 
-/** Setelan alokasi dari tabel setelan sampel. Kolom dengan_updating baru ada setelah migrasi 20261107e; sebelum itu dipakai bawaan (dengan updating). */
+/**
+ * Setelan alokasi dari tabel setelan sampel. Kolom dengan_updating baru ada setelah migrasi 20261107e dan cadangan_per_sls setelah 20261107f; sebelum itu dipakai
+ * bawaan (dengan updating, tanpa cadangan). Membaca bertahap supaya migrasi yang sudah jalan tetap terbaca walau yang berikutnya belum.
+ */
 export async function muatKonfigAlokasi(db: Db, kegiatanId: number): Promise<KonfigAlokasi> {
-  const { data, error } = await db.from("sigap_sampel_konfig").select("target_per_sls, maks_sls_per_ppl, dengan_updating").eq("kegiatan_id", kegiatanId).maybeSingle();
-  if (error) {
-    const lama = await db.from("sigap_sampel_konfig").select("target_per_sls, maks_sls_per_ppl").eq("kegiatan_id", kegiatanId).maybeSingle();
-    const d = lama.data as Record<string, unknown> | null;
-    return d
-      ? { target_per_sls: bulat(d.target_per_sls, 1, 100, KONFIG_ALOKASI_AWAL.target_per_sls), maks_sls_per_ppl: bulat(d.maks_sls_per_ppl, 1, 50, KONFIG_ALOKASI_AWAL.maks_sls_per_ppl), dengan_updating: true }
-      : { ...KONFIG_ALOKASI_AWAL };
+  const tingkat = ["target_per_sls, maks_sls_per_ppl, dengan_updating, cadangan_per_sls", "target_per_sls, maks_sls_per_ppl, dengan_updating", "target_per_sls, maks_sls_per_ppl"];
+  for (const kolom of tingkat) {
+    const { data, error } = await db.from("sigap_sampel_konfig").select(kolom).eq("kegiatan_id", kegiatanId).maybeSingle();
+    if (error) continue;
+    if (!data) return { ...KONFIG_ALOKASI_AWAL };
+    const d = data as unknown as Record<string, unknown>;
+    return {
+      target_per_sls: bulat(d.target_per_sls, 1, 100, KONFIG_ALOKASI_AWAL.target_per_sls),
+      maks_sls_per_ppl: bulat(d.maks_sls_per_ppl, 1, 50, KONFIG_ALOKASI_AWAL.maks_sls_per_ppl),
+      dengan_updating: typeof d.dengan_updating === "boolean" ? d.dengan_updating : true,
+      cadangan_per_sls: bulat(d.cadangan_per_sls, 0, 100, 0),
+    };
   }
-  if (!data) return { ...KONFIG_ALOKASI_AWAL };
-  const d = data as Record<string, unknown>;
-  return {
-    target_per_sls: bulat(d.target_per_sls, 1, 100, KONFIG_ALOKASI_AWAL.target_per_sls),
-    maks_sls_per_ppl: bulat(d.maks_sls_per_ppl, 1, 50, KONFIG_ALOKASI_AWAL.maks_sls_per_ppl),
-    dengan_updating: typeof d.dengan_updating === "boolean" ? d.dengan_updating : true,
-  };
+  return { ...KONFIG_ALOKASI_AWAL };
 }
 
-/** Simpan pilihan model 1 (dengan/tanpa updating), setelan lain dipertahankan. */
-export async function simpanModelAlokasi(db: Db, kegiatanId: number, denganUpdating: unknown, oleh: string): Promise<KonfigAlokasi> {
+/** Simpan pilihan model 1 (dengan/tanpa updating) dan, bila diberikan, jatah cadangan per sub SLS. Setelan lain dipertahankan. */
+export async function simpanModelAlokasi(db: Db, kegiatanId: number, denganUpdating: unknown, oleh: string, cadanganPerSls?: unknown): Promise<KonfigAlokasi> {
   if (typeof denganUpdating !== "boolean") throw new GalatSampel("Pilihan model tidak sah.");
+  let cadangan: number | undefined;
+  if (cadanganPerSls !== undefined) {
+    const n = Number(cadanganPerSls);
+    if (!Number.isInteger(n) || n < 0 || n > 100) throw new GalatSampel("Jumlah cadangan per sub SLS harus bilangan bulat 0-100.");
+    cadangan = n;
+  }
   if ((await namaKegiatan(db, kegiatanId)) == null) throw new GalatSampel("Kegiatan tidak ditemukan.", 404);
   const sekarang = await muatKonfigAlokasi(db, kegiatanId);
   const { data: lama } = await db.from("sigap_sampel_konfig").select("boleh_ganti").eq("kegiatan_id", kegiatanId).maybeSingle();
   const bolehGanti = typeof (lama as { boleh_ganti?: unknown } | null)?.boleh_ganti === "boolean" ? ((lama as { boleh_ganti: boolean }).boleh_ganti) : true;
-  const { error } = await db.from("sigap_sampel_konfig").upsert(
-    { kegiatan_id: kegiatanId, target_per_sls: sekarang.target_per_sls, maks_sls_per_ppl: sekarang.maks_sls_per_ppl, boleh_ganti: bolehGanti, dengan_updating: denganUpdating, diubah_oleh: oleh.slice(0, 120), diubah_at: new Date().toISOString() },
-    { onConflict: "kegiatan_id" },
-  );
+  const baris: Record<string, unknown> = { kegiatan_id: kegiatanId, target_per_sls: sekarang.target_per_sls, maks_sls_per_ppl: sekarang.maks_sls_per_ppl, boleh_ganti: bolehGanti, dengan_updating: denganUpdating, diubah_oleh: oleh.slice(0, 120), diubah_at: new Date().toISOString() };
+  if (cadangan !== undefined) baris.cadangan_per_sls = cadangan;
+  const { error } = await db.from("sigap_sampel_konfig").upsert(baris, { onConflict: "kegiatan_id" });
   if (error) {
     if (belumMigrasi(error)) throw new GalatSampel(PESAN_BELUM_MIGRASI, 503);
     throw new Error(error.message);
   }
-  return { ...sekarang, dengan_updating: denganUpdating };
+  return { ...sekarang, dengan_updating: denganUpdating, cadangan_per_sls: cadangan ?? sekarang.cadangan_per_sls };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------

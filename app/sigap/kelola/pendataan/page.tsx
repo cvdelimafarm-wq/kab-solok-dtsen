@@ -42,6 +42,7 @@ import IsiLaporanSpj from "./IsiLaporanSpj";
 import UnggahKk from "./UnggahKk";
 import AlokasiSampel from "./AlokasiSampel";
 import AlokasiWilayah from "./AlokasiWilayah";
+import TagSampel from "./TagSampel";
 import Seleksi from "./Seleksi";
 
 export default function KelolaPendataan() {
@@ -117,6 +118,7 @@ export default function KelolaPendataan() {
           {f.persiapan_sasaran && <UnggahKk />}
           {f.persiapan_lembar && <PengaturanLembar />}
           {f.persiapan_sampel && <AlokasiWilayah key={`w${kegId}`} kegiatanId={kegId} nama={nama} />}
+          {f.persiapan_sampel && <TagSampel key={`t${kegId}`} kegiatanId={kegId} nama={nama} />}
           {f.persiapan_sampel && <AlokasiSampel key={kegId} kegiatanId={kegId} nama={nama} />}
           {f.persiapan_laporan_spj && <IsiLaporanSpj />}
           <Seleksi key={kegId} kegiatanId={kegId} nama={nama} />

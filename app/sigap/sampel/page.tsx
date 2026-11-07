@@ -95,7 +95,7 @@ export default function HalamanSampel() {
           </div>
         )}
 
-        {alokasi.data && <WilayahSaya data={alokasi.data} muatKk={alokasi.muatKk} luring={alokasi.luring} />}
+        {alokasi.data && <WilayahSaya data={alokasi.data} muatKk={alokasi.muatKk} luring={alokasi.luring} aksiTag={alokasi.aksiTag} selisihMs={alokasi.selisihMs} />}
 
         {data && (
           <>

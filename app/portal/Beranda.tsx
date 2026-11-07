@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import { setelahLapisanTutup } from "./lapisan"; // (7 Nov 2026) pindah akun "Lihat sebagai" menunggu pemilih akun selesai ditutup
 import { createClient } from "@/lib/supabase/client";
 import type { Kartu } from "@/lib/portal/server";
 import { ikonKartu, tugasUtamaPelatihan, type HubTugas } from "@/lib/sigapTugasUtama";
@@ -189,9 +190,14 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
     } catch {
       /* penyimpanan tidak tersedia */
     }
-    hapusLihatSebagai(); // sisa mode lama (bila ada) dibuang; sesi akun super ini yang disimpan sebagai sesi asli
-    mulaiLihatSebagai({ sesi, sampai: sampai || new Date(Date.now() + 24 * 3_600_000).toISOString(), token }, { sesi: h.sesi, sampai: h.sampai, token: h.token, id: h.id, nama: h.nama, aktor: h.aktor });
-    window.location.replace("/"); // muat ulang penuh supaya semua tampilan memakai akun yang dipilih
+    // (7 Nov 2026) Menutup pemilih (setLihatSebagai(false) di atas) memanggil history.back() yang tak sinkron; window.location.replace("/") yang
+    // dijalankan bersamaan dikalahkan mundur itu, sehingga "Lihat sebagai" tidak berlaku sampai keluar-masuk lagi. Maka seluruh penerapan
+    // (tulis mode + muat ulang) ditunda sampai entri penanda lapisan selesai dibuang (pola yang sama dengan BarKegiatan).
+    setelahLapisanTutup(() => {
+      hapusLihatSebagai(); // sisa mode lama (bila ada) dibuang; sesi akun super ini yang disimpan sebagai sesi asli
+      mulaiLihatSebagai({ sesi, sampai: sampai || new Date(Date.now() + 24 * 3_600_000).toISOString(), token }, { sesi: h.sesi, sampai: h.sampai, token: h.token, id: h.id, nama: h.nama, aktor: h.aktor });
+      window.location.replace("/"); // muat ulang penuh supaya semua tampilan memakai akun yang dipilih
+    });
   }
 
   async function keluar() {
@@ -443,6 +449,8 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         ))}
 
         {adaSesi && !memuatAwal && <KartuSeleksi />}
+        {/* (7 Nov 2026) sakelar Kartu | Ikon dipindah ke atas kartu Temuan Anomali (dulu di dalam bagian "Kegiatan saya") */}
+        {adaSesi && !memuatAwal && daftarKartu.length > 0 && <PilihTampilan nilai={tampilan} onPilih={gantiTampilan} />}
         {adaSesi && !memuatAwal && <KartuAnomali />}
 
         {/* (31 Okt 2026) Satu kartu per survei: nama + poin mendesak menurut peran; usang di bawah dan redup */}
@@ -461,7 +469,6 @@ export default function Beranda({ dtsen, onKeluar }: { dtsen: InfoDtsen; onKelua
         ) : (
           (daftarKartu.length > 0 || tampilDelego) && (
             <section aria-label="Kegiatan saya" className="space-y-3">
-              {daftarKartu.length > 0 && <PilihTampilan nilai={tampilan} onPilih={gantiTampilan} />}
               {tampilan === "kartu" || daftarKartu.length === 0 ? (
                 daftarKartu.map((k) => <KartuSurvei key={k.id} k={k} sibuk={sibuk === k.id} onSso={() => bukaSsoKegiatan(k.id)} />)
               ) : (
