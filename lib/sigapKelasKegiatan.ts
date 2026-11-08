@@ -5,7 +5,8 @@
 // Daftar kelas yang dipakai aplikasi = tabel ITU + kelas yang ternyata sudah dipakai peserta aktif / instruktur (supaya tidak ada kelas "gaib"); tabel kosong -> Kelas 1.
 // "Semua Kelas" (nomor 0, ruang gabungan Adu Sigap) tidak disimpan: ia hanya ditawarkan bila kelas lebih dari satu.
 
-import type { Db } from "@/lib/sigap";
+// Db bertipe struktural (bukan SupabaseClient penuh) agar basis data tiruan di tes dan pemanggil lain sama-sama diterima.
+type Db = { from: (t: string) => any }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export const KELAS_MAKS = 20;
 export const KELAS_GABUNGAN_NOMOR = 0;

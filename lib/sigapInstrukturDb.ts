@@ -3,10 +3,11 @@
 // (3 Nov 2026) Instruktur kelas per pelatihan (tabel sigap_kuis_instruktur_kelas, kunci utama kegiatan_id + akun_id: satu kelas per akun per kegiatan).
 // Dulu hanya bisa diisi lewat SQL; kini lewat Kelola Pelatihan > Tim & Peserta > Instruktur (/api/sigap/pelatihan/instruktur).
 
-import type { Db as SupabaseDb } from "@/lib/sigap";
 import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
 
-type Db = SupabaseDb;
+type Db = {
+  from: (t: string) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
+};
 
 export type BarisInstruktur = { akun_id: number; nama: string; kelas: number };
 export type KandidatInstruktur = { akun_id: number; nama: string; jenis: string | null };
