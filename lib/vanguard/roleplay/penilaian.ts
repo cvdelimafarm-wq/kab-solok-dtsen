@@ -5,7 +5,8 @@
 // (yang tidak dicentang = salah; suara terbanyak BUKAN kunci). Berkas ini memuat seluruh hitungannya:
 //   - satuan nilai = satu RINCIAN (Blok IV.1, R.n) atau satu KOTAK (Blok V-VII). Satu satuan dinilai UTUH: letak (rincian/ART), sumber (K7), banyaknya, nilai harus cocok semua;
 //   - variasi = tanda tangan (signature) jawaban peserta pada satuan itu; "Tidak diisi" juga variasi (tanda tangan kosong);
-//   - skor: benar +1, salah -0,3 (termasuk isian di luar cakupan), kosong padahal harus diisi 0; poin = maks(0, 100 x skor / satuan dinilai).
+//   - skor (putusan Iqbal 8 Nov 2026, mengacu ke kunci jawaban = variasi yang dicentang benar): benar +1; SELAIN ITU -0,3, baik salah isi, tidak diisi padahal harus diisi, maupun isian di luar cakupan;
+//     poin = maks(0, 100 x skor / satuan dinilai). Hasil "kosong" tetap dibedakan (warna oranye di review) tetapi skornya sama dengan salah.
 // Nama komoditas dan satuan tulisan sendiri (rincian "lainnya") TIDAK ikut tanda tangan (teks bebas). Poin roleplay tidak masuk nilai pelatihan, bintang, sertifikasi, atau poin kinerja.
 
 import { RINCIAN_IV1, cariRincianIv1 } from "../kuesioner/rincian";
@@ -142,7 +143,7 @@ export type NilaiSatuan = { kunci: string; hasil: HasilSatuan; skor: number; tan
 export function nilaiSatuan(kunci: string, tandaPeserta_: string | undefined, benar: readonly string[]): NilaiSatuan {
   const dasar = { kunci, tanda: tandaPeserta_ ?? null, benar: [...benar] };
   if (tandaPeserta_ === undefined) {
-    return benar.includes(KOSONG) ? { ...dasar, hasil: "benar", skor: SKOR_BENAR } : { ...dasar, hasil: "kosong", skor: 0 };
+    return benar.includes(KOSONG) ? { ...dasar, hasil: "benar", skor: SKOR_BENAR } : { ...dasar, hasil: "kosong", skor: SKOR_SALAH };
   }
   const cocok = benar.some((b) => b !== KOSONG && samaTanda(kunci, tandaPeserta_, b));
   return cocok ? { ...dasar, hasil: "benar", skor: SKOR_BENAR } : { ...dasar, hasil: "salah", skor: SKOR_SALAH };
@@ -187,7 +188,7 @@ export function hasilPeserta(akunId: number, isian: IsianRoleplay | null | undef
   const benar = satuan.filter((s) => s.hasil === "benar").length;
   const salah = satuan.filter((s) => s.hasil === "salah").length;
   const kosong = satuan.filter((s) => s.hasil === "kosong").length;
-  const skor = Math.round((benar * SKOR_BENAR + salah * SKOR_SALAH + luar.length * SKOR_SALAH) * 100) / 100;
+  const skor = Math.round((benar * SKOR_BENAR + (salah + kosong + luar.length) * SKOR_SALAH) * 100) / 100;
   return { akun_id: akunId, satuan, luar, benar, salah, kosong, skor, dinilai: satuan.length, poin: hitungPoin(skor, satuan.length) };
 }
 

@@ -54,10 +54,10 @@ describe("tanda tangan dan pemetaan variasi", () => {
 describe("skor", () => {
   const k = kunciIv1(2);
   const benarTanda = tandaPeserta(beras(2, 30000)).get(k) as string;
-  it("benar +1; salah -0,3; kosong padahal harus diisi 0", () => {
+  it("benar +1; selain itu -0,3: salah isi maupun kosong padahal harus diisi (kosong tetap dibedakan untuk warna review)", () => {
     expect(nilaiSatuan(k, benarTanda, [benarTanda])).toMatchObject({ hasil: "benar", skor: SKOR_BENAR });
     expect(nilaiSatuan(k, tandaPeserta(beras(2, 32000)).get(k), [benarTanda])).toMatchObject({ hasil: "salah", skor: SKOR_SALAH });
-    expect(nilaiSatuan(k, undefined, [benarTanda])).toMatchObject({ hasil: "kosong", skor: 0 });
+    expect(nilaiSatuan(k, undefined, [benarTanda])).toMatchObject({ hasil: "kosong", skor: SKOR_SALAH });
   });
   it("beberapa variasi boleh sama-sama benar; yang tidak dicentang salah walau terbanyak", () => {
     const lain = tandaPeserta(beras(2, 32000)).get(k) as string;
@@ -94,8 +94,20 @@ describe("skor", () => {
     const cakupan = [kunciIv1(2)];
     const tanda = new Map([[kunciIv1(2), [benarTanda]]]);
     const r = hasilKelas([P(1, beras(2, 32000)), P(2, beras(2, 30000)), P(3, null)], cakupan, tanda);
-    expect(r.map((x) => x.akun_id)).toEqual([2, 3, 1]);
+    expect(r.map((x) => x.akun_id)).toEqual([2, 1, 3]); // salah isi dan tidak mengisi sama-sama -0,3: poin 0, urut nomor akun
     expect(r.map((x) => x.poin)).toEqual([100, 0, 0]);
+  });
+  it("lima jawaban benar ditandai: selain kunci itu, salah isi, tidak isi, atau isian lain, semuanya -0,3", () => {
+    const cakupan = ["r2", "r3", "r4", "r5", "r6", "r7"].map((r) => kunciIv1(Number(r.slice(1))));
+    const sig = (r: number) => tandaPeserta({ iv1: [{ r, k1: 1, k2: 1000 }] }).get(kunciIv1(r)) as string;
+    const tanda = new Map(cakupan.map((c) => [c, [sig(Number(c.slice(1)))]] as [string, string[]]));
+    // r2-r6 benar (5), r7 tidak diisi
+    const isian: IsianRoleplay = { iv1: [2, 3, 4, 5, 6].map((r) => ({ r, k1: 1, k2: 1000 })) };
+    expect(hasilPeserta(1, isian, cakupan, tanda)).toMatchObject({ benar: 5, salah: 0, kosong: 1, dinilai: 6, skor: 4.7 });
+    // peserta hanya mengisi 1 benar dari 6: 1 - 5 x 0,3 = -0,5 -> poin 0
+    const sedikit: IsianRoleplay = { iv1: [{ r: 2, k1: 1, k2: 1000 }] };
+    const h = hasilPeserta(2, sedikit, cakupan, tanda);
+    expect(h).toMatchObject({ benar: 1, kosong: 5, skor: -0.5, poin: 0 });
   });
   it("luar cakupan dihitung dari seluruh cakupan roleplay", () => {
     expect(satuanLuarCakupan({ iv1: [{ r: 5, k2: 1 }], nilai: { vi_g1: 5 } }, [kunciIv1(5)])).toEqual([kunciSel("vi_g1")]);

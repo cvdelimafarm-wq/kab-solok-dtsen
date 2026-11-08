@@ -49,7 +49,7 @@ describe("hasil dan rekap", () => {
     expect(salah.review[0]).toMatchObject({ hasil: "salah", skor: -0.3 });
     expect(salah.review[0].benar[0]).toContain("30.000");
     expect(salah.poin).toBe(0);
-    expect(susunHasilPeserta(4, null, cakupan, gab).review[0].hasil).toBe("kosong");
+    expect(susunHasilPeserta(4, null, cakupan, gab).review[0]).toMatchObject({ hasil: "kosong", skor: -0.3 });
   });
   it("kotak yang nilainya salah letak: petunjuk menunjuk kotak tempat nilai itu ditulis", () => {
     const l: LangkahBaris = { id: 12, nomor: 2, bagian: "A", dari: null, sampai: null, status: "diperiksa", diperiksa_at: null, selesai_at: null };
@@ -68,7 +68,7 @@ describe("hasil dan rekap", () => {
   });
   it("rekap kelas: urut poin, kolom sudah_isi", () => {
     const r = susunRekap(peserta, nama, cakupan, gab);
-    expect(r.map((x) => x.nama)).toEqual(["Ani", "Budi", "Dodi", "Cici"]);
+    expect(r.map((x) => x.nama)).toEqual(["Ani", "Budi", "Cici", "Dodi"]);
     expect(r[0]).toMatchObject({ poin: 100, benar: 1, sudah_isi: true });
     expect(r.find((x) => x.nama === "Dodi")).toMatchObject({ kosong: 1, sudah_isi: false });
   });
