@@ -66,11 +66,13 @@ describe("status langkah", () => {
     const st = statusLangkah(hitungLangkahPelatihan(m));
     expect(st.slice(0, 3)).toEqual(["selesai", "selesai", "sekarang"]);
   });
-  it("pretest terlewat ditandai terlewat; langkah wajib pertama yang belum selesai menjadi 'sekarang'", () => {
+  it("pretest terlewat ditandai terlewat; langkah wajib berurutan pertama yang belum selesai menjadi 'sekarang' (presensi lepas dari urutan, tidak jadi penunjuk)", () => {
     const m = dasar({ langkah: { undangan_dibuka: true, instrumen_diunduh: true, foto_total: 5, slot: [] }, tes: [{ jenis: "pretest", status: "terlewat" }, { jenis: "posttest", status: "belum_buka" }] });
     const st = statusLangkah(hitungLangkahPelatihan(m));
     expect(st[2]).toBe("terlewat");
-    expect(st[3]).toBe("sekarang"); // presensi: langkah wajib pertama yang belum selesai/terlewat
+    expect(st[3]).toBe("menyusul"); // (8 Nov 2026) presensi = langkah lepas: bukan penunjuk "Berikutnya"
+    const d = hitungLangkahPelatihan(m);
+    expect(st[d.findIndex((l) => l.kode === "posttest")]).toBe("sekarang"); // penunjuk melompati langkah lepas ke langkah wajib berurutan berikutnya
   });
   it("foto: selesai bila semua slot bagian itu ada; bisa dikerjakan sejak jam mulai", () => {
     const sebelum = hitungLangkahPelatihan(dasar({ now: SEBELUM })).find((l) => l.kode === "foto_awal")!;
@@ -114,7 +116,8 @@ describe("posisi dan teks", () => {
 describe("catatan berikutnya", () => {
   it("ada bila langkah berikutnya menyusul, tidak ada bila bisa dikerjakan atau langkah terakhir", () => {
     const d = hitungLangkahPelatihan(dasar({ langkah: { undangan_dibuka: true, instrumen_diunduh: true, foto_total: 5, slot: [] } }));
-    expect(catatanBerikutnya(d, "pretest")).toMatch(/Presensi belum bisa dikerjakan/); // presensi belum dibuka -> menyusul
+    expect(catatanBerikutnya(d, "foto_awal")).toMatch(/Posttest belum bisa dikerjakan/); // posttest belum dibuka -> menyusul (langkah berurutan)
+    expect(catatanBerikutnya(d, "pretest")).toBeNull(); // (8 Nov 2026) presensi = langkah lepas: tanpa peringatan walau belum dibuka
     expect(catatanBerikutnya(d, "instrumen")).toBeNull(); // pretest = langkah wajib pertama yang belum selesai ("Berikutnya")
     expect(catatanBerikutnya(d, "undangan")).toBeNull(); // instrumen bisa dikerjakan
     expect(catatanBerikutnya(d, d[d.length - 1].kode)).toBeNull();

@@ -66,11 +66,12 @@ describe("komponen langkah pelatihan", () => {
     expect(h).toContain("4 · Presensi");
     expect(h).toContain('href="/sigap/pelatihan?langkah=hadir"');
   });
-  it("navigasi: catatan kuning bila langkah berikutnya belum saatnya", () => {
-    // dari Presensi (sekarang) -> Foto awal masih "menyusul": ada catatan; dari Pretest -> Presensi berstatus "sekarang": tanpa catatan
-    const h = renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "hadir" }));
-    expect(h).toContain("Foto Translok belum bisa dikerjakan sekarang");
+  it("navigasi: langkah lepas (presensi, foto) tidak diberi catatan "belum bisa dikerjakan"", () => {
+    // (8 Nov 2026) Presensi dan Foto Translok lepas dari urutan: boleh dikerjakan kapan saja, jadi tidak ada peringatan "belum bisa dikerjakan"
+    expect(renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "hadir" }))).not.toContain("belum bisa dikerjakan");
     expect(renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "pretest" }))).not.toContain("belum bisa dikerjakan");
+    // Posttest kini penunjuk "Berikutnya" (langkah berurutan pertama yang belum selesai), jadi dari Foto Translok juga tanpa catatan
+    expect(renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "foto_awal" }))).not.toContain("belum bisa dikerjakan");
   });
   it("navigasi: langkah terakhir -> kalimat penutup, tanpa Berikutnya", () => {
     const akhir = daftar[daftar.length - 1].kode;

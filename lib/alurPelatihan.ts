@@ -230,6 +230,7 @@ export function catatanBerikutnya(daftar: readonly LangkahPelatihan[], aktif: st
   const st = statusLangkah(daftar);
   const b = daftar[i + 1];
   if (st[i + 1] !== "menyusul") return null;
+  if (b.lepas) return null; // (8 Nov 2026) langkah lepas boleh dikerjakan kapan saja: tidak ada peringatan "belum bisa dikerjakan"
   return `${b.singkat} belum bisa dikerjakan sekarang. Buka saja untuk melihat jadwal atau syaratnya.`;
 }
 
