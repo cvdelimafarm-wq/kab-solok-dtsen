@@ -14,9 +14,10 @@ describe("bersihkanIsian", () => {
   });
   it("rincian per ART: ART 1-15 dan sumber 0-3; bawaan ART 1", () => {
     const h = bersihkanIsian({ iv1: [{ r: 190, art: 99, sumber: 7, k1: 1, k2: 1000 }, { r: 191, art: 3, sumber: 2, k1: 1, k2: 2000 }] });
-    expect(h.iv1[0]).toMatchObject({ r: 190, art: 1 });
-    expect(h.iv1[0].sumber).toBeUndefined();
-    expect(h.iv1[1]).toMatchObject({ r: 191, art: 3, sumber: 2 });
+    const iv1 = h.iv1 ?? [];
+    expect(iv1[0]).toMatchObject({ r: 190, art: 1 });
+    expect(iv1[0].sumber).toBeUndefined();
+    expect(iv1[1]).toMatchObject({ r: 191, art: 3, sumber: 2 });
   });
   it("bentuk tak sah -> isian kosong", () => {
     expect(bersihkanIsian(null)).toEqual({ iv1: [], nilai: {} });
