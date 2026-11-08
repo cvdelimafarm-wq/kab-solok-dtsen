@@ -79,6 +79,15 @@ export async function muatKesiapan(
     db.from("arsip_nomor").select("id", { count: "exact", head: true }).eq("jenis", "undangan").eq("kegiatan_id", kegiatanId).eq("status", "terpakai"),
   ]);
 
+  // (9 Nov 2026) agenda hari H; tabel belum ada / galat = tidak dimuat (butir hanya informatif)
+  const agendaR = await db.from("sigap_agenda_sesi").select("tes_id, kelas").eq("kegiatan_id", kegiatanId).limit(500);
+  let agenda: MasukanKesiapan["agenda"];
+  if (!agendaR.error) {
+    const { data: tesRows } = await db.from("sigap_tes").select("id, jenis").eq("kegiatan_id", kegiatanId).limit(50);
+    const jenisTes = new Map(((tesRows ?? []) as Baris[]).map((t) => [ang(t.id), String(t.jenis)]));
+    agenda = ((agendaR.data ?? []) as Baris[]).filter((a) => jenisTes.has(ang(a.tes_id))).map((a) => ({ jenis: jenisTes.get(ang(a.tes_id)) as string, kelas: ang(a.kelas) }));
+  }
+
   const skema = skemaR.data as Baris | null;
   let totalBobot: number | null = null;
   if (skema) {
@@ -107,6 +116,7 @@ export async function muatKesiapan(
     tarifPeran: ((tarif.data ?? []) as Baris[]).filter((t) => Number(t.tarif) > 0).map((t) => String(t.peran)),
     foto: Array.from(fotoPer.entries()).map(([k, jumlah]) => ({ kelas: k, jumlah })),
     undanganBernomor: undangan.count ?? 0,
+    agenda,
     sekarang,
   };
   return hitungKesiapan(masukan);

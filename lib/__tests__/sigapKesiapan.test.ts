@@ -35,6 +35,7 @@ function dasar(ubah: Partial<MasukanKesiapan> = {}): MasukanKesiapan {
     tarifPeran: ["ppl", "panitia", "instruktur"],
     foto: [{ kelas: 1, jumlah: FOTO_PER_HARI_PER_KELAS * 2 }],
     undanganBernomor: 1,
+    agenda: [{ jenis: "pretest", kelas: 1 }, { jenis: "posttest", kelas: 1 }],
     sekarang: SEKARANG,
     ...ubah,
   };
@@ -131,12 +132,38 @@ describe("hitungKesiapan", () => {
   });
 
   it("jadwal tes: di luar tanggal, jam sama persis, posttest sebelum pretest ditutup", () => {
-    const luar = dasar({ tes: dasar().tes.map((t) => (t.jenis === "pretest" ? { ...t, buka_at: "2026-11-20T00:00:00Z", tutup_at: "2026-11-20T03:00:00Z" } : t)) });
+    const luar = dasar({ agenda: [], tes: dasar().tes.map((t) => (t.jenis === "pretest" ? { ...t, buka_at: "2026-11-20T00:00:00Z", tutup_at: "2026-11-20T03:00:00Z" } : t)) });
     expect(cari(luar, "jadwal_tes").status).toBe("kuning");
-    const sama = dasar({ tes: dasar().tes.map((t) => ({ ...t, buka_at: "2026-11-09T00:00:00Z", tutup_at: "2026-11-09T03:00:00Z" })) });
+    const sama = dasar({ agenda: [], tes: dasar().tes.map((t) => ({ ...t, buka_at: "2026-11-09T00:00:00Z", tutup_at: "2026-11-09T03:00:00Z" })) });
     expect(cari(sama, "jadwal_tes").rincian.join(" ")).toContain("jam yang sama");
-    const tumpang = dasar({ tes: dasar().tes.map((t) => (t.jenis === "posttest" ? { ...t, buka_at: "2026-11-09T01:00:00Z", tutup_at: "2026-11-09T05:00:00Z" } : t)) });
+    const tumpang = dasar({ agenda: [], tes: dasar().tes.map((t) => (t.jenis === "posttest" ? { ...t, buka_at: "2026-11-09T01:00:00Z", tutup_at: "2026-11-09T05:00:00Z" } : t)) });
     expect(cari(tumpang, "jadwal_tes").rincian.join(" ")).toContain("sebelum Pretest ditutup");
+  });
+
+  it("agenda sesi: tanpa data = info; belum diatur = kuning; lengkap = hijau dan jam sama persis tak diperingatkan", () => {
+    expect(cari(dasar({ agenda: undefined }), "agenda_sesi").status).toBe("info");
+    expect(cari(dasar({ agenda: undefined }), "agenda_sesi").wajib).toBe(false);
+    expect(cari(dasar(), "agenda_sesi").status).toBe("ok");
+    const kosong = dasar({ agenda: [] });
+    expect(cari(kosong, "agenda_sesi").status).toBe("kuning");
+    expect(cari(kosong, "agenda_sesi").rincian).toEqual(["Pretest kelas 1 belum diatur dimulai instruktur", "Posttest kelas 1 belum diatur dimulai instruktur"]);
+    expect(cari(kosong, "agenda_sesi").tab).toBe("harih");
+    expect(cari(kosong, "agenda_sesi").sub).toBe("agenda");
+    const separuh = dasar({ agenda: [{ jenis: "pretest", kelas: 1 }] });
+    expect(cari(separuh, "agenda_sesi").rincian).toEqual(["Posttest kelas 1 belum diatur dimulai instruktur"]);
+    const penuh = dasar({ agenda: [{ jenis: "pretest", kelas: 1 }, { jenis: "posttest", kelas: 1 }] });
+    expect(cari(penuh, "agenda_sesi").status).toBe("ok");
+    const sama = dasar({ agenda: penuh.agenda, tes: dasar().tes.map((t) => ({ ...t, buka_at: "2026-11-09T00:00:00Z", tutup_at: "2026-11-09T03:00:00Z" })) });
+    expect(cari(sama, "jadwal_tes").status).toBe("ok");
+    const samaTanpaAgenda = dasar({ agenda: [], tes: sama.tes });
+    expect(cari(samaTanpaAgenda, "jadwal_tes").status).toBe("kuning");
+  });
+
+  it("agenda sesi: tes tanpa soal tidak dihitung; dua kelas harus diatur dua-duanya", () => {
+    const tanpaSoal = dasar({ agenda: [], tes: dasar().tes.map((t) => ({ ...t, jumlah_soal: 0 })) });
+    expect(cari(tanpaSoal, "agenda_sesi").status).toBe("info");
+    const duaKelas = dasar({ kelas: [1, 2], agenda: [{ jenis: "pretest", kelas: 1 }, { jenis: "posttest", kelas: 1 }] });
+    expect(cari(duaKelas, "agenda_sesi").rincian).toEqual(["Pretest kelas 2 belum diatur dimulai instruktur", "Posttest kelas 2 belum diatur dimulai instruktur"]);
   });
 
   it("hari kerja: kekurangan dicatat per orang; hari yang bentrok tidak dihitung ganda", () => {

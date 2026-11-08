@@ -13,6 +13,8 @@ const st = {
   izinBaris: [] as Record<string, unknown>[],
   masukan: { video: { ada: false, tuntas: false }, vanguard: { ada: false, tuntas: false }, pretest: { ada: true, tuntas: false }, kuis: { ada: false, tuntas: false }, posttest: { ada: true, tuntas: false } },
   sesi: null as Record<string, unknown> | null,
+  /** (9 Nov 2026) agenda hari H: null = tes berjadwal biasa; "menunggu" = instruktur belum Mulai; "berjalan" = dimulai 1 menit lalu (jendela 30 menit). */
+  agenda: null as null | "menunggu" | "berjalan",
 };
 const tesPost = { id: 2, kegiatan_id: 7, jenis: "posttest", judul: "Posttest", buka_at: "2026-11-09T02:00:00Z", tutup_at: tutupAsli, durasi_menit: 30, aktif: true, ulang_maks: 1, nilai_lulus: 70, wajib_lulus: false };
 const susun = vi.fn(async (_db: unknown, tes: Record<string, unknown>) => ({ tes: { jenis: tes.jenis, buka_at: tes.buka_at, tutup_at: tes.tutup_at }, status: "buka" }));
@@ -32,6 +34,15 @@ vi.mock("@/lib/sigapTesDb", () => ({
   susunKeadaan: (...a: Parameters<typeof susun>) => susun(...a),
   KOLOM_SESI_PUBLIK: "id",
 }));
+vi.mock("@/lib/sigapAgendaDb", async () => {
+  const { tesDenganAgenda } = await import("@/lib/sigapAgenda");
+  return {
+    terapkanAgendaPeserta: async (_db: unknown, tes: { buka_at: string; tutup_at: string }) =>
+      st.agenda === null
+        ? tes
+        : tesDenganAgenda(tes, st.agenda === "menunggu" ? null : { mulai_at: new Date(NOW - 60_000).toISOString(), selesai_at: null, jendela_menit: 30 }, true),
+  };
+});
 vi.mock("@/lib/sigapAturanDb", () => ({ muatAturan: async () => st.aturan }));
 vi.mock("@/lib/sigapTahapanDb", () => {
   return {
@@ -57,6 +68,7 @@ beforeEach(() => {
   st.izinBaris = [];
   st.masukan = { video: { ada: false, tuntas: false }, vanguard: { ada: false, tuntas: false }, pretest: { ada: true, tuntas: false }, kuis: { ada: false, tuntas: false }, posttest: { ada: true, tuntas: false } };
   st.sesi = null;
+  st.agenda = null;
   susun.mockClear();
   insertSesi.mockClear();
 });
@@ -132,5 +144,38 @@ describe("POST mulai", () => {
   it("izin kedaluwarsa tidak membuka", async () => {
     st.izinBaris = [{ tahap: "posttest", status: "disetujui", berlaku_sampai: "2026-11-09T09:30:00.000Z", dibuat_at: new Date(NOW - 3600_000).toISOString() }];
     expect((await hasil(POST(req({ aksi: "mulai" }), ctx))).status).toBe(409);
+  });
+});
+
+describe("Agenda hari H: tes dimulai instruktur", () => {
+  beforeEach(() => {
+    st.aturan.blokir_tahap = false;
+  });
+  it("menunggu instruktur: mulai ditolak 409 dan sesi tidak dibuat, walau jadwal tes sudah lewat", async () => {
+    st.agenda = "menunggu";
+    const r = await hasil(POST(req({ aksi: "mulai" }), ctx));
+    expect(r.status).toBe(409);
+    expect(String(r.body.error)).toContain("instruktur");
+    expect(insertSesi).not.toHaveBeenCalled();
+  });
+  it("menunggu instruktur: ulang juga ditolak", async () => {
+    st.agenda = "menunggu";
+    st.sesi = { id: 5, tes_id: 2, akun_id: 11 };
+    const r = await hasil(POST(req({ aksi: "ulang" }), ctx));
+    expect(r.status).toBe(409);
+  });
+  it("sudah dimulai instruktur: peserta boleh mulai dan mendapat durasi PENUH (tidak dipotong penutupan jendela)", async () => {
+    st.agenda = "berjalan";
+    const r = await hasil(POST(req({ aksi: "mulai" }), ctx));
+    expect(r.status).toBe(200);
+    expect(insertSesi).toHaveBeenCalledTimes(1);
+    const isi = (insertSesi.mock.calls[0] as unknown as [Record<string, string>])[0];
+    expect(isi.batas_at).toBe(new Date(NOW + 30 * 60_000).toISOString()); // jendela menutup NOW+29 menit, batas peserta tetap NOW+30 menit
+  });
+  it("tanpa agenda: perilaku lama (jendela sudah tutup = 409 'ditutup')", async () => {
+    st.agenda = null;
+    const r = await hasil(POST(req({ aksi: "mulai" }), ctx));
+    expect(r.status).toBe(409);
+    expect(String(r.body.error)).toContain("ditutup");
   });
 });

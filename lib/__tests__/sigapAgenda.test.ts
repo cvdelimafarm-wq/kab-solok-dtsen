@@ -1,7 +1,7 @@
 // lib/__tests__/sigapAgenda.test.ts
 // (9 Nov 2026) Agenda hari H: tes dimulai instruktur (jendela, status, batas pengerjaan, hasil langsung).
 import { describe, expect, it } from "vitest";
-import { aksiAgendaSah, aksiTersedia, peringatanMulai, statusAgenda, tesDenganAgenda, tutupJendela } from "../sigapAgenda";
+import { agendaBelumDiatur, aksiAgendaSah, aksiTersedia, jendelaSah, pesanMulaiPush, peringatanMulai, statusAgenda, tesDenganAgenda, tutupJendela } from "../sigapAgenda";
 import { batasPengerjaan, hasilBolehTampil, hitungBatas, statusTes, type TesBaris } from "../sigapTes";
 
 const MULAI = "2026-11-09T01:05:00.000Z"; // 08.05 WIB
@@ -116,5 +116,38 @@ describe("peringatan urutan", () => {
     expect(peringatanMulai("posttest", [{ jenis: "pretest", status: "selesai" }])).toBeNull();
     expect(peringatanMulai("posttest", [{ jenis: "posttest", status: "menunggu" }])).toBeNull();
     expect(peringatanMulai("pretest", [{ jenis: "pretest", status: "menunggu" }])).toBeNull();
+  });
+});
+
+describe("agendaBelumDiatur", () => {
+  const dua = [{ jenis: "pretest", jumlah_soal: 25 }, { jenis: "posttest", jumlah_soal: 25 }];
+  it("semua kelas x tes bersoal tanpa baris = belum diatur, urut kelas lalu tes", () => {
+    expect(agendaBelumDiatur(dua, [2, 1], [])).toEqual([
+      { jenis: "pretest", kelas: 1 }, { jenis: "posttest", kelas: 1 }, { jenis: "pretest", kelas: 2 }, { jenis: "posttest", kelas: 2 },
+    ]);
+  });
+  it("baris yang ada tidak dihitung; tes tanpa soal diabaikan; tanpa kelas = kosong", () => {
+    expect(agendaBelumDiatur(dua, [1], [{ jenis: "pretest", kelas: 1 }])).toEqual([{ jenis: "posttest", kelas: 1 }]);
+    expect(agendaBelumDiatur([{ jenis: "pretest", jumlah_soal: 0 }], [1], [])).toEqual([]);
+    expect(agendaBelumDiatur(dua, [], [])).toEqual([]);
+  });
+});
+
+describe("jendelaSah", () => {
+  it("menerima bilangan bulat 1..480 (angka atau teks), menolak selain itu", () => {
+    expect(jendelaSah(30)).toBe(30);
+    expect(jendelaSah("45")).toBe(45);
+    expect(jendelaSah(1)).toBe(1);
+    expect(jendelaSah(480)).toBe(480);
+    for (const x of [0, 481, -5, 2.5, "", "abc", null, undefined, NaN]) expect(jendelaSah(x)).toBeNull();
+  });
+});
+
+describe("pesanMulaiPush", () => {
+  it("memakai nama baku Pretest/Posttest; tes lain memakai judulnya", () => {
+    expect(pesanMulaiPush("pretest", "x").judul).toBe("Pretest dimulai");
+    expect(pesanMulaiPush("posttest", "x").judul).toBe("Posttest dimulai");
+    expect(pesanMulaiPush("lain", "Kuis Akhir").judul).toBe("Kuis Akhir dimulai");
+    expect(pesanMulaiPush("pretest", "x").isi.length).toBeLessThan(200);
   });
 });

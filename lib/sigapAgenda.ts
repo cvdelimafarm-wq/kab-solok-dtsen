@@ -76,3 +76,36 @@ export function peringatanMulai(jenis: string, semua: readonly { jenis: string; 
   if (!pre || pre.status === "selesai") return null;
   return pre.status === "menunggu" ? "Pretest kelas ini belum dimulai." : "Pretest kelas ini masih berjalan.";
 }
+
+export type PasanganAgenda = { jenis: string; kelas: number };
+
+/**
+ * Pasangan (jenis tes, kelas) yang BELUM punya baris agenda: tes bersoal di tiap kelas. Tes tanpa soal tidak dihitung (belum bisa tayang).
+ * Dipakai butir Kesiapan "Agenda sesi" dan kartu Agenda di Kelola > Hari H. Tanpa kelas = tidak ada yang dihitung.
+ */
+export function agendaBelumDiatur(
+  tes: readonly { jenis: string; jumlah_soal: number }[],
+  kelas: readonly number[],
+  agenda: readonly PasanganAgenda[]
+): PasanganAgenda[] {
+  const ada = new Set(agenda.map((a) => `${a.jenis}|${a.kelas}`));
+  const hasil: PasanganAgenda[] = [];
+  for (const k of [...kelas].sort((a, b) => a - b)) {
+    for (const t of tes) {
+      if (t.jumlah_soal > 0 && !ada.has(`${t.jenis}|${k}`)) hasil.push({ jenis: t.jenis, kelas: k });
+    }
+  }
+  return hasil;
+}
+
+/** Jendela mulai yang sah (menit bulat 1..JENDELA_MAKS_MENIT); null bila tidak sah. */
+export function jendelaSah(x: unknown): number | null {
+  const n = typeof x === "string" && x.trim() !== "" ? Number(x) : x;
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= JENDELA_MAKS_MENIT ? n : null;
+}
+
+/** Teks notifikasi push ke peserta saat instruktur menekan Mulai. */
+export function pesanMulaiPush(jenis: string, judulTes: string): { judul: string; isi: string } {
+  const nama = jenis === "pretest" ? "Pretest" : jenis === "posttest" ? "Posttest" : judulTes;
+  return { judul: `${nama} dimulai`, isi: `Instruktur sudah memulai ${nama}. Buka sekarang dan kerjakan; waktu pengerjaan dihitung sejak Anda menekan Mulai.` };
+}

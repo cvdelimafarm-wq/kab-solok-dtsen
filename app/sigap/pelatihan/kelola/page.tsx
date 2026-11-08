@@ -15,6 +15,7 @@ import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, T
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
+import AgendaKelola from "./agendaKelola"; // (9 Nov 2026) Hari H > Agenda sesi: tes dimulai instruktur per kelas
 import KesiapanKartu from "./kesiapan"; // (8 Nov 2026) tab Kesiapan: daftar periksa + tombol Perbaiki ke tab/sub yang tepat
 import GabungTab, { type Bagian } from "./gabungTab"; // (8 Nov 2026) perekat tujuh tab: satu tab = beberapa bagian (sub)
 import { KartuHierarki } from "./hierarki";
@@ -326,6 +327,7 @@ export default function KelolaPelatihan() {
           label="Bagian Hari H"
           bagian={[
             { kode: "monitoring", label: "📊 Monitoring", ket: "Pantau tes, akses, presensi, dan Transport Lokal.", isi: () => <MonitoringBagian onUbahSkema={() => bukaTab("materi", "penilaian")} /> },
+            { kode: "agenda", label: "▶️ Agenda sesi", ket: "Atur tes yang dimulai instruktur per kelas dan jendela mulainya.", isi: () => <AgendaKelola /> },
             {
               kode: "presensi",
               label: "📍 Absen & presensi",

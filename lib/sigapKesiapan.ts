@@ -6,6 +6,8 @@
 // Status butir: ok (hijau) · kuning (perlu perhatian) · merah (mendesak) · info (informatif, tidak dinilai).
 // Butir WAJIB menentukan lencana "Siap": belum hijau = kuning, dan menjadi MERAH mulai H-3 (hari mulai pelatihan dikurangi 3 hari) atau bila pelatihan sudah mulai.
 
+import { agendaBelumDiatur } from "@/lib/sigapAgenda";
+
 export type StatusButir = "ok" | "kuning" | "merah" | "info";
 
 export type Butir = {
@@ -57,11 +59,14 @@ export type MasukanKesiapan = {
   tarifPeran: string[];
   foto: { kelas: number; jumlah: number }[];
   undanganBernomor: number;
+  /** (9 Nov 2026) Baris agenda hari H yang sudah ada (jenis tes + kelas). undefined = tidak dimuat (tabel belum ada) -> butir hanya informatif. */
+  agenda?: { jenis: string; kelas: number }[];
   sekarang: Date;
 };
 
 const BUKAN_PESERTA = new Set(["panitia", "instruktur"]);
 export const FOTO_PER_HARI_PER_KELAS = 4;
+
 
 /** YYYY-MM-DD menurut WIB. */
 export function tanggalWib(d: Date): string {
@@ -221,22 +226,42 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
     const post = m.tes.find((x) => x.jenis === "posttest");
     const rincian: string[] = [];
     let masalah = false;
-    for (const [nama, t] of [["Pretest", pre], ["Posttest", post]] as const) {
+    // (9 Nov 2026) Bila semua tes bersoal dimulai instruktur di semua kelas, jam di pengaturan Tes hanya penanda: urutan dijaga tombol Mulai.
+    const dikendalikanInstruktur = m.agenda !== undefined && m.kelas.length > 0 && agendaBelumDiatur(m.tes, m.kelas, m.agenda).length === 0 && m.tes.some((x) => x.jumlah_soal > 0);
+    for (const [nama, t] of dikendalikanInstruktur ? [] : ([["Pretest", pre], ["Posttest", post]] as const)) {
       if (!t) continue;
       const hari = tanggalWib(new Date(t.buka_at));
       if (tanggal.length && !tanggal.includes(hari)) { masalah = true; rincian.push(`${nama} dibuka ${tglPendek(hari)}, di luar tanggal pelatihan`); }
     }
-    if (pre && post) {
+    if (pre && post && !dikendalikanInstruktur) {
       if (pre.buka_at === post.buka_at && pre.tutup_at === post.tutup_at) { masalah = true; rincian.push("Pretest dan Posttest dibuka pada jam yang sama persis; Posttest sebaiknya sesudah Pretest"); }
       else if (Date.parse(post.buka_at) < Date.parse(pre.tutup_at)) { masalah = true; rincian.push("Posttest dibuka sebelum Pretest ditutup"); }
     }
     tambah({
       kode: "jadwal_tes", judul: "Jadwal tes sesuai tanggal dan urutan", wajib: false,
       status: masalah ? "kuning" : "ok",
-      ringkas: masalah ? "Periksa jadwal Pretest dan Posttest" : "Jadwal sesuai",
+      ringkas: masalah ? "Periksa jadwal Pretest dan Posttest" : dikendalikanInstruktur ? "Dimulai instruktur: jam di pengaturan Tes hanya penanda" : "Jadwal sesuai",
       rincian,
       tab: "materi", sub: "tes",
     });
+  }
+
+  // 8b. Agenda sesi: tes dimulai instruktur kelas (tabel sigap_agenda_sesi)
+  {
+    if (m.agenda === undefined) {
+      tambah({ kode: "agenda_sesi", judul: "Agenda sesi (tes dimulai instruktur)", wajib: false, status: "info", ringkas: "Belum dapat dibaca (SQL agenda belum dijalankan?)", rincian: [], tab: "harih", sub: "agenda" });
+    } else {
+      const belum = agendaBelumDiatur(m.tes, m.kelas, m.agenda);
+      const ada = m.tes.some((x) => x.jumlah_soal > 0) && m.kelas.length > 0;
+      const nama = (j: string) => (j === "pretest" ? "Pretest" : j === "posttest" ? "Posttest" : j);
+      tambah({
+        kode: "agenda_sesi", judul: "Agenda sesi (tes dimulai instruktur)", wajib: false,
+        status: !ada ? "info" : belum.length ? "kuning" : "ok",
+        ringkas: !ada ? "Belum ada tes bersoal atau kelas" : belum.length ? `${belum.length} sesi belum diatur; terbuka menurut jadwal, bukan menunggu instruktur` : "Pretest dan Posttest dimulai instruktur di semua kelas",
+        rincian: belum.map((b) => `${nama(b.jenis)} kelas ${b.kelas} belum diatur dimulai instruktur`),
+        tab: "harih", sub: "agenda",
+      });
+    }
   }
 
   // 9. Skema nilai akhir
