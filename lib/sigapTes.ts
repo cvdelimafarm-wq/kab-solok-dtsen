@@ -26,6 +26,14 @@ export type SoalLengkap = { nomor: number; teks: string; opsi: Opsi[]; kunci: st
 /** Soal yang dikirim ke peserta saat mengerjakan: TANPA kunci & bobot. */
 export type SoalPeserta = { nomor: number; teks: string; opsi: Opsi[] };
 
+/**
+ * (9 Nov 2026) Agenda hari H: tes yang DIMULAI INSTRUKTUR (tabel sigap_agenda_sesi). Kosong/tidak ada = perilaku lama (jadwal + aktif).
+ * menunggu = instruktur belum menekan Mulai: peserta tidak bisa mulai. Sesudah Mulai: buka_at = saat Mulai, tutup_at = penutupan jendela
+ * (Mulai + jendela_menit, atau saat instruktur menekan Selesai); jendela hanya membatasi KAPAN peserta boleh mulai, waktu pengerjaan tiap
+ * peserta tetap durasi_menit penuh (tidak dipotong jendela, tidak diperpanjang).
+ */
+export type InfoAgendaTes = { menunggu: boolean; mulai_at: string | null; tutup_at: string | null };
+
 export type TesBaris = {
   id: number;
   kegiatan_id: number;
@@ -42,6 +50,8 @@ export type TesBaris = {
   wajib_lulus?: boolean;
   /** (2 Nov 2026) "Wajib 100": peserta boleh mengulang tanpa batas jumlah sampai mencapai 100, selama tes masih dibuka. Kolom belum ada (SQL 20261102zl belum jalan) = undefined = tidak wajib 100. */
   wajib_100?: boolean;
+  /** (9 Nov 2026) Dimulai instruktur (agenda hari H). Lihat InfoAgendaTes. */
+  agenda?: InfoAgendaTes | null;
 };
 
 export type SesiBaris = {
@@ -87,13 +97,22 @@ export function hitungBatas(sekarang: Date, durasiMenit: number, tutupAt: string
   return b.getTime() < t.getTime() ? b : t;
 }
 
+/**
+ * (9 Nov 2026) Batas pengerjaan seorang peserta yang baru mulai. Tes biasa: LEAST(sekarang + durasi, tutup_at). Tes berjendela instruktur (agenda):
+ * selalu sekarang + durasi penuh, siapa pun yang mulai di dalam jendela mendapat waktu yang sama (jendela hanya membatasi kapan boleh mulai).
+ */
+export function batasPengerjaan(tes: Pick<TesBaris, "durasi_menit" | "tutup_at" | "agenda">, sekarang: Date): Date {
+  if (tes.agenda && !tes.agenda.menunggu) return new Date(sekarang.getTime() + tes.durasi_menit * 60_000);
+  return hitungBatas(sekarang, tes.durasi_menit, tes.tutup_at);
+}
+
 /** Sudah melewati batas (dgn toleransi opsional)? */
 export function lewatBatas(sekarang: Date, batasAt: string | Date, toleransiDetik = 0): boolean {
   return sekarang.getTime() > new Date(batasAt).getTime() + toleransiDetik * 1000;
 }
 
 export function statusTes(
-  tes: Pick<TesBaris, "aktif" | "buka_at" | "tutup_at">,
+  tes: Pick<TesBaris, "aktif" | "buka_at" | "tutup_at" | "agenda">,
   jumlahSoal: number,
   sesi: Pick<SesiBaris, "batas_at" | "selesai_at"> | null,
   sekarang: Date
@@ -104,6 +123,7 @@ export function statusTes(
   }
   if (!tes.aktif) return "nonaktif";
   if (jumlahSoal <= 0) return "soal_belum_ada";
+  if (tes.agenda?.menunggu) return "belum_buka"; // (9 Nov 2026) menunggu instruktur menekan Mulai
   const t = sekarang.getTime();
   if (t < new Date(tes.buka_at).getTime()) return "belum_buka";
   if (t < new Date(tes.tutup_at).getTime()) return "buka";
@@ -211,7 +231,8 @@ export function alasanTakBisaUlang(tes: TesUlang, sesi: SesiUlang): string {
 }
 
 /** Hasil (skor & pembahasan) boleh ditampilkan setelah tes ditutup utk semua peserta. */
-export function hasilBolehTampil(tes: Pick<TesBaris, "tutup_at">, sekarang: Date): boolean {
+export function hasilBolehTampil(tes: Pick<TesBaris, "tutup_at" | "agenda">, sekarang: Date): boolean {
+  if (tes.agenda) return true; // (9 Nov 2026) tes dimulai instruktur: hasil tampil begitu peserta selesai (kirim / waktu habis); pemanggil memeriksa status "selesai"
   return sekarang.getTime() >= new Date(tes.tutup_at).getTime();
 }
 

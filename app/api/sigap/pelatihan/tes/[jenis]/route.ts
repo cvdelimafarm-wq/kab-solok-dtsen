@@ -9,13 +9,16 @@
 // POST {aksi:"kirim", jawaban?}           -> kirim & nilai
 // POST {aksi:"ulang"}                      -> (posttest, bila panitia membuka kesempatan mengulang) arsipkan percobaan lama & mulai percobaan baru;
 //                                             nilai resmi = skor tertinggi (aturan versi 1) atau percobaan pertama (versi 2)
+// (9 Nov 2026) AGENDA HARI H: tes yang punya baris di sigap_agenda_sesi dimulai INSTRUKTUR kelas peserta (lib/sigapAgenda.ts). Sebelum Mulai: status belum_buka dan
+// aksi mulai/ulang ditolak 409. Sesudah Mulai: jendela [Mulai, Mulai + jendela_menit atau Selesai); waktu pengerjaan tiap peserta durasi_menit penuh; hasil tampil begitu selesai.
 // (2 Nov 2026) BLOKIR TAHAPAN: bila kegiatan menyalakan blokir_tahap dan tahapan sebelumnya belum tuntas, GET menyertakan `terkunci` dan
 // POST {aksi:"mulai"} ditolak 409 (sesi yang sudah berjalan tidak pernah diputus). IZIN BUKA KUNCI yang berlaku memberi jendela tes pribadi (lib/sigapTahapan.ts).
 
 import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
 import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { NextRequest, NextResponse } from "next/server";
-import { TOLERANSI_DETIK, bersihkanJawaban, hitungBatas, jawabanSoalLain, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
+import { TOLERANSI_DETIK, batasPengerjaan, bersihkanJawaban, jawabanSoalLain, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
+import { terapkanAgendaPeserta } from "@/lib/sigapAgendaDb"; // (9 Nov 2026) tes dimulai instruktur (agenda hari H)
 import { muatAturan } from "@/lib/sigapAturanDb";
 import { hitungTahapan, kunciUntuk, ringkasIzin, tesDenganIzin, type KodeTahap } from "@/lib/sigapTahapan";
 import { izinBerlakuPerTahap, muatIzin, muatTahapanBatch } from "@/lib/sigapTahapanDb";
@@ -59,7 +62,9 @@ async function siapkan(req: NextRequest, ctx: Ctx) {
   const sekarangMs = Date.now();
   const [aturan, izin] = await Promise.all([muatAturan(db, kegiatanId), muatIzin(db, kegiatanId, [akun.id], sekarangMs)]);
   const barisIzin = izin.peta.get(akun.id) ?? [];
-  const tesEfektif = tesDenganIzin(tes, izinBerlakuPerTahap(barisIzin, sekarangMs)[jenis], sekarangMs);
+  const tesIzin = tesDenganIzin(tes, izinBerlakuPerTahap(barisIzin, sekarangMs)[jenis], sekarangMs);
+  // (9 Nov 2026) Agenda hari H: bila tes ini punya baris agenda, buka/tutupnya mengikuti Mulai/Selesai instruktur kelas peserta (tanpa agenda = jadwal biasa)
+  const tesEfektif = await terapkanAgendaPeserta(db, tesIzin, peserta.kelas);
   let terkunci: { oleh: KodeTahap; oleh_label: string; pesan: string } | null = null;
   if (aturan.blokir_tahap) {
     const batch = await muatTahapanBatch(db, kegiatanId, [akun.id], sekarangMs, aturan);
@@ -93,12 +98,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
     if (aksi === "mulai") {
       if (sesi) return NextResponse.json(await susunKeadaan(db, tes, akun.id, sekarang)); // lanjutkan
+      if (tes.agenda?.menunggu) return galat("Menunggu instruktur memulai tes ini.", 409);
       if (kunci) return NextResponse.json({ error: kunci.pesan, terkunci: kunci }, { status: 409 });
       if (soal.length === 0) return galat("Soal belum tersedia.", 409);
       const t = sekarang.getTime();
       if (t < new Date(tes.buka_at).getTime()) return galat("Tes belum dibuka.", 409);
       if (t >= new Date(tes.tutup_at).getTime()) return galat("Sesi tes sudah ditutup.", 409);
-      const batas = hitungBatas(sekarang, tes.durasi_menit, tes.tutup_at);
+      const batas = batasPengerjaan(tes, sekarang);
       const { error } = await db
         .from("sigap_tes_sesi")
         .insert({ tes_id: tes.id, akun_id: akun.id, mulai_at: sekarang.toISOString(), batas_at: batas.toISOString(), jawaban: {} });
@@ -109,6 +115,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
     if (aksi === "ulang") {
       if (!sesi) return galat("Anda belum memulai tes ini.", 409);
+      if (tes.agenda?.menunggu) return galat("Menunggu instruktur memulai tes ini.", 409);
       sesi = await finalisasiBilaKedaluwarsa(db, sesi, soal, sekarang); // percobaan yang waktunya habis dinilai dulu
       const r = await mulaiUlang(db, tes, sesi, soal, sekarang);
       if (!r.ok) return galat(r.pesan, r.status);

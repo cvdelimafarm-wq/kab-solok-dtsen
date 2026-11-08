@@ -14,6 +14,7 @@ import { bukaBlob, fetchJson, pesanGalat } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, Kartu, Memuat, Pesan } from "../../admin/ui";
 import KartuVanguardHariIni from "../../KartuVanguardHariIni";
 import KartuRoleplayHariIni from "../../KartuRoleplayHariIni"; // (8 Nov 2026) Roleplaying by Vanguard (langkah 8)
+import KartuAgendaSesi from "../KartuAgendaSesi"; // (9 Nov 2026) Agenda sesi: instruktur memulai/menyelesaikan Pretest dan Posttest kelasnya
 import AbsenPeserta from "../AbsenPeserta";
 import KartuIzinBuka from "../KartuIzinBuka";
 import { Kerangka } from "../komponen";
@@ -252,6 +253,7 @@ export default function HalamanHariIni() {
       {d && !d.peserta && !d.ditolak && d.pengguna === "peserta" && <Pesan jenis="info">Akun Anda bukan peserta pelatihan ini.</Pesan>}
       {d && pratinjauPeserta && <Pesan jenis="info">Anda belum terdaftar sebagai peserta pelatihan ini, jadi tampilan peserta tidak ada isinya. Pilih peran lain di "Masuk sebagai", atau daftarkan diri Anda sebagai peserta di Kelola Pelatihan.</Pesan>}
       {d && sebagaiPengelola && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} sebagai={pm.peran ? LABEL_PERAN[pm.peran] : undefined} />}
+      {d && !terkunciUndangan && <KartuAgendaSesi kegiatanId={d.kegiatan_id} />}
       {d && !terkunciUndangan && <KartuIzinBuka />}
       {d && sebagaiPeserta && nada && (
         <>

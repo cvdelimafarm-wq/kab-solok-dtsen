@@ -200,7 +200,14 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       kirim(true); // waktu habis: kirim jawaban terakhir (server menilai yang tersimpan bila lewat toleransi)
     }
   });
-  useSaatLewat(status === "belum_buka" && k ? k.tes.buka_at : null, sekarang, muat, `${jenis}-buka`);
+  useSaatLewat(status === "belum_buka" && k && !k.agenda?.menunggu ? k.tes.buka_at : null, sekarang, muat, `${jenis}-buka`);
+  // (9 Nov 2026) menunggu instruktur memulai: periksa ulang tiap 4 detik sampai instruktur menekan Mulai
+  const menungguInstruktur = status === "belum_buka" && !!k?.agenda?.menunggu;
+  useEffect(() => {
+    if (!menungguInstruktur) return;
+    const t = setInterval(() => void muat(), 4000);
+    return () => clearInterval(t);
+  }, [menungguInstruktur, muat]);
   useSaatLewat(status === "buka" && k ? k.tes.tutup_at : null, sekarang, muat, `${jenis}-tutup`);
   useSaatLewat(status === "selesai" && k?.hasil_tertunda ? k.tes.tutup_at : null, sekarang, muat, `${jenis}-hasil`);
 
@@ -278,13 +285,18 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   ) : null;
 
   return (
-    <Kerangka aktif="pelatihan" judul={k.tes.judul} sub={`${tglPanjang(new Date(new Date(k.tes.buka_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10))} · dibuka ${jamWib(k.tes.buka_at)} · ditutup ${jamWib(k.tes.tutup_at)} WIB`} langkah={jenis} langkahSelesai={status === "selesai"} alurTersembunyi={mengerjakan}>
+    <Kerangka aktif="pelatihan" judul={k.tes.judul} sub={k.agenda ? (k.agenda.menunggu ? "Dimulai oleh instruktur kelas" : `Dimulai instruktur ${jamWib(k.tes.buka_at)} · jendela mulai ditutup ${jamWib(k.tes.tutup_at)} WIB`) : `${tglPanjang(new Date(new Date(k.tes.buka_at).getTime() + 7 * 3_600_000).toISOString().slice(0, 10))} · dibuka ${jamWib(k.tes.buka_at)} · ditutup ${jamWib(k.tes.tutup_at)} WIB`} langkah={jenis} langkahSelesai={status === "selesai"} alurTersembunyi={mengerjakan}>
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
 
       {/* ------------------------------------------------ belum bisa dimulai */}
       {status === "soal_belum_ada" && <Pesan jenis="peringatan">Soal {label} belum tersedia. Halaman ini otomatis menyesuaikan setelah panitia mengunggah soal.</Pesan>}
       {status === "nonaktif" && <Pesan jenis="info">Tes ini sedang tidak aktif.</Pesan>}
-      {status === "belum_buka" && (
+      {status === "belum_buka" && k.agenda?.menunggu && (
+        <Kartu judul={`Menunggu instruktur memulai ${label}`}>
+          <p className="text-[13px] leading-relaxed text-[#5B6B84]">Instruktur kelas Anda akan memulai {label} bersama-sama. Jangan tutup halaman ini; tombol Mulai muncul sendiri begitu instruktur menekan Mulai. Waktu pengerjaan {k.tes.durasi_menit} menit dihitung sejak Anda menekan Mulai di HP Anda.</p>
+        </Kartu>
+      )}
+      {status === "belum_buka" && !k.agenda?.menunggu && (
         <Kartu judul={`${label} belum dibuka`}>
           <p className="text-[13px] text-[#5B6B84]">Terbuka otomatis pukul {jamWib(k.tes.buka_at)} WIB. Jangan tutup halaman ini; tombol Mulai muncul sendiri.</p>
           <p className="mt-2 text-[28px] font-extrabold tabular-nums text-[#0F2A52]">{formatSisa(sisaBuka)}</p>
@@ -302,11 +314,15 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       {status === "buka" && !k.terkunci && (
         <Kartu judul={`${label} · ${k.jumlah_soal} soal`}>
           <ul className="list-disc space-y-1 pl-5 text-[13px] leading-relaxed">
-            <li>Waktu mengerjakan <b>{Math.min(k.tes.durasi_menit, Math.max(0, Math.floor(sisaTutup / 60)))} menit</b> sejak Anda menekan Mulai (maksimal {k.tes.durasi_menit} menit, tidak melewati pukul {jamWib(k.tes.tutup_at)} WIB).</li>
+            {k.agenda ? (
+              <li>Waktu mengerjakan <b>{k.tes.durasi_menit} menit</b> sejak Anda menekan Mulai di bawah. Waktunya sama untuk semua peserta; jendela mulai ditutup pukul {jamWib(k.tes.tutup_at)} WIB dan tidak diperpanjang.</li>
+            ) : (
+              <li>Waktu mengerjakan <b>{Math.min(k.tes.durasi_menit, Math.max(0, Math.floor(sisaTutup / 60)))} menit</b> sejak Anda menekan Mulai (maksimal {k.tes.durasi_menit} menit, tidak melewati pukul {jamWib(k.tes.tutup_at)} WIB).</li>
+            )}
             <li>Pilih satu jawaban per soal. Jawaban <b>tersimpan otomatis</b>; Anda dapat mengubahnya sebelum waktu habis.</li>
-            <li>Waktu habis atau tombol Kirim ditekan: jawaban langsung dinilai. Skor &amp; pembahasan tampil setelah sesi ditutup.</li>
+            <li>Waktu habis atau tombol Kirim ditekan: jawaban langsung dinilai. {k.agenda ? "Skor & pembahasan langsung tampil." : "Skor & pembahasan tampil setelah sesi ditutup."}</li>
           </ul>
-          <p className="mt-2 text-[13px] font-semibold text-[#8A6200]">Sesi ditutup dalam {formatSisa(sisaTutup)}.</p>
+          <p className="mt-2 text-[13px] font-semibold text-[#8A6200]">{k.agenda ? "Jendela mulai ditutup dalam" : "Sesi ditutup dalam"} {formatSisa(sisaTutup)}.</p>
           <button type="button" onClick={mulai} disabled={sibuk} className="mt-3 w-full rounded-xl bg-[#13794B] px-4 py-3 text-[15px] font-extrabold text-white shadow-sm hover:bg-[#13794B] disabled:opacity-60">
             {sibuk ? "Memulai…" : `Mulai ${label} →`}
           </button>
@@ -439,7 +455,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       {status === "selesai" && kartuUlang}
       {status === "selesai" && k.hasil && (
         <>
-          <Kartu judul={`Hasil ${label}`} ket={`Sesi ditutup ${jamWib(k.tes.tutup_at)} WIB`}>
+          <Kartu judul={`Hasil ${label}`} ket={k.agenda ? undefined : `Sesi ditutup ${jamWib(k.tes.tutup_at)} WIB`}>
             <div className="flex items-end gap-5">
               <div>
                 <p className="text-[12px] text-[#6B7A90]">Skor</p>
@@ -499,7 +515,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
             <ul className="mt-1.5 list-disc space-y-1 pl-5 text-[12.5px] leading-relaxed text-[#5B6B84]">
               <li>Waktu dan jawaban dimulai dari awal (percobaan ke-{k.percobaan + 1}{k.wajib_100 ? "" : ` dari ${k.ulang_maks}`}).</li>
               <li>Jawaban percobaan sebelumnya tetap tersimpan; {nilaiPertamaBerlaku ? "nilai yang dicatat tetap nilai percobaan pertama." : "nilai yang dipakai = skor tertinggi dari semua percobaan."}</li>
-              <li>Waktu mengerjakan paling lama {k.tes.durasi_menit} menit dan tidak melewati pukul {jamWib(k.tes.tutup_at)} WIB.</li>
+              <li>{k.agenda ? `Waktu mengerjakan ${k.tes.durasi_menit} menit sejak Anda menekan Ulangi (jendela mulai ditutup pukul ${jamWib(k.tes.tutup_at)} WIB).` : `Waktu mengerjakan paling lama ${k.tes.durasi_menit} menit dan tidak melewati pukul ${jamWib(k.tes.tutup_at)} WIB.`}</li>
             </ul>
             <div className="mt-3 flex gap-2">
               <button type="button" className={`${BTN_O} flex-1 !py-2.5`} onClick={() => setKonfirmasiUlang(false)}>

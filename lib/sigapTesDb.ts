@@ -20,7 +20,7 @@ import {
   alasanTakBisaUlang,
   bisaUlang,
   hasilBolehTampil,
-  hitungBatas,
+  batasPengerjaan,
   hitungSkor,
   nilaiLulus,
   percobaanMaks,
@@ -28,6 +28,7 @@ import {
   statusLulus,
   statusTes,
   wajibLulus,
+  type InfoAgendaTes,
   type JenisTes,
   type SesiBaris,
   type SoalLengkap,
@@ -258,6 +259,8 @@ export type KeadaanTes = {
   tuntas: boolean;
   /** (2 Nov 2026) Versi aturan nilai kegiatan ini: 2 = nilai resmi adalah percobaan PERTAMA. */
   aturan_versi: VersiAturan;
+  /** (9 Nov 2026) Tes dimulai instruktur: menunggu = belum ditekan Mulai. null/tidak ada = tes berjadwal biasa. */
+  agenda?: InfoAgendaTes | null;
   /** Hanya saat status "mengerjakan". */
   soal?: SoalPeserta[];
   jawaban?: Record<string, string>;
@@ -296,6 +299,7 @@ export async function susunKeadaan(db: Db, tes: TesBaris, akunId: number, sekara
     wajib_100: wajib100(tes),
     tuntas: tesTuntas(tes, sesi),
     aturan_versi: aturan.versi,
+    agenda: tes.agenda ?? null,
     hasil_tertunda: false,
   };
   if (wajibLulus(tes) && !wajib100(tes) && sesi?.selesai_at) {
@@ -387,7 +391,7 @@ export async function mulaiUlang(db: Db, tes: TesBaris, sesi: SesiBaris, soal: S
   const lama = sesi.skor_terbaik != null ? Number(sesi.skor_terbaik) : null;
   const baru = sesi.skor != null ? Number(sesi.skor) : null;
   const terbaik = lama === null ? baru : baru === null ? lama : Math.max(lama, baru);
-  const batas = hitungBatas(sekarang, tes.durasi_menit, tes.tutup_at);
+  const batas = batasPengerjaan(tes, sekarang);
   const { data, error } = await db
     .from("sigap_tes_sesi")
     .update({
