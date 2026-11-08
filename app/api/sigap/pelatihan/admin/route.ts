@@ -33,6 +33,7 @@ import {
 } from "@/lib/sigapTes";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
 import { nilaiResmiTes } from "@/lib/sigapAturanTes";
+import { muatKesiapan } from "@/lib/sigapKesiapanDb"; // (8 Nov 2026) kartu Kesiapan: ?bagian=kesiapan (hanya baca)
 import { FILTER_BUKAN_ADMINISTRASI, KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTes, muatTesDaftar, pastikanTesBawaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -87,6 +88,20 @@ export async function GET(req: NextRequest) {
       const tes = daftar.find((t) => t.jenis === jenis);
       if (!tes) return galat("Tes tidak ditemukan.", 404);
       return NextResponse.json({ tes, soal: await muatSoal(db, tes.id) });
+    }
+
+    // (8 Nov 2026) Kartu Kesiapan: daftar periksa kesiapan pelatihan. Hanya baca; memuat nama peserta, jadi khusus pengelola.
+    if (bagian === "kesiapan") {
+      if (!bisaKelola) return galat("Hanya pengelola yang boleh melihat kesiapan pelatihan.", 403);
+      const nSoalKes = await jumlahSoal(db, daftar.map((t) => t.id));
+      return NextResponse.json(
+        await muatKesiapan(
+          db,
+          kegiatanId,
+          daftar.map((t) => ({ jenis: t.jenis, aktif: t.aktif, buka_at: String(t.buka_at), tutup_at: String(t.tutup_at), jumlah_soal: nSoalKes.get(t.id) ?? 0 })),
+          sekarang,
+        ),
+      );
     }
 
     if (bagian === "monitoring") return NextResponse.json(await monitoring(db, kegiatanId, daftar, sekarang));

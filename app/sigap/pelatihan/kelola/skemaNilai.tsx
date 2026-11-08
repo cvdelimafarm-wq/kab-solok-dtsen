@@ -110,7 +110,7 @@ export function PanelSkemaNilai({ nilai, asal }: { nilai: PakaiSkemaNilai; asal:
       kanan={data.tersimpan ? <Chip w="ok">tersimpan</Chip> : <Chip w="wait">bawaan</Chip>}
     >
       <p className="mb-2 text-[12px] text-[#55657D]">
-        Centang komponen yang diperhitungkan lalu isi bobotnya (total 100%). Kedisiplinan dihitung otomatis dari presensi; Sikap diisi panitia di tab Monitoring.{" "}
+        Bagian ini hanya menentukan cara menghitung nilai akhir; tidak membuka atau menayangkan Pretest/Posttest (itu diatur di kartu tesnya masing-masing, saklar "Tampilkan tes ke peserta"). Centang komponen yang diperhitungkan lalu isi bobotnya (total 100%). Kedisiplinan dihitung otomatis dari presensi; Sikap diisi panitia di tab Monitoring.{" "}
         {asal === "soal" ? "Pengaturan yang sama juga ada di Monitoring › Pretest & Posttest." : "Pengaturan yang sama juga ada di Soal & Jadwal."} Skema ini otomatis dipakai tab Administrasi dan Laporan Pelatihan.
       </p>
       <div className="grid gap-2 sm:grid-cols-3">

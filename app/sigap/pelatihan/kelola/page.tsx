@@ -15,6 +15,7 @@ import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, T
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
+import KesiapanKartu from "./kesiapan"; // (8 Nov 2026) kartu Kesiapan di atas tab Persiapan: daftar periksa + tombol Perbaiki ke tab/sub yang tepat
 import PersiapanGabung from "./persiapanGabung"; // (2 Nov 2026) tab Persiapan: Pengaturan (tampilan peserta, ketentuan, absen, aturan nilai) + Instrumen (unggah kuesioner, pedoman, PPT)
 import TimPesertaKelola from "./hierarki"; // (2 Nov 2026) tab Tim & Peserta: hierarki + kelas
 import KendalaKelola from "./kendala"; // (3 Nov 2026) tab Kendala: petugas menolak / mundur -> ganti, kosongkan, atau alihkan
@@ -47,6 +48,8 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const keInputWib = (iso: string) => new Date(new Date(iso).getTime() + 7 * 3_600_000).toISOString().slice(0, 16);
 /** "YYYY-MM-DDTHH:mm" (WIB) -> epoch ms. */
 const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
+/** Waktu tampil "9 Nov 07.00" menurut WIB dari ISO. */
+const tampilWaktuWib = (iso: string) => { const d = new Date(new Date(iso).getTime() + 7 * 3_600_000); const bln = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"][d.getUTCMonth()]; return `${d.getUTCDate()} ${bln} ${String(d.getUTCHours()).padStart(2, "0")}.${String(d.getUTCMinutes()).padStart(2, "0")}`; };
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
 // (2 Nov 2026) 10 tab dirapikan menjadi 7. Alamat lama (?tab=pengumuman, rapat, kuispra, kelas, ...) tetap dikenali lewat PETA_TAB_LAMA.
@@ -64,6 +67,8 @@ const PETA_TAB_LAMA: Record<string, { tab: TabK; sub?: string }> = {
 
 export default function KelolaPelatihan() {
   const [tab, setTab] = useState<TabK>("persiapan");
+  // (8 Nov 2026) navKey: naik tiap tombol "Perbaiki" dipakai, supaya bagian (sub) di tab tujuan dipasang ulang dan membaca ?sub= yang baru.
+  const [navKey, setNavKey] = useState(0);
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   // (31 Okt 2026) "daftar" = satu kartu per survei (halaman awal); "kelola" = tab-tab pelatihan pada survei terpilih, dengan dropdown Survei (+ Pelatihan bila lebih dari satu).
@@ -172,6 +177,27 @@ export default function KelolaPelatihan() {
     muat();
   }, [kegId, surveiKode, mode, muat]);
 
+  /** Tombol "Perbaiki" di kartu Kesiapan: pindah tab, set ?sub=, lalu gulir ke atas. */
+  const bukaTab = useCallback((t: string, sub?: string) => {
+    if (!(TAB_SAH as string[]).includes(t)) return;
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.set("tab", t);
+      if (sub) u.searchParams.set("sub", sub);
+      else u.searchParams.delete("sub");
+      window.history.replaceState(null, "", u.toString());
+    } catch {
+      /* abaikan */
+    }
+    setNavKey((n) => n + 1);
+    setTab(t as TabK);
+    try {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      /* abaikan */
+    }
+  }, []);
+
   if (mode !== "kelola")
     return (
       <Bingkai<TabK> aktif="pelatihan_kelola" kecil="SIGAP · Kelola Pelatihan" jejak={["Pelatihan", "Kelola"]} judul="Kelola Pelatihan" sub="Pilih survei yang pelatihannya ingin dikelola">
@@ -236,8 +262,13 @@ export default function KelolaPelatihan() {
           </div>
         </div>
       )}
-      {ringkas && tab === "persiapan" && <PersiapanGabung key={kegId ?? 0} />}
-      {ringkas && tab === "tim" && <TimPesertaKelola key={kegId ?? 0} />}
+      {ringkas && tab === "persiapan" && (
+        <>
+          {ringkas.boleh_kelola && <KesiapanKartu key={`s${kegId ?? 0}`} onBuka={bukaTab} />}
+          <PersiapanGabung key={`${kegId ?? 0}-${navKey}`} />
+        </>
+      )}
+      {ringkas && tab === "tim" && <TimPesertaKelola key={`${kegId ?? 0}-${navKey}`} />}
       {ringkas && tab === "kendala" && (
         <>
           <KendalaKelola key={kegId ?? 0} />
@@ -246,7 +277,7 @@ export default function KelolaPelatihan() {
       )}
       {ringkas && tab === "harikerja" && <HariKerjaKelola key={kegId ?? 0} />}
       {ringkas && tab === "kuis" && <KuisRapatKelola key={kegId ?? 0} kegiatanId={kegId} bisaKelola={ringkas.boleh_kelola} />}
-      {ringkas && tab === "notifikasi" && <KomunikasiKelola key={kegId ?? 0} />}
+      {ringkas && tab === "notifikasi" && <KomunikasiKelola key={`${kegId ?? 0}-${navKey}`} />}
       {ringkas && tab === "monitoring" && <MonitoringBagian key={kegId ?? 0} />}
       {ringkas && tab === "administrasi" && <Administrasi key={kegId ?? 0} />}
       {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}
@@ -297,6 +328,26 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
   }, [kunciJadwal]);
 
   const terkunci = tes.jumlah_sesi > 0;
+
+  // (8 Nov 2026) Status tampil yang jujur: lencana lama "Siap" hanya berarti soal ada, padahal saklar "Tes aktif" yang menentukan tes terlihat atau tidak.
+  // Syarat tampil bagi peserta = soal ada + jadwal ada + saklar tampil menyala. Yang dibaca di sini adalah nilai TERSIMPAN (bukan isian yang belum disimpan).
+  const adaSoalTes = tes.jumlah_soal > 0;
+  const bukaMs = Date.parse(tes.buka_at);
+  const tutupMs = Date.parse(tes.tutup_at);
+  const adaJadwalTes = Number.isFinite(bukaMs) && Number.isFinite(tutupMs) && tutupMs > bukaMs;
+  const sekarangMs = Date.now();
+  const belumSimpan = aktif !== tes.aktif || buka !== keInputWib(tes.buka_at) || tutup !== keInputWib(tes.tutup_at) || durasi !== String(tes.durasi_menit);
+  const lencanaTes: { w: "ok" | "wait" | "bad" | "mut"; teks: string } = !adaSoalTes
+    ? { w: "bad", teks: "Soal kosong" }
+    : !adaJadwalTes
+      ? { w: "bad", teks: "Jadwal belum diisi" }
+      : !tes.aktif
+        ? { w: "wait", teks: "Belum tampil ke peserta" }
+        : sekarangMs < bukaMs
+          ? { w: "ok", teks: "Tampil, belum dibuka" }
+          : sekarangMs > tutupMs
+            ? { w: "mut", teks: "Sudah ditutup" }
+            : { w: "ok", teks: "Sedang dibuka" };
 
   async function muatTersimpan() {
     try {
@@ -393,8 +444,19 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
     <Kartu
       judul={label}
       ket={tes.jumlah_soal > 0 ? `${tes.jumlah_soal} soal` : "belum ada soal"}
-      kanan={terkunci ? <Chip w="wait">{tes.jumlah_sesi} peserta sudah memulai</Chip> : tes.jumlah_soal > 0 ? <Chip w="ok">Siap</Chip> : <Chip w="bad">Soal kosong</Chip>}
+      kanan={terkunci ? <Chip w="wait">{tes.jumlah_sesi} peserta sudah memulai</Chip> : <Chip w={lencanaTes.w}>{lencanaTes.teks}</Chip>}
     >
+      {/* Syarat tampil bagi peserta (nilai tersimpan) */}
+      <div className="mb-3 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2 text-[12.5px]">
+        <div className="mb-1 font-bold text-[#1F2A37]">Syarat tes tampil bagi peserta</div>
+        <ul className="m-0 grid list-none gap-0.5 p-0">
+          <li><span className={adaSoalTes ? "font-bold text-[#157F4B]" : "font-bold text-[#B42329]"}>{adaSoalTes ? "✓" : "✗"}</span> Soal: {adaSoalTes ? `${tes.jumlah_soal} soal` : "belum ada, unggah di bawah"}</li>
+          <li><span className={adaJadwalTes ? "font-bold text-[#157F4B]" : "font-bold text-[#B42329]"}>{adaJadwalTes ? "✓" : "✗"}</span> Jadwal: {adaJadwalTes ? `${tampilWaktuWib(tes.buka_at)} s.d. ${tampilWaktuWib(tes.tutup_at)} WIB` : "belum diisi"}</li>
+          <li><span className={tes.aktif ? "font-bold text-[#157F4B]" : "font-bold text-[#B42329]"}>{tes.aktif ? "✓" : "✗"}</span> Tampilkan ke peserta: {tes.aktif ? "ya (saklar menyala)" : "tidak, saklar di bawah masih mati"}</li>
+        </ul>
+        <p className="m-0 mt-1 text-[11.5px] text-[#7B8794]">Ketiganya harus ✓. Skema nilai akhir di bawah hanya cara menghitung nilai; ia tidak membuka atau menayangkan tes.</p>
+        {belumSimpan && <p className="m-0 mt-1 text-[11.5px] font-semibold text-[#8A6200]">Ada perubahan yang belum disimpan. Tekan Simpan jadwal agar berlaku.</p>}
+      </div>
       {/* Jadwal */}
       <div className="grid grid-cols-2 gap-2.5">
         <label className="col-span-2 text-[12px] text-[#7B8794] sm:col-span-1">
@@ -410,7 +472,7 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
           <input type="datetime-local" className={`${INPUT} mt-0.5 w-full`} value={tutup} disabled={!bisaKelola} onChange={(e) => setTutup(e.target.value)} />
         </label>
         <label className="col-span-2 flex items-center gap-2 pt-4 text-[12.5px] sm:col-span-1">
-          <input type="checkbox" checked={aktif} disabled={!bisaKelola} onChange={(e) => setAktif(e.target.checked)} /> Tes aktif (tampil bagi peserta)
+          <input type="checkbox" checked={aktif} disabled={!bisaKelola} onChange={(e) => setAktif(e.target.checked)} /> Tampilkan tes ke peserta (saklar utama; berlaku setelah Simpan jadwal)
         </label>
         {adaSetelan100 && (
           <div className="col-span-2 rounded-lg border border-[#EDF0F4] bg-[#F8FAFC] px-3 py-2">
