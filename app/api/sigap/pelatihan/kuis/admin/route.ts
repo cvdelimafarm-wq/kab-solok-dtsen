@@ -6,7 +6,7 @@
 // GET ?bagian=daftar                   -> bank kuis (jumlah soal, topik) + pengaturan 4 kelas + riwayat ruang + izin
 // GET ?bagian=soal&kuis_id=            -> soal lengkap dgn kunci, topik, penjelasan (izin kelola)
 // GET ?bagian=ruang&kelas=N | &ruang_id= -> keadaan layar host
-// GET ?bagian=live                     -> ringkasan live keempat kelas (Pantau Live)
+// GET ?bagian=live                     -> ringkasan live semua kelas (Pantau Live)
 // GET ?bagian=rekap&ruang_id=          -> rekap per peserta + statistik per soal (+ kunci, penjelasan)
 // POST {aksi:"buat_kuis", judul} | {aksi:"ubah_judul", kuis_id, judul} | {aksi:"hapus_kuis", kuis_id} | {aksi:"duplikat_kuis", kuis_id}
 //      {aksi:"simpan_soal", kuis_id, soal:[{nomor,teks,opsi:[{kode,teks}],kunci,detik,topik,penjelasan}]}

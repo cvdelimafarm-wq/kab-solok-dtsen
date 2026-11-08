@@ -242,7 +242,7 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
               </div>
               {p.mode === "acak" && (
                 <div className="mt-2">
-                  <Sakelar nilai={p.dahulukan_belum_dipakai} onUbah={(v) => ubahP({ dahulukan_belum_dipakai: v })} label="Dahulukan soal yang belum dipakai kelas lain" ket="Agar keempat kelas mendapat soal berbeda selama bank soal mencukupi." mati={!bolehEdit} />
+                  <Sakelar nilai={p.dahulukan_belum_dipakai} onUbah={(v) => ubahP({ dahulukan_belum_dipakai: v })} label="Dahulukan soal yang belum dipakai kelas lain" ket="Agar setiap kelas mendapat soal berbeda selama bank soal mencukupi." mati={!bolehEdit} />
                 </div>
               )}
               {p.mode === "manual" && <p className="mt-2 text-[12.5px] text-[#7B8794]">Centang soal yang akan dimainkan. Jumlah soal mengikuti jumlah yang dicentang.</p>}
