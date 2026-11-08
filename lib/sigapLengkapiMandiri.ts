@@ -103,3 +103,6 @@ export function susunLaporanSls(mentah: unknown, master: Set<string>): { error: 
   if (jumlah > MAKS_ANGKA_SLS) return { error: `Jumlah seluruhnya melebihi ${MAKS_ANGKA_SLS}. Periksa kembali angkanya.` };
   return { rincian, jumlah };
 }
+
+/** Tanda pada tiap SLS di sigap_realisasi.lokasi: laporan ini diisi manual untuk melengkapi hari terlewat dan TIDAK dihitung sebagai poin kinerja. */
+export const SUMBER_LAPORAN_MANUAL = "manual_susulan";

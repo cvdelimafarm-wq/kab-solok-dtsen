@@ -29,6 +29,7 @@ import BarisPengawasan from "@/app/sigap/BarisPengawasan";
 import BarisLangkah from "@/app/sigap/BarisLangkah";
 import ModalBlokirTranslok from "@/app/sigap/translok/ModalBlokirTranslok";
 import KartuUnblockMasuk from "@/app/sigap/translok/KartuUnblockMasuk";
+import KartuLengkapiAnggota from "@/app/sigap/translok/KartuLengkapiAnggota"; // (8 Nov 2026) PML/admin melengkapi laporan SLS anggota
 import KartuSusulan from "@/app/sigap/translok/KartuSusulan"; // (3 Nov 2026) Ajukan susulan: petugas mengajukan, 2 atasan terdekat memutuskan
 import LembarSusulan from "@/app/sigap/translok/LembarSusulan";
 import LengkapiLaporanSls from "@/app/sigap/translok/LengkapiLaporanSls"; // (8 Nov 2026) lengkapi laporan hari terlewat: form rincian SLS
@@ -634,6 +635,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
               return w ? <BarisPengawasan kode={bar.kode} peran={bar.peran} label={w.label} href={w.href} /> : null;
             })()}
             <KartuUnblockMasuk token={token} kegiatanId={pen.kegiatan.id} />
+            {pakaiFormSls(pen.kegiatan.kode) && <KartuLengkapiAnggota token={token} kegiatanId={pen.kegiatan.id} master={data.lokasi_opsi.master} />}
             <KartuSusulan
               token={token}
               penugasanId={pen.id}

@@ -10,7 +10,8 @@
 // POST { aksi:"hari_kerja", penugasan_id, tanggal:[...] }   -> simpan rencana hari kerja (daftar lengkap); hari lewat yang kosong boleh dilepas (21 Okt 2026)
 // POST { aksi:"realisasi", penugasan_id, tanggal, lokasi[], jumlah_realisasi, kendala }
 
-import { MAKS_FOTO_KURANG_MANDIRI, bolehLengkapiMandiri, hitungKekurangan, kunciSls, olehMelepas, olehMengembalikan, pakaiFormSls, susunLaporanSls, tanggalDapatDipulihkan, type BarisRiwayat } from "@/lib/sigapLengkapiMandiri";
+import { MAKS_FOTO_KURANG_MANDIRI, bolehLengkapiMandiri, hitungKekurangan, olehMelepas, olehMengembalikan, pakaiFormSls, tanggalDapatDipulihkan, type BarisRiwayat } from "@/lib/sigapLengkapiMandiri";
+import { simpanLaporanSlsManual } from "@/lib/sigapLaporanSlsDb";
 import { NextRequest, NextResponse } from "next/server";
 import { galatServer } from "@/lib/sigapGalat";
 import { createClient } from "@/lib/supabaseServer";
@@ -315,23 +316,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       }
       // (7 Okt 2026) kegiatan tanpa laporan (mis. pelatihan) -- cukup dokumentasi
       if (!akses.penugasan.kegiatan.wajib_laporan) return NextResponse.json({ error: "Kegiatan ini tidak memerlukan laporan harian; cukup unggah dokumentasi." }, { status: 400 });
-      // (8 Nov 2026) Laporan hari terlewat kegiatan Pascabencana: rincian per SLS (terdampak / tidak terdampak / tidak ditemukan), dipilih dari master SLS kabupaten.
+      // (8 Nov 2026) Laporan hari terlewat kegiatan Pascabencana: rincian per SLS (terdampak / tidak terdampak / tidak ditemukan). Lihat lib/sigapLaporanSlsDb.ts.
       if (akses.mandiri && pakaiFormSls(akses.penugasan.kegiatan.kode)) {
-        const wilMaster = await ambilWilayahRingkas(db);
-        const hasilSls = susunLaporanSls(body?.rincian_sls, new Set(wilMaster.map((w) => kunciSls({ kecamatan: w.kecamatan, nagari: w.nagari, jorong: w.sls }))));
-        if ("error" in hasilSls) return NextResponse.json({ error: hasilSls.error }, { status: 400 });
-        const kendalaSls = typeof body?.kendala === "string" ? body.kendala.trim().slice(0, 1000) : "";
-        const { error: eSls } = await db.from("sigap_realisasi").insert({
-          penugasan_id: akses.penugasan.id,
-          kegiatan_id: akses.penugasan.kegiatan.id,
-          tanggal: akses.tanggal,
-          lokasi: hasilSls.rincian.map((r) => ({ kecamatan: r.kecamatan, nagari: r.nagari, jorong: r.jorong, idsubsls: null, terdampak: r.terdampak, tidak_terdampak: r.tidak_terdampak, tidak_ditemukan: r.tidak_ditemukan })),
-          jumlah_realisasi: hasilSls.jumlah,
-          kendala: kendalaSls || null,
-          diperbarui_at: new Date().toISOString(),
-        });
-        if (eSls) return galatServer("[api/sigap/translok POST]", eSls);
-        await db.from("sigap_audit").insert({ akun_id: akun.id, aksi: "translok.lengkapi_laporan", detail: { penugasan_id: akses.penugasan.id, tanggal: akses.tanggal, jumlah: hasilSls.jumlah, sls: hasilSls.rincian.length } });
+        const hasilSls = await simpanLaporanSlsManual(db, { penugasanId: akses.penugasan.id, kegiatanId: akses.penugasan.kegiatan.id, tanggal: akses.tanggal }, { rincian_sls: body?.rincian_sls, kendala: body?.kendala }, akun.id, akun.id);
+        if ("error" in hasilSls) return NextResponse.json({ error: hasilSls.error }, { status: hasilSls.status });
         return NextResponse.json({ ok: true });
       }
       const lokasiRaw: unknown[] = Array.isArray(body?.lokasi) ? body.lokasi : [];

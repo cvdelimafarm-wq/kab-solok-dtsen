@@ -21,12 +21,15 @@ export default function LengkapiLaporanSls({
   tanggal,
   master,
   onTersimpan,
+  atasNama = false,
 }: {
   token: string;
   penugasanId: number;
   tanggal: string;
   master: Master[];
   onTersimpan: () => Promise<void>;
+  /** PML / Supervisor / admin mengisi atas nama anggotanya (endpoint /lengkapi); bawaan: petugas mengisi sendiri */
+  atasNama?: boolean;
 }) {
   const [baris, setBaris] = useState<Baris[]>([{ id: 1, sls: "", terdampak: "", tidak_terdampak: "", tidak_ditemukan: "" }]);
   const [kendala, setKendala] = useState("");
@@ -63,10 +66,10 @@ export default function LengkapiLaporanSls({
         const m = master.find((x) => kunciSls(x) === b.sls)!;
         return { kecamatan: m.kecamatan, nagari: m.nagari, jorong: m.jorong, terdampak: angka(b.terdampak), tidak_terdampak: angka(b.tidak_terdampak), tidak_ditemukan: angka(b.tidak_ditemukan) };
       });
-      const res = await fetch(`/api/sigap/translok/${token}`, {
+      const res = await fetch(atasNama ? `/api/sigap/translok/${encodeURIComponent(token)}/lengkapi` : `/api/sigap/translok/${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aksi: "realisasi", penugasan_id: penugasanId, tanggal, rincian_sls, kendala }),
+        body: JSON.stringify({ aksi: atasNama ? "laporan_sls" : "realisasi", penugasan_id: penugasanId, tanggal, rincian_sls, kendala }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Gagal menyimpan laporan.");
