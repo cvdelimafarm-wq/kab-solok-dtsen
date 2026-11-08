@@ -73,7 +73,7 @@ export function PanelUsulanSampel({ sumber, isi, ubah, mati }: { sumber: SumberS
               <span className="font-semibold text-[#0F2A52]" data-testid="usulan-hasil">Usulan: PPL {usul.ppl}, PML {usul.pml}{usul.sampel > 0 ? `, sampel ${usul.sampel}` : ""}.</span>
               <label className="flex items-center gap-2 text-[12.5px]">
                 <input type="checkbox" className="h-5 w-5 accent-[#1F5FD1]" checked={beban} disabled={mati || usul.sampel === 0} onChange={(e) => setBeban(e.target.checked)} />
-                Isi juga "Jumlah sampel" pada Beban tugas lapangan
+                Isi juga &quot;Jumlah sampel&quot; pada Beban tugas lapangan
               </label>
               <div>
                 <button type="button" className={tombolKecil} disabled={mati} onClick={terapkan}>Terapkan usulan</button>
