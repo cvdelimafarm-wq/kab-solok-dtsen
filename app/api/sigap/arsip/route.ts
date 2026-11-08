@@ -9,7 +9,7 @@
 // GET  ?bagian=pengaturan                                  -> { kode[], fungsi[], sering[], jenis[], register[], kegiatan_semua[], unit }
 // POST { aksi:"ambil", jenis, kka?, tanggal?, perihal?, kegiatan_id? }                 -> { nomor, ... }  (mengambil nomor untuk surat yang dibuat di luar SIGAP)
 // POST { aksi:"ambil_paket", paket, butir:[{kode, tanggal}] }                           -> { hasil[] }     (nomor dokumen pengadaan barang/jasa satu paket; idempoten per paket+butir)
-// POST { aksi:"catat_luar", jenis, urut, tanggal, perihal?, kka?, kegiatan_id?, nomor? } -> { nomor }      (mencatat nomor yang sudah terbit di luar SIGAP)
+// POST { aksi:"catat_luar", jenis, urut, tanggal, perihal?, kka?, kegiatan_id?, nomor?, pengecualian?, alasan_pengecualian? } -> { nomor }      (mencatat nomor yang sudah terbit di luar SIGAP)
 // POST { aksi:"batalkan", id, alasan }                     -> { nomor }
 // POST { aksi:"atur_awal", register, tahun, terakhir }     -> { sebelumnya }   (hanya naik)
 // POST { aksi:"simpan_kode", kode, nama, kelompok, catatan?, aktif }   (kode resmi Perka hanya bisa dinonaktifkan; kode tambahan boleh dibuat)
@@ -124,9 +124,9 @@ export async function POST(req: NextRequest) {
       const urut = bulat(b.urut);
       const tanggal = teks(b.tanggal, 10);
       if (!jenis || !urut || !tanggal) return galat("Jenis dokumen, nomor urut, dan tanggal surat wajib diisi.");
-      const r = await catatLuar(db, { jenis, urut, tanggal, perihal: teks(b.perihal, 300), kka: teks(b.kka, 20), kegiatanId: bulat(b.kegiatan_id), nomorTeks: teks(b.nomor, 80), akunId: sesi.akunId, nama });
+      const r = await catatLuar(db, { jenis, urut, tanggal, perihal: teks(b.perihal, 300), kka: teks(b.kka, 20), kegiatanId: bulat(b.kegiatan_id), nomorTeks: teks(b.nomor, 80), akunId: sesi.akunId, nama, pengecualian: b.pengecualian === true, alasanPengecualian: teks(b.alasan_pengecualian, 300) });
       if (!r.ok) return galat(r.pesan, r.status);
-      await catatAudit(db, sesi.akunId, "arsip.catat_luar", { id: r.id, nomor: r.nomor, jenis });
+      await catatAudit(db, sesi.akunId, "arsip.catat_luar", { id: r.id, nomor: r.nomor, jenis, pengecualian: b.pengecualian === true });
       return NextResponse.json({ ok: true, id: r.id, nomor: r.nomor });
     }
 

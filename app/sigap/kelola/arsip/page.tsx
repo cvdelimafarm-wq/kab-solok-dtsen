@@ -163,7 +163,7 @@ function Buku({ tahun, setTahun, peng, versi, kelola, onKelola, onUbah }: { tahu
             <tbody>
               {buku.baris.map((b: BarisNomor) => (
                 <tr key={b.id} className={b.status === "batal" ? "opacity-60" : undefined}>
-                  <td className={`${TD} whitespace-nowrap font-semibold ${b.status === "batal" ? "line-through" : ""}`}>{b.nomor}</td>
+                  <td className={`${TD} whitespace-nowrap font-semibold ${b.status === "batal" ? "line-through" : ""}`}>{b.nomor}{b.pengecualian && <> <Chip w="wait" title={b.alasan_pengecualian ?? undefined}>Pengecualian</Chip></>}</td>
                   <td className={TD}>{namaJenis.get(b.jenis) ?? b.jenis}</td>
                   <td className={`${TD} whitespace-nowrap`}>{b.tanggal}</td>
                   <td className={`${TD} max-w-[320px]`}>{b.perihal ?? "–"}{b.kegiatan_id ? <span className="block text-[11.5px] text-[#5B6B84]">{namaKeg.get(b.kegiatan_id) ?? `Kegiatan ${b.kegiatan_id}`}</span> : null}</td>

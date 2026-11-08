@@ -136,6 +136,8 @@ function FormLuar({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
   const [tanggal, setTanggal] = useState(hariIniWib());
   const [perihal, setPerihal] = useState("");
   const [kegiatan, setKegiatan] = useState("");
+  const [pengecualian, setPengecualian] = useState(false);
+  const [alasanPeng, setAlasanPeng] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -147,7 +149,7 @@ function FormLuar({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
   const tahunBeda = !!urai && !!tahunTgl && urai.tahun !== tahunTgl;
   const urutAkhir = urai ? urai.urut : Number(urut);
   const kkaAkhir = kka || (urai?.kka ?? "");
-  const siap = !!j && !!tahunTgl && Number.isInteger(urutAkhir) && urutAkhir > 0 && !tahunBeda && (!pakaiKka || !!(kkaAkhir || j.kka_bawaan)) && (!kkaAkhir || kkaSah(kkaAkhir));
+  const siap = !!j && !!tahunTgl && Number.isInteger(urutAkhir) && urutAkhir > 0 && !tahunBeda && (!pakaiKka || !!(kkaAkhir || j.kka_bawaan)) && (!kkaAkhir || kkaSah(kkaAkhir)) && (!pengecualian || alasanPeng.trim().length >= 5);
 
   function tempel(v: string) {
     setNomorTeks(v);
@@ -164,11 +166,13 @@ function FormLuar({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
     setGalat(null);
     setOk(null);
     try {
-      const r = await aksiA<{ nomor: string }>("catat_luar", { jenis: j.kode, urut: urutAkhir, tanggal, perihal: perihal.trim() || undefined, kka: kkaAkhir || undefined, kegiatan_id: kegiatan ? Number(kegiatan) : undefined, nomor: urai ? nomorTeks.trim() : undefined });
-      setOk(`Nomor ${r.nomor} tercatat.`);
+      const r = await aksiA<{ nomor: string }>("catat_luar", { jenis: j.kode, urut: urutAkhir, tanggal, perihal: perihal.trim() || undefined, kka: kkaAkhir || undefined, kegiatan_id: kegiatan ? Number(kegiatan) : undefined, nomor: urai ? nomorTeks.trim() : undefined, pengecualian: pengecualian || undefined, alasan_pengecualian: pengecualian ? alasanPeng.trim() : undefined });
+      setOk(`Nomor ${r.nomor} tercatat${pengecualian ? " sebagai pengecualian (di luar rangkaian)" : ""}.`);
       setNomorTeks("");
       setUrut("");
       setPerihal("");
+      setPengecualian(false);
+      setAlasanPeng("");
       onUbah();
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
@@ -209,6 +213,15 @@ function FormLuar({ peng, jenisAktif, kodeAktif, onUbah }: Prop) {
         <label className={`${LABEL} sm:col-span-2`}>Perihal
           <input className={INPUT} value={perihal} maxLength={300} onChange={(e) => setPerihal(e.target.value)} />
         </label>
+        <label className="flex items-start gap-2 text-[13px] text-[#1F2A37] sm:col-span-2">
+          <input type="checkbox" className="mt-0.5" checked={pengecualian} onChange={(e) => setPengecualian(e.target.checked)} />
+          <span>Di luar rangkaian (pengecualian): nomor ini sengaja tidak mengikuti urutan buku, jadi tidak dihitung sebagai nomor terlewat.</span>
+        </label>
+        {pengecualian && (
+          <label className={`${LABEL} sm:col-span-2`}>Alasan pengecualian * (minimal 5 huruf)
+            <input className={INPUT} value={alasanPeng} maxLength={300} placeholder="mis. nomor undangan dipakai lebih dulu di luar rangkaian buku" onChange={(e) => setAlasanPeng(e.target.value)} />
+          </label>
+        )}
       </div>
       <div className="mt-3">
         <button type="button" className={BTN} disabled={!siap || sibuk} onClick={() => void catat()}>{sibuk ? "Mencatat…" : "Catat nomor"}</button>

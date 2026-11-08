@@ -44,13 +44,18 @@ export async function ambilNomor(db: Db, p: MasukanAmbil): Promise<HasilAmbil> {
   return { ok: true, id: Number(d.id), nomor: d.nomor, urut: Number(d.urut), tahun: Number(d.tahun), kka: d.kka ?? null, sudah_ada: !!d.sudah_ada };
 }
 
-export type MasukanLuar = { jenis: string; urut: number; tanggal: string; perihal?: string | null; kka?: string | null; kegiatanId?: number | null; nomorTeks?: string | null; akunId: number; nama: string };
+export type MasukanLuar = { jenis: string; urut: number; tanggal: string; perihal?: string | null; kka?: string | null; kegiatanId?: number | null; nomorTeks?: string | null; akunId: number; nama: string;
+  /** (8 Nov 2026) Nomor di luar rangkaian (pengecualian): tidak ikut hitungan nomor terlewat. Wajib beralasan. */
+  pengecualian?: boolean; alasanPengecualian?: string | null };
 
 export async function catatLuar(db: Db, p: MasukanLuar): Promise<{ ok: true; id: number; nomor: string } | Galat> {
   if (p.kka && !kkaSah(p.kka)) return { ok: false, status: 400, pesan: "Kode arsip tidak sah (contoh yang benar: VS.330)." };
+  const alasanPeng = (p.alasanPengecualian ?? "").trim();
+  if (p.pengecualian && alasanPeng.length < 5) return { ok: false, status: 400, pesan: "Nomor pengecualian wajib beralasan (minimal 5 huruf)." };
   const { data, error } = await db.rpc("arsip_catat_luar", {
     p_jenis: p.jenis, p_urut: p.urut, p_tanggal: p.tanggal, p_perihal: p.perihal ?? null, p_kka: p.kka ?? null,
     p_kegiatan: p.kegiatanId ?? null, p_oleh: p.akunId, p_nama: p.nama, p_nomor: p.nomorTeks ?? null,
+    p_pengecualian: p.pengecualian === true, p_alasan_pengecualian: p.pengecualian ? alasanPeng : null,
   });
   if (error) return { ok: false, status: 400, pesan: pesanDariDb(error.message) };
   const d = data as { id: number; nomor: string };
@@ -75,13 +80,14 @@ export async function aturAwal(db: Db, register: string, tahun: number, terakhir
 export type BarisNomor = {
   id: number; jenis: string; register: string; tahun: number; urut: number; nomor: string; kka: string | null; tanggal: string; perihal: string | null;
   kegiatan_id: number | null; sumber: string; status: string; alasan_batal: string | null; rujukan: string | null; dibuat_nama: string | null; dibuat_at: string;
+  pengecualian: boolean; alasan_pengecualian: string | null;
 };
 
 export type FilterBuku = { tahun?: number | null; jenis?: string | null; status?: string | null; cari?: string | null; sumber?: string | null; limit?: number };
 
 export async function muatBuku(db: Db, f: FilterBuku): Promise<{ ok: true; baris: BarisNomor[]; terpotong: boolean } | Galat> {
   const batas = Math.min(Math.max(f.limit ?? 500, 1), 2000);
-  let q = db.from("arsip_nomor").select("id, jenis, register, tahun, urut, nomor, kka, tanggal, perihal, kegiatan_id, sumber, status, alasan_batal, rujukan, dibuat_nama, dibuat_at");
+  let q = db.from("arsip_nomor").select("id, jenis, register, tahun, urut, nomor, kka, tanggal, perihal, kegiatan_id, sumber, status, alasan_batal, rujukan, dibuat_nama, dibuat_at, pengecualian, alasan_pengecualian");
   if (f.tahun) q = q.eq("tahun", f.tahun);
   if (f.jenis) q = q.eq("jenis", f.jenis);
   if (f.status) q = q.eq("status", f.status);
@@ -101,13 +107,14 @@ export type Kembar = { register: string; tahun: number; urut: number; jumlah: nu
 export async function muatRingkas(db: Db, tahun: number): Promise<{ ok: true; counter: Counter[]; celah: Celah[]; kembar: Kembar[]; tahun_ada: number[] } | Galat> {
   const [c, n, k, t] = await Promise.all([
     db.from("arsip_counter").select("register, tahun, terakhir").order("tahun", { ascending: false }).order("register"),
-    db.from("arsip_nomor").select("register, urut").eq("tahun", tahun).eq("status", "terpakai").limit(20000),
+    db.from("arsip_nomor").select("register, urut").eq("tahun", tahun).eq("status", "terpakai").eq("pengecualian", false).limit(20000),
     db.from("arsip_v_kembar").select("register, tahun, urut, jumlah, nomor").eq("tahun", tahun).order("urut").limit(500),
     db.from("arsip_counter").select("tahun"),
   ]);
   const e = c.error ?? n.error ?? k.error ?? t.error;
   if (e) return { ok: false, status: 500, pesan: pesanDariDb(e.message) };
   // Nomor terlewat dihitung dari nomor tercatat terkecil sampai nomor terakhir; nomor sebelum buku dimulai (surat lama di luar SIGAP) tidak dihitung.
+  // Nomor bertanda pengecualian (di luar rangkaian) dikeluarkan dari hitungan ini.
   const urutPer = new Map<string, number[]>();
   for (const x of (n.data ?? []) as { register: string; urut: number }[]) {
     const l = urutPer.get(x.register) ?? [];
