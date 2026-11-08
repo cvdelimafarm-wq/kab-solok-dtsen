@@ -66,7 +66,7 @@ describe("komponen langkah pelatihan", () => {
     expect(h).toContain("4 · Presensi");
     expect(h).toContain('href="/sigap/pelatihan?langkah=hadir"');
   });
-  it("navigasi: langkah lepas (presensi, foto) tidak diberi catatan "belum bisa dikerjakan"", () => {
+  it("navigasi: langkah lepas (presensi, foto) tidak diberi catatan peringatan belum bisa dikerjakan", () => {
     // (8 Nov 2026) Presensi dan Foto Translok lepas dari urutan: boleh dikerjakan kapan saja, jadi tidak ada peringatan "belum bisa dikerjakan"
     expect(renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "hadir" }))).not.toContain("belum bisa dikerjakan");
     expect(renderToStaticMarkup(e(NavPelatihan, { daftar, aktif: "pretest" }))).not.toContain("belum bisa dikerjakan");
