@@ -619,3 +619,59 @@ export type DataObjekSaya = {
   objek: ObjekSaya[];
   rekap: RekapHasilObjek;
 };
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// Tampilan HP: pengelompokan objek per wilayah / per PPL, teks hasil, pembaruan lokal sesudah mencatat
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+export type KelompokObjek = { kunci: string; judul: string; objek: ObjekSaya[]; rekap: RekapHasilObjek };
+export type KelompokPplObjek = { ppl_id: number | null; ppl_nama: string; rekap: RekapHasilObjek; kelompok: KelompokObjek[] };
+
+/** Persentase objek yang sudah punya hasil (apa pun hasilnya). */
+export const persenHasil = (r: Pick<RekapHasilObjek, "objek" | "belum">): number => (r.objek > 0 ? Math.round(((r.objek - r.belum) / r.objek) * 100) : 0);
+
+/** Judul baris: nama sampel, atau "N sampel" untuk baris berjumlah. */
+export const judulObjek = (o: Pick<ObjekSaya, "nama_sampel" | "jumlah">): string => o.nama_sampel ?? `${o.jumlah} sampel`;
+
+/** Kelompok per wilayah (model 2) menurut kode; model 3 (tanpa wilayah) satu kelompok. Urutan: judul wilayah, lalu urutan berkas. */
+export function kelompokWilayahObjek(objek: readonly ObjekSaya[], berwilayah: boolean, judulTunggal = "Sampel saya"): KelompokObjek[] {
+  const urut = [...objek].sort((a, b) => a.urut - b.urut || a.id - b.id);
+  if (!berwilayah) return urut.length === 0 ? [] : [{ kunci: "semua", judul: judulTunggal, objek: urut, rekap: rekapHasilObjek(urut) }];
+  const peta = new Map<string, KelompokObjek>();
+  for (const o of urut) {
+    const kunci = o.kode_wilayah ?? "-";
+    const g = peta.get(kunci) ?? { kunci, judul: o.wilayah || "Tanpa wilayah", objek: [], rekap: rekapHasilObjek([]) };
+    g.objek.push(o);
+    peta.set(kunci, g);
+  }
+  const hasil = Array.from(peta.values());
+  for (const g of hasil) g.rekap = rekapHasilObjek(g.objek);
+  return hasil.sort((a, b) => a.judul.localeCompare(b.judul));
+}
+
+/** Untuk PML: objek dikelompokkan per PPL, di dalamnya per wilayah. PPL tanpa nama di akhir. */
+export function kelompokPplObjek(objek: readonly ObjekSaya[], berwilayah: boolean): KelompokPplObjek[] {
+  const peta = new Map<string, { ppl_id: number | null; ppl_nama: string; objek: ObjekSaya[] }>();
+  for (const o of objek) {
+    const kunci = String(o.ppl_id ?? "-");
+    const g = peta.get(kunci) ?? { ppl_id: o.ppl_id, ppl_nama: o.ppl_nama ?? "Belum ada PPL", objek: [] };
+    g.objek.push(o);
+    peta.set(kunci, g);
+  }
+  return Array.from(peta.values())
+    .map((g) => ({ ppl_id: g.ppl_id, ppl_nama: g.ppl_nama, rekap: rekapHasilObjek(g.objek), kelompok: kelompokWilayahObjek(g.objek, berwilayah, "Sampel") }))
+    .sort((a, b) => (a.ppl_id == null ? 1 : b.ppl_id == null ? -1 : a.ppl_nama.localeCompare(b.ppl_nama)));
+}
+
+/** Teks status hasil sebuah objek ("Berhasil didata", "Berhasil didata 7 dari 10 sampel", "Menolak", ...), null bila belum. */
+export function teksHasil(o: Pick<ObjekSaya, "hasil" | "jumlah" | "nama_sampel" | "jumlah_didata">): string | null {
+  if (!o.hasil) return null;
+  if (o.hasil === "didata" && o.nama_sampel == null && o.jumlah > 1) return `Didata ${o.jumlah_didata ?? o.jumlah} dari ${o.jumlah} sampel`;
+  return LABEL_HASIL_OBJEK[o.hasil];
+}
+
+/** Perbarui salinan data HP sesudah hasil tercatat di server (rekap dihitung ulang). hasil null = catatan dihapus. */
+export function perbaruiHasilLokal(data: DataObjekSaya, objekId: number, hasil: HasilObjek | null, jumlahDidata: number | null, sekarang = new Date().toISOString()): DataObjekSaya {
+  const objek = data.objek.map((o) => (o.id === objekId ? { ...o, hasil, jumlah_didata: hasil === "didata" ? jumlahDidata : null, hasil_at: hasil ? sekarang : null } : o));
+  return { ...data, objek, rekap: rekapHasilObjek(objek) };
+}

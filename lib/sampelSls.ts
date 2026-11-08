@@ -463,8 +463,15 @@ export const PETUNJUK_TEMPLAT = [
   "Baris contoh pada lembar Templat harus dihapus sebelum diunggah.",
 ];
 
-export type InfoSampel = { kegiatan_id: number; peran: "ppl" | "pml"; sls: number; utama: number; cadangan: number; diganti: number; ppl: number };
+/** (8 Nov 2026) `objek` terisi untuk kegiatan MODEL 2/3 (daftar objek sampel dari pusat): baris, sampel, sampel yang sudah didata, dan jumlah wilayah. */
+export type InfoObjekModul = { baris: number; sampel: number; didata: number; wilayah: number };
+export type InfoSampel = { kegiatan_id: number; peran: "ppl" | "pml"; sls: number; utama: number; cadangan: number; diganti: number; ppl: number; objek?: InfoObjekModul };
 export const ketModulSampel = (f: InfoSampel): string => {
+  if (f.objek) {
+    const o = f.objek;
+    const dasar = `${o.sampel} sampel · ${o.didata} didata${o.wilayah > 0 ? ` · ${o.wilayah} wilayah` : ""}`;
+    return f.peran === "pml" ? `${f.ppl} PPL · ${dasar}` : dasar;
+  }
   const dasar = `${f.sls} SLS · ${f.utama} sampel utama`;
   const sisa = f.diganti > 0 ? ` · ${f.diganti} diganti cadangan` : "";
   return f.peran === "pml" ? `${f.ppl} PPL · ${dasar}${sisa}` : `${dasar}${sisa}`;

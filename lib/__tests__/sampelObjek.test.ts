@@ -274,3 +274,67 @@ describe("templatObjek", () => {
     expect(t[1]).toHaveLength(5);
   });
 });
+
+import { judulObjek, kelompokPplObjek, kelompokWilayahObjek, perbaruiHasilLokal, persenHasil, teksHasil } from "@/lib/sampelObjek";
+import type { DataObjekSaya, ObjekSaya } from "@/lib/sampelObjek";
+
+describe("tampilan HP: pengelompokan dan hasil", () => {
+  const ob = (id: number, o: Partial<ObjekSaya> = {}): ObjekSaya => ({
+    id, urut: id, kode_wilayah: "13031100050001", wilayah: "JORONG BARINGIN, GANTUANG CIRI", nama_sampel: `S${id}`, jumlah: 1, atribut: {}, ppl_id: 1, ppl_nama: "Ani", pml_nama: "Budi",
+    hasil: null, jumlah_didata: null, hasil_at: null, ...o,
+  });
+  it("kelompok per wilayah: urut judul, rekap per kelompok, urutan berkas", () => {
+    const g = kelompokWilayahObjek([ob(3), ob(1, { kode_wilayah: "13031100050002", wilayah: "AAA JORONG" }), ob(2, { hasil: "didata", jumlah_didata: 1 })], true);
+    expect(g.map((x) => x.judul)).toEqual(["AAA JORONG", "JORONG BARINGIN, GANTUANG CIRI"]);
+    expect(g[1].objek.map((o) => o.id)).toEqual([2, 3]);
+    expect(g[1].rekap).toMatchObject({ objek: 2, didata: 1, belum: 1 });
+  });
+  it("tanpa wilayah: satu kelompok; kosong: tanpa kelompok", () => {
+    expect(kelompokWilayahObjek([ob(2), ob(1)], false).map((x) => [x.kunci, x.objek.map((o) => o.id)])).toEqual([["semua", [1, 2]]]);
+    expect(kelompokWilayahObjek([], false)).toEqual([]);
+  });
+  it("kelompok per PPL untuk PML; PPL tanpa nama di akhir", () => {
+    const g = kelompokPplObjek([ob(1, { ppl_id: 2, ppl_nama: "Zed" }), ob(2, { ppl_id: 1, ppl_nama: "Ani" }), ob(3, { ppl_id: null, ppl_nama: null }), ob(4, { ppl_id: 1, ppl_nama: "Ani", hasil: "menolak" })], true);
+    expect(g.map((x) => x.ppl_nama)).toEqual(["Ani", "Zed", "Belum ada PPL"]);
+    expect(g[0].rekap).toMatchObject({ objek: 2, menolak: 1, belum: 1 });
+  });
+  it("judul, persen, dan teks hasil", () => {
+    expect(judulObjek({ nama_sampel: null, jumlah: 10 })).toBe("10 sampel");
+    expect(judulObjek({ nama_sampel: "Warung A", jumlah: 1 })).toBe("Warung A");
+    expect(persenHasil({ objek: 4, belum: 1 })).toBe(75);
+    expect(persenHasil({ objek: 0, belum: 0 })).toBe(0);
+    expect(teksHasil({ hasil: null, jumlah: 1, nama_sampel: "x", jumlah_didata: null })).toBeNull();
+    expect(teksHasil({ hasil: "didata", jumlah: 10, nama_sampel: null, jumlah_didata: 7 })).toBe("Didata 7 dari 10 sampel");
+    expect(teksHasil({ hasil: "didata", jumlah: 1, nama_sampel: "x", jumlah_didata: 1 })).toBe("Berhasil didata");
+    expect(teksHasil({ hasil: "tidak_ditemukan", jumlah: 1, nama_sampel: "x", jumlah_didata: null })).toBe("Tidak ditemukan");
+  });
+  it("perbaruiHasilLokal menghitung ulang rekap dan membersihkan jumlah saat bukan didata", () => {
+    const d: DataObjekSaya = {
+      sekarang: "", kegiatan: { id: 1, nama: "x" }, peran: "ppl", saya: { id: 1, nama: "Ani" },
+      profil: { model: 2, variabel: ["sls", "nama_sampel"], label_bebas: {}, level: "sls" }, kolom_atribut: [], objek: [ob(1), ob(2, { jumlah: 10, nama_sampel: null })], rekap: rekapHasilObjek([]),
+    };
+    const a = perbaruiHasilLokal(d, 2, "didata", 7, "2026-11-08T00:00:00Z");
+    expect(a.objek[1]).toMatchObject({ hasil: "didata", jumlah_didata: 7, hasil_at: "2026-11-08T00:00:00Z" });
+    expect(a.rekap).toMatchObject({ objek: 2, didata: 1, belum: 1, sampel_didata: 7 });
+    const b = perbaruiHasilLokal(a, 2, "menolak", 7);
+    expect(b.objek[1]).toMatchObject({ hasil: "menolak", jumlah_didata: null });
+    const c = perbaruiHasilLokal(b, 2, null, null);
+    expect(c.objek[1]).toMatchObject({ hasil: null, hasil_at: null });
+    expect(c.rekap.belum).toBe(2);
+    expect(d.objek[1].hasil).toBeNull();
+  });
+});
+
+import { ketModulSampel } from "@/lib/sampelSls";
+describe("modul Beranda model 2/3", () => {
+  const dasar = { kegiatan_id: 7, sls: 0, utama: 0, cadangan: 0, diganti: 0 };
+  it("PPL: sampel, didata, wilayah", () => {
+    expect(ketModulSampel({ ...dasar, peran: "ppl", ppl: 1, objek: { baris: 20, sampel: 30, didata: 12, wilayah: 3 } })).toBe("30 sampel · 12 didata · 3 wilayah");
+  });
+  it("PML: jumlah PPL di depan; tanpa wilayah (model 3) tidak menyebut wilayah", () => {
+    expect(ketModulSampel({ ...dasar, peran: "pml", ppl: 4, objek: { baris: 2, sampel: 50, didata: 0, wilayah: 0 } })).toBe("4 PPL · 50 sampel · 0 didata");
+  });
+  it("model 1 tidak berubah", () => {
+    expect(ketModulSampel({ ...dasar, peran: "ppl", ppl: 1, sls: 2, utama: 20 })).toBe("2 SLS · 20 sampel utama");
+  });
+});

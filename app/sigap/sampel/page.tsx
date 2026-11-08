@@ -14,6 +14,8 @@ import KartuSls from "./KartuSls";
 import SheetGanti from "./SheetGanti";
 import WilayahSaya from "./WilayahSaya";
 import { useAlokasiSaya } from "./useAlokasi";
+import DaftarObjek from "./DaftarObjek";
+import { useObjekSaya } from "./useObjek";
 
 function Angka({ nilai, label }: { nilai: number; label: string }) {
   return (
@@ -38,6 +40,8 @@ export default function HalamanSampel() {
   const { data, galat, luring, memuat, muat, ganti, batal } = useSampelSaya(kegiatan ?? null);
   // (7 Nov 2026) Wilayah saya: alokasi sub SLS + daftar KK master (tidak bergantung pada ada-tidaknya sampel yang sudah ditandai)
   const alokasi = useAlokasiSaya(kegiatan ?? null);
+  // (8 Nov 2026) Model 2/3: daftar objek sampel dari pusat. Kegiatan model 1 dijawab "bukan model 2/3" (data null) dan memakai tampilan model 1.
+  const objek = useObjekSaya(kegiatan ?? null);
   const [diganti, setDiganti] = useState<SampelRow | null>(null);
   const [pesan, setPesan] = useState("");
   const [sibuk, setSibuk] = useState(false);
@@ -46,7 +50,7 @@ export default function HalamanSampel() {
   const grupSls = useMemo(() => kelompokSls(rows), [rows]);
   const grupPpl = useMemo(() => kelompokPpl(rows), [rows]);
   const rekap = useMemo(() => rekapSampel(rows), [rows]);
-  const peran = data?.peran ?? null;
+  const peran = data?.peran ?? objek.data?.peran ?? null;
   const bisaGanti = peran === "ppl" && !!data?.konfig.boleh_ganti;
 
   async function batalkan(cadangan: SampelRow) {
@@ -71,33 +75,35 @@ export default function HalamanSampel() {
           <TombolKembali tema="gelap" className="max-w-[40%] flex-none" />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[16.5px] font-extrabold leading-[1.15]">Wilayah dan sampel</h1>
-            <p className="truncate text-[11.5px] text-[#A9BCD8]">{data ? `${data.kegiatan.nama} · ${peran === "pml" ? "PML" : "PPL"}` : "Memuat…"}</p>
+            <p className="truncate text-[11.5px] text-[#A9BCD8]">{data || objek.data ? `${(data ?? objek.data)?.kegiatan.nama} · ${peran === "pml" ? "PML" : "PPL"}` : "Memuat…"}</p>
           </div>
-          <button type="button" onClick={() => { void muat(); void alokasi.muat(); }} disabled={memuat || alokasi.memuat} className="min-h-[44px] flex-none rounded-[12px] bg-white/15 px-3 text-[12.5px] font-bold text-white active:bg-white/25 disabled:opacity-60">
-            {memuat || alokasi.memuat ? "Memuat…" : "Muat ulang"}
+          <button type="button" onClick={() => { void muat(); void alokasi.muat(); void objek.muat(); }} disabled={memuat || alokasi.memuat || objek.memuat} className="min-h-[44px] flex-none rounded-[12px] bg-white/15 px-3 text-[12.5px] font-bold text-white active:bg-white/25 disabled:opacity-60">
+            {memuat || alokasi.memuat || objek.memuat ? "Memuat…" : "Muat ulang"}
           </button>
         </div>
       </header>
 
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-2.5 px-2.5 pb-8 pt-2.5">
         {kegiatan === null && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">Alamat halaman tidak lengkap (kegiatan tidak disebutkan). Buka dari menu tahap.</p>}
-        {galat && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
-        {luring && <p className="rounded-[14px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-semibold text-[#8A6200]">Tidak tersambung. Menampilkan data terakhir yang tersimpan di HP; penggantian sampel butuh sinyal.</p>}
+        {(galat ?? objek.galat) && !objek.data && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat ?? objek.galat}</p>}
+        {luring && !objek.data && <p className="rounded-[14px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-semibold text-[#8A6200]">Tidak tersambung. Menampilkan data terakhir yang tersimpan di HP; penggantian sampel butuh sinyal.</p>}
         {pesan && (
           <p role="status" className="rounded-[14px] bg-[#E8F6EE] px-3 py-2 text-[13px] font-semibold text-[#13794B]">
             {pesan}
           </p>
         )}
-        {!data && !galat && kegiatan !== null && (
+        {!data && !galat && !objek.data && kegiatan !== null && (
           <div className="rounded-[18px] bg-white p-4" aria-busy="true">
             <div className="h-3 w-32 animate-pulse rounded bg-[#E6EDF8]" />
             <div className="mt-4 h-24 animate-pulse rounded bg-[#EEF2F7]" />
           </div>
         )}
 
+        {objek.data && <DaftarObjek data={objek.data} luring={objek.luring} catat={objek.catat} />}
+
         {alokasi.data && <WilayahSaya data={alokasi.data} muatKk={alokasi.muatKk} luring={alokasi.luring} aksiTag={alokasi.aksiTag} selisihMs={alokasi.selisihMs} />}
 
-        {data && (
+        {data && !objek.data && (
           <>
             <div className="flex gap-2">
               {peran === "pml" && <Angka nilai={rekap.ppl} label="PPL" />}

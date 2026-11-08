@@ -331,11 +331,12 @@ export function susunModul(kode: string, tahap: TahapDef, k: KonteksTahap): Modu
     // (30 Okt 2026) Sampel per SLS: lembar bantu (tanpa isian yang diselesaikan) -> selalu "berjalan"; akun tanpa alokasi sampel tidak melihat modul ini
     const id = Number(ms[1]);
     const f = induk.sampel?.[id];
-    if (!f || f.utama + f.cadangan <= 0) return [];
+    // (8 Nov 2026) kegiatan model 2/3: modul tampil bila petugas punya sampel pada daftar objek (f.objek)
+    if (!f || (f.utama + f.cadangan <= 0 && !f.objek)) return [];
     return [
       {
         kode,
-        judul: "Sampel per SLS",
+        judul: f.objek ? "Sampel saya" : "Sampel per SLS",
         ket: ketModulSampel(f),
         status: "berjalan",
         href: `/sigap/sampel?k=${id}&dari=${encodeURIComponent(ruteTahap(induk, tahap))}`,

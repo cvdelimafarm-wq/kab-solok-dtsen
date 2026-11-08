@@ -7,7 +7,7 @@ import type { Db } from "@/lib/sigap";
 import type { AkunPortal } from "@/lib/portal/server";
 import { GalatSampel, akunBolehDitugaskan, peranSampel, petugasKegiatan } from "@/lib/portal/sampel";
 import { bentukTimJson, bandingkanPenugasan, ringkasTim, type BandingPenugasan, type PemetaanAtasan, type PeranTim, type RingkasTim, type SimpulTim } from "@/lib/timSampel";
-import type { GalatBaris, Pemetaan } from "@/lib/sampelSls";
+import type { GalatBaris, InfoSampel, Pemetaan } from "@/lib/sampelSls";
 import {
   KUNCI_BEBAS, bacaProfil, bentukObjekJson, cocokkanPetugasObjek, kolomProfil, periksaBarisObjek, periksaCatatHasil, periksaObjek, periksaWilayahObjek,
   rekapHasilObjek, rekapObjek, tingkatPlot, validasiProfil, bacaHasilObjek,
@@ -411,4 +411,24 @@ export async function catatHasilObjek(db: Db, akun: AkunPortal, kegiatanId: numb
   const r = data as { ok?: boolean; pesan?: string; kode?: string; hasil?: string | null; jumlah_didata?: number | null } | null;
   if (!r?.ok) throw new GalatSampel(r?.pesan ?? "Hasil gagal dicatat.", 400, r?.kode);
   return { hasil: bacaHasilObjek(r.hasil), jumlah_didata: num(r.jumlah_didata) };
+}
+
+/** Ringkasan modul tahap Beranda untuk kegiatan MODEL 2/3. null = bukan petugas, bukan model 2/3, belum ada sampel atas nama akun ini, atau tabel belum ada. */
+export async function ringkasModulObjek(db: Db, akun: AkunPortal, kegiatanId: number): Promise<InfoSampel | null> {
+  try {
+    const peran = await peranSampel(db, akun.id, kegiatanId);
+    if (!peran) return null;
+    const { profil, siap } = await muatProfil(db, kegiatanId);
+    if (!siap || !profil) return null;
+    const { baris } = await bacaObjek(db, kegiatanId, peran === "ppl" ? { ppl: akun.id } : { pml: akun.id });
+    if (baris.length === 0) return null;
+    const r = rekapHasilObjek(baris);
+    return {
+      kegiatan_id: kegiatanId, peran, sls: 0, utama: 0, cadangan: 0, diganti: 0,
+      ppl: new Set(baris.map((b) => b.ppl_akun_id).filter((x): x is number => x != null)).size,
+      objek: { baris: baris.length, sampel: r.sampel, didata: r.sampel_didata, wilayah: new Set(baris.map((b) => b.kode_wilayah).filter((x): x is string => !!x)).size },
+    };
+  } catch {
+    return null;
+  }
 }

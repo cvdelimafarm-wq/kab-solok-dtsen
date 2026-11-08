@@ -70,3 +70,67 @@ describe("ModelSampel (Kelola)", () => {
     expect(t).toContain("Memuat");
   });
 });
+
+import DaftarObjek, { BarisObjek } from "@/app/sigap/sampel/DaftarObjek";
+import { rekapHasilObjek, type DataObjekSaya, type ObjekSaya } from "@/lib/sampelObjek";
+
+const ob = (id: number, o: Partial<ObjekSaya> = {}): ObjekSaya => ({
+  id, urut: id, kode_wilayah: "13031100050001", wilayah: "JORONG BARINGIN, GANTUANG CIRI", nama_sampel: `Warung ${id}`, jumlah: 1,
+  atribut: { alamat: "Jl. Merdeka 1", bebas1: "Kuliner" }, ppl_id: 1, ppl_nama: "Ani Putri", pml_nama: "Budi", hasil: null, jumlah_didata: null, hasil_at: null, ...o,
+});
+const dataSaya = (objek: ObjekSaya[], o: Partial<DataObjekSaya> = {}): DataObjekSaya => ({
+  sekarang: "2026-11-08T00:00:00Z", kegiatan: { id: 7, nama: "Survei X" }, peran: "ppl", saya: { id: 1, nama: "Ani Putri" },
+  profil: { model: 2, variabel: ["sls", "nama_sampel", "alamat", "bebas1"], label_bebas: { bebas1: "Jenis usaha" }, level: "sls" },
+  kolom_atribut: [{ kunci: "alamat", judul: "Alamat" }, { kunci: "bebas1", judul: "Jenis usaha" }], objek, rekap: rekapHasilObjek(objek), ...o,
+});
+const catat = async () => {};
+
+describe("DaftarObjek (HP)", () => {
+  it("PPL model 2: kelompok wilayah, atribut berlabel, tiga tombol hasil", () => {
+    const d = dataSaya([ob(1), ob(2, { hasil: "didata", jumlah_didata: 1 }), ob(3, { kode_wilayah: "13031100050002", wilayah: "JORONG TENGAH, GANTUANG CIRI", hasil: "menolak" })]);
+    const t = teksDari(renderToString(<DaftarObjek data={d} luring={false} catat={catat} />));
+    for (const x of ["Sampel saya", "Dikelompokkan per wilayah", "JORONG BARINGIN, GANTUANG CIRI", "JORONG TENGAH, GANTUANG CIRI", "Warung 1", "Alamat: Jl. Merdeka 1", "Jenis usaha: Kuliner", "Berhasil didata", "Menolak", "Tidak ditemukan", "Hapus catatan", "1 menolak"]) expect(t).toContain(x);
+    expect(t).not.toContain("Tidak tersambung");
+  });
+
+  it("baris berjumlah: input jumlah didata dan teks 'N sampel'", () => {
+    const o = ob(1, { nama_sampel: null, jumlah: 10, atribut: {}, hasil: "didata", jumlah_didata: 7 });
+    const h = renderToString(<BarisObjek o={o} kolom={[]} aksi={{ bisaCatat: true, sibuk: false, onCatat: () => {} }} />);
+    const t = teksDari(h);
+    expect(t).toContain("10 sampel");
+    expect(t).toContain("Jumlah didata");
+    expect(t).toContain("Didata 7 dari 10 sampel");
+    expect(h).toMatch(/type="number"[^>]*max="10"|max="10"[^>]*type="number"/);
+    expect(h).toContain('value="7"');
+  });
+
+  it("koordinat: tombol Arahkan; tanpa koordinat: tidak ada", () => {
+    const aksi = { bisaCatat: false, sibuk: false, onCatat: () => {} };
+    expect(teksDari(renderToString(<BarisObjek o={ob(1, { atribut: { lat: -0.95, lng: 100.5 } })} kolom={[]} aksi={aksi} />))).toContain("Arahkan");
+    expect(teksDari(renderToString(<BarisObjek o={ob(1)} kolom={[]} aksi={aksi} />))).not.toContain("Arahkan");
+  });
+
+  it("PML: per PPL, tanpa tombol hasil, peringatan hanya baca", () => {
+    const d = dataSaya([ob(1), ob(2, { ppl_id: 4, ppl_nama: "Dedi" })], { peran: "pml", saya: { id: 2, nama: "Budi" } });
+    const t = teksDari(renderToString(<DaftarObjek data={d} luring={false} catat={catat} />));
+    expect(t).toContain("Sampel PPL saya");
+    expect(t).toContain("Ani Putri");
+    expect(t).toContain("Dedi");
+    expect(t).toContain("hasil dicatat oleh PPL");
+    expect(t).not.toContain("Tidak ditemukan");
+  });
+
+  it("luring: PPL melihat peringatan dan tombol hasil hilang", () => {
+    const t = teksDari(renderToString(<DaftarObjek data={dataSaya([ob(1)])} luring catat={catat} />));
+    expect(t).toContain("Tidak tersambung");
+    expect(t).not.toContain("Berhasil didata");
+  });
+
+  it("model 3 tanpa wilayah: satu daftar 'Sampel saya'; kosong: pesan hubungi admin", () => {
+    const d3 = dataSaya([ob(1, { kode_wilayah: null, wilayah: "" })], { profil: { model: 3, variabel: ["nama_sampel", "ppl", "pml"], label_bebas: {}, level: null } });
+    const t = teksDari(renderToString(<DaftarObjek data={d3} luring={false} catat={catat} />));
+    expect(t).not.toContain("Dikelompokkan per wilayah");
+    expect(t).toContain("Warung 1");
+    expect(teksDari(renderToString(<DaftarObjek data={dataSaya([])} luring={false} catat={catat} />))).toContain("Belum ada sampel yang dialokasikan");
+  });
+});
