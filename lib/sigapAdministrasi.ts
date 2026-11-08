@@ -39,12 +39,14 @@ import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
 import { nilaiResmiTes } from "@/lib/sigapAturanTes";
 import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
+import { PERAN_ADMINISTRASI, PERAN_PESERTA, PERAN_TAMBAHAN, kelompokDari, lepasAdministrasiAkun, tambahPesertaAdministrasi, type Kelompok } from "@/lib/sigapAdministrasiDaftar";
 
 // Penanda peserta tambahan manual (SUMBER_ADMINISTRASI) & filternya didefinisikan di lib/sigapTesDb.ts
 // (dipakai semua query peserta tes/presensi/monitoring); diekspor ulang di sini untuk kemudahan.
 export { SUMBER_ADMINISTRASI, FILTER_BUKAN_ADMINISTRASI };
 
-export const PERAN_PESERTA = ["ppl", "pml", "korwil"] as const;
+export { PERAN_PESERTA, PERAN_TAMBAHAN, PERAN_ADMINISTRASI, kelompokDari, tambahPesertaAdministrasi, lepasAdministrasiAkun };
+export type { Kelompok };
 
 /** Jenis dokumen kelengkapan pelatihan (selain 6 jenis SPJ). */
 export type JenisPelatihan = "daftar_hadir" | "form_hadir" | "laporan_pelatihan" | "laporan_instruktur";
@@ -129,15 +131,18 @@ export type BarisPeserta = {
   nilai_lengkap: boolean;
 };
 
-export async function muatPeserta(db: Db, kegiatanId: number, kelas: number, opsi: { nilai?: boolean } = {}): Promise<BarisPeserta[]> {
-  const { data: pen } = await db
+/** kelompok "peserta" (bawaan; termasuk panitia) = semua peran kecuali instruktur; kelompok "instruktur" = hanya instruktur (daftar terpisah). */
+export async function muatPeserta(db: Db, kegiatanId: number, kelas: number, opsi: { nilai?: boolean; kelompok?: Kelompok } = {}): Promise<BarisPeserta[]> {
+  const instr = opsi.kelompok === "instruktur";
+  const { data: pen0 } = await db
     .from("sigap_penugasan")
     .select("id, akun_id, peran, kelas, sumber, dikunci_at")
     .eq("kegiatan_id", kegiatanId)
     .eq("kelas", kelas)
     .eq("aktif", true)
     .limit(2000);
-  if (!pen || pen.length === 0) return [];
+  const pen = ((pen0 ?? []) as Record<string, unknown>[]).filter((p) => (String(p.peran) === "instruktur") === instr);
+  if (pen.length === 0) return [];
   const ids = pen.map((p) => p.id as number);
   const akunIds = pen.map((p) => p.akun_id as number);
   const [{ data: ak }, { data: keg }, { data: tarif }, { data: hk }, { data: real }, { data: dok }, { data: izin }] = await Promise.all([
@@ -221,8 +226,8 @@ export async function muatPeserta(db: Db, kegiatanId: number, kelas: number, ops
 // (8 Okt 2026) Daftar nomor HP pengisian pulsa (CSV) per kelas
 // ----------------------------------------------------------------------------------------------
 /** CSV (UTF-8 + BOM) nomor pulsa peserta kelas. Nomor ditulis ="08xx" agar Excel tidak membuang angka 0 di depan. */
-export async function csvPulsaKelas(db: Db, kegiatanId: number, kelas: number): Promise<string> {
-  const peserta = await muatPeserta(db, kegiatanId, kelas);
+export async function csvPulsaKelas(db: Db, kegiatanId: number, kelas: number, kelompok: Kelompok = "peserta"): Promise<string> {
+  const peserta = await muatPeserta(db, kegiatanId, kelas, { kelompok });
   const rinci = await pulsaBanyak(db, kegiatanId, peserta.map((p) => p.akun_id));
   const q = (v: string) => `"${v.replace(/"/g, '""')}"`;
   const nomor = (v: string | null) => (v ? `="${v}"` : "");

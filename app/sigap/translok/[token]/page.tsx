@@ -31,6 +31,8 @@ import ModalBlokirTranslok from "@/app/sigap/translok/ModalBlokirTranslok";
 import KartuUnblockMasuk from "@/app/sigap/translok/KartuUnblockMasuk";
 import KartuSusulan from "@/app/sigap/translok/KartuSusulan"; // (3 Nov 2026) Ajukan susulan: petugas mengajukan, 2 atasan terdekat memutuskan
 import LembarSusulan from "@/app/sigap/translok/LembarSusulan";
+import LengkapiLaporanSls from "@/app/sigap/translok/LengkapiLaporanSls"; // (8 Nov 2026) lengkapi laporan hari terlewat: form rincian SLS
+import { pakaiFormSls } from "@/lib/sigapLengkapiMandiri";
 import KartuVanguardHariIni from "@/app/sigap/KartuVanguardHariIni"; // (1 Nov 2026) hanya bila Vanguard menyala di kegiatan ini (dicatat)
 import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
@@ -61,6 +63,10 @@ type Hari = {
   kunci: "hari_ini" | "izin" | "terlewat" | "akan_datang";
   lengkap: boolean;
   izin_sampai: string | null;
+  // (8 Nov 2026) hari terlewat yang boleh dilengkapi petugas sendiri (laporan ketik manual, foto unggah manual) + jumlah kekurangannya
+  bisa_lengkapi?: boolean;
+  kurang_foto?: number;
+  kurang_laporan?: boolean;
 };
 type Kelompok = { mulai: string; selesai: string; jumlah_hari: number; tanggal: string[]; nominal: number };
 type Pen = {
@@ -84,6 +90,9 @@ type Pen = {
   hari: Hari[];
   kelompok: Kelompok[];
   tanggal_kegiatan_lain: string[];
+  // (8 Nov 2026) tanggal lewat yang dilepas petugas sendiri dan boleh dikembalikan; batas foto kurang untuk lengkapi mandiri
+  dapat_dipulihkan?: string[];
+  maks_foto_kurang_mandiri?: number;
 };
 type Data = {
   akun: {
@@ -655,7 +664,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         )}
         {tab === "hari_kerja" && (
           <>
-            <KalenderHariKerja key={pen.id} token={token} pen={pen} hariIni={data.hari_ini} onTersimpan={muat} />
+            <KalenderHariKerja key={pen.id} token={token} pen={pen} hariIni={data.hari_ini} onTersimpan={muat} data={data} />
           </>
         )}
         {tab === "arsip" && <ArsipDokumen token={token} data={data} pen={pen} onBerubah={muat} />}
@@ -1036,12 +1045,13 @@ function Ringkasan({ pen, hariIni }: { pen: Pen; hariIni: string }) {
 }
 
 // ---------------- Kalender hari kerja ----------------
-function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string; pen: Pen; hariIni: string; onTersimpan: () => Promise<void> }) {
+function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: string; pen: Pen; hariIni: string; onTersimpan: () => Promise<void>; data?: Data }) {
   const [pilih, setPilih] = useState<Set<string>>(new Set(pen.hari_kerja));
   const [busy, setBusy] = useState(false);
   const [pesan, setPesan] = useState<{ teks: string; ok: boolean } | null>(null);
   // (21 Okt 2026) Mode edit: sudah punya hari kerja -> kalender dikunci (hanya baca) sampai petugas menekan "Edit hari kerja"; belum punya -> langsung terbuka.
   const [edit, setEdit] = useState(pen.hari_kerja.length === 0);
+  const [buka, setBuka] = useState<string | null>(null); // (8 Nov 2026) tanggal merah yang dibuka untuk "lengkapi kekurangan"
   useEffect(() => setPilih(new Set(pen.hari_kerja)), [pen.hari_kerja]);
 
   if (!pen.periode.mulai || !pen.periode.selesai)
@@ -1091,6 +1101,11 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
   // (21 Okt 2026, permintaan user: SPDT NTP juga). Isian sebagian tetap tersimpan; hanya hari kerjanya yang dilepas. Hari lengkap (dibayar) tetap terkunci.
   const bisaDilepasLewat = (t: string) => t < hariIni && pilih.has(t) && !lengkapSet.has(t) && !pen.hari.some((h) => h.tanggal === t && h.kunci === "izin");
   const bukaEdit = !terkunci && edit;
+  // (8 Nov 2026) Tanggal lewat yang dilepas sendiri boleh dikembalikan (kembali merah); tanggal merah yang masih dipilih boleh diketuk (di luar mode edit) untuk dilengkapi.
+  const dapatPulih = new Set(pen.dapat_dipulihkan ?? []);
+  const bisaDipulihkan = (t: string) => t < hariIni && !pilih.has(t) && dapatPulih.has(t);
+  const bisaDibuka = (t: string) => !!data && !terkunci && t < hariIni && pilih.has(t) && !lengkapSet.has(t);
+  const hariBuka = buka ? pen.hari.find((h) => h.tanggal === buka) ?? null : null;
 
   function batalEdit() {
     setPilih(new Set(pen.hari_kerja));
@@ -1099,8 +1114,12 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
   }
 
   function ketuk(t: string) {
-    if (terkunci || !edit || lain.has(t)) return;
-    if (t < hariIni && !bisaDilepasLewat(t)) return;
+    if (terkunci || lain.has(t)) return;
+    if (!edit) {
+      if (bisaDibuka(t)) setBuka((b) => (b === t ? null : t));
+      return;
+    }
+    if (t < hariIni && !bisaDilepasLewat(t) && !bisaDipulihkan(t)) return;
     setPesan(null);
     setPilih((s) => {
       const n = new Set(s);
@@ -1149,13 +1168,13 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
         </span>
       </div>
       {!terkunci && !edit && (
-        <button type="button" onClick={() => { setPesan(null); setEdit(true); }} className="mt-2.5 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#0F3D7A] bg-white text-[14px] font-extrabold text-[#0F3D7A]">
+        <button type="button" onClick={() => { setPesan(null); setBuka(null); setEdit(true); }} className="mt-2.5 flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border-2 border-[#0F3D7A] bg-white text-[14px] font-extrabold text-[#0F3D7A]">
           <span aria-hidden="true">✎</span> Edit hari kerja
         </button>
       )}
       {bukaEdit && pen.hari_kerja.length > 0 && (
         <p className="mt-2.5 rounded-xl bg-[#FFF6DD] px-3 py-2 text-[11.5px] leading-snug text-[#6B4A00]">
-          Mode edit. Ketuk tanggal untuk memilih atau melepas. Hari terlewat yang belum lengkap (bingkai merah) boleh dilepas agar kuota kembali; isian sebagian tetap tersimpan tetapi tidak dibayar. Hari yang sudah lengkap tetap terkunci.
+          Mode edit. Ketuk tanggal untuk memilih atau melepas. Hari terlewat yang belum lengkap (bingkai merah) boleh dilepas agar kuota kembali; isian sebagian tetap tersimpan tetapi tidak dibayar. Bila tidak sengaja melepas, tanggal berbingkai kuning dapat dikembalikan dengan mengetuknya lagi (kembali merah). Hari yang sudah lengkap tetap terkunci.
         </p>
       )}
 
@@ -1181,21 +1200,24 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
                 const lewat = t < hariIni;
                 const dipakaiLain = lain.has(t);
                 const lepasLewat = bukaEdit && bisaDilepasLewat(t);
+                const pulih = bukaEdit && bisaDipulihkan(t);
+                const bisaLengkapi = !edit && bisaDibuka(t);
                 let cls = "bg-[#F4F6FA] text-[#13213A]";
                 if (dipakaiLain) cls = "bg-[#EEF1F5] text-[#B8C0CE] line-through";
                 else if (dipilih && lengkapSet.has(t)) cls = "bg-[#1E7A4C] text-white";
                 else if (dipilih && lewat) cls = "bg-red-100 text-red-800";
                 else if (dipilih) cls = "bg-[#0F3D7A] text-white";
+                else if (pulih) cls = "bg-amber-50 text-amber-800";
                 else if (lewat) cls = "bg-transparent text-[#C3CAD6]";
                 else if (penuh) cls = "bg-[#F4F6FA] text-[#B8C0CE]";
                 return (
                   <button
                     key={t}
                     type="button"
-                    disabled={terkunci || !edit || dipakaiLain || (lewat && !lepasLewat)}
+                    disabled={terkunci || dipakaiLain || (edit ? lewat && !lepasLewat && !pulih : !bisaLengkapi)}
                     onClick={() => ketuk(t)}
-                    className={`rounded-lg py-2 text-[13px] font-bold transition ${cls} ${t === hariIni ? "ring-2 ring-[#F5B841] ring-offset-1" : ""} ${lepasLewat ? "ring-2 ring-red-500" : ""}`}
-                    title={dipakaiLain ? "Dipakai kegiatan lain" : lepasLewat ? "Hari terlewat (belum lengkap): ketuk untuk melepas" : undefined}
+                    className={`rounded-lg py-2 text-[13px] font-bold transition ${cls} ${t === hariIni ? "ring-2 ring-[#F5B841] ring-offset-1" : ""} ${lepasLewat ? "ring-2 ring-red-500" : ""} ${pulih ? "ring-2 ring-amber-500" : ""} ${buka === t ? "outline outline-2 outline-offset-1 outline-[#0F3D7A]" : ""}`}
+                    title={dipakaiLain ? "Dipakai kegiatan lain" : pulih ? "Dilepas tidak sengaja? Ketuk untuk mengembalikan (kembali merah)" : lepasLewat ? "Hari terlewat (belum lengkap): ketuk untuk melepas" : bisaLengkapi ? "Ketuk untuk melengkapi kekurangan" : undefined}
                   >
                     {tglObj(t).getUTCDate()}
                   </button>
@@ -1209,7 +1231,18 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan }: { token: string
       <p className="mt-2.5 text-[10.5px] leading-relaxed text-[#6B7890]">
         <span className="font-bold text-[#0F3D7A]">■</span> dipilih · <span className="font-bold text-[#1E7A4C]">■</span> lengkap ·{" "}
         <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain.
+        {bukaEdit && dapatPulih.size > 0 && <> Bingkai kuning = dilepas sendiri, dapat dikembalikan.</>}
       </p>
+      {!edit && nTerlewat > 0 && data && <p className="mt-1.5 rounded-xl bg-red-50 px-3 py-2 text-[11.5px] leading-snug text-red-900">Ketuk tanggal merah untuk melengkapi kekurangannya: laporan diketik manual, foto diunggah manual (hanya mengisi yang masih kosong).</p>}
+      {!edit && data && hariBuka && (
+        <div className="mt-3 space-y-3 rounded-2xl border-2 border-[#C9D6EA] bg-[#F6F8FB] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[13px] font-extrabold text-[#0F3D7A]">Lengkapi kekurangan</p>
+            <button type="button" onClick={() => setBuka(null)} className="min-h-[36px] rounded-lg border border-[#C9D6EA] bg-white px-3 text-[12px] font-bold text-[#55657D]">Tutup</button>
+          </div>
+          <KartuHari token={token} data={data} pen={pen} hari={hariBuka} onBerubah={onTersimpan} />
+        </div>
+      )}
 
       {kelompokPilihan.length > 0 && (
         <div className="mt-3 rounded-xl bg-[#F6F8FB] p-3">
@@ -1336,7 +1369,9 @@ function IsianHariIni({ token, data, pen, onBerubah, hanya }: { token: string; d
 }
 
 function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { token: string; data: Data; pen: Pen; hari: Hari; onBerubah: () => Promise<void>; hanya?: "laporan" | "foto"; tanpaJudul?: boolean }) {
-  const boleh = !pen.dikunci_at && pen.status_periode !== "arsip" && (hari.kunci === "hari_ini" || hari.kunci === "izin");
+  // (8 Nov 2026) mandiri = hari terlewat yang boleh dilengkapi petugas sendiri (hanya mengisi yang kosong; server menjaga aturannya)
+  const mandiri = hari.kunci === "terlewat" && !hari.lengkap && !!hari.bisa_lengkapi;
+  const boleh = !pen.dikunci_at && pen.status_periode !== "arsip" && (hari.kunci === "hari_ini" || hari.kunci === "izin" || mandiri);
   const { fokus, waAdmin, namaPetugas } = useContext(FokusCtx);
   const [susulan, setSusulan] = useState(false); // (3 Nov 2026) lembar "Ajukan susulan" untuk tanggal ini
   const sorotLaporan = fokus?.tgl === hari.tanggal && fokus.bagian === "laporan";
@@ -1367,9 +1402,20 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
           )}
         </div>
       )}
-      {hari.kunci === "terlewat" && !hari.lengkap && (
+      {mandiri && (
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-amber-950">
+          <p className="text-[14px] font-extrabold">Tanggal ini terlewat, tetapi masih bisa Anda lengkapi</p>
+          <ul className="mt-1 list-disc pl-5 text-[12.5px]">
+            {hari.kurang_laporan && <li>Laporan belum ada: isi manual (pilih SLS, lalu jumlah ditemukan terdampak, tidak terdampak, dan tidak ditemukan).</li>}
+            {(hari.kurang_foto ?? 0) > 0 && <li>Foto kurang {hari.kurang_foto}: unggah manual pada nomor yang masih kosong (maksimal {pen.maks_foto_kurang_mandiri ?? 2} foto kurang; foto lainnya wajib sudah ada).</li>}
+          </ul>
+          <p className="mt-1 text-[11.5px] text-amber-900">Isian yang sudah tersimpan tidak bisa diubah atau dihapus. Setelah lengkap, tanggal ini menjadi hijau dan ikut dibayar.</p>
+        </div>
+      )}
+      {hari.kunci === "terlewat" && !hari.lengkap && !mandiri && (
         <div className="rounded-2xl border-2 border-red-200 bg-red-50 px-4 py-3 text-red-900">
           <p className="text-[14px] font-extrabold">🔒 Batas waktu tanggal ini sudah lewat</p>
+          {(hari.kurang_foto ?? 0) > (pen.maks_foto_kurang_mandiri ?? 2) && <p className="mt-0.5 text-[12.5px] font-semibold">Foto yang kurang ({hari.kurang_foto}) lebih dari {pen.maks_foto_kurang_mandiri ?? 2}, jadi tidak bisa dilengkapi sendiri.</p>}
           <p className="mt-0.5 text-[12.5px]">Laporan dan dokumentasi tidak dapat diisi lagi, dan hari ini tidak masuk Kwitansi. Bila ada alasan kuat, ajukan susulan ke atasan Anda (tanggal dibuka 24 jam bila disetujui){linkIzin ? ", atau hubungi admin anggaran" : ""}.</p>
           {!pen.dikunci_at && pen.status_periode !== "arsip" && pen.kegiatan.jenis !== "pelatihan" && (
             <button type="button" onClick={() => setSusulan(true)} className="mr-2 mt-2 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#0F3D7A] px-4 text-[13.5px] font-extrabold text-white">
@@ -1393,13 +1439,17 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
       )}
       {hanya !== "foto" && wajibLaporan(pen) && (
         <div id={`bag-laporan-${hari.tanggal}`} className={`scroll-mt-3 ${sorotLaporan ? SOROT : ""}`}>
-          <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />
+          {mandiri && !hari.realisasi && pakaiFormSls(pen.kegiatan.kode) ? (
+            <LengkapiLaporanSls key={`ls-${pen.id}-${hari.tanggal}`} token={token} penugasanId={pen.id} tanggal={hari.tanggal} master={data.lokasi_opsi.master} onTersimpan={onBerubah} />
+          ) : (
+            <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh && !(mandiri && !!hari.realisasi)} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />
+          )}
         </div>
       )}
       {hanya !== "laporan" && (
         <div id={`bag-foto-${hari.tanggal}`} className={`scroll-mt-3 ${sorotFoto ? SOROT : ""}`}>
           {/* (27 Okt 2026) lembar foto selebar layar HP (tanpa sudut dan garis kiri-kanan) di Hari Ini; di Arsip lebarnya sudah diatur panel pembungkus (tepi=false) */}
-          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin"} lampau={hari.kunci === "terlewat"} penuh tepi={!tanpaJudul} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} onBerubah={onBerubah} />} />
+          <FotoKegiatan kegiatanId={pen.kegiatan.id} susulan={hari.kunci === "izin" || mandiri} lampau={hari.kunci === "terlewat" && !mandiri} penuh tepi={!tanpaJudul} tanggal={hari.tanggal} jenis={pen.kegiatan.jenis ?? null} onBerubah={onBerubah} fallback={<PanelFoto key={`f-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh} tambahSaja={mandiri} onBerubah={onBerubah} />} />
         </div>
       )}
       {susulan && (
@@ -2296,7 +2346,7 @@ function FormRealisasi({
 }
 
 // ======================================================================
-function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen: Pen; hari: Hari; boleh: boolean; onBerubah: () => Promise<void> }) {
+function PanelFoto({ token, pen, hari, boleh, tambahSaja = false, onBerubah }: { token: string; pen: Pen; hari: Hari; boleh: boolean; tambahSaja?: boolean; onBerubah: () => Promise<void> }) {
   const [progres, setProgres] = useState<Record<number, number>>({});
   const [galat, setGalat] = useState<string | null>(null);
   const [lihat, setLihat] = useState<string | null>(null);
@@ -2513,7 +2563,7 @@ function PanelFoto({ token, pen, hari, boleh, onBerubah }: { token: string; pen:
                   )}
                 </label>
               )}
-              {f && boleh && (
+              {f && boleh && !tambahSaja && (
                 <div className="absolute inset-x-1.5 bottom-1.5 flex gap-1">
                   <label className="flex-1 cursor-pointer rounded-lg bg-white/90 py-1 text-center text-[11px] font-bold text-[#0F3D7A] backdrop-blur">
                     Ganti

@@ -10,6 +10,7 @@
 // POST { aksi:"hari_kerja", penugasan_id, tanggal:[...] }   -> simpan rencana hari kerja (daftar lengkap); hari lewat yang kosong boleh dilepas (21 Okt 2026)
 // POST { aksi:"realisasi", penugasan_id, tanggal, lokasi[], jumlah_realisasi, kendala }
 
+import { MAKS_FOTO_KURANG_MANDIRI, bolehLengkapiMandiri, hitungKekurangan, kunciSls, olehMelepas, olehMengembalikan, pakaiFormSls, susunLaporanSls, tanggalDapatDipulihkan, type BarisRiwayat } from "@/lib/sigapLengkapiMandiri";
 import { NextRequest, NextResponse } from "next/server";
 import { galatServer } from "@/lib/sigapGalat";
 import { createClient } from "@/lib/supabaseServer";
@@ -84,12 +85,16 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
     // Opsi lokasi: master wilayah kabupaten (kec > nagari > jorong), diambil per halaman (>1000 baris).
     const wil = await ambilWilayahRingkas(db);
 
+    // (8 Nov 2026) Riwayat hari kerja lampau (untuk tanggal yang boleh dikembalikan petugas).
+    const { data: riwayatMentah } = await db.from("sigap_hari_kerja_riwayat").select("id, penugasan_id, tanggal, aksi, oleh").in("penugasan_id", ids).lt("tanggal", hariIni).limit(2000);
     // (12 Okt 2026) Hari lampau tanpa laporan manual tetapi ada hasil identifikasi/pendataan = laporan dianggap selesai (lihat laporanDianggap).
     const hasil = await Promise.all(penugasan.map(async (p) => {
       const hariKerja = (hk ?? []).filter((h) => h.penugasan_id === p.id).map((h) => h.tanggal as string).sort();
       const lain = (hk ?? []).filter((h) => h.penugasan_id !== p.id).map((h) => h.tanggal as string);
       const satuan = satuanLaporan(p.kegiatan.kode, p.peran, p.kegiatan.satuan_realisasi);
       const oto = await ambilRealisasiOtomatis(db, akun.id, p.peran, p.kegiatan.kode, satuan, hariKerja, wil);
+      // (8 Nov 2026) Hari lampau yang terlewat boleh dilengkapi sendiri selama penugasan masih terbuka (belum dikunci / arsip / diblokir).
+      const terbuka = !p.dikunci_at && p.status_periode !== "arsip" && !(await translokDiblokir(db, p.kegiatan.id, akun.id));
       const hari = hariKerja.map((t) => {
         const r = (realisasi ?? []).find((x) => x.penugasan_id === p.id && x.tanggal === t) ?? null;
         const f = (foto ?? [])
@@ -101,12 +106,15 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ token:
         const otoHari = oto.get(t) ?? null;
         const dianggap = p.kegiatan.wajib_laporan && laporanDianggap(t, hariIni, !!r, otoHari);
         const lengkap = hariLengkap(!!r || dianggap, f.length, p.kegiatan); // (7 Okt 2026) aturan isian per kegiatan
-        return { tanggal: t, realisasi: r, foto: f, kunci, lengkap, laporan_dianggap: dianggap, otomatis: otoHari, izin_sampai: (iz?.berlaku_sampai as string | undefined) ?? null };
+        const kurang = hitungKekurangan(!!r, dianggap, f.length, p.kegiatan);
+        const bisaLengkapi = kunci === "terlewat" && !lengkap && terbuka && bolehLengkapiMandiri(kurang).boleh;
+        return { tanggal: t, realisasi: r, foto: f, kunci, lengkap, laporan_dianggap: dianggap, otomatis: otoHari, izin_sampai: (iz?.berlaku_sampai as string | undefined) ?? null, bisa_lengkapi: bisaLengkapi, kurang_foto: kurang.fotoKurang, kurang_laporan: kurang.laporanKurang };
       });
       // Hari dibayar: hari kerja yg belum lewat (masih bisa dilengkapi) + hari lampau yg lengkap / sedang izin susulan.
       const dibayar = hari.filter((h) => h.tanggal >= hariIni || h.lengkap || h.kunci === "izin").map((h) => h.tanggal);
       const kelompok = kelompokTanggal(dibayar).map((k) => ({ ...k, nominal: k.jumlah_hari * p.tarif }));
-      return { ...p, satuan_laporan: satuan, sumber_otomatis: sumberUntukPeran(p.kegiatan.kode, p.peran), hari_kerja: hariKerja, hari, kelompok, tanggal_kegiatan_lain: lain };
+      const dapatDipulihkan = terbuka ? tanggalDapatDipulihkan(((riwayatMentah ?? []) as (BarisRiwayat & { penugasan_id: number })[]).filter((x) => x.penugasan_id === p.id), akun.nama, hariIni, new Set(hariKerja)) : [];
+      return { ...p, satuan_laporan: satuan, sumber_otomatis: sumberUntukPeran(p.kegiatan.kode, p.peran), hari_kerja: hariKerja, hari, kelompok, tanggal_kegiatan_lain: lain, dapat_dipulihkan: dapatDipulihkan, maks_foto_kurang_mandiri: MAKS_FOTO_KURANG_MANDIRI };
     }));
 
     wil.sort((a, b) => a.kecamatan.localeCompare(b.kecamatan) || a.nagari.localeCompare(b.nagari) || a.sls.localeCompare(b.sls));
@@ -240,8 +248,14 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       const hapus = Array.from(lamaSet).filter((t) => !mintaSet.has(t));
       // Tanggal lewat tidak bisa DITAMBAH. (21 Okt 2026, permintaan user: tombol "Edit hari kerja") Hari lewat yang TERLEWAT (belum lengkap, tidak dibayar)
       // boleh DILEPAS supaya kuota kembali; hari lewat yang sudah lengkap atau sedang izin susulan tetap terkunci.
+      // (8 Nov 2026) Pengecualian: tanggal lewat yang DILEPAS petugas sendiri boleh dikembalikan (kembali merah, bisa dilengkapi).
       const tambahLewat = tambah.filter((t) => t < hariIni);
-      if (tambahLewat.length) return NextResponse.json({ error: `Tanggal yang sudah lewat tidak bisa ditambah: ${tambahLewat.join(", ")}.` }, { status: 400 });
+      if (tambahLewat.length) {
+        const { data: rw } = await db.from("sigap_hari_kerja_riwayat").select("id, tanggal, aksi, oleh").eq("penugasan_id", pen.id).in("tanggal", tambahLewat);
+        const boleh = new Set(tanggalDapatDipulihkan((rw ?? []) as BarisRiwayat[], akun.nama, hariIni, lamaSet));
+        const tolak = tambahLewat.filter((t) => !boleh.has(t));
+        if (tolak.length) return NextResponse.json({ error: `Tanggal yang sudah lewat tidak bisa ditambah: ${tolak.join(", ")}. Hanya tanggal yang Anda lepas sendiri yang bisa dikembalikan.` }, { status: 400 });
+      }
       const hapusLewat = hapus.filter((t) => t < hariIni);
       if (pen.maks_hari && diminta.length > pen.maks_hari) return NextResponse.json({ error: `Melebihi maksimal ${pen.maks_hari} hari untuk peran Anda.` }, { status: 400 });
       // Hari HARI INI/MENDATANG yang sudah ada laporan/foto tidak bisa dilepas. Hari LEWAT yang belum lengkap (terlewat, tidak dibayar) boleh dilepas walau isiannya
@@ -286,16 +300,40 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
         if (error) return galatServer("[api/sigap/translok POST]", error);
       }
       const log = [...tambah.map((t) => ({ t, aksi: "tambah" })), ...hapus.map((t) => ({ t, aksi: "hapus" }))];
-      if (log.length) await db.from("sigap_hari_kerja_riwayat").insert(log.map((x) => ({ penugasan_id: pen.id, tanggal: x.t, aksi: x.aksi, oleh: x.t < hariIni ? `petugas:${akun.nama} (melepas hari terlewat)` : `petugas:${akun.nama}` })));
+      if (log.length) await db.from("sigap_hari_kerja_riwayat").insert(log.map((x) => ({ penugasan_id: pen.id, tanggal: x.t, aksi: x.aksi, oleh: x.t < hariIni ? (x.aksi === "hapus" ? olehMelepas(akun.nama) : olehMengembalikan(akun.nama)) : `petugas:${akun.nama}` })));
       return NextResponse.json({ ok: true, ditambah: tambah.length, dilepas: hapus.length });
     }
 
     // ---------------- Laporan harian (realisasi manual) ----------------
     if (aksi === "realisasi") {
-      const akses = await cekAksesIsian(db, akun.id, Number(body?.penugasan_id), body?.tanggal);
+      const akses = await cekAksesIsian(db, akun.id, Number(body?.penugasan_id), body?.tanggal, { lengkapiMandiri: true }); // (8 Nov 2026) hari terlewat: lengkapi sendiri
       if ("error" in akses) return NextResponse.json({ error: akses.error }, { status: akses.status });
+      // Jalur lengkapi hari terlewat hanya MENAMBAH laporan yang belum ada; laporan yang sudah tersimpan tidak diubah.
+      if (akses.mandiri) {
+        const { data: sudah } = await db.from("sigap_realisasi").select("id").eq("penugasan_id", akses.penugasan.id).eq("tanggal", akses.tanggal).maybeSingle();
+        if (sudah) return NextResponse.json({ error: "Laporan tanggal terlewat yang sudah tersimpan tidak bisa diubah." }, { status: 403 });
+      }
       // (7 Okt 2026) kegiatan tanpa laporan (mis. pelatihan) -- cukup dokumentasi
       if (!akses.penugasan.kegiatan.wajib_laporan) return NextResponse.json({ error: "Kegiatan ini tidak memerlukan laporan harian; cukup unggah dokumentasi." }, { status: 400 });
+      // (8 Nov 2026) Laporan hari terlewat kegiatan Pascabencana: rincian per SLS (terdampak / tidak terdampak / tidak ditemukan), dipilih dari master SLS kabupaten.
+      if (akses.mandiri && pakaiFormSls(akses.penugasan.kegiatan.kode)) {
+        const wilMaster = await ambilWilayahRingkas(db);
+        const hasilSls = susunLaporanSls(body?.rincian_sls, new Set(wilMaster.map((w) => kunciSls({ kecamatan: w.kecamatan, nagari: w.nagari, jorong: w.sls }))));
+        if ("error" in hasilSls) return NextResponse.json({ error: hasilSls.error }, { status: 400 });
+        const kendalaSls = typeof body?.kendala === "string" ? body.kendala.trim().slice(0, 1000) : "";
+        const { error: eSls } = await db.from("sigap_realisasi").insert({
+          penugasan_id: akses.penugasan.id,
+          kegiatan_id: akses.penugasan.kegiatan.id,
+          tanggal: akses.tanggal,
+          lokasi: hasilSls.rincian.map((r) => ({ kecamatan: r.kecamatan, nagari: r.nagari, jorong: r.jorong, idsubsls: null, terdampak: r.terdampak, tidak_terdampak: r.tidak_terdampak, tidak_ditemukan: r.tidak_ditemukan })),
+          jumlah_realisasi: hasilSls.jumlah,
+          kendala: kendalaSls || null,
+          diperbarui_at: new Date().toISOString(),
+        });
+        if (eSls) return galatServer("[api/sigap/translok POST]", eSls);
+        await db.from("sigap_audit").insert({ akun_id: akun.id, aksi: "translok.lengkapi_laporan", detail: { penugasan_id: akses.penugasan.id, tanggal: akses.tanggal, jumlah: hasilSls.jumlah, sls: hasilSls.rincian.length } });
+        return NextResponse.json({ ok: true });
+      }
       const lokasiRaw: unknown[] = Array.isArray(body?.lokasi) ? body.lokasi : [];
       const lokasi: Lokasi[] = lokasiRaw
         .map((l) => l as Record<string, unknown>)
@@ -321,6 +359,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
         { onConflict: "penugasan_id,tanggal" }
       );
       if (error) return galatServer("[api/sigap/translok POST]", error);
+      if (akses.mandiri) await db.from("sigap_audit").insert({ akun_id: akun.id, aksi: "translok.lengkapi_laporan", detail: { penugasan_id: akses.penugasan.id, tanggal: akses.tanggal, jumlah } });
       return NextResponse.json({ ok: true });
     }
 

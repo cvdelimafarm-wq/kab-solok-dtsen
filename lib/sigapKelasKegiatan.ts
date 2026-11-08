@@ -9,6 +9,8 @@
 type Db = { from: (t: string) => any }; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 export const KELAS_MAKS = 20;
+/** Panitia dan instruktur punya baris penugasan (untuk administrasi/SPJ) tetapi BUKAN peserta kelas: tidak dihitung di kelas, kuota, maupun plotting peserta. */
+const PERAN_BUKAN_PESERTA = "(panitia,instruktur)";
 export const KELAS_GABUNGAN_NOMOR = 0;
 
 export type KelasKegiatan = { nomor: number; nama: string; kuota: number | null };
@@ -78,7 +80,7 @@ const gagal = (pesan: string): { ok: false; pesan: string } => ({ ok: false, pes
 export async function muatKelasKegiatan(db: Db, kegiatanId: number): Promise<KelasKegiatan[]> {
   const [{ data: m }, { data: p }, { data: i }] = await Promise.all([
     db.from("sigap_pelatihan_kelas").select("nomor, nama, kuota").eq("kegiatan_id", kegiatanId).order("nomor").limit(KELAS_MAKS),
-    db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).not("kelas", "is", null).limit(5000),
+    db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).not("kelas", "is", null).not("peran", "in", PERAN_BUKAN_PESERTA).limit(5000),
     db.from("sigap_kuis_instruktur_kelas").select("kelas").eq("kegiatan_id", kegiatanId).limit(500),
   ]);
   const master = ((m ?? []) as { nomor: number; nama: string; kuota: number | null }[]).map((x) => ({ nomor: Number(x.nomor), nama: String(x.nama ?? ""), kuota: x.kuota == null ? null : Number(x.kuota) }));
@@ -89,7 +91,7 @@ export async function muatKelasKegiatan(db: Db, kegiatanId: number): Promise<Kel
 export type PesertaKelas = { penugasan_id: number; akun_id: number; nama: string; peran: string; kelas: number | null; sumber: string | null };
 
 export async function muatPesertaKelas(db: Db, kegiatanId: number): Promise<PesertaKelas[]> {
-  const { data } = await db.from("sigap_penugasan").select("id, akun_id, peran, kelas, sumber").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(5000);
+  const { data } = await db.from("sigap_penugasan").select("id, akun_id, peran, kelas, sumber").eq("kegiatan_id", kegiatanId).eq("aktif", true).not("peran", "in", PERAN_BUKAN_PESERTA).limit(5000);
   const baris = (data ?? []) as { id: number; akun_id: number; peran: string; kelas: number | null; sumber: string | null }[];
   if (baris.length === 0) return [];
   const nama = new Map<number, string>();
@@ -228,7 +230,7 @@ export async function tambahPanitia(db: Db, kegiatanId: number, akunId: number, 
 }
 
 /** Cabut peran Panitia Pelatihan yang berlingkup pelatihan ini (peran lain atau lingkup semua kegiatan tidak dapat dicabut dari sini). */
-export async function cabutPanitia(db: Db, kegiatanId: number, akunPeranId: number, p: { aktorId: number; adminAplikasi: boolean }): Promise<Hasil & { nama?: string }> {
+export async function cabutPanitia(db: Db, kegiatanId: number, akunPeranId: number, p: { aktorId: number; adminAplikasi: boolean }): Promise<Hasil & { nama?: string; akun_id?: number }> {
   const { data: x } = await db.from("sigap_akun_peran").select("id, akun_id, peran_id, kegiatan_id").eq("id", akunPeranId).maybeSingle();
   if (!x) return gagal("Data panitia tidak ditemukan.");
   const baris = x as { id: number; akun_id: number; peran_id: number; kegiatan_id: number | null };
@@ -239,7 +241,7 @@ export async function cabutPanitia(db: Db, kegiatanId: number, akunPeranId: numb
   const { data: akun } = await db.from("sigap_akun").select("nama").eq("id", baris.akun_id).maybeSingle();
   const { error } = await db.from("sigap_akun_peran").delete().eq("id", akunPeranId);
   if (error) return gagal(error.message);
-  return { ok: true, nama: (akun as { nama?: string } | null)?.nama ?? `Akun ${baris.akun_id}` };
+  return { ok: true, nama: (akun as { nama?: string } | null)?.nama ?? `Akun ${baris.akun_id}`, akun_id: Number(baris.akun_id) };
 }
 
 // ---------------------------------------------------------------------------------------------

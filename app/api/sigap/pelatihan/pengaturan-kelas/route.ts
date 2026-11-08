@@ -15,6 +15,7 @@ import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { bersihkanCache } from "@/lib/sigapKuisDb";
 import { lepasInstruktur, muatInstruktur, tetapkanInstruktur } from "@/lib/sigapInstrukturDb";
+import { lepasAdministrasiAkun, tambahPesertaAdministrasi } from "@/lib/sigapAdministrasiDaftar";
 import { KELAS_MAKS, aturJumlahKelas, bagiRataPeserta, cabutPanitia, cariAkunLibat, hapusKelas, keluarkanPeserta, libatkanPeserta, peranPesertaKegiatan, tambahPanitia, masukkanBelumBerkelas, muatKelasKegiatan, muatPanitia, muatPesertaKelas, nomorKelasSah, pindahkanPesertaKelas, tambahKelas, ubahKelas } from "@/lib/sigapKelasKegiatan";
 
 export const runtime = "nodejs";
@@ -160,15 +161,19 @@ export async function POST(req: NextRequest) {
         const h = await tetapkanInstruktur(db, kegiatanId, akunId, kelas);
         if (!h.ok) return galat(h.pesan);
         segarkan();
-        await audit("pelatihan_libatkan_instruktur", { akun_id: akunId, kelas });
-        return NextResponse.json({ ok: true });
+        const adm = await tambahPesertaAdministrasi(db, kegiatanId, { akunId, peran: "instruktur", kelas });
+        await audit("pelatihan_libatkan_instruktur", { akun_id: akunId, kelas, administrasi: adm.ok });
+        return NextResponse.json({ ok: true, catatan: adm.ok ? undefined : `Belum masuk daftar Administrasi Instruktur: ${adm.pesan}` });
       }
       if (sebagai === "panitia") {
         const h = await tambahPanitia(db, kegiatanId, akunId, { aktorId: p.akun.id, adminAplikasi: p.adminAplikasi, diberiOleh: `pelatihan:${p.akun.id}` });
         if (!h.ok) return galat(h.pesan);
         segarkan();
-        await audit("pelatihan_libatkan_panitia", { akun_id: akunId });
-        return NextResponse.json({ ok: true, nama: h.nama });
+        // Panitia mengikuti dokumen yang sama dengan peserta: masuk juga ke daftar Administrasi (kelas dipilih, bawaan kelas pertama).
+        const kelasAdm = kelas ?? (await muatKelasKegiatan(db, kegiatanId))[0]?.nomor ?? 1;
+        const adm = await tambahPesertaAdministrasi(db, kegiatanId, { akunId, peran: "panitia", kelas: kelasAdm });
+        await audit("pelatihan_libatkan_panitia", { akun_id: akunId, kelas: kelasAdm, administrasi: adm.ok });
+        return NextResponse.json({ ok: true, nama: h.nama, catatan: adm.ok ? undefined : `Belum masuk daftar Administrasi: ${adm.pesan}` });
       }
       return galat("Pilih sebagai apa akun ini dilibatkan: peserta, instruktur, atau panitia.");
     }
@@ -185,6 +190,7 @@ export async function POST(req: NextRequest) {
         const akunId = Number(body.akun_id);
         const h = await lepasInstruktur(db, kegiatanId, akunId);
         if (!h.ok) return galat(h.pesan);
+        await lepasAdministrasiAkun(db, kegiatanId, akunId, "instruktur");
         segarkan();
         await audit("pelatihan_keluarkan_instruktur", { akun_id: akunId });
         return NextResponse.json({ ok: true });
@@ -192,6 +198,7 @@ export async function POST(req: NextRequest) {
       if (sebagai === "panitia") {
         const h = await cabutPanitia(db, kegiatanId, Number(body.akun_peran_id), { aktorId: p.akun.id, adminAplikasi: p.adminAplikasi });
         if (!h.ok) return galat(h.pesan);
+        if (h.akun_id) await lepasAdministrasiAkun(db, kegiatanId, h.akun_id, "panitia");
         await audit("pelatihan_keluarkan_panitia", { akun_peran_id: Number(body.akun_peran_id) });
         return NextResponse.json({ ok: true });
       }

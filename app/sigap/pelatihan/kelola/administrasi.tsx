@@ -94,6 +94,9 @@ export default function Administrasi() {
   const [fStatus, setFStatus] = useState("");
   const [sibuk, setSibuk] = useState<string | null>(null);
   const [tambah, setTambah] = useState(false);
+  // (8 Nov 2026) Panitia digabung dengan peserta (dokumen sama); instruktur dokumennya sama tetapi daftarnya terpisah.
+  const [kelompok, setKelompok] = useState<"peserta" | "instruktur">("peserta");
+  const instr = kelompok === "instruktur";
 
   // --- cakupan & kelas ---
   useEffect(() => {
@@ -119,7 +122,7 @@ export default function Administrasi() {
   const muat = useCallback(async () => {
     if (!kelas) return;
     try {
-      const d = await fetchJson<DataPeserta>(`${URL_ADM}?bagian=peserta&kelas=${kelas}`);
+      const d = await fetchJson<DataPeserta>(`${URL_ADM}?bagian=peserta&kelas=${kelas}&kelompok=${kelompok}`);
       setData(d);
       setGalat(null);
       // pilihan yang sudah tidak ada (mis. peserta dikeluarkan) dibuang
@@ -127,7 +130,7 @@ export default function Administrasi() {
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
     }
-  }, [kelas]);
+  }, [kelas, kelompok]);
 
   useEffect(() => {
     setData(null);
@@ -136,7 +139,7 @@ export default function Administrasi() {
     muat();
     const t = setInterval(muat, 15_000);
     return () => clearInterval(t);
-  }, [kelas, muat]);
+  }, [kelas, kelompok, muat]);
 
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase();
@@ -150,7 +153,7 @@ export default function Administrasi() {
   const butuhSpj = jenisSpj.length > 0;
 
   function urlCetak(ids: number[], jenis: string[], format: "gabungan" | "zip") {
-    const q = new URLSearchParams({ bagian: "cetak", kelas: String(kelas), penugasan: ids.join(","), jenis: jenis.join(","), format });
+    const q = new URLSearchParams({ bagian: "cetak", kelas: String(kelas), kelompok, penugasan: ids.join(","), jenis: jenis.join(","), format });
     return `${URL_ADM}?${q.toString()}`;
   }
 
@@ -211,7 +214,7 @@ export default function Administrasi() {
     try {
       const s = bacaSesi();
       if (!s) throw new Error("Sesi berakhir. Silakan masuk kembali.");
-      const res = await fetch(`${URL_ADM}?bagian=pulsa_csv&kelas=${kelas}`, { headers: { Authorization: `Bearer ${s}` }, cache: "no-store" });
+      const res = await fetch(`${URL_ADM}?bagian=pulsa_csv&kelas=${kelas}&kelompok=${kelompok}`, { headers: { Authorization: `Bearer ${s}` }, cache: "no-store" });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error((j as { error?: string })?.error ?? `Gagal menyiapkan CSV (${res.status}).`);
@@ -269,6 +272,19 @@ export default function Administrasi() {
               Kelas {k}
             </button>
           ))}
+          <span className="mx-1 hidden h-5 w-px bg-[#CDD5DE] sm:block" aria-hidden />
+          <b className="text-[13px]">Daftar:</b>
+          {([["peserta", "Peserta & panitia"], ["instruktur", "Instruktur"]] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKelompok(k)}
+              aria-pressed={kelompok === k}
+              className={`rounded-full px-3.5 py-1 text-[13px] font-bold transition ${kelompok === k ? "bg-[#0F3D7A] text-white" : "bg-white text-[#55657D] ring-1 ring-[#CDD5DE] hover:bg-[#F8FAFC]"}`}
+            >
+              {label}
+            </button>
+          ))}
           <span className="ml-auto text-[12px] text-[#7B8794]">
             {info.semua_kelas ? "Anda dapat mengakses semua kelas." : `Anda hanya mengakses Kelas ${info.kelas.join(", ")}.`}
           </span>
@@ -277,7 +293,7 @@ export default function Administrasi() {
 
       {/* 1. Monitoring */}
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-6">
-        <KartuAngka label="Peserta kelas ini" nilai={st?.peserta ?? "…"} />
+        <KartuAngka label={instr ? "Instruktur kelas ini" : "Peserta & panitia kelas ini"} nilai={st?.peserta ?? "…"} />
         <KartuAngka label="Belum diisi" nilai={st?.belum ?? "…"} warna="#B5352D" />
         <KartuAngka label="Draft (sebagian)" nilai={st?.draft ?? "…"} warna="#9A6200" />
         <KartuAngka label="Sudah diisi" nilai={st?.sudah ?? "…"} warna="#12816A" />
@@ -287,7 +303,7 @@ export default function Administrasi() {
 
       {/* 2. Pilih petugas */}
       <Kartu
-        judul="① Pilih petugas"
+        judul={instr ? "① Pilih instruktur" : "① Pilih petugas"}
         ket={`${dipilih.length} dipilih · segar otomatis tiap 15 detik`}
         kanan={
           <div className="flex flex-wrap gap-1.5">
@@ -296,7 +312,7 @@ export default function Administrasi() {
             </button>
             {info.boleh_kelola && (
               <button type="button" className={BTN} onClick={() => setTambah(true)}>
-                + Tambah peserta manual
+                {instr ? "+ Tambah instruktur manual" : "+ Tambah peserta / panitia manual"}
               </button>
             )}
           </div>
@@ -348,7 +364,7 @@ export default function Administrasi() {
                 <tr key={p.penugasan_id}>
                   <td className={TD}><input type="checkbox" checked={sel.has(p.penugasan_id)} onChange={() => ubahSel(p.penugasan_id)} aria-label={`Pilih ${p.nama}`} /></td>
                   <td className={`${TD} font-semibold`}>
-                    {p.nama} {p.manual && <Chip w="wait" title="Ditambahkan manual; hanya untuk administrasi">manual</Chip>}
+                    {p.nama} {p.manual && <Chip w="wait" title="Ditambahkan manual atau lewat Libatkan orang; hanya untuk administrasi">manual</Chip>}
                   </td>
                   <td className={TD}>{p.peran.toUpperCase()}</td>
                   <td className={TD}>{p.jenis_akun === "organik" ? "Organik" : "Mitra"}</td>
@@ -393,13 +409,13 @@ export default function Administrasi() {
               ))}
               {tampil.length === 0 && (
                 <tr>
-                  <td className={`${TD} text-center text-[#7B8794]`} colSpan={14}>Tidak ada peserta yang cocok.</td>
+                  <td className={`${TD} text-center text-[#7B8794]`} colSpan={14}>{instr ? "Belum ada instruktur di daftar ini. Libatkan instruktur lewat Pengaturan kelas, atau tambah manual." : "Tidak ada peserta yang cocok."}</td>
                 </tr>
               )}
             </tbody>
           </TabelKartu>
         )}
-        <p className="mt-1.5 text-[11.5px] text-[#7B8794]">Peserta bertanda “manual” hanya masuk administrasi kelas ini; tidak ikut tes, kuis, presensi, atau monitoring peserta.</p>
+        <p className="mt-1.5 text-[11.5px] text-[#7B8794]">Yang bertanda “manual” (termasuk panitia dan instruktur) hanya masuk administrasi kelas ini; tidak ikut tes, kuis, presensi, atau monitoring peserta. Peran Panitia dan Instruktur memerlukan tarifnya diatur di Kegiatan & Tarif.</p>
       </Kartu>
 
       {/* 3. Jenis dokumen */}
@@ -444,9 +460,10 @@ export default function Administrasi() {
       {tambah && kelas && (
         <ModalTambah
           kelas={kelas}
+          kelompok={kelompok}
           tutup={() => setTambah(false)}
           setelah={(nama) => {
-            setPesan({ jenis: "ok", teks: `${nama} ditambahkan sebagai peserta manual Kelas ${kelas}.` });
+            setPesan({ jenis: "ok", teks: `${nama} ditambahkan ke daftar ${instr ? "instruktur" : "peserta / panitia"} Kelas ${kelas}.` });
             muat();
           }}
         />
@@ -691,7 +708,7 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
 // ======================================================================
 // Tambah peserta manual
 // ======================================================================
-function ModalTambah({ kelas, tutup, setelah }: { kelas: number; tutup: () => void; setelah: (nama: string) => void }) {
+function ModalTambah({ kelas, kelompok, tutup, setelah }: { kelas: number; kelompok: "peserta" | "instruktur"; tutup: () => void; setelah: (nama: string) => void }) {
   useTutupDenganBack(true, tutup); // (31 Okt 2026) Back HP menutup lapisan ini
   const [q, setQ] = useState("");
   const [hasil, setHasil] = useState<Kandidat[] | null>(null);
@@ -699,6 +716,7 @@ function ModalTambah({ kelas, tutup, setelah }: { kelas: number; tutup: () => vo
   const [peran, setPeran] = useState<Record<number, string>>({});
   const [galat, setGalat] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState<number | null>(null);
+  const peranBawaan = kelompok === "instruktur" ? "instruktur" : "ppl";
 
   useEffect(() => {
     const teks = q.trim();
@@ -723,7 +741,7 @@ function ModalTambah({ kelas, tutup, setelah }: { kelas: number; tutup: () => vo
     setSibuk(k.akun_id);
     setGalat(null);
     try {
-      await fetchJson(URL_ADM, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "tambah_peserta", kelas, akun_id: k.akun_id, peran: peran[k.akun_id] ?? "ppl" }) });
+      await fetchJson(URL_ADM, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "tambah_peserta", kelas, akun_id: k.akun_id, peran: peran[k.akun_id] ?? peranBawaan }) });
       setHasil((h) => (h ?? []).filter((x) => x.akun_id !== k.akun_id));
       setelah(k.nama);
     } catch (e) {
@@ -737,7 +755,7 @@ function ModalTambah({ kelas, tutup, setelah }: { kelas: number; tutup: () => vo
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={tutup}>
       <div className="max-h-[85vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <b className="text-[15px]">Tambah peserta manual · Kelas {kelas}</b>
+          <b className="text-[15px]">{kelompok === "instruktur" ? "Tambah instruktur manual" : "Tambah peserta / panitia manual"} · Kelas {kelas}</b>
           <button type="button" className={BTN_O} onClick={tutup}>Tutup</button>
         </div>
         <p className="mt-1 text-[12px] text-[#7B8794]">Sumber: gabungan seluruh akun Mitra dan organik yang aktif. Ketik minimal 2 huruf nama. Peserta manual hanya masuk administrasi (SPJ translok, daftar hadir, laporan), tidak ikut tes/kuis/presensi.</p>
@@ -752,10 +770,17 @@ function ModalTambah({ kelas, tutup, setelah }: { kelas: number; tutup: () => vo
                 <p className="truncate text-[13px] font-semibold">{k.nama}</p>
                 <p className="text-[11.5px] text-[#7B8794]">{k.jenis === "organik" ? "Organik" : "Mitra"}{k.kecamatan ? ` · ${k.kecamatan}` : ""}</p>
               </div>
-              <SelectCari className={INPUT} value={peran[k.akun_id] ?? "ppl"} onChange={(e) => setPeran({ ...peran, [k.akun_id]: e.target.value })} aria-label="Peran">
-                <option value="ppl">PPL</option>
-                <option value="pml">PML</option>
-                <option value="korwil">Korwil</option>
+              <SelectCari className={INPUT} value={peran[k.akun_id] ?? peranBawaan} onChange={(e) => setPeran({ ...peran, [k.akun_id]: e.target.value })} aria-label="Peran">
+                {kelompok === "instruktur" ? (
+                  <option value="instruktur">Instruktur</option>
+                ) : (
+                  <>
+                    <option value="ppl">PPL</option>
+                    <option value="pml">PML</option>
+                    <option value="korwil">Korwil</option>
+                    <option value="panitia">Panitia</option>
+                  </>
+                )}
               </SelectCari>
               <button type="button" className={BTN_G} disabled={sibuk !== null} onClick={() => tambahkan(k)}>{sibuk === k.akun_id ? "…" : "Tambahkan"}</button>
             </div>

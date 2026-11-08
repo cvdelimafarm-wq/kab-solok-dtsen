@@ -111,6 +111,7 @@ function KartuLibatkan({ d, sibuk, kirim }: { d: Data; sibuk: boolean; kirim: (b
       body.kelas = kelas === "" ? null : kelas;
     }
     if (sebagai === "instruktur") body.kelas = kelas;
+    if (sebagai === "panitia" && kelas !== "") body.kelas = kelas;
     const ket = sebagai === "peserta" ? "peserta" : sebagai === "instruktur" ? "instruktur" : "panitia";
     const ok = await kirim(body, () => `${akun.nama} dilibatkan sebagai ${ket}.`);
     if (ok) {
@@ -158,15 +159,16 @@ function KartuLibatkan({ d, sibuk, kirim }: { d: Data; sibuk: boolean; kirim: (b
             {d.peran_peserta.map((r) => <option key={r} value={r}>{LABEL_PERAN[r] ?? r}</option>)}
           </SelectCari>
         )}
-        {sebagai !== "panitia" && (
+        {(
           <SelectCari className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value === "" ? "" : Number(e.target.value))} aria-label="Kelas">
-            <option value="">{sebagai === "peserta" ? "— belum berkelas —" : "Pilih kelas (wajib)"}</option>
+            <option value="">{sebagai === "peserta" ? "— belum berkelas —" : sebagai === "panitia" ? "Kelas administrasi (bawaan: kelas pertama)" : "Pilih kelas (wajib)"}</option>
             {d.kelas.map((k) => <option key={k.nomor} value={k.nomor}>{k.nama}</option>)}
           </SelectCari>
         )}
         <button type="submit" className={BTN} disabled={!bisa}>{sibuk ? "Menyimpan…" : "Libatkan"}</button>
       </form>
-      {sebagai === "panitia" && <p className="mt-2 text-[12px] text-[#6B7A90]">Panitia Pelatihan hanya berlaku untuk pelatihan ini. Hak lain di aplikasi tidak berubah.</p>}
+      {sebagai === "panitia" && <p className="mt-2 text-[12px] text-[#6B7A90]">Panitia Pelatihan hanya berlaku untuk pelatihan ini dan hak lain di aplikasi tidak berubah. Panitia ikut daftar peserta di Administrasi (dokumen yang sama); kelasnya menentukan di tab kelas mana ia muncul.</p>}
+      {sebagai === "instruktur" && <p className="mt-2 text-[12px] text-[#6B7A90]">Instruktur masuk daftar tersendiri di Administrasi (dokumen yang sama dengan peserta).</p>}
       {galat && <div className="mt-2"><Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan></div>}
     </Kartu>
   );
@@ -199,12 +201,12 @@ export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstrukt
     void muat();
   }, [muat]);
 
-  async function kirim(body: Record<string, unknown>, pesanOk: (r: { berubah?: number; jumlah?: number; nama?: string }) => string) {
+  async function kirim(body: Record<string, unknown>, pesanOk: (r: { berubah?: number; jumlah?: number; nama?: string; catatan?: string }) => string) {
     setSibuk(true);
     toast.tampil("simpan", "Menyimpan…");
     try {
-      const r = await fetchJson<{ ok: boolean; berubah?: number; jumlah?: number; nama?: string }>(urlPelatihan(URL_API), { method: "POST", body: JSON.stringify(body) });
-      toast.tampil("ok", pesanOk(r));
+      const r = await fetchJson<{ ok: boolean; berubah?: number; jumlah?: number; nama?: string; catatan?: string }>(urlPelatihan(URL_API), { method: "POST", body: JSON.stringify(body) });
+      toast.tampil(r.catatan ? "galat" : "ok", r.catatan ? `${pesanOk(r)} ${r.catatan}` : pesanOk(r));
       await muat();
       return true;
     } catch (e) {

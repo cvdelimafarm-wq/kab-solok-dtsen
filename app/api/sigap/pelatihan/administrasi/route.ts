@@ -6,13 +6,14 @@
 //
 // GET ?bagian=ringkas                          -> cakupan kelas, kelas bawaan, izin
 // GET ?bagian=peserta&kelas=N                  -> peserta kelas + status pengisian Transport Lokal + statistik
+// GET ?bagian=peserta|cetak|pulsa_csv ... &kelompok=instruktur  -> daftar instruktur (terpisah); tanpa kelompok = peserta + panitia
 // GET ?bagian=kandidat&kelas=N&q=teks          -> pencarian Mitra+organik (belum jadi peserta) utk ditambahkan manual
 // GET ?bagian=narasi&kelas=N                   -> narasi Laporan Pelatihan & Laporan Instruktur tersimpan
 // GET ?bagian=pulsa_csv&kelas=N                  -> CSV nomor HP pengisian pulsa peserta kelas (diisi peserta lewat pop-up)
 // GET ?bagian=foto_ringkas                    -> (9 Okt 2026) jumlah foto lampiran per kelas cakupan + batas
 // GET ?bagian=foto&kelas=N                     -> foto lampiran laporan (tautan sementara); unggah/hapus: ./foto/route.ts
 // GET ?bagian=cetak&kelas=N&penugasan=1,2&jenis=kwitansi,visum,daftar_hadir&format=gabungan|zip[&unduh=1]
-// POST {aksi:"tambah_peserta", kelas, akun_id, peran?}   -> peserta manual (hanya administrasi)
+// POST {aksi:"tambah_peserta", kelas, akun_id, peran?}   -> peserta manual / panitia / instruktur (hanya administrasi; peran ppl|pml|korwil|panitia|instruktur)
 // POST {aksi:"keluarkan_peserta", penugasan_id}          -> nonaktifkan peserta manual (tidak menghapus data)
 // POST {aksi:"simpan_narasi", kelas, jenis:"pelatihan"|"instruktur", ringkasan, kendala, catatan}
 
@@ -22,7 +23,7 @@ import { GalatSpj, headerBerkas } from "@/lib/sigapDokumen";
 import { undanganUntuk } from "@/lib/sigapTesDb";
 import { muatSkema } from "@/lib/sigapNilai";
 import { ringkasSkema } from "@/lib/sigapNilaiHitung";
-import { PERAN_PESERTA, SUMBER_ADMINISTRASI, buatCetak, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi, MAKS_FOTO_LAPORAN, hitungFotoLaporan } from "@/lib/sigapAdministrasi";
+import { SUMBER_ADMINISTRASI, buatCetak, kelompokDari, tambahPesertaAdministrasi, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi, MAKS_FOTO_LAPORAN, hitungFotoLaporan } from "@/lib/sigapAdministrasi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
     if (kelas instanceof NextResponse) return kelas;
 
     if (bagian === "peserta") {
-      const [peserta, { skema, tersimpan }] = await Promise.all([muatPeserta(k.db, k.kegiatanId, kelas, { nilai: true }), muatSkema(k.db, k.kegiatanId)]);
+      const [peserta, { skema, tersimpan }] = await Promise.all([muatPeserta(k.db, k.kegiatanId, kelas, { nilai: true, kelompok: kelompokDari(sp.get("kelompok")) }), muatSkema(k.db, k.kegiatanId)]);
       const hitung = (s: string) => peserta.filter((p) => p.status === s).length;
       return NextResponse.json({
         kelas,
@@ -76,7 +77,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (bagian === "pulsa_csv") {
-      const isi = await csvPulsaKelas(k.db, k.kegiatanId, kelas);
+      const isi = await csvPulsaKelas(k.db, k.kegiatanId, kelas, kelompokDari(sp.get("kelompok")));
       await catatAudit(k.db, k.akun.id, "pelatihan_administrasi_unduh_pulsa", { kelas });
       return new NextResponse(isi, {
         status: 200,
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
       if (ids.length === 0) return galat("Pilih minimal 1 petugas.");
       const jenis = parseJenisCetak(sp.get("jenis"));
       if (jenis.spj.length + jenis.pelatihan.length === 0) return galat("Pilih minimal 1 jenis dokumen.");
-      const peserta = await muatPeserta(k.db, k.kegiatanId, kelas);
+      const peserta = await muatPeserta(k.db, k.kegiatanId, kelas, { kelompok: kelompokDari(sp.get("kelompok")) });
       const pilih = ids.map((id) => peserta.find((p) => p.penugasan_id === id)).filter((p): p is NonNullable<typeof p> => !!p);
       if (pilih.length !== new Set(ids).size) return galat("Ada petugas yang bukan peserta kelas ini atau sudah tidak aktif. Muat ulang halaman.", 400);
       const urut = pilih.sort((a, b) => a.nama.localeCompare(b.nama));
@@ -121,35 +122,10 @@ export async function POST(req: NextRequest) {
     if (aksi === "tambah_peserta") {
       const kelas = kelasBoleh(k, body?.kelas);
       if (kelas instanceof NextResponse) return kelas;
-      const akunId = Number(body?.akun_id);
-      const peran = String(body?.peran ?? "ppl").toLowerCase();
-      if (!Number.isInteger(akunId) || akunId <= 0) return galat("Akun tidak valid.");
-      if (!(PERAN_PESERTA as readonly string[]).includes(peran)) return galat("Peran harus PPL, PML, atau Korwil.");
-      const { data: a } = await k.db.from("sigap_akun").select("id, nama, aktif").eq("id", akunId).maybeSingle();
-      if (!a || !a.aktif) return galat("Akun tidak ditemukan atau tidak aktif.", 404);
-      const { data: tarif } = await k.db.from("sigap_kegiatan_tarif").select("peran").eq("kegiatan_id", k.kegiatanId).eq("peran", peran).maybeSingle();
-      if (!tarif) return galat(`Tarif untuk peran ${peran.toUpperCase()} belum diatur pada kegiatan ini.`);
-
-      const { data: ada } = await k.db.from("sigap_penugasan").select("id, aktif").eq("kegiatan_id", k.kegiatanId).eq("akun_id", akunId).maybeSingle();
-      if (ada?.aktif) return galat("Orang ini sudah menjadi peserta pelatihan.", 409);
-      let penugasanId: number;
-      if (ada) {
-        const { error } = await k.db.from("sigap_penugasan").update({ aktif: true, peran, kelas, sumber: SUMBER_ADMINISTRASI }).eq("id", ada.id);
-        if (error) return galat(error.message, 500);
-        penugasanId = ada.id as number;
-      } else {
-        const { data: baru, error } = await k.db.from("sigap_penugasan").insert({ kegiatan_id: k.kegiatanId, akun_id: akunId, peran, kelas, aktif: true, sumber: SUMBER_ADMINISTRASI }).select("id").single();
-        if (error || !baru) return galat(error?.message ?? "Gagal menambah peserta.", 500);
-        penugasanId = baru.id as number;
-      }
-      // Hari kerja pelatihan, supaya halaman Transport Lokal peserta ini bisa diisi & SPJ-nya bisa dicetak.
-      const { error: eHk } = await k.db.from("sigap_hari_kerja").upsert({ penugasan_id: penugasanId, akun_id: akunId, tanggal: (await undanganUntuk(k.db, k.kegiatanId)).tanggal_iso }, { onConflict: "penugasan_id,tanggal", ignoreDuplicates: true });
-      if (eHk) {
-        const bentrok = eHk.code === "23505";
-        return galat(bentrok ? "Orang ini sudah punya hari kerja Transport Lokal pada tanggal pelatihan di kegiatan lain, sehingga tidak bisa ditambahkan." : eHk.message, bentrok ? 409 : 500);
-      }
-      await catatAudit(k.db, k.akun.id, "pelatihan_administrasi_tambah_peserta", { akun_id: akunId, nama: a.nama, kelas, peran, penugasan_id: penugasanId });
-      return NextResponse.json({ ok: true, penugasan_id: penugasanId });
+      const h = await tambahPesertaAdministrasi(k.db, k.kegiatanId, { akunId: Number(body?.akun_id), peran: String(body?.peran ?? "ppl"), kelas });
+      if (!h.ok) return galat(h.pesan, h.status);
+      await catatAudit(k.db, k.akun.id, "pelatihan_administrasi_tambah_peserta", { akun_id: Number(body?.akun_id), nama: h.nama, kelas, peran: String(body?.peran ?? "ppl"), penugasan_id: h.penugasan_id });
+      return NextResponse.json({ ok: true, penugasan_id: h.penugasan_id });
     }
 
     if (aksi === "keluarkan_peserta") {

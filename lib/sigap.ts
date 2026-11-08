@@ -17,6 +17,7 @@ import { PESAN_ARSIP, statusPeriode, type StatusPeriode } from "@/lib/portal/per
 import { BATAS_HARI_SUSUN, jendelaSusunFoto } from "@/lib/sigapFotoSusun";
 import { dalamToleransiKirim } from "@/lib/sigapFoto";
 import { PESAN_DIBLOKIR, memblokir } from "@/lib/translokBlokir";
+import { PESAN_FOTO_TERLALU_KURANG, bolehLengkapiMandiri, hitungKekurangan } from "@/lib/sigapLengkapiMandiri";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Db = SupabaseClient<any, any, any>;
@@ -249,8 +250,11 @@ export async function cekAksesIsian(
     /** (31 Okt 2026) Kamera SIGAP: tanggal yang BUKAN hari kerja tetap lolos (hasilnya `tanpaHariKerja: true`) supaya petugas boleh memotret
      *  satu foto laporan. Pemanggil wajib membatasi jumlahnya (lihat MAKS_FOTO_TANPA_HARI_KERJA di lib/sigapFoto.ts). Pemeriksaan lain tetap berlaku. */
     izinTanpaHariKerja?: boolean;
+    /** (8 Nov 2026) Hari lampau yang TERLEWAT boleh dilengkapi petugas sendiri (jalur "lengkapi kekurangan", ketik laporan / unggah foto manual) selama
+     *  foto yang kurang tidak lebih dari MAKS_FOTO_KURANG_MANDIRI. Hasilnya `mandiri: true` + `susulan: true`; pemanggil wajib hanya MENAMBAH (lihat lib/sigapLengkapiMandiri.ts). */
+    lengkapiMandiri?: boolean;
   } = {}
-): Promise<{ error: string; status: number } | { penugasan: Penugasan; tanggal: string; susulan: boolean; tanpaHariKerja?: boolean }> {
+): Promise<{ error: string; status: number } | { penugasan: Penugasan; tanggal: string; susulan: boolean; tanpaHariKerja?: boolean; mandiri?: boolean }> {
   if (!tanggalValid(tanggal)) return { error: "Tanggal tidak valid.", status: 400 };
   const pen = (await penugasanAkun(db, akunId)).find((p) => p.id === penugasanId);
   if (!pen) return { error: "Anda tidak terdaftar pada kegiatan ini.", status: 403 };
@@ -265,6 +269,15 @@ export async function cekAksesIsian(
   const kunci = await statusKunci(db, penugasanId, tanggal);
   if (!kunci.boleh && kunci.alasan === "terlewat" && opsi.toleransiOfflineHari !== undefined && dalamToleransiKirim(tanggal, hariIniWib(), opsi.toleransiOfflineHari)) {
     return { penugasan: pen, tanggal, susulan: false, ...(tanpaHariKerja ? { tanpaHariKerja } : {}) };
+  }
+  if (!kunci.boleh && kunci.alasan === "terlewat" && opsi.lengkapiMandiri && !tanpaHariKerja) {
+    const [{ data: r }, { data: f }] = await Promise.all([
+      db.from("sigap_realisasi").select("id").eq("penugasan_id", penugasanId).eq("tanggal", tanggal).limit(1),
+      db.from("sigap_dokumentasi").select("slot").eq("penugasan_id", penugasanId).eq("tanggal", tanggal),
+    ]);
+    const putusan = bolehLengkapiMandiri(hitungKekurangan((r ?? []).length > 0, false, (f ?? []).length, pen.kegiatan));
+    if (!putusan.boleh) return { error: putusan.alasan === "lengkap" ? "Tanggal ini sudah lengkap." : PESAN_FOTO_TERLALU_KURANG, status: 403 };
+    return { penugasan: pen, tanggal, susulan: true, mandiri: true };
   }
   if (!kunci.boleh) {
     return {

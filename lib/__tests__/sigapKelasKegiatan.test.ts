@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { lepasAdministrasiAkun, tambahPesertaAdministrasi } from "@/lib/sigapAdministrasiDaftar";
 import {
   aturJumlahKelas,
   bagiRataPeserta,
@@ -13,6 +14,7 @@ import {
   masukkanBelumBerkelas,
   muatKelasKegiatan,
   muatPanitia,
+  muatPesertaKelas,
   nomorPilihanKuis,
   periksaKuota,
   periksaNamaKelas,
@@ -22,6 +24,9 @@ import {
   ubahKelas,
   ukuranBagiRata,
 } from "@/lib/sigapKelasKegiatan";
+
+// tanggal pelatihan dari basis data sungguhan tidak relevan di sini
+vi.mock("@/lib/sigapTesDb", () => ({ SUMBER_ADMINISTRASI: "administrasi", undanganUntuk: async () => ({ tanggal_iso: "2026-11-10" }) }));
 
 type Baris = Record<string, unknown>;
 
@@ -63,7 +68,14 @@ function dbTiruan(awal: Record<string, Baris[]>) {
         ilike(k: string, pola: string) { const kata = pola.replace(/%/g, "").toLowerCase(); filters.push((b) => String(b[k] ?? "").toLowerCase().includes(kata)); return q; },
         neq(k: string, v: unknown) { filters.push((b) => b[k] !== v); return q; },
         in(k: string, v: unknown[]) { filters.push((b) => v.includes(b[k])); return q; },
-        not(k: string, op: string, v: unknown) { if (op === "is" && v === null) filters.push((b) => b[k] != null); return q; },
+        not(k: string, op: string, v: unknown) {
+          if (op === "is" && v === null) filters.push((b) => b[k] != null);
+          if (op === "in" && typeof v === "string") {
+            const daftar = v.replace(/[()]/g, "").split(",");
+            filters.push((b) => !daftar.includes(String(b[k])));
+          }
+          return q;
+        },
         or(teks: string) {
           const bagian = teks.split(",").map((s) => s.split("."));
           filters.push((b) => bagian.some(([k, op, v]) => (op === "is" ? b[k] == null : b[k] === Number(v))));
@@ -74,13 +86,23 @@ function dbTiruan(awal: Record<string, Baris[]>) {
         maybeSingle: async () => ({ data: jalankan().data?.[0] ?? null, error: null }),
         update(p: Baris) { aksi = "update"; patch = p; return q; },
         delete() { aksi = "delete"; return q; },
-        insert: async (b: Baris | Baris[]) => {
+        insert: (b: Baris | Baris[]) => {
           const baris = Array.isArray(b) ? b : [b];
+          let error: { message: string } | null = null;
+          let terakhir: Baris | null = null;
           for (const x of baris) {
-            if (nama === "sigap_pelatihan_kelas" && t[nama].some((y) => y.kegiatan_id === x.kegiatan_id && y.nomor === x.nomor)) return { error: { message: "dup" } };
-            t[nama].push({ ...x });
+            if (nama === "sigap_pelatihan_kelas" && t[nama].some((y) => y.kegiatan_id === x.kegiatan_id && y.nomor === x.nomor)) {
+              error = { message: "dup" };
+              break;
+            }
+            const baru = { ...x };
+            if (nama === "sigap_penugasan" && baru.id === undefined) baru.id = Math.max(0, ...t[nama].map((y) => Number(y.id) || 0)) + 1;
+            t[nama].push(baru);
+            terakhir = baru;
           }
-          return { error: null };
+          const hasil = Promise.resolve({ error }) as Promise<{ error: { message: string } | null }> & { select: () => { single: () => Promise<{ data: Baris | null; error: { message: string } | null }> } };
+          hasil.select = () => ({ single: async () => ({ data: error ? null : terakhir, error }) });
+          return hasil;
         },
         upsert: async (b: Baris | Baris[], opsi?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
           const baris = Array.isArray(b) ? b : [b];
@@ -396,5 +418,60 @@ describe("melibatkan orang di pelatihan (panitia, peserta)", () => {
     expect(h.map((x) => x.id)).toEqual([478]);
     expect(h[0].sebagai.sort()).toEqual(["Instruktur Kelas 1", "Panitia", "Peserta Kelas 1"]);
     expect((await cariAkunLibat(db, 7, "rina"))[0].sebagai).toEqual([]);
+  });
+});
+
+describe("administrasi: panitia digabung dengan peserta, instruktur terpisah", () => {
+  const dasar = () => ({
+    sigap_akun: [{ id: 478, nama: "Oryza", aktif: true }, { id: 354, nama: "Iqbal", aktif: true }, { id: 30, nama: "Peserta", aktif: true }, { id: 9, nama: "Lama", aktif: false }],
+    sigap_kegiatan_tarif: [{ kegiatan_id: 7, peran: "ppl" }, { kegiatan_id: 7, peran: "panitia" }, { kegiatan_id: 7, peran: "instruktur" }],
+    sigap_penugasan: [{ id: 1, kegiatan_id: 7, akun_id: 30, peran: "ppl", aktif: true, kelas: 1, sumber: null }] as Baris[],
+    sigap_hari_kerja: [] as Baris[],
+    sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: null }],
+    sigap_kuis_instruktur_kelas: [] as Baris[],
+  });
+
+  it("tambahPesertaAdministrasi: panitia dan instruktur menjadi baris administrasi lengkap dengan hari kerja pada tanggal pelatihan", async () => {
+    const { db, t } = dbTiruan(dasar());
+    const a = await tambahPesertaAdministrasi(db, 7, { akunId: 478, peran: "panitia", kelas: 1 });
+    expect(a).toMatchObject({ ok: true, nama: "Oryza" });
+    const b = await tambahPesertaAdministrasi(db, 7, { akunId: 354, peran: "instruktur", kelas: 1 });
+    expect(b.ok).toBe(true);
+    expect(t.sigap_penugasan.filter((x) => x.sumber === "administrasi").map((x) => [x.akun_id, x.peran, x.kelas])).toEqual([[478, "panitia", 1], [354, "instruktur", 1]]);
+    expect(t.sigap_hari_kerja.map((x) => [x.akun_id, x.tanggal])).toEqual([[478, "2026-11-10"], [354, "2026-11-10"]]);
+  });
+
+  it("tambahPesertaAdministrasi: menolak peran asing, tarif belum ada, akun nonaktif, kelas kosong, dan orang yang sudah terdaftar", async () => {
+    const { db } = dbTiruan({ ...dasar(), sigap_kegiatan_tarif: [{ kegiatan_id: 7, peran: "ppl" }] });
+    expect((await tambahPesertaAdministrasi(db, 7, { akunId: 478, peran: "bendahara", kelas: 1 })).ok).toBe(false);
+    const tanpaTarif = await tambahPesertaAdministrasi(db, 7, { akunId: 478, peran: "panitia", kelas: 1 });
+    expect(tanpaTarif).toMatchObject({ ok: false });
+    expect(!tanpaTarif.ok && tanpaTarif.pesan).toContain("Tarif untuk peran PANITIA");
+    expect((await tambahPesertaAdministrasi(db, 7, { akunId: 9, peran: "ppl", kelas: 1 })).ok).toBe(false);
+    expect((await tambahPesertaAdministrasi(db, 7, { akunId: 478, peran: "ppl", kelas: null })).ok).toBe(false);
+    const ganda = await tambahPesertaAdministrasi(db, 7, { akunId: 30, peran: "ppl", kelas: 1 });
+    expect(!ganda.ok && ganda.status).toBe(409);
+  });
+
+  it("lepasAdministrasiAkun: hanya baris administrasi pada peran itu yang dinonaktifkan; peserta biasa tidak tersentuh", async () => {
+    const { db, t } = dbTiruan(dasar());
+    await tambahPesertaAdministrasi(db, 7, { akunId: 478, peran: "panitia", kelas: 1 });
+    expect(await lepasAdministrasiAkun(db, 7, 30, "panitia")).toBe(0);
+    expect(await lepasAdministrasiAkun(db, 7, 478, "panitia")).toBe(1);
+    expect(t.sigap_penugasan.find((x) => x.akun_id === 478)).toMatchObject({ aktif: false });
+    expect(t.sigap_penugasan.find((x) => x.akun_id === 30)).toMatchObject({ aktif: true });
+  });
+
+  it("panitia dan instruktur bukan peserta kelas: tidak dihitung di plotting peserta dan tidak membuat kelas \"terpakai\"", async () => {
+    const d = dasar();
+    d.sigap_penugasan.push(
+      { id: 2, kegiatan_id: 7, akun_id: 478, peran: "panitia", aktif: true, kelas: 3, sumber: "administrasi" },
+      { id: 3, kegiatan_id: 7, akun_id: 354, peran: "instruktur", aktif: true, kelas: 2, sumber: "administrasi" },
+    );
+    d.sigap_akun.push();
+    const { db } = dbTiruan(d);
+    const p = await muatPesertaKelas(db, 7);
+    expect(p.map((x) => x.akun_id)).toEqual([30]);
+    expect((await muatKelasKegiatan(db, 7)).map((k) => k.nomor)).toEqual([1]);
   });
 });

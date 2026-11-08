@@ -32,7 +32,7 @@ async function cekAkses(db: Db, token: string, penugasanId: number, tanggal: unk
   const akun = await akunDariToken(db, token);
   if (!akun) return { error: "Sesi tidak valid. Silakan masuk kembali.", status: 404 } as const;
   if (!Number.isInteger(slot) || slot < 1 || slot > 10) return { error: "Slot foto tidak valid.", status: 400 } as const;
-  const akses = await cekAksesIsian(db, akun.id, penugasanId, tanggal);
+  const akses = await cekAksesIsian(db, akun.id, penugasanId, tanggal, { lengkapiMandiri: true }); // (8 Nov 2026) hari terlewat boleh dilengkapi sendiri (hanya menambah)
   // (7 Okt 2026) jumlah foto per kegiatan (Admin > Kegiatan, peran & tarif)
   if (!("error" in akses) && slot > akses.penugasan.kegiatan.jumlah_foto) return { error: "Slot foto tidak valid.", status: 400 } as const;
   return akses;
@@ -53,6 +53,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
 
     const akses = await cekAkses(db, token, penugasanId, form.get("tanggal"), slot);
     if ("error" in akses) return NextResponse.json({ error: akses.error }, { status: akses.status });
+
+    // (8 Nov 2026) Jalur "lengkapi kekurangan" hari terlewat: hanya mengisi nomor yang masih kosong; foto yang sudah ada tidak boleh diganti.
+    if ("mandiri" in akses && akses.mandiri) {
+      const { data: ada } = await db.from("sigap_dokumentasi").select("id").eq("penugasan_id", penugasanId).eq("tanggal", akses.tanggal).eq("slot", slot).maybeSingle();
+      if (ada) return NextResponse.json({ error: "Foto yang sudah terunggah pada tanggal terlewat tidak bisa diganti. Isi nomor yang masih kosong." }, { status: 403 });
+    }
 
     let jpeg: Buffer;
     try {
@@ -82,6 +88,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       { onConflict: "penugasan_id,tanggal,slot" }
     );
     if (error) return galatServer("[api/sigap/translok foto]", error);
+    if ("mandiri" in akses && akses.mandiri) {
+      const pelaku = await akunDariToken(db, token); // jejak: siapa melengkapi tanggal terlewat sendiri
+      await db.from("sigap_audit").insert({ akun_id: pelaku?.id ?? null, aksi: "translok.lengkapi_foto", detail: { penugasan_id: penugasanId, tanggal: akses.tanggal, slot } });
+    }
     const { data: signed } = await db.storage.from(BUCKET_SIGAP).createSignedUrl(path, 3600);
     return NextResponse.json({ ok: true, slot, url: signed?.signedUrl ?? null });
   } catch (err) {
@@ -99,6 +109,7 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ toke
     const slot = Number(sp.get("slot"));
     const akses = await cekAkses(db, token, penugasanId, sp.get("tanggal"), slot);
     if ("error" in akses) return NextResponse.json({ error: akses.error }, { status: akses.status });
+    if ("mandiri" in akses && akses.mandiri) return NextResponse.json({ error: "Foto pada tanggal terlewat tidak bisa dihapus. Hanya nomor kosong yang bisa diisi." }, { status: 403 });
     const { data: row } = await db
       .from("sigap_dokumentasi")
       .select("id, file_path")
