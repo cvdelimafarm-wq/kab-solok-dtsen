@@ -67,3 +67,10 @@ export async function tautanSurat(db: Db, kegiatanId: number, kelas: number, id:
   const { data: s } = await db.storage.from(BUCKET_SIGAP).createSignedUrl(String(data.file_path), 3600);
   return s?.signedUrl ?? null;
 }
+
+/** Nomor, tanggal, perihal surat aktif satu kelas (tanpa berkas). null bila tidak ada / tabel belum ada. */
+export async function ringkasSuratAktif(db: Db, kegiatanId: number, kelas: number): Promise<{ nomor: string; tanggal: string; perihal: string } | null> {
+  const { data, error } = await db.from("sigap_pelatihan_surat_undangan").select("nomor, tanggal, perihal").eq("kegiatan_id", kegiatanId).eq("kelas", kelas).eq("aktif", true).maybeSingle();
+  if (error || !data) return null;
+  return { nomor: String(data.nomor), tanggal: String(data.tanggal).slice(0, 10), perihal: String(data.perihal) };
+}

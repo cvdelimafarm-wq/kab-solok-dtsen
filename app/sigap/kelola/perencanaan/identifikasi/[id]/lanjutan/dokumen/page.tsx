@@ -13,6 +13,8 @@ import { Catatan, Chip, Galat, judulKartu, kartu, kolom, label as kelasLabel, Ko
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import { NAMA_DOKUMEN, normalisasiLanjutan, type JenisDokumen } from "@/lib/keu/lanjutan";
+import { JENIS_ARSIP_LANJUTAN } from "@/lib/arsip/nomor";
+import TombolNomorOtomatis from "@/app/sigap/arsip/TombolNomorOtomatis";
 import { bangunDokumen, type KonteksDokumen } from "@/lib/keu/lanjutanDokumen";
 import { useIdent } from "../../../useIdent";
 import { useLanjutan } from "../useLanjutan";
@@ -116,6 +118,14 @@ function Isi() {
                 <span className={kelasLabel}>Nomor surat (diisi manual)</span>
                 <input className={kolom} maxLength={80} disabled={terbit || !bolehUrus} value={nomor} onChange={(e) => { setNomor(e.target.value); setDiubah(true); }} />
               </label>
+              {/* (9 Nov 2026) nomor dari buku nomor (menu Arsip); idempoten per dokumen. Setelah terisi, tekan Simpan konsep. */}
+              {!terbit && bolehUrus && jenis && (
+                <TombolNomorOtomatis
+                  badan={{ untuk: "lanjutan", ident: id, jenis, kunci, ...(tanggal ? { tanggal } : {}) }}
+                  jenisArsip={JENIS_ARSIP_LANJUTAN[jenis]}
+                  onNomor={(n) => { setNomor(n); setDiubah(true); }}
+                />
+              )}
               <label className="block">
                 <span className={kelasLabel}>Tanggal surat</span>
                 <input type="date" className={kolom} disabled={terbit || !bolehUrus} value={tanggal} onChange={(e) => { setTanggal(e.target.value); setDiubah(true); }} />

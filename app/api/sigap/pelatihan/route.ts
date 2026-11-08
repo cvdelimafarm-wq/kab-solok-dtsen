@@ -18,6 +18,9 @@ import { hitungTahapan, kunciUntuk, ringkasIzin, tesDenganIzin } from "@/lib/sig
 import { izinBerlakuPerTahap, muatIzin, muatTahapanBatch, type BarisIzinLengkap } from "@/lib/sigapTahapanDb";
 import { ringkasanKuisHub } from "@/lib/sigapKuisDb";
 import { gerbangTertutup } from "@/lib/sigapPelatihanBaruDb";
+import { formatTanggalIndo } from "@/lib/pdf/sigap/format";
+import { gabungUndangan } from "@/lib/sigapSuratUndangan";
+import { ringkasSuratAktif } from "@/lib/sigapSuratUndanganDb";
 import { akunDariRequest, catatLangkah, dbAdmin, idKegiatanPelatihan, undanganUntuk, jumlahSoal, muatLangkah, muatPengaturanPresensi, muatRekamPresensi, muatTesDaftar, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
@@ -33,9 +36,11 @@ export async function GET(req: NextRequest) {
     if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
     const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
-    const undangan = await undanganUntuk(db, kegiatanId);
+    const undanganDasar = await undanganUntuk(db, kegiatanId);
     const sekarang = new Date();
     const [peserta, daftar, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), muatTesDaftar(db, kegiatanId), izinAkun(db, akun.id)]);
+    // (9 Nov 2026) surat undangan unggahan kelas peserta (pelatihan selain PSP) menggantikan undangan turunan
+    const undangan = gabungUndangan(undanganDasar, undanganDasar.turunan && peserta?.kelas ? await ringkasSuratAktif(db, kegiatanId, peserta.kelas) : null, formatTanggalIndo);
     // (3 Nov 2026) Gerbang undangan: peserta yang belum menerima undangan tidak mendapat tes, langkah, presensi, kuis, maupun pengumuman. Beranda memakai
     // `terkunci_undangan` untuk menampilkan satu tugas saja: "Respons undangan".
     if (peserta && (await gerbangTertutup(db, kegiatanId, akun.id, izin))) {

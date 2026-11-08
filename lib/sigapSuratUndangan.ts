@@ -62,3 +62,15 @@ export function namaBerkasSurat(nomor: string, kelas: number): string {
   const inti = nomor.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 50) || "undangan";
   return `Undangan_Kelas${kelas}_${inti}.pdf`;
 }
+
+/** Bagian InfoUndangan yang diganti oleh surat unggahan (pelatihan selain PSP). */
+export type UndanganDasar = { nomor: string; tanggal_surat: string; hal: string; pdf: string; turunan?: boolean };
+
+/**
+ * Pelatihan selain PSP: undangan disusun otomatis dari data kegiatan (turunan = true) dan belum punya surat resmi. Bila kelas peserta sudah punya surat
+ * undangan aktif, nomor, tanggal, perihal diambil dari surat itu dan PDF tersedia. PSP (surat resmi bawaan) tidak diubah.
+ */
+export function gabungUndangan<T extends UndanganDasar>(info: T, surat: { nomor: string; tanggal: string; perihal: string } | null, formatTanggal: (iso: string) => string): T {
+  if (!surat || info.turunan !== true) return info;
+  return { ...info, nomor: surat.nomor, tanggal_surat: formatTanggal(surat.tanggal), hal: surat.perihal, pdf: "surat-unggahan" };
+}

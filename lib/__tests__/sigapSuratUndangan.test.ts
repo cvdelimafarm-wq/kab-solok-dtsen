@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adalahPdf, alasanBersih, kelasTanpaSurat, namaBerkasSurat, periksaBerkas, periksaIsian, tanggalSah } from "@/lib/sigapSuratUndangan";
+import { adalahPdf, alasanBersih, gabungUndangan, kelasTanpaSurat, namaBerkasSurat, periksaBerkas, periksaIsian, tanggalSah } from "@/lib/sigapSuratUndangan";
 
 const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
 
@@ -35,5 +35,19 @@ describe("sigapSuratUndangan", () => {
     expect(alasanBersih("  salah  tanggal ")).toBe("salah tanggal");
     expect(alasanBersih("   ")).toBeNull();
     expect(namaBerkasSurat("B-457/13030/VS.220/2026", 1)).toBe("Undangan_Kelas1_B_457_13030_VS_220_2026.pdf");
+  });
+});
+
+describe("gabungUndangan", () => {
+  const surat = { nomor: "B-457/13030/VS.220/2026", tanggal: "2026-11-06", perihal: "Undangan Pelatihan" };
+  const fmt = (t: string) => `FMT:${t}`;
+  const turunan = { nomor: "", tanggal_surat: "", hal: "x", pdf: "", turunan: true, lain: 1 };
+  it("pelatihan turunan + surat aktif: nomor, tanggal, perihal, pdf diganti", () => {
+    expect(gabungUndangan(turunan, surat, fmt)).toEqual({ nomor: surat.nomor, tanggal_surat: "FMT:2026-11-06", hal: "Undangan Pelatihan", pdf: "surat-unggahan", turunan: true, lain: 1 });
+  });
+  it("tanpa surat atau PSP resmi: tidak berubah", () => {
+    expect(gabungUndangan(turunan, null, fmt)).toBe(turunan);
+    const resmi = { ...turunan, turunan: undefined, pdf: "psp.pdf" };
+    expect(gabungUndangan(resmi, surat, fmt)).toBe(resmi);
   });
 });

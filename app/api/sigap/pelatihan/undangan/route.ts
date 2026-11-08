@@ -9,6 +9,8 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { boleh, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan, undanganUntuk } from "@/lib/sigapTesDb";
+import { namaBerkasSurat } from "@/lib/sigapSuratUndangan";
+import { unduhSuratAktif } from "@/lib/sigapSuratUndanganDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +27,18 @@ export async function GET(req: NextRequest) {
     if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
     const [peserta, { izin }] = await Promise.all([pesertaPelatihan(db, akun.id, kegiatanId), izinAkun(db, akun.id)]);
     if (!peserta && !boleh(izin, "pelatihan.kelola", "lihat", kegiatanId)) return galat("Undangan hanya untuk peserta pelatihan.", 403);
-    if (!(await undanganUntuk(db, kegiatanId)).pdf) return galat("Surat undangan resmi belum tersedia untuk pelatihan ini.", 404);
+    const info = await undanganUntuk(db, kegiatanId);
+    // (9 Nov 2026) pelatihan selain PSP: surat undangan unggahan kelas peserta (pengelola memilih kelas lewat ?kelas=)
+    if (info.turunan) {
+      const kelasMinta = Number(req.nextUrl.searchParams.get("kelas"));
+      const kelas = peserta?.kelas ?? (Number.isInteger(kelasMinta) && kelasMinta > 0 ? kelasMinta : null);
+      const surat = kelas ? await unduhSuratAktif(db, kegiatanId, kelas) : null;
+      if (!kelas || !surat) return galat("Surat undangan resmi belum tersedia untuk kelas ini.", 404);
+      return new NextResponse(new Uint8Array(surat.bytes), {
+        headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${namaBerkasSurat(surat.nomor, kelas)}"`, "Cache-Control": "private, no-store" },
+      });
+    }
+    if (!info.pdf) return galat("Surat undangan resmi belum tersedia untuk pelatihan ini.", 404);
     const berkas = await readFile(path.join(process.cwd(), "data", "undangan-pelatihan-8okt2026.pdf"));
     return new NextResponse(new Uint8Array(berkas), {
       headers: {
