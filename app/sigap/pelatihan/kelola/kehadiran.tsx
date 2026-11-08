@@ -10,7 +10,7 @@ import { LABEL_SLOT_FOTO, MAKS_SESI, bagiFoto, sesiBawaan, teksJarak, type Atura
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import ResetPin from "../../admin/ResetPin";
-import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon } from "./monitorKit";
+import { BarFilterMonitoring, OPSI_JENIS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon } from "./monitorKit";
 import SelectCari from "@/app/components/SelectCari";
 
 const URL_KEHADIRAN = "/api/sigap/pelatihan/admin/kehadiran";
@@ -373,7 +373,7 @@ export function MonitoringPresensi() {
           <thead>
             <tr>
               <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
-              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Kls" filter={{ options: f.opsiKelas, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
               <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
               <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
               <ThKontrol
@@ -576,7 +576,7 @@ export function MonitoringTranslok() {
           <thead>
             <tr>
               <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
-              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Kls" filter={{ options: f.opsiKelas, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
               <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
               <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
               <ThKontrol label="Foto (sebelum | sesudah posttest)" sort={sortKolom(f, "foto")} />
@@ -769,7 +769,7 @@ export function MonitoringAkses() {
           <thead>
             <tr>
               <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
-              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Kls" filter={{ options: f.opsiKelas, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
               <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
               <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
               <ThKontrol label="Kecamatan" filter={{ options: opsiKecamatan, selected: f.kolom.kecamatan ?? new Set<string>(), onApply: (v) => f.setKolom("kecamatan", v) }} sort={sortKolom(f, "kecamatan")} />

@@ -3,15 +3,15 @@
 // (3 Nov 2026) Instruktur kelas per pelatihan (tabel sigap_kuis_instruktur_kelas, kunci utama kegiatan_id + akun_id: satu kelas per akun per kegiatan).
 // Dulu hanya bisa diisi lewat SQL; kini lewat Kelola Pelatihan > Tim & Peserta > Instruktur (/api/sigap/pelatihan/instruktur).
 
-type Db = {
-  from: (t: string) => any; // eslint-disable-line @typescript-eslint/no-explicit-any
-};
+import type { Db as SupabaseDb } from "@/lib/sigap";
+import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
+
+type Db = SupabaseDb;
 
 export type BarisInstruktur = { akun_id: number; nama: string; kelas: number };
 export type KandidatInstruktur = { akun_id: number; nama: string; jenis: string | null };
 
 export const KELAS_MAKS = 20;
-const KELAS_BAWAAN = [1, 2, 3, 4];
 
 export const kelasSah = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 1 && x <= KELAS_MAKS;
 
@@ -25,13 +25,10 @@ export async function muatInstruktur(db: Db, kegiatanId: number): Promise<BarisI
   return baris.map((b) => ({ ...b, nama: nama.get(b.akun_id) ?? `Akun ${b.akun_id}` })).sort((a, b) => a.kelas - b.kelas || a.nama.localeCompare(b.nama));
 }
 
-/** Pilihan kelas: kelas yang dipakai peserta kegiatan ini, ditambah kelas instruktur yang ada; kosong -> 1..4. */
+/** Pilihan kelas = kelas milik pelatihan ini (tabel kelas + yang sudah terpakai peserta) ditambah kelas instruktur yang ada. */
 export async function kelasTersedia(db: Db, kegiatanId: number, instruktur: readonly BarisInstruktur[]): Promise<number[]> {
-  const { data } = await db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(5000);
-  const set = new Set<number>();
-  for (const r of (data ?? []) as { kelas: number | null }[]) if (kelasSah(Number(r.kelas))) set.add(Number(r.kelas));
+  const set = new Set<number>((await muatKelasKegiatan(db, kegiatanId)).map((k) => k.nomor));
   for (const i of instruktur) set.add(i.kelas);
-  if (set.size === 0) KELAS_BAWAAN.forEach((k) => set.add(k));
   return [...set].sort((a, b) => a - b);
 }
 
@@ -48,6 +45,7 @@ export type HasilInstruktur = { ok: true } | { ok: false; pesan: string };
 /** Menetapkan (atau memindahkan kelas) satu instruktur. Akun harus ada dan aktif. */
 export async function tetapkanInstruktur(db: Db, kegiatanId: number, akunId: number, kelas: number): Promise<HasilInstruktur> {
   if (!kelasSah(kelas)) return { ok: false, pesan: `Kelas harus angka 1 sampai ${KELAS_MAKS}.` };
+  if (!(await muatKelasKegiatan(db, kegiatanId)).some((k) => k.nomor === kelas)) return { ok: false, pesan: "Kelas itu tidak ada di pelatihan ini. Atur kelas di Pengaturan kelas." };
   const { data: akun } = await db.from("sigap_akun").select("id, aktif").eq("id", akunId).maybeSingle();
   if (!akun) return { ok: false, pesan: "Akun tidak ditemukan." };
   if ((akun as { aktif: boolean }).aktif === false) return { ok: false, pesan: "Akun itu tidak aktif." };

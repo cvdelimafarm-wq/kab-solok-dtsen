@@ -420,12 +420,12 @@ export async function catatHasilObjek(db: Db, akun: AkunPortal, kegiatanId: numb
  * Objek aktif sebuah kegiatan model 2/3 dalam bentuk ringan (kode wilayah, jumlah, petugas) untuk modul lain yang hanya MEMBACA turunan sampel
  * (wilayah tugas identifikasi lanjutan, usulan jumlah petugas). `profil` null = model 1 atau tabel belum ada; baris kosong bila belum ada daftar.
  */
-export async function objekRingan(db: Db, kegiatanId: number, denganTitik = false): Promise<{ profil: ProfilTersimpan | null; baris: { kode_wilayah: string | null; jumlah: number; ppl_akun_id: number | null; pml_akun_id: number | null; lat: number | null; lng: number | null }[] }> {
+export async function objekRingan(db: Db, kegiatanId: number): Promise<{ profil: ProfilTersimpan | null; baris: { kode_wilayah: string | null; jumlah: number; ppl_akun_id: number | null; pml_akun_id: number | null; lat: number | null; lng: number | null }[] }> {
   const { profil } = await muatProfil(db, kegiatanId).catch(() => ({ profil: null as ProfilTersimpan | null }));
   if (!profil || (profil.model !== 2 && profil.model !== 3)) return { profil: null, baris: [] };
   const baris: { kode_wilayah: string | null; jumlah: number; ppl_akun_id: number | null; pml_akun_id: number | null; lat: number | null; lng: number | null }[] = [];
   for (let i = 0; i < 30; i++) {
-    const { data, error } = await db.from("sigap_sampel_objek").select(denganTitik ? "kode_wilayah, jumlah, ppl_akun_id, pml_akun_id, atribut" : "kode_wilayah, jumlah, ppl_akun_id, pml_akun_id").eq("kegiatan_id", kegiatanId).is("nonaktif_at", null).order("id").range(i * 1000, i * 1000 + 999);
+    const { data, error } = await db.from("sigap_sampel_objek").select("kode_wilayah, jumlah, ppl_akun_id, pml_akun_id, atribut").eq("kegiatan_id", kegiatanId).is("nonaktif_at", null).order("id").range(i * 1000, i * 1000 + 999);
     if (error) return { profil, baris: [] };
     for (const r of (data ?? []) as Record<string, unknown>[]) {
       const at = (r.atribut ?? {}) as Record<string, unknown>;
@@ -452,7 +452,7 @@ export async function wilayahObjekRingan(db: Db, kegiatanId: number): Promise<{ 
 
 /** Bahan usulan wilayah seleksi dari objek model 2/3: baris (kode, jumlah, titik), tingkat profil, dan nama wilayah per kode kelompok (tingkat sub SLS naik ke SLS). */
 export async function dataSeleksiObjek(db: Db, kegiatanId: number): Promise<{ ada: boolean; model: 2 | 3 | null; tingkat: TingkatWilayah | null; baris: { kode_wilayah: string | null; jumlah: number; lat: number | null; lng: number | null }[]; nama: Map<string, { kecamatan: string; nagari: string; sls: string }> }> {
-  const { profil, baris } = await objekRingan(db, kegiatanId, true);
+  const { profil, baris } = await objekRingan(db, kegiatanId);
   const kosong = { ada: false, model: null, tingkat: null, baris: [], nama: new Map<string, { kecamatan: string; nagari: string; sls: string }>() };
   if (!profil || baris.length === 0 || !profil.level) return kosong;
   const kelompok = kodeKelompokObjek(profil.level);

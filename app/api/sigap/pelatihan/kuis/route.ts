@@ -15,7 +15,8 @@ import { boleh, izinAkun, sesiDariHeader } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
 import { catatJawaban, dariCache, gabungRuang, keadaanPeserta, reviewPeserta, ruangKelas, ruangSemuaKelas } from "@/lib/sigapKuisDb";
 import { infoKuis, kelasInstruktur } from "@/lib/sigapKuisDb";
-import { KELAS_GABUNGAN, KELAS_PILIHAN, kelasSah, labelKelas } from "@/lib/sigapKuis";
+import { KELAS_GABUNGAN, kelasSah, labelKelas } from "@/lib/sigapKuis";
+import { kelasEfektif, labelKelasNama, muatKelasKegiatan, nomorPilihanKuis } from "@/lib/sigapKelasKegiatan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +49,8 @@ async function aksesMain(db: NonNullable<ReturnType<typeof dbAdmin>>, kegiatanId
     const p = await pesertaPelatihan(db, akunId, kegiatanId);
     const { izin } = await izinAkun(db, akunId);
     const instruktur = boleh(izin, "pelatihan.kelola", "lihat", kegiatanId);
-    if (p) return { kelas: p.kelas, instruktur };
+    // (8 Nov 2026) pelatihan satu kelas: peserta tanpa kelas dianggap masuk kelas itu (kelasEfektif)
+    if (p) return { kelas: kelasEfektif(p.kelas, await muatKelasKegiatan(db, kegiatanId)) ?? p.kelas, instruktur };
     return instruktur ? { kelas: null, instruktur: true, kelas_saya: await kelasInstruktur(db, kegiatanId, akunId) } : null;
   });
 }
@@ -65,11 +67,11 @@ export async function GET(req: NextRequest) {
     const q = req.nextUrl.searchParams;
 
     if (q.get("daftar") === "1") {
-      const peta = await ruangSemuaKelas(db, kegiatanId);
+      const [peta, daftarKelas] = await Promise.all([ruangSemuaKelas(db, kegiatanId), muatKelasKegiatan(db, kegiatanId)]);
       const baris = [];
-      for (const k of KELAS_PILIHAN) {
+      for (const k of nomorPilihanKuis(daftarKelas)) { // (8 Nov 2026) hanya kelas milik pelatihan ini; "Semua Kelas" bila kelas > 1
         const r = peta.get(k);
-        baris.push({ kelas: k, ada: !!r && r.status !== "selesai", status: r ? r.status : null, judul: r ? (await infoKuis(db, r.kuis_id)).judul : null });
+        baris.push({ kelas: k, nama: labelKelasNama(k, daftarKelas), ada: !!r && r.status !== "selesai", status: r ? r.status : null, judul: r ? (await infoKuis(db, r.kuis_id)).judul : null });
       }
       return NextResponse.json({ sekarang: now.toISOString(), ruang: baris });
     }

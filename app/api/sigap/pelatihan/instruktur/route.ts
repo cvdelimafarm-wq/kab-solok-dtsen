@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
+import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
 import { cariAkun, kelasTersedia, lepasInstruktur, muatInstruktur, tetapkanInstruktur } from "@/lib/sigapInstrukturDb";
 
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
     const cari = req.nextUrl.searchParams.get("cari");
     if (cari !== null) return NextResponse.json({ kandidat: await cariAkun(p.db, cari) });
     const instruktur = await muatInstruktur(p.db, p.kegiatanId);
-    return NextResponse.json({ kegiatan_id: p.kegiatanId, instruktur, kelas: await kelasTersedia(p.db, p.kegiatanId, instruktur), boleh_kelola: p.bisaKelola });
+    return NextResponse.json({ kegiatan_id: p.kegiatanId, instruktur, kelas: await kelasTersedia(p.db, p.kegiatanId, instruktur), daftar_kelas: await muatKelasKegiatan(p.db, p.kegiatanId), boleh_kelola: p.bisaKelola });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }

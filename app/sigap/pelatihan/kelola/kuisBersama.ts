@@ -19,7 +19,7 @@ export type KuisRingkas = {
   topik: Record<string, number>;
 };
 export type RuangRingkas = { id: number; kuis_id: number; kelas: number; status: StatusR; soal_ke: number; dibuka_at: string; selesai_at: string | null; jumlah_peserta: number };
-export type KonfigKelas = { kegiatan_id: number; kelas: number; kuis_id: number | null; pengaturan: Pengaturan; soal_pilihan: number[]; diubah_at: string | null; anggota: number };
+export type KonfigKelas = { kegiatan_id: number; kelas: number; nama?: string; kuis_id: number | null; pengaturan: Pengaturan; soal_pilihan: number[]; diubah_at: string | null; anggota: number };
 export type Daftar = { sekarang: string; boleh_kelola: boolean; maks_soal: number; kelas_saya?: number | null; kuis: KuisRingkas[]; kelas: KonfigKelas[]; ruang: RuangRingkas[] };
 
 export const LABEL_STATUS: Record<string, string> = { lobi: "Lobi · menunggu peserta", soal: "Soal berjalan", jawaban: "Menampilkan jawaban", selesai: "Selesai" };

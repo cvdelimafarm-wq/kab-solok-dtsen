@@ -13,7 +13,7 @@ import { Toast, useToast } from "../../admin/Toast";
 import SelectCari from "@/app/components/SelectCari";
 
 type Baris = { akun_id: number; nama: string; kelas: number };
-type Data = { instruktur: Baris[]; kelas: number[]; boleh_kelola: boolean };
+type Data = { instruktur: Baris[]; kelas: number[]; daftar_kelas?: { nomor: number; nama: string }[]; boleh_kelola: boolean };
 type Kandidat = { akun_id: number; nama: string; jenis: string | null };
 
 const URL_API = "/api/sigap/pelatihan/instruktur";
@@ -77,7 +77,7 @@ export default function InstrukturKelola() {
 
   async function tetapkan() {
     if (!pilih || kelas === "") return;
-    await kirim({ aksi: "tetapkan", akun_id: pilih.akun_id, kelas }, `${pilih.nama} ditetapkan sebagai instruktur kelas ${kelas}.`, pilih.akun_id);
+    await kirim({ aksi: "tetapkan", akun_id: pilih.akun_id, kelas }, `${pilih.nama} ditetapkan sebagai instruktur ${namaKelas(Number(kelas))}.`, pilih.akun_id);
     setPilih(null);
     setKata("");
     setKelas("");
@@ -86,6 +86,7 @@ export default function InstrukturKelola() {
   if (!d && !galat) return <Memuat />;
   const boleh = !!d?.boleh_kelola;
   const opsiKelas = d?.kelas ?? [];
+  const namaKelas = (k: number) => d?.daftar_kelas?.find((x) => x.nomor === k)?.nama ?? `Kelas ${k}`; // (8 Nov 2026) nama kelas pelatihan
 
   return (
     <Kartu judul="Instruktur" ket="Instruktur kelas melihat pelatihan sebagai instruktur dan memantau pesertanya. Akun yang juga peserta atau pengelola bisa berganti peran lewat “Masuk sebagai” di HP.">
@@ -107,7 +108,7 @@ export default function InstrukturKelola() {
                 >
                   {Array.from(new Set([...opsiKelas, b.kelas])).sort((x, y) => x - y).map((k) => (
                     <option key={k} value={k}>
-                      {k}
+                      {namaKelas(k)}
                     </option>
                   ))}
                 </SelectCari>
@@ -154,7 +155,7 @@ export default function InstrukturKelola() {
               <option value="">Pilih kelas</option>
               {opsiKelas.map((k) => (
                 <option key={k} value={k}>
-                  Kelas {k}
+                  {namaKelas(k)}
                 </option>
               ))}
             </SelectCari>

@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import TombolKembali from "@/app/components/TombolKembali";
-import {KELAS_PILIHAN, labelKelas, warnaPosisi } from "@/lib/sigapKuis";
+import { labelKelas, warnaPosisi } from "@/lib/sigapKuis";
 import { bacaSesi, fetchJson, keMasuk, pesanGalat, SesiBerakhir } from "../../admin/api";
 import { efek, setSuaraAktif } from "../kuisSuara";
 
@@ -34,7 +34,7 @@ type Keadaan = {
 };
 type Butir = { urutan: number; nomor: number; teks: string; topik: string | null; opsi: { kode: string; teks: string }[]; kunci: string; penjelasan: string | null; pilihan: string | null; benar: boolean; poin: number; persen_benar: number | null };
 type Review = { ruang: { id: number; kelas: number; judul: string; status: Status; total: number }; butir: Butir[] };
-type RuangKelas = { kelas: number; ada: boolean; status: Status | null; judul: string | null };
+type RuangKelas = { kelas: number; nama?: string; ada: boolean; status: Status | null; judul: string | null };
 
 const mmss = (detik: number) => {
   const d = Math.max(0, Math.ceil(detik));
@@ -339,12 +339,12 @@ export default function KuisPeserta() {
         <p className="mt-1 text-[18px] font-extrabold">Pilih kelas yang ingin Anda ikuti</p>
         <p className="mt-1 text-[13px] text-[#55657D]">Akun Anda tidak terdaftar di satu kelas (inda/instruktur), jadi pilih ruang yang sedang dibuka.</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          {KELAS_PILIHAN.map((k) => {
-            const x = daftarKelas?.find((d) => d.kelas === k);
+          {(daftarKelas ?? []).map((x) => { // (8 Nov 2026) hanya kelas milik pelatihan ini
+            const k = x.kelas;
             return (
-              <button key={k} type="button" onClick={() => pilihKelas(k)} className={`rounded-xl border px-3 py-3 text-[15px] font-extrabold ${x?.ada ? "border-[#46178F] bg-[#F1EAFB] text-[#46178F]" : "border-[#CDD5DE] bg-white text-[#7B8794]"}`}>
-                {labelKelas(k)}
-                <span className="block text-[11.5px] font-semibold">{x?.ada ? `● ${x.status === "lobi" ? "lobi terbuka" : "sedang berjalan"}` : "belum dibuka"}</span>
+              <button key={k} type="button" onClick={() => pilihKelas(k)} className={`rounded-xl border px-3 py-3 text-[15px] font-extrabold ${x.ada ? "border-[#46178F] bg-[#F1EAFB] text-[#46178F]" : "border-[#CDD5DE] bg-white text-[#7B8794]"}`}>
+                {labelKelas(k, x.nama)}
+                <span className="block text-[11.5px] font-semibold">{x.ada ? `● ${x.status === "lobi" ? "lobi terbuka" : "sedang berjalan"}` : "belum dibuka"}</span>
               </button>
             );
           })}

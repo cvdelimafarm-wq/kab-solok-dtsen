@@ -20,6 +20,7 @@ import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb"
 import { MAKS_SOAL } from "@/lib/sigapTes";
 import {
   kelasSah, KELAS_GABUNGAN, TOPIK_UMUM, validasiKuisJson } from "@/lib/sigapKuis";
+import { kelasEfektif, labelKelasNama, muatKelasKegiatan, nomorPilihanKuis } from "@/lib/sigapKelasKegiatan";
 import {
   akhiriRuang,
   bersihkanCache,
@@ -52,6 +53,11 @@ const kelasValid = (v: unknown): number | null => {
   const n = Number(v);
   return kelasSah(n) ? n : null; // (8 Okt 2026) 0 = Semua Kelas (ruang gabungan)
 };
+
+/** (8 Nov 2026) Kelas harus milik pelatihan ini; 0 (Semua Kelas) hanya bila pelatihan punya lebih dari satu kelas. */
+async function kelasAdaDiPelatihan(db: Db, kegiatanId: number, kelas: number): Promise<boolean> {
+  return nomorPilihanKuis(await muatKelasKegiatan(db, kegiatanId)).includes(kelas);
+}
 
 type KuisBaris = { id: number; kegiatan_id: number; judul: string; aktif: boolean; dibuat_at: string; diubah_at: string };
 
@@ -102,8 +108,12 @@ export async function GET(req: NextRequest) {
       const nPes = new Map<number, number>();
       for (const p of pes ?? []) nPes.set(Number(p.ruang_id), (nPes.get(Number(p.ruang_id)) ?? 0) + 1);
       const { data: pen } = await db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(3000);
+      const daftarKelas = await muatKelasKegiatan(db, kegiatanId);
       const anggota: Record<number, number> = {};
-      for (const p of pen ?? []) if (p.kelas != null) anggota[Number(p.kelas)] = (anggota[Number(p.kelas)] ?? 0) + 1;
+      for (const p of pen ?? []) {
+        const ke = kelasEfektif(p.kelas as number | null, daftarKelas); // (8 Nov 2026) pelatihan satu kelas: peserta tanpa kelas dihitung masuk kelas itu
+        if (ke != null) anggota[ke] = (anggota[ke] ?? 0) + 1;
+      }
       anggota[KELAS_GABUNGAN] = (pen ?? []).length; // (8 Okt 2026) Semua Kelas = seluruh peserta
       return NextResponse.json({
         sekarang: now.toISOString(),
@@ -111,7 +121,7 @@ export async function GET(req: NextRequest) {
         maks_soal: MAKS_SOAL,
         kelas_saya: await kelasInstruktur(db, kegiatanId, akun.id),
         kuis: (kuis ?? []).map((k) => ({ ...k, jumlah_soal: nSoal.get(Number(k.id))?.n ?? 0, total_detik: nSoal.get(Number(k.id))?.detik ?? 0, topik: nSoal.get(Number(k.id))?.topik ?? {} })),
-        kelas: (await konfigKelasSemua(db, kegiatanId)).map((k) => ({ ...k, anggota: anggota[k.kelas] ?? 0 })),
+        kelas: (await konfigKelasSemua(db, kegiatanId)).map((k) => ({ ...k, nama: labelKelasNama(k.kelas, daftarKelas), anggota: anggota[k.kelas] ?? 0 })),
         ruang: (ruang ?? []).map((r) => ({ ...r, jumlah_peserta: nPes.get(Number(r.id)) ?? 0 })),
       });
     }
@@ -265,7 +275,7 @@ export async function POST(req: NextRequest) {
 
     if (aksi === "simpan_kelas") {
       const kelas = kelasValid(body?.kelas);
-      if (kelas === null) return galat("Kelas tidak valid.");
+      if (kelas === null || !(await kelasAdaDiPelatihan(db, kegiatanId, kelas))) return galat("Kelas tidak valid untuk pelatihan ini.");
       const kuisId = body?.kuis_id === null || body?.kuis_id === undefined || body?.kuis_id === "" ? null : Number(body.kuis_id);
       if (kuisId !== null && !Number.isInteger(kuisId)) return galat("Kuis tidak valid.");
       const h = await simpanKonfigKelas(db, kegiatanId, kelas, { kuis_id: kuisId, pengaturan: body?.pengaturan, soal_pilihan: body?.soal_pilihan, acak_ulang: body?.acak_ulang === true }, akun.id, now);
@@ -276,7 +286,7 @@ export async function POST(req: NextRequest) {
 
     if (aksi === "buka_ruang") {
       const kelas = kelasValid(body?.kelas);
-      if (kelas === null) return galat("Kelas tidak valid.");
+      if (kelas === null || !(await kelasAdaDiPelatihan(db, kegiatanId, kelas))) return galat("Kelas tidak valid untuk pelatihan ini.");
       const h = await bukaRuang(db, kegiatanId, kelas, akun.id, now);
       if (!h.ok) return galat(h.error, h.status);
       await catatAudit(db, akun.id, "pelatihan_kuis_buka_ruang", { kelas, kuis_id: h.ruang.kuis_id, ruang_id: h.ruang.id });

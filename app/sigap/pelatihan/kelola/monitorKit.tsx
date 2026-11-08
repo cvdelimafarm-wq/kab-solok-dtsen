@@ -10,13 +10,39 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BTN_O, INPUT, TH } from "../../admin/ui";
-import SelectCari from "@/app/components/SelectCari";
+import { fetchJson, urlPelatihan } from "../../admin/api";
 
 export type Opsi = string | { nilai: string; label: string; grup?: string };
 const nilaiOpsi = (o: Opsi) => (typeof o === "string" ? o : o.nilai);
 const labelOpsi = (o: Opsi) => (typeof o === "string" ? o : o.label);
 
-export const OPSI_KELAS: Opsi[] = [1, 2, 3, 4].map((k) => ({ nilai: String(k), label: `Kelas ${k}` }));
+// (8 Nov 2026) Pilihan kelas mengikuti pengaturan kelas PELATIHAN yang dibuka (bukan Kelas 1-4 tetap): dibaca sekali per pelatihan dari
+// /api/sigap/pelatihan/pengaturan-kelas?ringkas=1 dan disimpan di memori halaman. Gagal baca -> daftar kosong (filter hanya "Semua kelas").
+const simpananOpsiKelas = new Map<string, Promise<Opsi[]>>();
+export function useOpsiKelas(): Opsi[] {
+  const [opsi, setOpsi] = useState<Opsi[]>([]);
+  useEffect(() => {
+    let batal = false;
+    const url = urlPelatihan("/api/sigap/pelatihan/pengaturan-kelas?ringkas=1");
+    let janji = simpananOpsiKelas.get(url);
+    if (!janji) {
+      janji = fetchJson<{ kelas: { nomor: number; nama: string }[] }>(url)
+        .then((r) => r.kelas.map((k) => ({ nilai: String(k.nomor), label: k.nama })))
+        .catch(() => {
+          simpananOpsiKelas.delete(url);
+          return [] as Opsi[];
+        });
+      simpananOpsiKelas.set(url, janji);
+    }
+    void janji.then((o) => {
+      if (!batal) setOpsi(o);
+    });
+    return () => {
+      batal = true;
+    };
+  }, []);
+  return opsi;
+}
 export const OPSI_PERAN: Opsi[] = [
   { nilai: "pml", label: "PML" },
   { nilai: "ppl", label: "PPL" },
@@ -39,6 +65,7 @@ export function useFilterMon(statusAwal: string[] = []) {
   const [kolom, setKolomState] = useState<Record<string, Set<string>>>({});
   const [cari, setCari] = useState("");
   const [urut, setUrut] = useState<Urut>(null);
+  const opsiKelas = useOpsiKelas();
   const setKolom = (k: string, v: Set<string>) => setKolomState((p) => ({ ...p, [k]: v }));
   const adaKolom = Object.values(kolom).some((s) => s.size > 0);
   const adaFilter = jenis.size > 0 || kelas.size > 0 || peran.size > 0 || status.size > 0 || adaKolom || cari.trim() !== "";
@@ -50,7 +77,7 @@ export function useFilterMon(statusAwal: string[] = []) {
     setKolomState({});
     setCari("");
   }
-  return { jenis, setJenis, kelas, setKelas, peran, setPeran, status, setStatus, kolom, setKolom, cari, setCari, urut, setUrut, adaFilter, reset };
+  return { jenis, setJenis, kelas, setKelas, peran, setPeran, status, setStatus, kolom, setKolom, cari, setCari, urut, setUrut, adaFilter, reset, opsiKelas };
 }
 export type FilterMon = ReturnType<typeof useFilterMon>;
 
@@ -105,7 +132,7 @@ function PilihSatu({ nilai, opsi, semua, label, onUbah, grup }: { nilai: Set<str
   const v = nilai.size === 1 ? [...nilai][0] : banyak ? "__banyak" : "";
   const grupSet = grup ? [...new Set(opsi.map((o) => (typeof o === "string" ? "" : (o.grup ?? ""))))] : [""];
   return (
-    <SelectCari className={INPUT} value={v} onChange={(e) => onUbah(e.target.value && e.target.value !== "__banyak" ? new Set([e.target.value]) : new Set())} aria-label={label}>
+    <select className={INPUT} value={v} onChange={(e) => onUbah(e.target.value && e.target.value !== "__banyak" ? new Set([e.target.value]) : new Set())} aria-label={label}>
       <option value="">{semua}</option>
       {banyak && (
         <option value="__banyak" disabled>
@@ -127,7 +154,7 @@ function PilihSatu({ nilai, opsi, semua, label, onUbah, grup }: { nilai: Set<str
           daftar
         );
       })}
-    </SelectCari>
+    </select>
   );
 }
 
@@ -153,7 +180,7 @@ export function BarFilterMonitoring({
 }) {
   const aktif = [
     f.jenis.size ? gabung(f.jenis, OPSI_JENIS) : "",
-    f.kelas.size ? gabung(f.kelas, OPSI_KELAS) : "",
+    f.kelas.size ? gabung(f.kelas, f.opsiKelas) : "",
     f.peran.size ? gabung(f.peran, OPSI_PERAN) : "",
     f.status.size ? gabung(f.status, statusOpsi) : "",
     ...Object.entries(f.kolom).map(([k, s]) => (s.size ? `${k}: ${[...s].join(", ")}` : "")),
@@ -164,7 +191,7 @@ export function BarFilterMonitoring({
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white p-2.5 ring-1 ring-[#E3E8EE]" role="group" aria-label="Filter monitoring">
         <span className="text-[12.5px] font-bold text-[#55657D]">Filter:</span>
         {!tanpaJenis && <PilihSatu nilai={f.jenis} opsi={OPSI_JENIS} semua="Organik & Mitra" label="Filter jenis" onUbah={f.setJenis} />}
-        <PilihSatu nilai={f.kelas} opsi={OPSI_KELAS} semua="Semua kelas" label="Filter kelas" onUbah={f.setKelas} />
+        <PilihSatu nilai={f.kelas} opsi={f.opsiKelas} semua="Semua kelas" label="Filter kelas" onUbah={f.setKelas} />
         <PilihSatu nilai={f.peran} opsi={OPSI_PERAN} semua="Semua peran" label="Filter peran" onUbah={f.setPeran} />
         <PilihSatu nilai={f.status} opsi={statusOpsi} semua={statusSemua} label={statusLabel} onUbah={f.setStatus} grup />
         <input className={`${INPUT} min-w-[150px] flex-1`} placeholder="Cari nama…" value={f.cari} onChange={(e) => f.setCari(e.target.value)} aria-label="Cari nama" />

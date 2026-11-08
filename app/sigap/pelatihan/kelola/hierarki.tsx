@@ -15,6 +15,7 @@ import { PETUNJUK_TEMPLATE, bacaImpor, barisTemplate, type HasilImpor } from "@/
 import type { SelisihTim } from "@/lib/hierarkiSelaras";
 import KelasIdentKelola from "./kelasIdent";
 import InstrukturKelola from "./instruktur";
+import PengaturanKelasKelola from "./pengaturanKelas";
 import { ChipSetelan, PilihSub, useSub, type ItemSub } from "./GrupTab";
 import SelectCari from "@/app/components/SelectCari";
 
@@ -29,9 +30,10 @@ const ASAL: Record<NonNullable<SimpulHierarki["asal"]>, { teks: string; w: "mut"
 };
 
 const SUB: ItemSub[] = [
+  { kode: "pengaturan", label: "Pengaturan kelas", ket: "Jumlah dan nama kelas, siapa peserta tiap kelas, instruktur, dan panitia. Semua pilihan kelas di Adu Sigap dan Monitoring mengikuti ini." },
   { kode: "hierarki", label: "Hierarki", ket: "Siapa melapor kepada siapa. Menentukan siapa yang dapat memantau progres siapa di tab Monitoring peserta." },
   { kode: "instruktur", label: "Instruktur", ket: "Tetapkan instruktur per kelas, tanpa SQL." },
-  { kode: "kelas", label: "Kelas", ket: "Kelas menurut perencanaan (hanya baca)." },
+  { kode: "kelas", label: "Rencana kelas", ket: "Kelas menurut perencanaan (hanya baca)." },
 ];
 
 function KartuHierarki() {
@@ -420,6 +422,7 @@ export default function TimPesertaKelola() {
   return (
     <div>
       <PilihSub daftar={SUB} aktif={sub} onPilih={pilih} label="Bagian Tim & Peserta" />
+      {sub === "pengaturan" && <PengaturanKelasKelola bukaInstruktur={() => pilih("instruktur")} />}
       {sub === "hierarki" && <KartuHierarki />}
       {sub === "instruktur" && <InstrukturKelola />}
       {sub === "kelas" && <KelasIdentKelola />}

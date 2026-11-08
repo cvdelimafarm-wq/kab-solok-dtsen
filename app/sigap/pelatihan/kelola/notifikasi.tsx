@@ -10,12 +10,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { MAKS_ISI_PUSH, MAKS_JUDUL_PUSH, type PesertaPush, type RiwayatPush, type StatusTesPush } from "@/lib/sigapPushUtil";
 import { fetchJson, pesanGalat, SesiBerakhir, waktuWib } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
-import SelectCari from "@/app/components/SelectCari";
 
 const URL_API = "/api/sigap/pelatihan/admin/push";
 
 type Data = { boleh_kelola: boolean; server_siap: boolean; hari: string; sekarang: string; peserta: PesertaPush[]; riwayat: RiwayatPush[] };
-type Sasaran = "belum_posttest" | "belum_pretest" | "belum_presensi" | "belum_pasang" | "belum_notif" | "semua" | "kelas_1" | "kelas_2" | "kelas_3" | "kelas_4" | "kosong";
+type Sasaran = "belum_posttest" | "belum_pretest" | "belum_presensi" | "belum_pasang" | "belum_notif" | "semua" | `kelas_${number}` | "kosong";
 
 const OPSI_SASARAN: { k: Sasaran; label: string }[] = [
   { k: "belum_posttest", label: "Belum mengerjakan Posttest" },
@@ -23,10 +22,7 @@ const OPSI_SASARAN: { k: Sasaran; label: string }[] = [
   { k: "belum_presensi", label: "Belum presensi hari ini" },
   { k: "belum_pasang", label: "Belum memasang aplikasi (tindak lanjut lewat WhatsApp)" },
   { k: "belum_notif", label: "Belum mengaktifkan notifikasi" },
-  { k: "kelas_1", label: "Semua peserta Kelas 1" },
-  { k: "kelas_2", label: "Semua peserta Kelas 2" },
-  { k: "kelas_3", label: "Semua peserta Kelas 3" },
-  { k: "kelas_4", label: "Semua peserta Kelas 4" },
+  // (8 Nov 2026) sasaran "Semua peserta Kelas N" dibuat per kelas yang ada pada peserta pelatihan ini (lihat opsiSasaran)
   { k: "semua", label: "Semua peserta" },
   { k: "kosong", label: "Pilih manual (kosongkan dulu)" },
 ];
@@ -91,6 +87,12 @@ export default function NotifikasiKelola() {
     if (d) setDipilih(new Set(d.peserta.filter((p) => cocokSasaran(s, p)).map((p) => p.akun_id)));
   }
 
+  const opsiSasaran = useMemo(() => {
+    const kelas = Array.from(new Set((d?.peserta ?? []).map((p) => p.kelas).filter((k): k is number => k != null && k > 0))).sort((a, b) => a - b);
+    const perKelas = kelas.length > 1 ? kelas.map((k) => ({ k: `kelas_${k}` as Sasaran, label: `Semua peserta Kelas ${k}` })) : []; // satu kelas = sama dengan "Semua peserta"
+    const i = OPSI_SASARAN.findIndex((o) => o.k === "semua");
+    return [...OPSI_SASARAN.slice(0, i), ...perKelas, ...OPSI_SASARAN.slice(i)];
+  }, [d]);
   const terpilih = useMemo(() => (d?.peserta ?? []).filter((p) => dipilih.has(p.akun_id)), [d, dipilih]);
   const adaNotif = terpilih.filter((p) => p.notif > 0);
   const tanpaNotif = terpilih.length - adaNotif.length;
@@ -157,11 +159,11 @@ export default function NotifikasiKelola() {
             </label>
             <label className="block text-[12px] font-semibold text-[#55657D]">
               Saat diketuk, buka
-              <SelectCari className={`${INPUT} mt-1 w-full`} value={url} onChange={(e) => setUrl(e.target.value)}>
+              <select className={`${INPUT} mt-1 w-full`} value={url} onChange={(e) => setUrl(e.target.value)}>
                 {TUJUAN.map((t) => (
                   <option key={t.url} value={t.url}>{t.label}</option>
                 ))}
-              </SelectCari>
+              </select>
             </label>
             <div>
               <p className="mb-1 text-[12px] font-semibold text-[#55657D]">Pratinjau di HP</p>
@@ -181,11 +183,11 @@ export default function NotifikasiKelola() {
         <Kartu judul="Penerima" ket={`hari ini ${d.hari}`}>
           <label className="block text-[12px] font-semibold text-[#55657D]">
             Sasaran cepat
-            <SelectCari className={`${INPUT} mt-1 w-full`} value={sasaran} onChange={(e) => pilihSasaran(e.target.value as Sasaran)}>
-              {OPSI_SASARAN.map((o) => (
+            <select className={`${INPUT} mt-1 w-full`} value={sasaran} onChange={(e) => pilihSasaran(e.target.value as Sasaran)}>
+              {opsiSasaran.map((o) => (
                 <option key={o.k} value={o.k}>{o.label}</option>
               ))}
-            </SelectCari>
+            </select>
           </label>
           <p className="mt-1.5 text-[12px] text-[#7B8794]">Centang atau hapus centang pada tabel untuk menyesuaikan. Peserta yang belum mengaktifkan notifikasi di HP-nya tidak akan menerima.</p>
 

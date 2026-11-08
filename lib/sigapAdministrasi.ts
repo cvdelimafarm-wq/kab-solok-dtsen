@@ -35,6 +35,7 @@ import { muatNilaiAkhir } from "@/lib/sigapNilai";
 import { LABEL_DASAR_KUIS, ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { nomorAsli, pulsaBanyak } from "@/lib/sigapPulsa";
 import { LABEL_JENIS_TES, UNDANGAN, skorResmi, type SesiBaris } from "@/lib/sigapTes";
+import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
 import { nilaiResmiTes } from "@/lib/sigapAturanTes";
 import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
@@ -43,7 +44,6 @@ import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmi
 // (dipakai semua query peserta tes/presensi/monitoring); diekspor ulang di sini untuk kemudahan.
 export { SUMBER_ADMINISTRASI, FILTER_BUKAN_ADMINISTRASI };
 
-export const SEMUA_KELAS = [1, 2, 3, 4];
 export const PERAN_PESERTA = ["ppl", "pml", "korwil"] as const;
 
 /** Jenis dokumen kelengkapan pelatihan (selain 6 jenis SPJ). */
@@ -63,7 +63,7 @@ export async function cakupanKelas(db: Db, akunId: number, peran: PeranAkun[], k
   const semua = berlaku.some((p) => p.kode !== "instruktur_pelatihan");
   const { data } = await db.from("sigap_kuis_instruktur_kelas").select("kelas").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).maybeSingle();
   const miliknya = (data?.kelas as number | undefined) ?? null;
-  const kelas = semua ? SEMUA_KELAS : miliknya ? [miliknya] : [];
+  const kelas = semua ? (await muatKelasKegiatan(db, kegiatanId)).map((k) => k.nomor) : miliknya ? [miliknya] : []; // (8 Nov 2026) kelas milik pelatihan ini
   return { semua, kelas, bawaan: miliknya ?? kelas[0] ?? null };
 }
 
@@ -94,7 +94,7 @@ export async function siapkanAdministrasi(req: NextRequest, tulis: boolean): Pro
 /** Kelas valid & boleh diakses akun ini, atau respons galat. */
 export function kelasBoleh(k: KonteksAdm, raw: unknown): number | NextResponse {
   const kelas = Number(raw);
-  if (!Number.isInteger(kelas) || kelas < 1 || kelas > 4) return galatJson("Kelas tidak valid.");
+  if (!Number.isInteger(kelas) || kelas < 1 || kelas > 20) return galatJson("Kelas tidak valid.");
   if (!k.cakupan.kelas.includes(kelas)) return galatJson(k.cakupan.kelas.length === 0 ? "Anda belum ditetapkan pada kelas mana pun. Hubungi admin." : `Anda hanya boleh mengakses Kelas ${k.cakupan.kelas.join(", ")}.`, 403);
   return kelas;
 }

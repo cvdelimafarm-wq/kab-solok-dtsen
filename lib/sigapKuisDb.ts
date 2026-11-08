@@ -1,7 +1,7 @@
 // lib/sigapKuisDb.ts
 //
 // (7-8 Okt 2026) SIGAP > Pelatihan > Adu Sigap -- akses database & mesin ruang permainan (khusus server).
-// Satu ruang per (kegiatan, kelas); keempat kelas boleh berjalan paralel.
+// Satu ruang per (kegiatan, kelas); semua kelas boleh berjalan paralel.
 // Waktu SELALU dari jam server. Peralihan fase (soal -> jawaban -> soal berikut / selesai, mulai terjadwal) dilakukan
 // "lazy" + idempoten saat ruang dibaca: update bersyarat pada `versi`, jadi aman walau banyak permintaan bersamaan.
 // Beban: ~100 peserta polling tiap ~1,5 detik -> pembacaan ruang/soal di-cache di memori (500 ms - 20 detik) sehingga
@@ -9,10 +9,11 @@
 
 import type { Db } from "@/lib/sigap";
 import type { Opsi } from "@/lib/sigapTes";
+import { kelasEfektif, labelKelasNama, muatKelasKegiatan, nomorPilihanKuis } from "@/lib/sigapKelasKegiatan";
 import {
   KELAS_GABUNGAN,
-  KELAS_PILIHAN,
   labelKelas,
+  MAKS_KELAS,
   PENGATURAN_DEFAULT,
   TOLERANSI_JAWAB_MS,
   bangunSoalMain,
@@ -254,7 +255,9 @@ function olahKonfig(kegiatanId: number, kelas: number, x: Record<string, unknown
 export async function konfigKelasSemua(db: Db, kegiatanId: number): Promise<KelasKonfig[]> {
   const { data } = await db.from("sigap_kuis_kelas").select("kelas, kuis_id, pengaturan, soal_pilihan, diubah_at").eq("kegiatan_id", kegiatanId).limit(20);
   const peta = new Map(((data ?? []) as Record<string, unknown>[]).map((x) => [Number(x.kelas), x]));
-  return KELAS_PILIHAN.map((k) => olahKonfig(kegiatanId, k, peta.get(k) ?? null)); // (8 Okt 2026) + kelas 0 = Semua Kelas
+  // (8 Nov 2026) kelas milik pelatihan ini saja; kelas 0 = Semua Kelas hanya bila kelas > 1
+  const pilihan = nomorPilihanKuis(await muatKelasKegiatan(db, kegiatanId));
+  return pilihan.map((k) => olahKonfig(kegiatanId, k, peta.get(k) ?? null));
 }
 
 /** Nomor soal (pada kuis `kuisId`) yang sudah dipilih kelas LAIN. */
@@ -643,16 +646,20 @@ export async function reviewPeserta(db: Db, ruang: RuangBaris, akunId: number) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Pantau Live (admin): ringkasan keempat kelas
+// Pantau Live (admin): ringkasan semua kelas pelatihan
 // ---------------------------------------------------------------------------------------------
 export async function ringkasanLive(db: Db, kegiatanId: number, now: Date) {
-  const [semua, ruangMap, { data: pen }] = await Promise.all([
+  const [semua, ruangMap, { data: pen }, daftarKelas] = await Promise.all([
     konfigKelasSemua(db, kegiatanId),
     ruangSemuaKelas(db, kegiatanId),
     db.from("sigap_penugasan").select("kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).limit(3000),
+    muatKelasKegiatan(db, kegiatanId),
   ]);
   const anggota = new Map<number, number>();
-  for (const p of pen ?? []) if (p.kelas != null) anggota.set(Number(p.kelas), (anggota.get(Number(p.kelas)) ?? 0) + 1);
+  for (const p of pen ?? []) {
+    const ke = kelasEfektif(p.kelas, daftarKelas); // pelatihan satu kelas: peserta tanpa kelas dihitung masuk kelas itu
+    if (ke != null) anggota.set(ke, (anggota.get(ke) ?? 0) + 1);
+  }
   anggota.set(KELAS_GABUNGAN, (pen ?? []).length); // Semua Kelas = seluruh peserta
   const kuisIds = Array.from(new Set(semua.map((k) => k.kuis_id).filter((x): x is number => x !== null)));
   const judul = new Map<number, string>();
@@ -679,6 +686,7 @@ export async function ringkasanLive(db: Db, kegiatanId: number, now: Date) {
     }
     out.push({
       kelas: k.kelas,
+      nama: labelKelasNama(k.kelas, daftarKelas),
       kuis_id: k.kuis_id,
       kuis_judul: k.kuis_id !== null ? (judul.get(k.kuis_id) ?? null) : null,
       jumlah_soal: k.soal_pilihan.length,
@@ -739,7 +747,7 @@ export async function kelasInstruktur(db: Db, kegiatanId: number, akunId: number
   try {
     const { data } = await db.from("sigap_kuis_instruktur_kelas").select("kelas").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).maybeSingle();
     const k = Number(data?.kelas);
-    return Number.isInteger(k) && k >= 1 && k <= 4 ? k : null;
+    return Number.isInteger(k) && k >= 1 && k <= MAKS_KELAS ? k : null;
   } catch {
     return null;
   }

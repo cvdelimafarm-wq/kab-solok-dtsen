@@ -25,7 +25,7 @@ import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 No
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 import { InputSikap, PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
 import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, lulusAkhirDari, ringkasSkema, tambahanDari, type HasilAkhir } from "@/lib/sigapNilaiHitung";
-import { BarFilterMonitoring, OPSI_JENIS, OPSI_KELAS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
+import { BarFilterMonitoring, OPSI_JENIS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 import ModalFotoPanitia from "../ModalFotoPanitia";
 import { HubSurvei, PemilihSurveiPelatihan, SurveiTanpaPelatihan, useDaftarSurvei } from "./survei"; // (31 Okt 2026) halaman awal = satu kartu per survei + dropdown survei
 import { bacaParamKelola, cariSurvei, pilihPelatihanAwal, urlKelola, type Survei } from "@/lib/sigapPelatihanSurvei";
@@ -846,7 +846,7 @@ function Monitoring() {
           <thead>
             <tr>
               <ThKontrol label="Nama" search={{ value: f.cari, onChange: f.setCari, placeholder: "Cari nama..." }} sort={sortKolom(f, "nama")} />
-              <ThKontrol label="Kls" filter={{ options: OPSI_KELAS, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
+              <ThKontrol label="Kls" filter={{ options: f.opsiKelas, selected: f.kelas, onApply: f.setKelas }} sort={sortKolom(f, "kelas")} />
               <ThKontrol label="Peran" filter={{ options: OPSI_PERAN, selected: f.peran, onApply: f.setPeran }} sort={sortKolom(f, "peran")} />
               <ThKontrol label="Jenis" filter={{ options: OPSI_JENIS, selected: f.jenis, onApply: f.setJenis }} sort={sortKolom(f, "jenis")} />
               <ThKontrol label="Pretest" filter={{ options: opsiStatusTes("pretest"), selected: new Set([...f.status].filter((v) => v.startsWith("pretest:"))), onApply: (v) => f.setStatus(new Set([...[...f.status].filter((x) => !x.startsWith("pretest:")), ...v])) }} sort={sortKolom(f, "pretest")} />

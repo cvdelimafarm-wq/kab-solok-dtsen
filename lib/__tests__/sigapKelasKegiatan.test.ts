@@ -1,0 +1,307 @@
+import { describe, expect, it } from "vitest";
+import {
+  aturJumlahKelas,
+  bagiRataPeserta,
+  gabungKelas,
+  hapusKelas,
+  kelasEfektif,
+  labelKelasNama,
+  masukkanBelumBerkelas,
+  muatKelasKegiatan,
+  muatPanitia,
+  nomorPilihanKuis,
+  periksaKuota,
+  periksaNamaKelas,
+  pindahkanPesertaKelas,
+  tambahKelas,
+  ubahKelas,
+  ukuranBagiRata,
+} from "@/lib/sigapKelasKegiatan";
+
+type Baris = Record<string, unknown>;
+
+/** Basis data tiruan: tabel = larik baris; pembangun kueri berantai cukup untuk fungsi di sigapKelasKegiatan. */
+function dbTiruan(awal: Record<string, Baris[]>) {
+  const t: Record<string, Baris[]> = Object.fromEntries(Object.entries(awal).map(([k, v]) => [k, v.map((b) => ({ ...b }))]));
+  const db = {
+    from(nama: string) {
+      if (!t[nama]) t[nama] = [];
+      const filters: ((b: Baris) => boolean)[] = [];
+      let aksi: "select" | "update" | "delete" = "select";
+      let patch: Baris = {};
+      let hitung = false;
+      let kepala = false;
+      let batas = Infinity;
+      let urutKolom: string | null = null;
+      const jalankan = () => {
+        const cocok = t[nama].filter((b) => filters.every((f) => f(b)));
+        if (aksi === "update") {
+          cocok.forEach((b) => Object.assign(b, patch));
+          return { data: null, error: null };
+        }
+        if (aksi === "delete") {
+          t[nama] = t[nama].filter((b) => !cocok.includes(b));
+          return { data: null, error: null };
+        }
+        let hasil = [...cocok];
+        if (urutKolom) hasil.sort((a, b) => Number(a[urutKolom!]) - Number(b[urutKolom!]));
+        hasil = hasil.slice(0, batas);
+        return { data: kepala ? null : hasil, error: null, count: hitung ? cocok.length : null };
+      };
+      const q: Record<string, unknown> = {
+        select(_k?: string, opsi?: { count?: string; head?: boolean }) {
+          hitung = !!opsi?.count;
+          kepala = !!opsi?.head;
+          return q;
+        },
+        eq(k: string, v: unknown) { filters.push((b) => b[k] === v); return q; },
+        neq(k: string, v: unknown) { filters.push((b) => b[k] !== v); return q; },
+        in(k: string, v: unknown[]) { filters.push((b) => v.includes(b[k])); return q; },
+        not(k: string, op: string, v: unknown) { if (op === "is" && v === null) filters.push((b) => b[k] != null); return q; },
+        or(teks: string) {
+          const bagian = teks.split(",").map((s) => s.split("."));
+          filters.push((b) => bagian.some(([k, op, v]) => (op === "is" ? b[k] == null : b[k] === Number(v))));
+          return q;
+        },
+        order(k: string) { urutKolom = k; return q; },
+        limit(n: number) { batas = n; return q; },
+        maybeSingle: async () => ({ data: jalankan().data?.[0] ?? null, error: null }),
+        update(p: Baris) { aksi = "update"; patch = p; return q; },
+        delete() { aksi = "delete"; return q; },
+        insert: async (b: Baris | Baris[]) => {
+          const baris = Array.isArray(b) ? b : [b];
+          for (const x of baris) {
+            if (nama === "sigap_pelatihan_kelas" && t[nama].some((y) => y.kegiatan_id === x.kegiatan_id && y.nomor === x.nomor)) return { error: { message: "dup" } };
+            t[nama].push({ ...x });
+          }
+          return { error: null };
+        },
+        upsert: async (b: Baris | Baris[], opsi?: { onConflict?: string; ignoreDuplicates?: boolean }) => {
+          const baris = Array.isArray(b) ? b : [b];
+          const kunci = (opsi?.onConflict ?? "").split(",");
+          for (const x of baris) {
+            const ada = t[nama].find((y) => kunci.every((k) => y[k] === x[k]));
+            if (ada) { if (!opsi?.ignoreDuplicates) Object.assign(ada, x); } else t[nama].push({ ...x });
+          }
+          return { error: null };
+        },
+        then(ok: (v: unknown) => unknown, tolak?: (e: unknown) => unknown) { return Promise.resolve(jalankan()).then(ok, tolak); },
+      };
+      return q;
+    },
+  };
+  return { db: db as never, t };
+}
+
+const peserta = (id: number, kelas: number | null, extra: Baris = {}) => ({ id, kegiatan_id: 7, akun_id: 100 + id, peran: "ppl", kelas, aktif: true, sumber: null, ...extra });
+const akun = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 101 + i, nama: `Petugas ${String(i + 1).padStart(2, "0")}`, aktif: true }));
+
+describe("fungsi murni kelas pelatihan", () => {
+  it("gabungKelas: tabel kosong -> Kelas 1; kelas terpakai di luar tabel ikut tampil; tanpa kembar dan berurutan", () => {
+    expect(gabungKelas([], [])).toEqual([{ nomor: 1, nama: "Kelas 1", kuota: null }]);
+    expect(gabungKelas([{ nomor: 2, nama: "Kelas B", kuota: 20 }], [3, 2, 3, 0, 99]).map((k) => [k.nomor, k.nama, k.kuota])).toEqual([[2, "Kelas B", 20], [3, "Kelas 3", null]]);
+  });
+
+  it("kelasEfektif: satu kelas -> peserta tanpa kelas masuk kelas itu; banyak kelas -> null", () => {
+    const satu = gabungKelas([{ nomor: 1, nama: "Kelas 1", kuota: null }], []);
+    const dua = gabungKelas([{ nomor: 1, nama: "A", kuota: null }, { nomor: 2, nama: "B", kuota: null }], []);
+    expect(kelasEfektif(null, satu)).toBe(1);
+    expect(kelasEfektif(5, satu)).toBe(1);
+    expect(kelasEfektif(null, dua)).toBeNull();
+    expect(kelasEfektif(2, dua)).toBe(2);
+    expect(kelasEfektif(9, dua)).toBeNull();
+  });
+
+  it("nomorPilihanKuis: Semua Kelas (0) hanya bila kelas > 1", () => {
+    const dua = gabungKelas([{ nomor: 1, nama: "A", kuota: null }, { nomor: 2, nama: "B", kuota: null }], []);
+    expect(nomorPilihanKuis(dua)).toEqual([0, 1, 2]);
+    expect(nomorPilihanKuis(gabungKelas([], []))).toEqual([1]);
+  });
+
+  it("labelKelasNama memakai nama kelas pelatihan", () => {
+    const d = gabungKelas([{ nomor: 1, nama: "Kelas Pagi", kuota: null }], []);
+    expect(labelKelasNama(1, d)).toBe("Kelas Pagi");
+    expect(labelKelasNama(0, d)).toBe("Semua Kelas");
+    expect(labelKelasNama(4, d)).toBe("Kelas 4");
+    expect(labelKelasNama(null, d)).toBe("?");
+  });
+
+  it("ukuranBagiRata selisih paling banyak 1 dan jumlahnya tetap", () => {
+    expect(ukuranBagiRata(94, 4)).toEqual([24, 24, 23, 23]);
+    expect(ukuranBagiRata(3, 5)).toEqual([1, 1, 1, 0, 0]);
+    expect(ukuranBagiRata(0, 3)).toEqual([0, 0, 0]);
+    expect(ukuranBagiRata(5, 0)).toEqual([]);
+  });
+
+  it("periksa nama dan kuota", () => {
+    expect(periksaNamaKelas("  Kelas   Pagi ")).toEqual({ ok: true, nama: "Kelas Pagi" });
+    expect(periksaNamaKelas("   ").ok).toBe(false);
+    expect(periksaNamaKelas("x".repeat(61)).ok).toBe(false);
+    expect(periksaKuota("")).toEqual({ ok: true, kuota: null });
+    expect(periksaKuota(null)).toEqual({ ok: true, kuota: null });
+    expect(periksaKuota("25")).toEqual({ ok: true, kuota: 25 });
+    expect(periksaKuota(0).ok).toBe(false);
+    expect(periksaKuota(501).ok).toBe(false);
+    expect(periksaKuota(2.5).ok).toBe(false);
+  });
+});
+
+describe("muatKelasKegiatan", () => {
+  it("memakai tabel kelas, ditambah kelas yang terpakai peserta aktif dan instruktur", async () => {
+    const { db } = dbTiruan({
+      sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: null }],
+      sigap_penugasan: [peserta(1, 1), peserta(2, 3), peserta(3, 4, { aktif: false })],
+      sigap_kuis_instruktur_kelas: [{ kegiatan_id: 7, akun_id: 9, kelas: 2 }],
+    });
+    expect((await muatKelasKegiatan(db, 7)).map((k) => k.nomor)).toEqual([1, 2, 3]);
+  });
+  it("pelatihan lain tidak ikut", async () => {
+    const { db } = dbTiruan({ sigap_pelatihan_kelas: [{ kegiatan_id: 3, nomor: 1, nama: "x", kuota: null }, { kegiatan_id: 3, nomor: 2, nama: "y", kuota: null }] });
+    expect((await muatKelasKegiatan(db, 7)).map((k) => k.nomor)).toEqual([1]);
+  });
+});
+
+describe("mengatur kelas", () => {
+  const awal = () => ({
+    sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: null }],
+    sigap_penugasan: [peserta(1, 1), peserta(2, 1), peserta(3, 1), peserta(4, null)],
+    sigap_akun: akun(4),
+    sigap_kuis_instruktur_kelas: [],
+    sigap_kuis_ruang: [],
+    sigap_kuis_kelas: [],
+  });
+
+  it("atur jumlah: menambah kelas bernama Kelas N, lalu mengurangi kelas kosong dari nomor terbesar", async () => {
+    const { db } = dbTiruan(awal());
+    expect(await aturJumlahKelas(db, 7, 3)).toMatchObject({ ok: true, jumlah: 3 });
+    expect((await muatKelasKegiatan(db, 7)).map((k) => k.nama)).toEqual(["Kelas 1", "Kelas 2", "Kelas 3"]);
+    expect(await aturJumlahKelas(db, 7, 1)).toMatchObject({ ok: true, jumlah: 1 });
+  });
+
+  it("atur jumlah ditolak di luar 1..20 dan saat kelas yang akan dibuang masih berisi peserta", async () => {
+    const { db } = dbTiruan({ ...awal(), sigap_penugasan: [peserta(1, 1), peserta(2, 2)], sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: null }, { kegiatan_id: 7, nomor: 2, nama: "Kelas 2", kuota: null }] });
+    expect((await aturJumlahKelas(db, 7, 0)).ok).toBe(false);
+    expect((await aturJumlahKelas(db, 7, 21)).ok).toBe(false);
+    const h = await aturJumlahKelas(db, 7, 1);
+    expect(h.ok).toBe(false);
+    expect(!h.ok && h.pesan).toContain("masih berisi 1 peserta");
+    expect((await muatKelasKegiatan(db, 7)).length).toBe(2);
+  });
+
+  it("hapus kelas: minimal satu kelas, ditolak bila ada peserta/instruktur/ruang berjalan, berhasil bila kosong", async () => {
+    const tabel = {
+      ...awal(),
+      sigap_penugasan: [peserta(1, 1)],
+      sigap_pelatihan_kelas: [1, 2, 3, 4].map((n) => ({ kegiatan_id: 7, nomor: n, nama: `Kelas ${n}`, kuota: null })),
+      sigap_kuis_instruktur_kelas: [{ kegiatan_id: 7, akun_id: 9, kelas: 2 }],
+      sigap_kuis_ruang: [{ id: 1, kegiatan_id: 7, kelas: 3, status: "lobi" }, { id: 2, kegiatan_id: 7, kelas: 4, status: "selesai" }],
+      sigap_kuis_kelas: [{ kegiatan_id: 7, kelas: 4, kuis_id: 5 }],
+    };
+    const { db, t } = dbTiruan(tabel);
+    const peserta1 = await hapusKelas(db, 7, 1);
+    expect(!peserta1.ok && peserta1.pesan).toContain("peserta");
+    const ins = await hapusKelas(db, 7, 2);
+    expect(!ins.ok && ins.pesan).toContain("instruktur");
+    const ruang = await hapusKelas(db, 7, 3);
+    expect(!ruang.ok && ruang.pesan).toContain("Ruang Adu Sigap");
+    expect(await hapusKelas(db, 7, 4)).toEqual({ ok: true });
+    expect(t.sigap_pelatihan_kelas.map((k) => k.nomor)).toEqual([1, 2, 3]);
+    expect(t.sigap_kuis_kelas).toEqual([]); // pengaturan kuis kelas yang dihapus ikut dibuang
+
+    const satu = dbTiruan(awal());
+    const h = await hapusKelas(satu.db, 7, 1);
+    expect(!h.ok && h.pesan).toContain("minimal satu kelas");
+  });
+
+  it("ubah kelas: nama unik, kuota tidak boleh di bawah isi kelas, kuota kosong = bebas", async () => {
+    const tabel = { ...awal(), sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: null }, { kegiatan_id: 7, nomor: 2, nama: "Kelas 2", kuota: null }] };
+    const { db, t } = dbTiruan(tabel);
+    expect((await ubahKelas(db, 7, 2, "kelas 1", null)).ok).toBe(false); // nama kembar (tak peka huruf)
+    const kecil = await ubahKelas(db, 7, 1, "Pagi", 2); // berisi 3 peserta
+    expect(!kecil.ok && kecil.pesan).toContain("lebih dari kuota 2");
+    expect(await ubahKelas(db, 7, 1, "Pagi", 5)).toEqual({ ok: true });
+    expect(t.sigap_pelatihan_kelas.find((k) => k.nomor === 1)).toMatchObject({ nama: "Pagi", kuota: 5 });
+    expect(await ubahKelas(db, 7, 1, "Pagi", "")).toEqual({ ok: true });
+    expect(t.sigap_pelatihan_kelas.find((k) => k.nomor === 1)?.kuota).toBeNull();
+    expect((await ubahKelas(db, 7, 9, "Z", null)).ok).toBe(false); // kelas tidak ada
+  });
+
+  it("tambah kelas memakai nomor kosong terkecil dan menolak melebihi 20", async () => {
+    const { db } = dbTiruan({ ...awal(), sigap_pelatihan_kelas: [1, 3].map((n) => ({ kegiatan_id: 7, nomor: n, nama: `Kelas ${n}`, kuota: null })) });
+    const h = await tambahKelas(db, 7);
+    expect(h).toMatchObject({ ok: true, nomor: 2 });
+    const penuh = dbTiruan({ ...awal(), sigap_pelatihan_kelas: Array.from({ length: 20 }, (_, i) => ({ kegiatan_id: 7, nomor: i + 1, nama: `Kelas ${i + 1}`, kuota: null })) });
+    expect((await tambahKelas(penuh.db, 7)).ok).toBe(false);
+  });
+
+  it("tabel kelas belum ada (SQL belum dijalankan): ditolak dengan petunjuk", async () => {
+    const rusak = { from: () => ({ select: () => ({ limit: async () => ({ error: { message: "relation does not exist" } }) }) }) } as never;
+    const h = await ubahKelas(rusak, 7, 1, "A", null);
+    expect(!h.ok && h.pesan).toContain("20261108b_kelas_pelatihan.sql");
+  });
+});
+
+describe("peserta ke kelas", () => {
+  const dua = () => ({
+    sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: 2 }, { kegiatan_id: 7, nomor: 2, nama: "Kelas 2", kuota: null }],
+    sigap_penugasan: [peserta(1, 1), peserta(2, null), peserta(3, null), peserta(4, 2), peserta(5, 2, { aktif: false })],
+    sigap_akun: akun(5),
+    sigap_kuis_instruktur_kelas: [],
+  });
+
+  it("pindah peserta: hanya peserta aktif pelatihan ini, kelas tujuan harus ada, kuota dijaga", async () => {
+    const { db, t } = dbTiruan(dua());
+    expect((await pindahkanPesertaKelas(db, 7, [], 2)).ok).toBe(false);
+    expect((await pindahkanPesertaKelas(db, 7, [2], 9)).ok).toBe(false); // kelas 9 tidak ada
+    expect((await pindahkanPesertaKelas(db, 7, [999], 2)).ok).toBe(false); // bukan peserta
+    expect(await pindahkanPesertaKelas(db, 7, [2, 3], 1)).toMatchObject({ ok: false }); // kuota 2, sudah ada 1
+    expect(await pindahkanPesertaKelas(db, 7, [2], 1)).toEqual({ ok: true, berubah: 1 });
+    expect(t.sigap_penugasan.find((p) => p.id === 2)?.kelas).toBe(1);
+    expect(await pindahkanPesertaKelas(db, 7, [2], 1)).toEqual({ ok: true, berubah: 0 }); // sudah di sana
+    expect(await pindahkanPesertaKelas(db, 7, [5], 1)).toMatchObject({ ok: false }); // tidak aktif
+    expect(await pindahkanPesertaKelas(db, 7, [2], null)).toEqual({ ok: true, berubah: 1 }); // dikeluarkan dari kelas
+  });
+
+  it("masukkan semua yang belum berkelas", async () => {
+    const { db, t } = dbTiruan(dua());
+    expect(await masukkanBelumBerkelas(db, 7, 2)).toEqual({ ok: true, berubah: 2 });
+    expect(t.sigap_penugasan.filter((p) => p.aktif).map((p) => p.kelas)).toEqual([1, 2, 2, 2]);
+    expect(await masukkanBelumBerkelas(db, 7, 2)).toEqual({ ok: true, berubah: 0 });
+  });
+
+  it("bagi rata: potongan berurutan menurut nama, selisih paling banyak 1; ditolak bila melanggar kuota", async () => {
+    const tabel = dua();
+    tabel.sigap_pelatihan_kelas[0].kuota = null;
+    const { db, t } = dbTiruan(tabel);
+    expect(await bagiRataPeserta(db, 7)).toMatchObject({ ok: true });
+    const per = (k: number) => t.sigap_penugasan.filter((p) => p.aktif && p.kelas === k).length;
+    expect([per(1), per(2)]).toEqual([2, 2]);
+    const sempit = dbTiruan({ ...dua(), sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: 1 }, { kegiatan_id: 7, nomor: 2, nama: "Kelas 2", kuota: null }] });
+    const h = await bagiRataPeserta(sempit.db, 7);
+    expect(!h.ok && h.pesan).toContain("kuota");
+  });
+
+  it("bagi rata tanpa peserta ditolak", async () => {
+    const { db } = dbTiruan({ ...dua(), sigap_penugasan: [] });
+    expect((await bagiRataPeserta(db, 7)).ok).toBe(false);
+  });
+});
+
+describe("muatPanitia", () => {
+  it("panitia = pemegang peran dengan menu pelatihan.kelola (lingkup pelatihan ini atau semua), tanpa instruktur, akun nonaktif dilewati", async () => {
+    const { db } = dbTiruan({
+      sigap_peran_izin: [{ peran_id: 1, menu_kode: "pelatihan.kelola" }, { peran_id: 2, menu_kode: "pelatihan.kelola" }, { peran_id: 3, menu_kode: "pelatihan.kelola" }, { peran_id: 4, menu_kode: "lain" }],
+      sigap_peran: [{ id: 1, kode: "panitia_pelatihan", nama: "Panitia Pelatihan" }, { id: 2, kode: "instruktur_pelatihan", nama: "Instruktur" }, { id: 3, kode: "admin_aplikasi", nama: "Admin Aplikasi" }],
+      sigap_akun_peran: [
+        { akun_id: 10, peran_id: 1, kegiatan_id: 7 },
+        { akun_id: 11, peran_id: 1, kegiatan_id: 3 }, // pelatihan lain
+        { akun_id: 12, peran_id: 2, kegiatan_id: 7 }, // instruktur
+        { akun_id: 13, peran_id: 3, kegiatan_id: null }, // admin global
+        { akun_id: 14, peran_id: 1, kegiatan_id: 7 }, // nonaktif
+      ],
+      sigap_akun: [{ id: 10, nama: "Rina", aktif: true }, { id: 11, nama: "Budi", aktif: true }, { id: 12, nama: "Inda", aktif: true }, { id: 13, nama: "Iqbal", aktif: true }, { id: 14, nama: "Lama", aktif: false }],
+    });
+    const p = await muatPanitia(db, 7);
+    expect(p.map((x) => [x.nama, x.lingkup])).toEqual([["Rina", "kegiatan"], ["Iqbal", "semua"]]);
+  });
+});

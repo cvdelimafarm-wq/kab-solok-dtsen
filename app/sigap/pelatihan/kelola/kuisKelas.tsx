@@ -62,8 +62,10 @@ function Angka({ nilai, onUbah, min, max, satuan, label }: { nilai: number; onUb
 }
 
 export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { data: Daftar; bisaKelola: boolean; sibuk: boolean; aksi: AksiFn; bukaHost: (ruangId: number) => void }) {
-  const [kelas, setKelas] = useState(data.kelas_saya ?? 1); // inda/instruktur: langsung terbuka di kelasnya
-  const konfig = data.kelas.find((k) => k.kelas === kelas)!;
+  // (8 Nov 2026) kelas milik pelatihan ini saja; inda/instruktur langsung terbuka di kelasnya, selain itu kelas pertama
+  const [kelas, setKelas] = useState(() => (data.kelas_saya != null && data.kelas.some((k) => k.kelas === data.kelas_saya) ? data.kelas_saya : (data.kelas.find((k) => k.kelas !== KELAS_GABUNGAN) ?? data.kelas[0]).kelas));
+  const konfig = data.kelas.find((k) => k.kelas === kelas) ?? data.kelas[0];
+  const namaKelas = (k: number) => labelKelas(k, data.kelas.find((x) => x.kelas === k)?.nama);
   const [draft, setDraft] = useState<Draft>(() => dariKonfig(konfig));
   const versiTerakhir = useRef<string>(`${kelas}|${konfig.diubah_at ?? ""}`);
   const [soalBank, setSoalBank] = useState<Record<number, SoalKuis[]>>({});
@@ -156,7 +158,7 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
         ok = false;
         throw e;
       }
-    }, `Pengaturan ${labelKelas(kelas)} tersimpan.`);
+    }, `Pengaturan ${namaKelas(kelas)} tersimpan.`);
     return ok;
   }
   async function bukaRuang() {
@@ -168,7 +170,7 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
   }
 
   const nPesertaKelas = konfig.anggota;
-  const tabKelas = [1, 2, 3, 4, KELAS_GABUNGAN].map((k) => { // (8 Okt 2026) + Semua Kelas
+  const tabKelas = [...data.kelas.map((x) => x.kelas).filter((k) => k !== KELAS_GABUNGAN), ...data.kelas.filter((x) => x.kelas === KELAS_GABUNGAN).map((x) => x.kelas)].map((k) => { // (8 Okt 2026) + Semua Kelas (hanya bila kelas > 1)
     const r = data.ruang.find((x) => x.kelas === k && x.status !== "selesai");
     return { k, r };
   });
@@ -182,7 +184,7 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
           const kf = data.kelas.find((x) => x.kelas === k)!;
           return (
             <button key={k} type="button" role="tab" aria-selected={kelas === k} onClick={() => setKelas(k)} className={`flex items-center gap-2 rounded-xl border px-3.5 py-2 text-[13.5px] font-bold transition ${kelas === k ? "border-[#46178F] bg-[#46178F] text-white" : "border-[#CDD5DE] bg-white text-[#14202E] hover:bg-[#F1EAFB]"}`}>
-              {labelKelas(k)}
+              {namaKelas(k)}
               {r ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${kelas === k ? "bg-[#FFD02B] text-[#2B0F55]" : "bg-[#FBEFD6] text-[#9A6200]"}`}>● {LABEL_STATUS[r.status].split(" · ")[0]}</span> : kf.kuis_id !== null ? <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${kelas === k ? "bg-white/25" : "bg-[#DFF2EC] text-[#12816A]"}`}>siap</span> : <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${kelas === k ? "bg-white/25" : "bg-[#EDF0F4] text-[#4D5B6B]"}`}>belum diatur</span>}
             </button>
           );
@@ -191,21 +193,21 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
 
       {ruangAktif && (
         <Pesan jenis="info">
-          {labelKelas(kelas)} sedang punya ruang <b>{LABEL_STATUS[ruangAktif.status].toLowerCase()}</b> ({ruangAktif.jumlah_peserta} peserta). Perubahan di bawah berlaku untuk ruang berikutnya.{" "}
+          {namaKelas(kelas)} sedang punya ruang <b>{LABEL_STATUS[ruangAktif.status].toLowerCase()}</b> ({ruangAktif.jumlah_peserta} peserta). Perubahan di bawah berlaku untuk ruang berikutnya.{" "}
           <button type="button" className="font-bold text-[#46178F] underline" onClick={() => bukaHost(ruangAktif.id)}>Buka layar host</button>
         </Pesan>
       )}
       {kelas === KELAS_GABUNGAN && (
         <Pesan jenis="info">
           <b>Semua Kelas</b> = satu ruang gabungan untuk seluruh peserta (satu layar host, satu papan skor &amp; podium). Saat ruang ini dibuka, peserta yang
-          ruang kelasnya tidak aktif otomatis diarahkan ke sini, jadi <b>Stop dulu ruang Kelas 1–4</b> yang masih berjalan.
+          ruang kelasnya tidak aktif otomatis diarahkan ke sini, jadi <b>Stop dulu ruang kelas lain</b> yang masih berjalan.
         </Pesan>
       )}
       {!bisaKelola && <Pesan jenis="peringatan">Anda hanya punya izin melihat. Pengaturan kelas hanya dapat diubah oleh pengelola.</Pesan>}
 
       <div className="grid gap-3 xl:grid-cols-2">
         {/* ① Soal */}
-        <Kartu judul="① Soal" ket={`${labelKelas(kelas)} · ${nPesertaKelas} peserta`} className="xl:col-span-2">
+        <Kartu judul="① Soal" ket={`${namaKelas(kelas)} · ${nPesertaKelas} peserta`} className="xl:col-span-2">
           <div className="flex flex-wrap items-center gap-2.5">
             <label className="text-[13px] font-semibold">Kuis dari bank</label>
             <SelectCari className={`${INPUT} min-w-[220px]`} value={draft.kuis_id ?? ""} disabled={!bolehEdit} onChange={(e) => setDraft((d) => ({ ...d, kuis_id: e.target.value ? Number(e.target.value) : null, soal_pilihan: [] }))} aria-label="Kuis untuk kelas ini">
@@ -364,10 +366,10 @@ export function PengaturanKelas({ data, bisaKelola, sibuk, aksi, bukaHost }: { d
 
           {bisaKelola && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button type="button" className={BTN} disabled={sibuk || !dirty} onClick={() => void simpan()}>💾 Simpan pengaturan {labelKelas(kelas)}</button>
+              <button type="button" className={BTN} disabled={sibuk || !dirty} onClick={() => void simpan()}>💾 Simpan pengaturan {namaKelas(kelas)}</button>
               {dirty && <Chip w="wait">belum disimpan</Chip>}
               {ruangAktif ? (
-                <button type="button" className={BTN_G} onClick={() => bukaHost(ruangAktif.id)}>🖥 Buka layar host {labelKelas(kelas)}</button>
+                <button type="button" className={BTN_G} onClick={() => bukaHost(ruangAktif.id)}>🖥 Buka layar host {namaKelas(kelas)}</button>
               ) : (
                 <button type="button" className={BTN_G} disabled={sibuk || draft.kuis_id === null || ringkas.soal === 0} title={draft.kuis_id === null ? "Pilih kuis dulu" : undefined} onClick={bukaRuang}>
                   ▶ Buka ruang & layar host

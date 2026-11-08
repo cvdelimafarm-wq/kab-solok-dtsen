@@ -157,7 +157,7 @@ export function Rekap({ ruangId, onTutup }: { ruangId: number; onTutup: () => vo
             </SelectCari>
             <SelectCari className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value)} aria-label="Filter kelas">
               <option value="">Semua kelas</option>
-              {[1, 2, 3, 4].map((k) => (
+              {Array.from(new Set((d?.peserta ?? []).map((p) => p.kelas).filter((k): k is number => k != null && k > 0))).sort((a, b) => a - b).map((k) => ( // (8 Nov 2026) kelas yang ada pada ruang ini
                 <option key={k} value={k}>{labelKelas(k)}</option>
               ))}
             </SelectCari>
