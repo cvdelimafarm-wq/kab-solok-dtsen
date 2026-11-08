@@ -5,6 +5,7 @@
 
 import type { Db } from "@/lib/sigap";
 import { muatInstruktur } from "@/lib/sigapInstrukturDb";
+import { muatKelasBerSurat } from "@/lib/sigapSuratUndanganDb";
 import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
 import { daftarTanggal, hitungKesiapan, type HasilKesiapan, type MasukanKesiapan } from "@/lib/sigapKesiapan";
 
@@ -103,6 +104,7 @@ export async function muatKesiapan(
   } else {
     fotoHari = fotoBaris.map((f) => ({ kelas: ang(f.kelas), tanggal: typeof f.tanggal === "string" ? f.tanggal.slice(0, 10) : null }));
   }
+  const suratUndangan = await muatKelasBerSurat(db, kegiatanId);
   const fotoPer = new Map<number, number>();
   for (const f of fotoBaris) fotoPer.set(ang(f.kelas), (fotoPer.get(ang(f.kelas)) ?? 0) + 1);
 
@@ -126,6 +128,7 @@ export async function muatKesiapan(
     foto: Array.from(fotoPer.entries()).map(([k, jumlah]) => ({ kelas: k, jumlah })),
     fotoHari,
     undanganBernomor: undangan.count ?? 0,
+    suratUndangan,
     agenda,
     sekarang,
   };

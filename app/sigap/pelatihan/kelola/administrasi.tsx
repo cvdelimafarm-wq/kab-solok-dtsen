@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
-import { bacaSesi, bukaBlob, fetchJson, pesanGalat, SesiBerakhir, rupiah } from "../../admin/api";
+import { bacaSesi, bukaBlob, fetchJson, pesanGalat, SesiBerakhir, rupiah, urlPelatihan } from "../../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, TH, TabelKartu } from "../../admin/ui";
 import SelectCari from "@/app/components/SelectCari";
 
@@ -215,7 +215,7 @@ export default function Administrasi({ onLibatkan }: { onLibatkan?: () => void }
     try {
       const s = bacaSesi();
       if (!s) throw new Error("Sesi berakhir. Silakan masuk kembali.");
-      const res = await fetch(`${URL_ADM}?bagian=pulsa_csv&kelas=${kelas}&kelompok=${kelompok}`, { headers: { Authorization: `Bearer ${s}` }, cache: "no-store" });
+      const res = await fetch(urlPelatihan(`${URL_ADM}?bagian=pulsa_csv&kelas=${kelas}&kelompok=${kelompok}`), { headers: { Authorization: `Bearer ${s}` }, cache: "no-store" });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error((j as { error?: string })?.error ?? `Gagal menyiapkan CSV (${res.status}).`);
@@ -627,7 +627,7 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
       fd.append("keterangan", ket);
       fd.append("file", daftar[i]);
       try {
-        const res = await fetch(`${URL_ADM}/foto`, { method: "POST", headers: { Authorization: `Bearer ${s}` }, body: fd });
+        const res = await fetch(urlPelatihan(`${URL_ADM}/foto`), { method: "POST", headers: { Authorization: `Bearer ${s}` }, body: fd });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error((j as { error?: string })?.error ?? `Gagal mengunggah (${res.status}).`);
         sukses++;

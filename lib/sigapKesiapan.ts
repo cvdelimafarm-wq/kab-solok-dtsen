@@ -8,6 +8,7 @@
 
 import { agendaBelumDiatur } from "@/lib/sigapAgenda";
 import { FOTO_PER_HARI, ringkasPerHari } from "@/lib/sigapFotoHari";
+import { kelasTanpaSurat } from "@/lib/sigapSuratUndangan";
 
 export type StatusButir = "ok" | "kuning" | "merah" | "info";
 
@@ -62,6 +63,8 @@ export type MasukanKesiapan = {
   /** (9 Nov 2026) Foto per kelas dengan tanggalnya (null = foto lama, dihitung hari pertama). undefined = kolom tanggal belum ada -> hitung total seperti dulu. */
   fotoHari?: { kelas: number; tanggal: string | null }[];
   undanganBernomor: number;
+  /** (9 Nov 2026) Kelas yang punya surat undangan aktif (diunggah di Kelola Pelatihan). undefined = tabel belum ada. */
+  suratUndangan?: number[];
   /** (9 Nov 2026) Baris agenda hari H yang sudah ada (jenis tes + kelas). undefined = tidak dimuat (tabel belum ada) -> butir hanya informatif. */
   agenda?: { jenis: string; kelas: number }[];
   sekarang: Date;
@@ -346,14 +349,24 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
     });
   }
 
-  // 15. Undangan bernomor
-  tambah({
-    kode: "undangan_nomor", judul: "Undangan bernomor tercatat", wajib: false,
-    status: m.undanganBernomor > 0 ? "ok" : "kuning",
-    ringkas: m.undanganBernomor > 0 ? `${m.undanganBernomor} nomor undangan tercatat di Arsip` : "Belum ada nomor undangan untuk pelatihan ini di Arsip",
-    rincian: [],
-    tab: "komunikasi", sub: "tampilan",
-  });
+  // 15. Undangan bernomor: nomor tercatat di Arsip, atau surat undangan (PDF + nomor) sudah terunggah untuk semua kelas
+  {
+    const kelasDaftar = m.kelas.length ? m.kelas : [1];
+    const tanpaSurat = m.suratUndangan ? kelasTanpaSurat(kelasDaftar, m.suratUndangan) : null;
+    const suratLengkap = tanpaSurat !== null && tanpaSurat.length === 0;
+    const ok = m.undanganBernomor > 0 || suratLengkap;
+    tambah({
+      kode: "undangan_nomor", judul: "Undangan bernomor tercatat", wajib: false,
+      status: ok ? "ok" : "kuning",
+      ringkas: suratLengkap
+        ? `Surat undangan terunggah untuk ${kelasDaftar.length} kelas`
+        : m.undanganBernomor > 0
+          ? `${m.undanganBernomor} nomor undangan tercatat di Arsip`
+          : "Belum ada nomor undangan untuk pelatihan ini di Arsip",
+      rincian: tanpaSurat && tanpaSurat.length ? [`Surat undangan belum diunggah: ${tanpaSurat.map((k) => `Kelas ${k}`).join(", ")}`] : [],
+      tab: "komunikasi", sub: "tampilan",
+    });
+  }
 
   // 16. Bentrokan jadwal
   {

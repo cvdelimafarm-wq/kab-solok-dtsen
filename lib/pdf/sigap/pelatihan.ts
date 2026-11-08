@@ -10,7 +10,7 @@
 // garis titik supaya bisa ditulis tangan.
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
-import { formatTanggalIndoDenganHari, teksAman } from "./format";
+import { formatTanggalIndo, formatTanggalIndoDenganHari, teksAman } from "./format";
 
 const MM = 2.834645669;
 const PAGE_W = 595.28;
@@ -258,6 +258,28 @@ class Kanvas {
   }
 
   /**
+   * (9 Nov 2026) Lampiran surat undangan: halaman pemisah berisi nomor, tanggal, perihal, lalu halaman PDF surat asli ditempel apa adanya.
+   * PDF yang rusak/terkunci dilewati (halaman pemisah tetap tercetak dengan catatan), supaya laporan tidak gagal dicetak.
+   */
+  async lampiranUndangan(u: UndanganLampiran) {
+    this.baru();
+    this.seksi("LAMPIRAN SURAT UNDANGAN");
+    for (const [label, isi] of [["Nomor", u.nomor], ["Tanggal", formatTanggalIndo(u.tanggal)], ["Perihal", u.perihal]] as const) {
+      for (const [i, baris] of bungkus(this.font, `${label.padEnd(8)}: ${isi}`, 10, CONTENT_W).entries()) {
+        this.teks(i === 0 ? baris : `   ${baris}`, CONTENT_L, this.y, 10, { color: TEXT_SEC });
+        this.y += 14;
+      }
+    }
+    try {
+      const sumber = await PDFDocument.load(u.bytes, { ignoreEncryption: true });
+      const salinan = await this.doc.copyPages(sumber, sumber.getPageIndices());
+      for (const h of salinan) this.doc.addPage(h);
+    } catch {
+      this.teks("(Berkas PDF surat tidak dapat disisipkan; lihat berkas aslinya di SIGAP.)", CONTENT_L, this.y + 6, 9, { color: TEXT_SEC });
+    }
+  }
+
+  /**
    * Lampiran foto kegiatan: halaman baru, grid 2 kolom x 3 baris per halaman (foto "muat di kotak", tidak dipotong),
    * tiap foto diberi nomor + keterangan. Foto yang tidak bisa dibaca dilewati.
    */
@@ -408,11 +430,15 @@ export type NilaiLaporan = {
   kuis: { ikut: number; juara: { nama: string; poin: number; benar: number; total: number }[] } | null;
 };
 
+export type UndanganLampiran = { bytes: Uint8Array; nomor: string; tanggal: string; perihal: string };
+
 export type FotoLampiran = { bytes: Uint8Array; contentType: string; keterangan: string | null };
 
 export type DataLaporan = {
   info: InfoKelas;
   /** Lampiran foto kegiatan (opsional; tanpa foto = tidak ada halaman lampiran). */
+  /** (9 Nov 2026) Surat undangan aktif kelas ini (Lampiran A); null/undefined = tidak ada lampiran undangan. */
+  undangan?: UndanganLampiran | null;
   foto?: FotoLampiran[];
   /** (9 Nov 2026) Catatan "foto belum lengkap" (4 per hari per kelas); tercetak di halaman lampiran. */
   fotoCatatan?: string | null;
@@ -491,6 +517,7 @@ export async function buatPdfLaporanPelatihan(d: DataLaporan): Promise<Uint8Arra
   k.seksi("KENDALA DAN TINDAK LANJUT");
   k.narasi(d.kendala, 4);
   k.tandaTangan([{ judul: "Panitia Pelatihan", nama: "" }, { judul: `Instruktur ${titelKelas(d.info)}`, nama: d.info.instruktur.join(", ") }], d.tanggalCetak);
+  if (d.undangan) await k.lampiranUndangan(d.undangan);
   await k.lampiranFoto(d.foto ?? [], d.fotoCatatan ?? null);
   return k.simpan();
 }
@@ -512,6 +539,7 @@ export async function buatPdfLaporanInstruktur(d: DataLaporan): Promise<Uint8Arr
   k.seksi("KENDALA DAN SARAN");
   k.narasi(d.kendala, 4);
   k.tandaTangan([{ judul: "Mengetahui,\nPanitia Pelatihan", nama: "" }, { judul: `Instruktur ${titelKelas(d.info)}`, nama: d.info.instruktur.join(", ") }], d.tanggalCetak);
+  if (d.undangan) await k.lampiranUndangan(d.undangan);
   await k.lampiranFoto(d.foto ?? [], d.fotoCatatan ?? null);
   return k.simpan();
 }

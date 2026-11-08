@@ -37,6 +37,7 @@ import { nomorAsli, pulsaBanyak } from "@/lib/sigapPulsa";
 import { LABEL_JENIS_TES, UNDANGAN, skorResmi, type SesiBaris } from "@/lib/sigapTes";
 import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
 import { muatInstruktur } from "@/lib/sigapInstrukturDb";
+import { unduhSuratAktif } from "@/lib/sigapSuratUndanganDb";
 import { daftarTanggal } from "@/lib/sigapKesiapan";
 import { FOTO_PER_HARI, batasFotoKelas, catatanLampiran, jenisPengunggah, ringkasPerHari, tanggalEfektif, tglSingkat, type Pengunggah, type RingkasHari } from "@/lib/sigapFotoHari";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
@@ -378,12 +379,13 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
     if (selisih.length) kenaikan = selisih.reduce((x, y) => x + y, 0) / selisih.length;
   }
   const n = narasi[jenis];
-  const { foto, catatan: fotoCatatan } = await unduhFotoLaporan(db, kegiatanId, kelas);
+  const [{ foto, catatan: fotoCatatan }, undangan] = await Promise.all([unduhFotoLaporan(db, kegiatanId, kelas), unduhSuratAktif(db, kegiatanId, kelas)]);
   const nilai = await nilaiLaporan(db, kegiatanId, inti);
   return {
     info,
     foto,
     fotoCatatan,
+    undangan,
     nilai,
     jumlahPeserta: inti.length,
     hadir: inti.filter((p) => pres.has(p.akun_id)).length,

@@ -213,6 +213,15 @@ describe("hitungKesiapan", () => {
     expect(b.status).toBe("kuning");
     expect(b.rincian[0]).toBe("Kelas 1: hari 1 4/4, hari 2 0/4");
   });
+  it("undangan bernomor: surat terunggah untuk semua kelas = ok walau Arsip kosong; kelas tanpa surat = kuning dengan rincian", () => {
+    const tanpaArsip = { undanganBernomor: 0 };
+    expect(cari(dasar(tanpaArsip), "undangan_nomor").status).toBe("kuning");
+    expect(cari(dasar({ ...tanpaArsip, suratUndangan: [1] }), "undangan_nomor").status).toBe("ok");
+    const b = cari(dasar({ ...tanpaArsip, kelas: [1, 2], suratUndangan: [1] }), "undangan_nomor");
+    expect(b.status).toBe("kuning");
+    expect(b.rincian).toEqual(["Surat undangan belum diunggah: Kelas 2"]);
+    expect(cari(dasar({ undanganBernomor: 2, kelas: [1, 2], suratUndangan: [] }), "undangan_nomor").status).toBe("ok");
+  });
   it("foto lama tanpa tanggal dihitung hari pertama", () => {
     const lama = Array.from({ length: 4 }, () => ({ kelas: 1, tanggal: null }));
     expect(cari(dasar({ sekarang: new Date("2026-11-09T05:00:00Z"), foto: [{ kelas: 1, jumlah: 4 }], fotoHari: lama }), "foto_pelaksanaan").status).toBe("ok");

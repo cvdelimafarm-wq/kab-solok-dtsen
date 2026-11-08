@@ -22,6 +22,7 @@ import { KartuHierarki } from "./hierarki";
 import OrangKelasKelola from "./orangKelas"; // (8 Nov 2026) Orang & kelas: libatkan orang, kelas, peserta per kelas, panitia, instruktur, pembanding rencana kelas
 import InstrumenKelola from "./instrumen";
 import VanguardKelola from "./vanguardKelola";
+import KartuSuratUndangan from "./suratUndangan"; // (9 Nov 2026) surat undangan per kelas (lampiran laporan)
 import PersiapanKelola, { KartuAturAbsen, KartuAturanNilai } from "./tampilan"; // PersiapanKelola = tampilan peserta + ketentuan undangan; absen -> Hari H; aturan nilai -> Penilaian
 import KendalaKelola from "./kendala"; // (3 Nov 2026) tab Kendala: petugas menolak / mundur -> ganti, kosongkan, atau alihkan
 import KoreksiKelola from "./koreksi"; // (6 Nov 2026) tab Kendala: kendala tes, soal bermasalah, pindah kelas / atasan, tambah peserta mendadak
@@ -315,7 +316,7 @@ export default function KelolaPelatihan() {
           key={`${kegId ?? 0}-${navKey}`}
           label="Bagian Komunikasi"
           bagian={[
-            { kode: "tampilan", label: "Undangan & tampilan", ket: "Tampilan peserta dan ketentuan undangan.", isi: () => <PersiapanKelola /> },
+            { kode: "tampilan", label: "Undangan & tampilan", ket: "Tampilan peserta, ketentuan, dan surat undangan.", isi: () => (<><PersiapanKelola /><KartuSuratUndangan /></>) },
             { kode: "notifikasi", label: "🔔 Notifikasi", ket: "Pengingat push ke HP peserta.", isi: () => <NotifikasiKelola /> },
             { kode: "pengumuman", label: "📢 Pengumuman", ket: "Modal pengumuman di aplikasi peserta.", isi: () => <PengumumanKelola /> },
           ] as Bagian[]}
