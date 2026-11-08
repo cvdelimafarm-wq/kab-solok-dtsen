@@ -48,6 +48,7 @@ const PENGECUALIAN_MODAL: Record<string, string> = {
   "app/sigap/pelatihan/kelola/kuisHost.tsx": "layar host kuis langsung: tidak boleh tertutup tak sengaja oleh Back saat kuis berjalan",
   "app/portal/PilihSebagai.tsx": "isi dialog; penutupnya dipasang pemanggil (Beranda, BannerLihatSebagai) dengan useTutupDenganBack",
   "app/sigap/translok/ModalBlokirTranslok.tsx": "penutup halaman translok petugas yang diblokir sementara: baru terbuka setelah atasan menyetujui ajukan unblock, tidak boleh ditutup Back (keluar lewat tombol Keluar)",
+  "app/sigap/PemblokirSesi.tsx": "modal pemblokir peserta saat Pretest/Posttest, roleplay, atau kuis dibuka (putusan Iqbal 9 Nov 2026): tidak boleh ditutup Back, hilang sendiri setelah sesi dikerjakan/selesai; dipasang di layout sehingga tetap tampil walau Back memundurkan halaman",
   "app/sigap/revisi/tanggapan/TanggapanRevisi.tsx": "modal pemblokir tanggapan siklus revisi: muncul hanya selama ada RO yang wajib ditanggapi (Ajukan sekarang, Ingatkan saya, atau Tidak mengusulkan); tidak boleh ditutup Back, hilang sendiri setelah semua ditanggapi",
 };
 
