@@ -33,7 +33,7 @@ import {
 } from "@/lib/sigapTes";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
 import { nilaiResmiTes } from "@/lib/sigapAturanTes";
-import { FILTER_BUKAN_ADMINISTRASI, KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTes, muatTesDaftar } from "@/lib/sigapTesDb";
+import { FILTER_BUKAN_ADMINISTRASI, KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTes, muatTesDaftar, pastikanTesBawaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,6 +63,8 @@ export async function GET(req: NextRequest) {
     const bisaKelola = boleh(izin, "pelatihan.kelola", "kelola", kegiatanId);
     const bagian = req.nextUrl.searchParams.get("bagian") ?? "ringkas";
     const sekarang = new Date();
+    // (8 Nov 2026) pelatihan dari mana pun asalnya wajib punya pretest + posttest: yang belum ada dibuatkan (tidak aktif) agar kartu unggah soal & jadwal tampil
+    if (bisaKelola) await pastikanTesBawaan(db, kegiatanId);
     const daftar = await muatTesDaftar(db, kegiatanId);
 
     if (bagian === "ringkas") {

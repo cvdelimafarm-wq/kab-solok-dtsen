@@ -36,6 +36,7 @@ import {
   type TesBaris,
 } from "@/lib/sigapTes";
 import { pilihPelatihanPeserta } from "@/lib/sigapPelatihanPilih";
+import { tesBawaan } from "@/lib/sigapPelatihanSurvei";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
 import { tesTuntas, wajib100 } from "@/lib/sigapTes";
 import type { VersiAturan } from "@/lib/sigapAturanTes";
@@ -122,6 +123,29 @@ export async function muatTesDaftar(db: Db, kegiatanId: number): Promise<TesBari
   if (!error) return ((data ?? []) as unknown as TesBaris[]).map(rapikanTes);
   const { data: lama } = await q(KOLOM_TES_LAMA);
   return (lama ?? []) as unknown as TesBaris[];
+}
+
+/**
+ * (8 Nov 2026) Setiap kegiatan berjenis pelatihan HARUS punya pretest dan posttest (tempat unggah soal dan jadwal di Kelola Pelatihan > Soal & Jadwal),
+ * dari mana pun pelatihan itu dibuat (tombol "+ Pelatihan baru", SQL, impor). Menambahkan yang belum ada dengan setelan bawaan (tidak aktif, wajib lulus mati);
+ * baris yang sudah ada tidak diubah. Idempoten dan aman dipanggil berulang; gagal = 0 (tidak mengganggu pemanggil). Mengembalikan jumlah baris yang ditambahkan.
+ * Pengaman kedua di basis data: pemicu sigap_kegiatan_tes_bawaan (SQL 20261108a).
+ */
+export async function pastikanTesBawaan(db: Db, kegiatanId: number): Promise<number> {
+  try {
+    const { data: k } = await db.from("sigap_kegiatan").select("nama, jenis, tanggal_mulai, tanggal_selesai").eq("id", kegiatanId).maybeSingle();
+    const keg = k as { nama: string | null; jenis: string | null; tanggal_mulai: string | null; tanggal_selesai: string | null } | null;
+    if (!keg || keg.jenis !== "pelatihan" || !keg.tanggal_mulai) return 0;
+    const { data: ada } = await db.from("sigap_tes").select("jenis").eq("kegiatan_id", kegiatanId);
+    const sudah = new Set(((ada ?? []) as { jenis: string }[]).map((r) => r.jenis));
+    const selesai = keg.tanggal_selesai && keg.tanggal_selesai >= keg.tanggal_mulai ? keg.tanggal_selesai : keg.tanggal_mulai;
+    const kurang = tesBawaan(keg.nama ?? "Pelatihan", keg.tanggal_mulai, selesai).filter((t) => !sudah.has(t.jenis));
+    if (kurang.length === 0) return 0;
+    const { error } = await db.from("sigap_tes").upsert(kurang.map((t) => ({ kegiatan_id: kegiatanId, ...t })), { onConflict: "kegiatan_id,jenis", ignoreDuplicates: true });
+    return error ? 0 : kurang.length;
+  } catch {
+    return 0;
+  }
 }
 
 export async function muatTes(db: Db, kegiatanId: number, jenis: JenisTes): Promise<TesBaris | null> {

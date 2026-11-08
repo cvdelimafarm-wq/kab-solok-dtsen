@@ -59,7 +59,8 @@ export async function POST(req: NextRequest) {
   };
 
   const tes = tesBawaan(v.data.nama, v.data.tanggal_mulai, v.data.tanggal_selesai).map((t) => ({ kegiatan_id: idBaru, ...t }));
-  const { error: eTes } = await db.from("sigap_tes").insert(tes);
+  // (8 Nov 2026) upsert yang mengabaikan baris kembar: pemicu basis data (SQL 20261108a) boleh sudah membuat keduanya lebih dulu
+  const { error: eTes } = await db.from("sigap_tes").upsert(tes, { onConflict: "kegiatan_id,jenis", ignoreDuplicates: true });
   if (eTes) return batal(`Pretest/posttest bawaan gagal dibuat: ${eTes.message}.`);
 
   const { error: eInduk } = await db.from("sigap_induk").update({ kegiatan_ids: [...idsInduk, idBaru] }).eq("kode", kodeSurvei);
