@@ -86,6 +86,7 @@ export default function KartuLengkapiAnggota({ token, kegiatanId, master }: { to
               penugasanId={terpilih.penugasan_id}
               tanggal={tanggal}
               master={master}
+              peran={terpilih.peran}
               atasNama
               onTersimpan={async () => {
                 setSelesai(`Laporan ${terpilih.nama} tanggal ${tglPendek(tanggal)} tersimpan.`);

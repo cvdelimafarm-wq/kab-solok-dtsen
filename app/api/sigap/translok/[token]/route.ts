@@ -11,7 +11,7 @@
 // POST { aksi:"realisasi", penugasan_id, tanggal, lokasi[], jumlah_realisasi, kendala }
 
 import { MAKS_FOTO_KURANG_MANDIRI, bolehLengkapiMandiri, hitungKekurangan, olehMelepas, olehMengembalikan, pakaiFormSls, tanggalDapatDipulihkan, type BarisRiwayat } from "@/lib/sigapLengkapiMandiri";
-import { simpanLaporanSlsManual } from "@/lib/sigapLaporanSlsDb";
+import { simpanLaporanManual } from "@/lib/sigapLaporanSlsDb";
 import { NextRequest, NextResponse } from "next/server";
 import { galatServer } from "@/lib/sigapGalat";
 import { createClient } from "@/lib/supabaseServer";
@@ -318,7 +318,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
       if (!akses.penugasan.kegiatan.wajib_laporan) return NextResponse.json({ error: "Kegiatan ini tidak memerlukan laporan harian; cukup unggah dokumentasi." }, { status: 400 });
       // (8 Nov 2026) Laporan hari terlewat kegiatan Pascabencana: rincian per SLS (terdampak / tidak terdampak / tidak ditemukan). Lihat lib/sigapLaporanSlsDb.ts.
       if (akses.mandiri && pakaiFormSls(akses.penugasan.kegiatan.kode)) {
-        const hasilSls = await simpanLaporanSlsManual(db, { penugasanId: akses.penugasan.id, kegiatanId: akses.penugasan.kegiatan.id, tanggal: akses.tanggal }, { rincian_sls: body?.rincian_sls, kendala: body?.kendala }, akun.id, akun.id);
+        const hasilSls = await simpanLaporanManual(db, { penugasanId: akses.penugasan.id, kegiatanId: akses.penugasan.kegiatan.id, tanggal: akses.tanggal, peran: akses.penugasan.peran }, { rincian_sls: body?.rincian_sls, rincian_pengawasan: body?.rincian_pengawasan, kendala: body?.kendala }, akun.id, akun.id);
         if ("error" in hasilSls) return NextResponse.json({ error: hasilSls.error }, { status: hasilSls.status });
         return NextResponse.json({ ok: true });
       }

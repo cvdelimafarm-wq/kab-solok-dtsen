@@ -108,3 +108,49 @@ export function susunLaporanSls(mentah: unknown, master: Set<string>): { error: 
 
 /** Tanda pada tiap SLS di sigap_realisasi.lokasi: laporan ini diisi manual untuk melengkapi hari terlewat dan TIDAK dihitung sebagai poin kinerja. */
 export const SUMBER_LAPORAN_MANUAL = "manual_susulan";
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// PML dan Korwil (supervisi) tidak mengisi rincian SLS, melainkan tiga angka pengawasan (permintaan user, 8 Nov 2026):
+//   PML   : jumlah SLS yang diawasi, jumlah PPL yang diawasi, jumlah dokumen yang diperiksa
+//   Korwil: jumlah SLS yang disupervisi, jumlah PPL yang disupervisi, jumlah dokumen yang diperiksa
+// Penyimpanan tanpa SQL baru: lokasi dikosongkan (pembaca PDF/admin menampilkan baris lokasi), ketiga angka ditulis di baris pertama `kendala`
+// dengan PENANDA_MANUAL (terbaca manusia dan bisa diurai), ditambah audit terstruktur. jumlah_realisasi: PML = SLS diawasi (satuan Sub SLS),
+// Korwil = dokumen diperiksa (satuan lembar QC). Tidak dihitung sebagai poin kinerja.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+export type JenisFormLaporan = "sls" | "pml" | "korwil";
+export const jenisFormLaporan = (peran: string | null | undefined): JenisFormLaporan => {
+  const p = String(peran ?? "").trim().toLowerCase();
+  return p === "pml" ? "pml" : p === "korwil" ? "korwil" : "sls";
+};
+
+/** Awalan baris pertama `kendala` pada laporan manual PML/Korwil. */
+export const PENANDA_MANUAL = "[Manual susulan]";
+export const MAKS_ANGKA_PENGAWASAN = 999;
+
+export const LABEL_PENGAWASAN: Record<"pml" | "korwil", { sls: string; ppl: string; dokumen: string; kata: string }> = {
+  pml: { sls: "Jumlah SLS yang diawasi", ppl: "Jumlah PPL yang diawasi", dokumen: "Jumlah dokumen yang diperiksa", kata: "diawasi" },
+  korwil: { sls: "Jumlah SLS yang disupervisi", ppl: "Jumlah PPL yang disupervisi", dokumen: "Jumlah dokumen yang diperiksa", kata: "disupervisi" },
+};
+
+export type RincianPengawasan = { sls: number; ppl: number; dokumen: number };
+
+export function susunLaporanPengawasan(
+  mentah: unknown,
+  peran: "pml" | "korwil",
+  kendalaPetugas: string
+): { error: string } | { rincian: RincianPengawasan; jumlah: number; kendala: string } {
+  const m = (mentah && typeof mentah === "object" ? mentah : {}) as Record<string, unknown>;
+  const L = LABEL_PENGAWASAN[peran];
+  const baca = (v: unknown, label: string): number | { error: string } =>
+    typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAKS_ANGKA_PENGAWASAN ? v : { error: `${label} harus bilangan bulat 0 sampai ${MAKS_ANGKA_PENGAWASAN}.` };
+  const sls = baca(m.sls, L.sls);
+  if (typeof sls !== "number") return sls;
+  const ppl = baca(m.ppl, L.ppl);
+  if (typeof ppl !== "number") return ppl;
+  const dokumen = baca(m.dokumen, L.dokumen);
+  if (typeof dokumen !== "number") return dokumen;
+  const baris1 = `${PENANDA_MANUAL} SLS ${L.kata}: ${sls} · PPL ${L.kata}: ${ppl} · Dokumen diperiksa: ${dokumen}`;
+  const kendala = (kendalaPetugas.trim() ? `${baris1}\n${kendalaPetugas.trim()}` : baris1).slice(0, 1000);
+  return { rincian: { sls, ppl, dokumen }, jumlah: peran === "pml" ? sls : dokumen, kendala };
+}

@@ -1429,7 +1429,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
         <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-4 py-3 text-amber-950">
           <p className="text-[14px] font-extrabold">Tanggal ini terlewat, tetapi masih bisa Anda lengkapi</p>
           <ul className="mt-1 list-disc pl-5 text-[12.5px]">
-            {hari.kurang_laporan && <li>Laporan belum ada: isi manual (pilih SLS, lalu jumlah ditemukan terdampak, tidak terdampak, dan tidak ditemukan).</li>}
+            {hari.kurang_laporan && <li>Laporan belum ada: isi manual ({pen.peran === "pml" ? "jumlah SLS dan PPL yang diawasi, serta dokumen yang diperiksa" : pen.peran === "korwil" ? "jumlah SLS dan PPL yang disupervisi, serta dokumen yang diperiksa" : "pilih SLS, lalu jumlah ditemukan terdampak, tidak terdampak, dan tidak ditemukan"}).</li>}
             {(hari.kurang_foto ?? 0) > 0 && <li>Foto kurang {hari.kurang_foto}: unggah manual pada nomor yang masih kosong (maksimal {pen.maks_foto_kurang_mandiri ?? 2} foto kurang; foto lainnya wajib sudah ada).</li>}
           </ul>
           <p className="mt-1 text-[11.5px] text-amber-900">Isian yang sudah tersimpan tidak bisa diubah atau dihapus. Setelah lengkap, tanggal ini menjadi hijau dan ikut dibayar.</p>
@@ -1463,7 +1463,7 @@ function KartuHari({ token, data, pen, hari, onBerubah, hanya, tanpaJudul }: { t
       {hanya !== "foto" && wajibLaporan(pen) && (
         <div id={`bag-laporan-${hari.tanggal}`} className={`scroll-mt-3 ${sorotLaporan ? SOROT : ""}`}>
           {mandiri && !hari.realisasi && pakaiFormSls(pen.kegiatan.kode) ? (
-            <LengkapiLaporanSls key={`ls-${pen.id}-${hari.tanggal}`} token={token} penugasanId={pen.id} tanggal={hari.tanggal} master={data.lokasi_opsi.master} onTersimpan={onBerubah} />
+            <LengkapiLaporanSls key={`ls-${pen.id}-${hari.tanggal}`} token={token} penugasanId={pen.id} tanggal={hari.tanggal} master={data.lokasi_opsi.master} peran={pen.peran} onTersimpan={onBerubah} />
           ) : (
             <FormRealisasi key={`r-${pen.id}-${hari.tanggal}`} token={token} pen={pen} hari={hari} boleh={boleh && !(mandiri && !!hari.realisasi)} opsi={data.lokasi_opsi} onTersimpan={onBerubah} />
           )}

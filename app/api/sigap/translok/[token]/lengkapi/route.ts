@@ -2,11 +2,11 @@
 //
 // (8 Nov 2026) PML / Supervisor / admin translok melengkapi LAPORAN hari terlewat anggotanya (kegiatan Pascabencana), lewat form rincian SLS.
 // Token = sigap_akun.token pemanggil (seperti halaman translok). Kewenangan = lib/translokBlokirDb.bolehMengelola (atasan bertingkat, Supervisor, admin).
-// Hanya laporan; foto tetap diunggah petugas sendiri. Angka tidak dihitung sebagai poin kinerja (lib/sigapLaporanSlsDb.ts).
+// Bentuk isian mengikuti PERAN petugas yang dilengkapi (PPL: rincian SLS; PML/Korwil: tiga angka pengawasan). Hanya laporan; foto tetap diunggah petugas sendiri. Angka tidak dihitung sebagai poin kinerja (lib/sigapLaporanSlsDb.ts).
 //
 // GET  ?kegiatan=ID                                              -> { anggota: [{ penugasan_id, akun_id, nama, peran, hari: [{ tanggal, foto }] }] }
 //                                                                    anggota yang hari terlewatnya masih bisa dilengkapi laporannya
-// POST { aksi:"laporan_sls", penugasan_id, tanggal, rincian_sls, kendala? }
+// POST { aksi:"laporan_sls", penugasan_id, tanggal, rincian_sls | rincian_pengawasan:{sls,ppl,dokumen}, kendala? }
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabaseServer";
@@ -16,7 +16,7 @@ import { galatServer } from "@/lib/sigapGalat";
 import { memblokir } from "@/lib/translokBlokir";
 import { bawahanDikelola, bolehMengelola } from "@/lib/translokBlokirDb";
 import { MAKS_FOTO_KURANG_MANDIRI, pakaiFormSls } from "@/lib/sigapLengkapiMandiri";
-import { simpanLaporanSlsManual } from "@/lib/sigapLaporanSlsDb";
+import { simpanLaporanManual } from "@/lib/sigapLaporanSlsDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ token:
     if (!akses.mandiri) return NextResponse.json({ error: "Tanggal ini masih terbuka bagi petugas; laporan diisi petugas sendiri." }, { status: 400 });
     if (!pakaiFormSls(akses.penugasan.kegiatan.kode) || !akses.penugasan.kegiatan.wajib_laporan) return NextResponse.json({ error: "Kegiatan ini tidak memakai form laporan SLS." }, { status: 400 });
 
-    const hasil = await simpanLaporanSlsManual(db, { penugasanId, kegiatanId, tanggal: akses.tanggal }, { rincian_sls: b.rincian_sls, kendala: b.kendala }, akun.id, targetAkun);
+    const hasil = await simpanLaporanManual(db, { penugasanId, kegiatanId, tanggal: akses.tanggal, peran: akses.penugasan.peran }, { rincian_sls: b.rincian_sls, rincian_pengawasan: b.rincian_pengawasan, kendala: b.kendala }, akun.id, targetAkun);
     if ("error" in hasil) return NextResponse.json({ error: hasil.error }, { status: hasil.status });
     return NextResponse.json({ ok: true });
   } catch (e) {

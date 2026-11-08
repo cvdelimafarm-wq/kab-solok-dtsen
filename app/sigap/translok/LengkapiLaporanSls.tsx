@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from "react";
 import SelectCari from "@/app/components/SelectCari";
-import { MAKS_ANGKA_SLS, MAKS_SLS_LAPORAN, kunciSls } from "@/lib/sigapLengkapiMandiri";
+import { LABEL_PENGAWASAN, MAKS_ANGKA_PENGAWASAN, MAKS_ANGKA_SLS, MAKS_SLS_LAPORAN, jenisFormLaporan, kunciSls } from "@/lib/sigapLengkapiMandiri";
 
 type Master = { kecamatan: string; nagari: string; jorong: string };
 type Baris = { id: number; sls: string; terdampak: string; tidak_terdampak: string; tidak_ditemukan: string };
@@ -22,6 +22,7 @@ export default function LengkapiLaporanSls({
   master,
   onTersimpan,
   atasNama = false,
+  peran,
 }: {
   token: string;
   penugasanId: number;
@@ -30,6 +31,28 @@ export default function LengkapiLaporanSls({
   onTersimpan: () => Promise<void>;
   /** PML / Supervisor / admin mengisi atas nama anggotanya (endpoint /lengkapi); bawaan: petugas mengisi sendiri */
   atasNama?: boolean;
+  /** peran petugas yang dilengkapi: PPL = rincian SLS; PML / Korwil = tiga angka pengawasan (diawasi / disupervisi) */
+  peran: string;
+}) {
+  const jenis = jenisFormLaporan(peran);
+  if (jenis !== "sls") return <FormPengawasan token={token} penugasanId={penugasanId} tanggal={tanggal} onTersimpan={onTersimpan} atasNama={atasNama} jenis={jenis} />;
+  return <FormSls token={token} penugasanId={penugasanId} tanggal={tanggal} master={master} onTersimpan={onTersimpan} atasNama={atasNama} />;
+}
+
+function FormSls({
+  token,
+  penugasanId,
+  tanggal,
+  master,
+  onTersimpan,
+  atasNama,
+}: {
+  token: string;
+  penugasanId: number;
+  tanggal: string;
+  master: Master[];
+  onTersimpan: () => Promise<void>;
+  atasNama: boolean;
 }) {
   const [baris, setBaris] = useState<Baris[]>([{ id: 1, sls: "", terdampak: "", tidak_terdampak: "", tidak_ditemukan: "" }]);
   const [kendala, setKendala] = useState("");
@@ -148,6 +171,88 @@ export default function LengkapiLaporanSls({
       </p>
       {galat && <p className="mt-2 text-[12.5px] font-semibold text-red-700">⚠ {galat}</p>}
 
+      {!yakin ? (
+        <button type="button" disabled={!siap || busy} onClick={() => setYakin(true)} className="mt-3 min-h-[48px] w-full rounded-xl bg-[#0F3D7A] text-[14.5px] font-extrabold text-white shadow disabled:opacity-40">
+          Simpan laporan
+        </button>
+      ) : (
+        <div className="mt-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-3">
+          <p className="text-[13px] font-bold text-amber-950">Laporan tanggal terlewat tidak bisa diubah setelah disimpan. Sudah benar?</p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={busy} onClick={() => setYakin(false)} className="min-h-[46px] flex-1 rounded-xl border border-[#C9D6EA] bg-white text-[14px] font-extrabold text-[#55657D]">Periksa lagi</button>
+            <button type="button" disabled={busy} onClick={simpan} className="min-h-[46px] flex-[2] rounded-xl bg-[#1E7A4C] text-[14px] font-extrabold text-white disabled:opacity-50">{busy ? "Menyimpan…" : "Ya, simpan"}</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ---- PML (diawasi) dan Korwil (disupervisi): tiga angka pengawasan ----
+function FormPengawasan({
+  token,
+  penugasanId,
+  tanggal,
+  onTersimpan,
+  atasNama,
+  jenis,
+}: {
+  token: string;
+  penugasanId: number;
+  tanggal: string;
+  onTersimpan: () => Promise<void>;
+  atasNama: boolean;
+  jenis: "pml" | "korwil";
+}) {
+  const L = LABEL_PENGAWASAN[jenis];
+  const [angka, setAngka] = useState({ sls: "", ppl: "", dokumen: "" });
+  const [kendala, setKendala] = useState("");
+  const [yakin, setYakin] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [galat, setGalat] = useState<string | null>(null);
+
+  const sah = (v: string) => /^\d+$/.test(v.trim()) && Number(v) <= MAKS_ANGKA_PENGAWASAN;
+  const siap = sah(angka.sls) && sah(angka.ppl) && sah(angka.dokumen);
+  const ubah = (k: keyof typeof angka, v: string) => { setYakin(false); setAngka((a) => ({ ...a, [k]: v.replace(/[^\d]/g, "").slice(0, 3) })); };
+
+  async function simpan() {
+    setBusy(true);
+    setGalat(null);
+    try {
+      const rincian_pengawasan = { sls: Number(angka.sls), ppl: Number(angka.ppl), dokumen: Number(angka.dokumen) };
+      const res = await fetch(atasNama ? `/api/sigap/translok/${encodeURIComponent(token)}/lengkapi` : `/api/sigap/translok/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ aksi: atasNama ? "laporan_sls" : "realisasi", penugasan_id: penugasanId, tanggal, rincian_pengawasan, kendala }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Gagal menyimpan laporan.");
+      await onTersimpan();
+    } catch (e) {
+      setGalat(e instanceof Error ? e.message : "Gagal menyimpan laporan.");
+      setYakin(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl bg-white p-4 shadow-md">
+      <p className="text-[15px] font-extrabold">Isi laporan manual</p>
+      <p className="mt-0.5 text-[12px] text-[#55657D]">Isi sesuai hasil {jenis === "pml" ? "pengawasan" : "supervisi"} pada tanggal ini.</p>
+      <div className="mt-3 space-y-3">
+        {([["sls", L.sls], ["ppl", L.ppl], ["dokumen", L.dokumen]] as const).map(([k, label]) => (
+          <label key={k} className="block">
+            <span className="block text-[12.5px] font-bold text-[#0F3D7A]">{label}</span>
+            <input inputMode="numeric" placeholder="0" value={angka[k]} onChange={(e) => ubah(k, e.target.value)} className={`${KOTAK} mt-1 text-center text-[17px] font-bold`} />
+          </label>
+        ))}
+      </div>
+      <label className="mt-3 block text-[12px] font-bold text-[#55657D]">
+        Kendala (boleh kosong)
+        <textarea value={kendala} onChange={(e) => setKendala(e.target.value)} maxLength={800} rows={2} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-[14px] font-normal" />
+      </label>
+      {galat && <p className="mt-2 text-[12.5px] font-semibold text-red-700">⚠ {galat}</p>}
       {!yakin ? (
         <button type="button" disabled={!siap || busy} onClick={() => setYakin(true)} className="mt-3 min-h-[48px] w-full rounded-xl bg-[#0F3D7A] text-[14.5px] font-extrabold text-white shadow disabled:opacity-40">
           Simpan laporan
