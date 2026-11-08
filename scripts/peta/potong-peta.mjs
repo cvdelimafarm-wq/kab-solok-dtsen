@@ -13,6 +13,10 @@
 //   node scripts/peta/potong-peta.mjs --hanya-unggah               -> unggah berkas yang sudah ada di peta-keluar/ (tanpa memotong ulang)
 //   node scripts/peta/potong-peta.mjs --spdt [--tim=9100498] ...   -> (21 Okt 2026) berkas Lembar SPDT NTP (per PPL, per PML, supervisor); wilayah dihitung dari tabel
 //                                                                     sigap_spdt_kk (butuh NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY). Tanpa --spdt = tim PML bencana seperti biasa.
+//   node scripts/peta/potong-peta.mjs --kegiatan=ID [--tim=KUNCI] ...  -> (8 Nov 2026) berkas peta KEGIATAN (survei model 1): per PPL, per PML, dan satu "semua wilayah" (Korwil/Supervisor).
+//                                                                     Wilayah dihitung dari alokasi aktif (sigap_alokasi_wilayah) + poligon sub SLS di public/peta/batas/ (jalankan dari folder
+//                                                                     proyek) + margin sekitar 500 m. Kunci berkas: lihat scripts/peta/wilayah-kegiatan.mjs. Berkas "semua" bisa besar:
+//                                                                     --maxzoom-semua=13 (bawaan) atau --tanpa-semua untuk melewatinya. Kartu "Peta dasar tim" di Kelola Pendataan menampilkan statusnya.
 // Pilihan: --sumber=<url|berkas .pmtiles> (bawaan: build harian Protomaps terbaru)  --pad=1  --maxzoom=15  --keluar=peta-keluar  --pmtiles=pmtiles
 // Unggah butuh NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY (dari lingkungan atau .env.local). Kunci tidak ditampilkan.
 
@@ -22,6 +26,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { wilayahTim, sidik } from "./wilayah.mjs";
 import { kelompokkanSpdt, ambilKkSpdt } from "./wilayah-spdt.mjs";
+import { ambilAlokasiKegiatan, bacaBatasLokal, kelompokkanKegiatan } from "./wilayah-kegiatan.mjs";
 
 const BUCKET = "peta-dasar";
 const BATAS_UNGGAH = 50 * 1024 * 1024; // batas bawaan Supabase paket gratis per berkas
@@ -34,6 +39,7 @@ const pilihan = (nama, bawaan) => {
   return a ? a.slice(nama.length + 3) : bawaan;
 };
 const ada = (nama) => args.includes(`--${nama}`);
+const modeKegiatan = args.some((a) => a === "--kegiatan" || a.startsWith("--kegiatan="));
 
 function bacaEnvLokal() {
   try {
@@ -48,7 +54,37 @@ function bacaEnvLokal() {
 
 async function dapatkanWilayah() {
   let mentah;
-  if (ada("spdt")) {
+  const kegiatan = Number(pilihan("kegiatan", "0"));
+  if (modeKegiatan) {
+    if (!Number.isInteger(kegiatan) || kegiatan < 1) {
+      console.error("--kegiatan=<id> harus berupa angka id kegiatan (mis. --kegiatan=7).");
+      process.exit(1);
+    }
+    bacaEnvLokal();
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const kunci = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !kunci) {
+      console.error("--kegiatan butuh NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY (lingkungan atau .env.local).");
+      process.exit(1);
+    }
+    const { createClient } = await import("@supabase/supabase-js");
+    const sb = createClient(url, kunci, { auth: { persistSession: false } });
+    const alokasi = await ambilAlokasiKegiatan(sb, kegiatan);
+    if (!alokasi.length) {
+      console.error(`Kegiatan ${kegiatan} belum punya alokasi sub SLS aktif.`);
+      process.exit(1);
+    }
+    const folderBatas = path.join(process.cwd(), "public", "peta", "batas");
+    const fitur = bacaBatasLokal(folderBatas, alokasi.map((a) => a.idsubsls));
+    if (!fitur.size) {
+      console.error(`Tidak ada poligon batas sub SLS di ${folderBatas}. Jalankan skrip ini dari folder proyek dan pastikan batas kecamatan sudah ada (gabung-batas-subsls.mjs).`);
+      process.exit(1);
+    }
+    mentah = { tim: kelompokkanKegiatan(kegiatan, alokasi, fitur) };
+    const hilang = new Set(Object.values(mentah.tim).flatMap((t) => t.tanpaBatas));
+    if (hilang.size) console.warn(`! ${hilang.size} sub SLS beralokasi tidak punya poligon batas di berkas lokal, tidak ikut wilayah peta: ${[...hilang].slice(0, 5).join(", ")}${hilang.size > 5 ? ", ..." : ""}`);
+    if (ada("tanpa-semua")) for (const [k, t] of Object.entries(mentah.tim)) if (t.peran === "semua") delete mentah.tim[k];
+  } else if (ada("spdt")) {
     bacaEnvLokal();
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const kunci = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -62,7 +98,7 @@ async function dapatkanWilayah() {
   } else {
     mentah = JSON.parse(fs.readFileSync(path.join(FOLDER_INI, "wilayah-tim.json"), "utf8"));
   }
-  const pad = Number(pilihan("pad", "1"));
+  const pad = Number(pilihan("pad", modeKegiatan ? "0" : "1")); // peta kegiatan: margin sudah 500 m dari poligon
   const diminta = pilihan("tim", "")
     .split(",")
     .map((s) => s.trim())
@@ -70,9 +106,9 @@ async function dapatkanWilayah() {
   const hasil = [];
   for (const [id, t] of Object.entries(mentah.tim)) {
     if (diminta.length && !diminta.includes(id)) continue;
-    hasil.push({ id, nama: t.nama, kk: t.kk, ...wilayahTim(t.lari, pad) });
+    hasil.push({ id, nama: t.nama, kk: t.kk, satuan: t.satuan ?? "KK", peran: t.peran, hash: t.hash, subsls: t.subsls, ...wilayahTim(t.lari, pad) });
   }
-  for (const d of diminta) if (!hasil.some((h) => h.id === d)) console.warn(`! Tim ${d} tidak ada di ${ada("spdt") ? "data SPDT" : "wilayah-tim.json"}, dilewati.`);
+  for (const d of diminta) if (!hasil.some((h) => h.id === d)) console.warn(`! Tim ${d} tidak ada di ${modeKegiatan ? "alokasi kegiatan" : ada("spdt") ? "data SPDT" : "wilayah-tim.json"}, dilewati.`);
   return hasil;
 }
 
@@ -161,13 +197,14 @@ async function utama() {
   }
 
   if (ada("daftar")) {
-    console.log("tim\tkk\tsel(+pad)\tbarat\tselatan\ttimur\tutara\tnama");
+    console.log("tim\tkk/sub SLS\tsel(+pad)\tbarat\tselatan\ttimur\tutara\tnama");
     for (const w of wilayah) console.log([w.id, w.kk, w.sel, ...w.kotak, w.nama].join("\t"));
     return;
   }
 
   const keluar = path.resolve(pilihan("keluar", "peta-keluar"));
   const maxzoom = Number(pilihan("maxzoom", "15"));
+  const maxzoomSemua = Number(pilihan("maxzoom-semua", "13")); // berkas "semua wilayah" (kegiatan) luas: zoom maks lebih kecil menjaga ukuran di bawah batas unggah
   const biner = pilihan("pmtiles", "pmtiles");
   fs.mkdirSync(keluar, { recursive: true });
   const manifest = bacaManifestLokal(keluar);
@@ -204,15 +241,16 @@ async function utama() {
     fs.writeFileSync(berkasGeo, JSON.stringify(w.geojson));
     const nama = `tim-${w.id}.pmtiles`;
     const tujuan = path.join(keluar, nama);
-    console.log(`\n== Tim ${w.id} ${w.nama} (${w.kk} KK, ${w.sel} sel) ==`);
-    const ok = jalankanPmtiles(biner, ["extract", sumber, tujuan, `--region=${berkasGeo}`, `--maxzoom=${maxzoom}`, ...(perkiraan ? ["--dry-run"] : [])]);
+    const zoomIni = w.peran === "semua" ? Math.min(maxzoom, maxzoomSemua) : maxzoom;
+    console.log(`\n== Tim ${w.id} ${w.nama} (${w.kk} ${w.satuan}, ${w.sel} sel, zoom maks ${zoomIni}) ==`);
+    const ok = jalankanPmtiles(biner, ["extract", sumber, tujuan, `--region=${berkasGeo}`, `--maxzoom=${zoomIni}`, ...(perkiraan ? ["--dry-run"] : [])]);
     if (!ok) {
       console.error(`x Tim ${w.id}: pmtiles extract gagal, dilewati.`);
       continue;
     }
     if (perkiraan) continue;
     const ukuran = fs.statSync(tujuan).size;
-    manifest.tim[w.id] = { berkas: nama, ukuran, versi: `${namaBuild}-${sidik(JSON.stringify(w.geojson) + maxzoom)}` };
+    manifest.tim[w.id] = { berkas: nama, ukuran, versi: `${namaBuild}-${sidik(JSON.stringify(w.geojson) + zoomIni)}`, ...(w.hash ? { hash: w.hash, subsls: w.subsls } : {}) };
     dibuat.push(nama);
     console.log(`✓ ${nama}: ${label(ukuran)}`);
   }

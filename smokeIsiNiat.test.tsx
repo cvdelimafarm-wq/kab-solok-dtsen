@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 
-const st = vi.hoisted(() => ({ kk: [] as unknown[] | null, niat: [] as unknown[] | null, anggaran: null as unknown }));
+const st = vi.hoisted(() => ({ kk: [] as unknown[] | null, niat: [] as unknown[] | null, anggaran: null as unknown, baru: [] as unknown[] }));
 vi.mock("@/app/sigap/keu-ui", () => ({
   Catatan: ({ children }: { children: unknown }) => <p>{children as never}</p>, Chip: ({ children }: { children: unknown }) => <span>{children as never}</span>, Memuat: () => <b>memuat</b>,
   judulKartu: "j", kartu: "k", tombolUtama: "tu",
 }));
 vi.mock("@/app/sigap/ro/useKeu", () => ({
   aksiKeu: async () => ({ ok: true, data: [] }), tulisKeuKlien: async () => ({ ok: true, data: {} }),
-  useAnggaranRo: () => ({ anggaran: st.anggaran, galat: null }),
+  useAnggaranRo: () => ({ anggaran: st.anggaran, galat: null, itemBaru: st.baru }),
   useBacaKeu: (u: string | null) => {
     const baris = u && u.includes("keu_niat_butir") ? st.niat : st.kk;
     return { baris, memuat: baris === null, galat: null, terpotong: false, muat: async () => {} };
@@ -49,6 +49,13 @@ describe("KartuIsiNiat", () => {
     st.kk = [barisKk()]; st.niat = [{ ro_kode: "2906.BMA.006", pok_kunci: "k1", niat: "lepas", jumlah: 350000, catatan: null }]; st.anggaran = anggaran;
     const h = gambar();
     for (const k of ["1 baris siap diisi", "Pengawasan", "vol 10 → 7", "Isi ke kertas kerja", "dilepas Rp 300.000"]) expect(h).toContain(k);
+  });
+  it("geseran dan item baru ditampilkan", () => {
+    st.baru = [{ item_id: 5, uraian: "Cetak banner", akun_kode: "521811", jumlah_rab: 750000 }];
+    st.kk = [barisKk()]; st.niat = [{ ro_kode: "2906.BMA.006", pok_kunci: "k1", niat: "lepas", jumlah: 350000, catatan: null }]; st.anggaran = anggaran;
+    const h = gambar();
+    for (const k of ["Tidak ada pasangan donor", "belum punya penerima", "1 item baru di RAB belum ada di POK"]) expect(h).toContain(k);
+    st.baru = [];
   });
   it("tanpa hak: tombol Isi tetap ada tetapi dijelaskan", () => {
     st.kk = [barisKk()]; st.niat = [{ ro_kode: "2906.BMA.006", pok_kunci: "k1", niat: "lepas", jumlah: 350000, catatan: null }]; st.anggaran = anggaran;

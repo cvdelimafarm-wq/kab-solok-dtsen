@@ -13,7 +13,7 @@
 // sehingga menjalankan ulang tidak menimpa suntingan tangan dan tidak menggandakan perubahan.
 // Pembulatan ke satuan utuh meninggalkan sisa kecil; sisa itu dilaporkan (selisihKeseimbangan) agar ditutup lewat geseran atau Dana penggenap.
 
-import { n, type BarisKk } from "./kk";
+import { kelompokAkun, n, type BarisKk } from "./kk";
 import { butuhJumlah, LABEL_NIAT, type BarisRencana, type Niat } from "./niat";
 
 export type LangkahIsi = {
@@ -121,3 +121,50 @@ export function isiTulisLangkah(l: LangkahIsi, catatanSekarang: string | null | 
   if (!catatanSekarang || catatanSekarang.trim() === "") isi.catatan = l.catatan;
   return isi;
 }
+
+// ---------------------------------------------------------------- geseran (siapa membiayai siapa)
+export type RencanaGeseran = { donorId: number; penerimaId: number; jumlah: number; catatan: string };
+export type HasilGeseran = { geseran: RencanaGeseran[]; /** dana dilepas yang tidak punya penerima sekelompok, dan dana ditambah yang tidak punya donor */ tanpaPenerima: number; tanpaDonor: number };
+
+/**
+ * Pasangkan donor (baris yang dilepas) dengan penerima (baris yang ditambah) di dalam kelompok belanja yang sama (51, 524, 52L, 53; aturan D-08),
+ * dari yang terbesar, sebesar yang sama-sama tersedia. Hasilnya catatan geseran; angka sebenarnya tetap di baris kertas kerja.
+ * Sisa yang tidak berpasangan dilaporkan, tidak dipaksakan.
+ */
+export function pasangkanGeseran(langkah: readonly LangkahIsi[], baris: readonly BarisKk[]): HasilGeseran {
+  const akunDari = new Map(baris.map((b) => [b.id, b.akun_menjadi] as const));
+  type Sisi = { id: number; sisa: number };
+  const donor = new Map<string, Sisi[]>(), terima = new Map<string, Sisi[]>();
+  let tanpaKelompok = { donor: 0, terima: 0 };
+  for (const l of langkah) {
+    const k = kelompokAkun(akunDari.get(l.barisId));
+    const jumlah = Math.abs(l.perubahan);
+    if (jumlah === 0) continue;
+    if (k === null) { if (l.perubahan < 0) tanpaKelompok.donor += jumlah; else tanpaKelompok.terima += jumlah; continue; }
+    const peta = l.perubahan < 0 ? donor : terima;
+    const daftar = peta.get(k) ?? [];
+    daftar.push({ id: l.barisId, sisa: jumlah });
+    peta.set(k, daftar);
+  }
+  const geseran: RencanaGeseran[] = [];
+  const kelompok = new Set([...donor.keys(), ...terima.keys()]);
+  let tanpaPenerima = tanpaKelompok.donor, tanpaDonor = tanpaKelompok.terima;
+  for (const k of [...kelompok].sort()) {
+    const d = (donor.get(k) ?? []).sort((a, b) => b.sisa - a.sisa || a.id - b.id);
+    const t = (terima.get(k) ?? []).sort((a, b) => b.sisa - a.sisa || a.id - b.id);
+    let i = 0, j = 0;
+    while (i < d.length && j < t.length) {
+      const jumlah = Math.min(d[i].sisa, t[j].sisa);
+      if (jumlah > 0) geseran.push({ donorId: d[i].id, penerimaId: t[j].id, jumlah, catatan: "Dari rencana tindakan" });
+      d[i].sisa -= jumlah; t[j].sisa -= jumlah;
+      if (d[i].sisa === 0) i++;
+      if (t[j].sisa === 0) j++;
+    }
+    for (; i < d.length; i++) tanpaPenerima += d[i].sisa;
+    for (; j < t.length; j++) tanpaDonor += t[j].sisa;
+  }
+  return { geseran, tanpaPenerima, tanpaDonor };
+}
+
+/** Isi tulis satu geseran untuk keu_kk_geseran (insert). */
+export const isiTulisGeseran = (jadwal: number, g: RencanaGeseran): Record<string, unknown> => ({ jadwal_id: jadwal, donor_id: g.donorId, penerima_id: g.penerimaId, jumlah: g.jumlah, catatan: g.catatan });

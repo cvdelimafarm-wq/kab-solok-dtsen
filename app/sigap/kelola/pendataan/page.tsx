@@ -41,8 +41,9 @@ import PengaturanLembar from "./PengaturanLembar";
 import IsiLaporanSpj from "./IsiLaporanSpj";
 import UnggahKk from "./UnggahKk";
 import AlokasiSampel from "./AlokasiSampel";
-import AlokasiWilayah from "./AlokasiWilayah";
+import ModelSampel from "./ModelSampel";
 import TagSampel from "./TagSampel";
+import PetaTim from "./PetaTim";
 import Seleksi from "./Seleksi";
 
 export default function KelolaPendataan() {
@@ -117,7 +118,8 @@ export default function KelolaPendataan() {
         <>
           {f.persiapan_sasaran && <UnggahKk />}
           {f.persiapan_lembar && <PengaturanLembar />}
-          {f.persiapan_sampel && <AlokasiWilayah key={`w${kegId}`} kegiatanId={kegId} nama={nama} />}
+          {f.persiapan_sampel && <ModelSampel key={`w${kegId}`} kegiatanId={kegId} nama={nama} />}
+          {f.persiapan_sampel && <PetaTim key={`p${kegId}`} kegiatanId={kegId} nama={nama} />}
           {f.persiapan_sampel && <TagSampel key={`t${kegId}`} kegiatanId={kegId} nama={nama} />}
           {f.persiapan_sampel && (
             // (7 Nov 2026) Cara LAMA: unggah KK sampel lengkap (utama + cadangan + koordinat) per baris. Digantikan alur 2 stage di atas

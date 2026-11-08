@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alasanTidakBisa, isiDariNiat, isiTulisLangkah, kalimatIsi, langkahDariNiat } from "../isiNiat";
+import { alasanTidakBisa, isiDariNiat, isiTulisGeseran, isiTulisLangkah, kalimatIsi, langkahDariNiat, pasangkanGeseran } from "../isiNiat";
 import type { BarisKk } from "../kk";
 import type { BarisRencana } from "../niat";
 
@@ -90,5 +90,42 @@ describe("isiDariNiat", () => {
   it("alasanTidakBisa", () => {
     expect(alasanTidakBisa(undefined)).toMatch(/belum ada/);
     expect(alasanTidakBisa(baris({ id: 1, pok_kunci: "a" }))).toBeNull();
+  });
+});
+
+describe("pasangkanGeseran", () => {
+  const dua = () => isiDariNiat(
+    [rencana({ kunci: "a", niat: "lepas", jumlah: 300000 }), rencana({ kunci: "b", golongan: "kurang", niat: "tambal", jumlah: 200000 })],
+    [baris({ id: 1, pok_kunci: "a" }), baris({ id: 2, pok_kunci: "b" })],
+  );
+  it("memasangkan donor dan penerima sekelompok sebesar yang sama-sama tersedia", () => {
+    const h = dua();
+    const g = pasangkanGeseran(h.langkah, [baris({ id: 1, pok_kunci: "a" }), baris({ id: 2, pok_kunci: "b" })]);
+    expect(g.geseran).toEqual([{ donorId: 1, penerimaId: 2, jumlah: 200000, catatan: "Dari rencana tindakan" }]);
+    expect(g.tanpaPenerima).toBe(100000);
+    expect(g.tanpaDonor).toBe(0);
+  });
+  it("satu donor membiayai beberapa penerima, dari yang terbesar", () => {
+    const rows = [baris({ id: 1, pok_kunci: "a" }), baris({ id: 2, pok_kunci: "b" }), baris({ id: 3, pok_kunci: "c" })];
+    const h = isiDariNiat([
+      rencana({ kunci: "a", niat: "lepas", jumlah: 1000000 }),
+      rencana({ kunci: "b", golongan: "kurang", niat: "tambal", jumlah: 300000 }),
+      rencana({ kunci: "c", golongan: "kurang", niat: "tambal", jumlah: 500000 }),
+    ], rows);
+    const g = pasangkanGeseran(h.langkah, rows);
+    expect(g.geseran.map((x) => [x.donorId, x.penerimaId, x.jumlah])).toEqual([[1, 3, 500000], [1, 2, 300000]]);
+    expect(g.tanpaPenerima).toBe(200000);
+  });
+  it("tidak memasangkan lintas kelompok belanja", () => {
+    const rows = [baris({ id: 1, pok_kunci: "a" }), baris({ id: 2, pok_kunci: "b", akun_menjadi: "521211", akun_semula: "521211" })];
+    const h = isiDariNiat([rencana({ kunci: "a", niat: "lepas", jumlah: 300000 }), rencana({ kunci: "b", golongan: "kurang", niat: "tambal", jumlah: 300000 })], rows);
+    const g = pasangkanGeseran(h.langkah, rows);
+    expect(g.geseran).toHaveLength(0);
+    expect(g.tanpaPenerima).toBe(300000);
+    expect(g.tanpaDonor).toBe(300000);
+  });
+  it("tanpa langkah: kosong; isiTulisGeseran", () => {
+    expect(pasangkanGeseran([], [])).toEqual({ geseran: [], tanpaPenerima: 0, tanpaDonor: 0 });
+    expect(isiTulisGeseran(2, { donorId: 1, penerimaId: 2, jumlah: 5, catatan: "x" })).toEqual({ jadwal_id: 2, donor_id: 1, penerima_id: 2, jumlah: 5, catatan: "x" });
   });
 });

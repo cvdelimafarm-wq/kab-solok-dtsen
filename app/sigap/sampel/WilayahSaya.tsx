@@ -13,6 +13,7 @@ import { tautanLihatSampel, tautanPetaSampel } from "@/lib/sampelSls";
 import { KET_JENDELA, LABEL_HASIL, formatSisa, selisihJam, sisaDetik, statusEfektif, type DataTagSub, type HasilTag, type InfoJendela, type PeranTag, type TagKk } from "@/lib/tagSampel";
 import type { AksiTag, HasilMuatKk } from "./useAlokasi";
 import PetaSubSls from "./PetaSubSls";
+import { kunciPetaSaya } from "@/lib/petaKegiatan";
 import {
   ALASAN_GANTI, LABEL_ALASAN, LABEL_STATUS_GANTI, MAKS_CATATAN, MIN_CATATAN_TOLAK, bisaMengajukanGanti, cadanganTersedia, menunggu as gantiMenunggu, periksaIsianGanti,
   type AlasanGanti, type GantiRow,
@@ -257,7 +258,7 @@ export function FormGanti({
 type Sudah = { dt: DataTagSub; selisih: number };
 
 function KartuWilayah({
-  w, tampilPpl, terbukaAwal, peran, cadanganKonfig, muatKk, aksiTag,
+  w, tampilPpl, terbukaAwal, peran, cadanganKonfig, muatKk, aksiTag, kunciDasar = null,
 }: {
   w: WilayahAlokasi;
   tampilPpl: boolean;
@@ -266,6 +267,8 @@ function KartuWilayah({
   cadanganKonfig: number;
   muatKk: (id: string) => Promise<HasilMuatKk>;
   aksiTag?: (a: AksiTag) => Promise<void>;
+  /** (8 Nov 2026) kunci berkas peta jalan tim di peta mini; null = tanpa latar */
+  kunciDasar?: number | null;
 }) {
   const [buka, setBuka] = useState(terbukaAwal);
   const [kk, setKk] = useState<KkMaster[] | null>(null);
@@ -436,7 +439,7 @@ function KartuWilayah({
                   </span>
                 )}
               </div>
-              {peta && <PetaSubSls idsubsls={w.idsubsls} kk={kk} peran={petaPeran} />}
+              {peta && <PetaSubSls idsubsls={w.idsubsls} kk={kk} peran={petaPeran} kunciDasar={kunciDasar} />}
               <ol>
                 {tampil.map((k, i) => (
                   <BarisKk
@@ -489,6 +492,7 @@ export default function WilayahSaya({
 }) {
   const peran = data.peran;
   const model = data.konfig.dengan_updating ? "dengan" : "tanpa";
+  const kunciDasar = kunciPetaSaya(data.kegiatan.id, peran, data.saya.id);
   const grup = useMemo(() => {
     const m = new Map<number, { nama: string; sub: WilayahAlokasi[] }>();
     for (const w of data.wilayah) {
@@ -514,13 +518,13 @@ export default function WilayahSaya({
         <BannerJendela jendela={data.jendela} selisihMs={selisihMs} />
         {luring && <p className="mt-1 rounded-[10px] bg-[#FFF4D6] px-2.5 py-1.5 text-[12px] font-semibold text-[#8A6200]">Tidak tersambung. Menampilkan data terakhir yang tersimpan di HP.</p>}
       </div>
-      {peran === "ppl" && data.wilayah.map((w, i) => <KartuWilayah key={w.id} w={w} tampilPpl={false} terbukaAwal={data.wilayah.length <= 2 && i === 0} peran="ppl" cadanganKonfig={cad} muatKk={muatKk} aksiTag={aksiTag} />)}
+      {peran === "ppl" && data.wilayah.map((w, i) => <KartuWilayah key={w.id} w={w} tampilPpl={false} terbukaAwal={data.wilayah.length <= 2 && i === 0} peran="ppl" cadanganKonfig={cad} muatKk={muatKk} aksiTag={aksiTag} kunciDasar={kunciDasar} />)}
       {peran === "pml" &&
         grup.map(([id, g]) => (
           <div key={id} className="space-y-2">
             <p className="px-1 pt-1 text-[13px] font-extrabold text-[#0F2A52]">{g.nama}</p>
             {g.sub.map((w) => (
-              <KartuWilayah key={w.id} w={w} tampilPpl={false} terbukaAwal={false} peran="pml" cadanganKonfig={cad} muatKk={muatKk} aksiTag={aksiTag} />
+              <KartuWilayah key={w.id} w={w} tampilPpl={false} terbukaAwal={false} peran="pml" cadanganKonfig={cad} muatKk={muatKk} aksiTag={aksiTag} kunciDasar={kunciDasar} />
             ))}
           </div>
         ))}

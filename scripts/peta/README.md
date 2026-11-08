@@ -46,6 +46,22 @@ node scripts/peta/potong-peta.mjs --spdt --unggah                       # semua 
 ```
 Manifest yang diunggah digabung dengan manifest yang sudah ada di Storage, jadi 18 tim bencana tidak hilang. Bila KK SPDT bertambah/pindah, jalankan ulang untuk kunci terkait.
 
+## Peta kegiatan, model 1 (8 Nov 2026)
+Survei model 1 (alokasi per sub SLS: Seruti, Susenas, dan sejenisnya) memakai bucket dan manifest yang sama, kunci angka sendiri per kegiatan:
+`100.000.000.000 + id kegiatan x 10.000.000 + peran x 1.000.000 + akun` (peran 1 = PPL, 2 = PML, 3 = semua wilayah untuk Korwil/Supervisor).
+Wilayahnya dihitung dari alokasi aktif (`sigap_alokasi_wilayah`) dan poligon sub SLS di `public/peta/batas/` (jalankan dari folder proyek), ditambah margin sekitar 500 m di sekeliling batas.
+Butuh `NEXT_PUBLIC_SUPABASE_URL` dan `SUPABASE_SERVICE_ROLE_KEY` (.env.local).
+```
+node scripts/peta/potong-peta.mjs --kegiatan=7 --daftar                 # kunci, jumlah sub SLS, kotak batas
+node scripts/peta/potong-peta.mjs --kegiatan=7 --perkiraan              # ukuran perkiraan tanpa mengunduh
+node scripts/peta/potong-peta.mjs --kegiatan=7 --unggah                 # semua berkas kegiatan itu
+node scripts/peta/potong-peta.mjs --kegiatan=7 --tim=100071000011 --unggah   # satu berkas saja
+node scripts/peta/potong-peta.mjs --kegiatan=7 --unggah --tanpa-semua   # lewati berkas "semua wilayah" bila terlalu besar
+```
+Berkas "semua wilayah" memakai zoom maksimum 13 (`--maxzoom-semua`) supaya tetap di bawah batas unggah 50 MB; Korwil/Supervisor yang tidak mendapat berkas tetap melihat batas sub SLS tanpa peta jalan.
+Manifest mencatat `hash` (sidik himpunan sub SLS saat dipotong): kartu "Peta dasar tim" di Kelola Pendataan membandingkannya dengan alokasi sekarang dan menandai berkas **usang** bila alokasi berubah. Setelah mengunggah ulang alokasi, jalankan ulang untuk kunci yang usang.
+Sub SLS yang tidak punya poligon di berkas lokal dilaporkan dan tidak ikut wilayah.
+
 ## Tim tanpa berkas
 Tim yang tidak ada di manifest tidak melihat kontrol peta jalan sama sekali; tab Peta tetap titik di kanvas seperti sebelumnya.
 

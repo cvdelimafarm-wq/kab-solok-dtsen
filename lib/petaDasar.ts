@@ -36,7 +36,8 @@ export function kameraDariPandang(proj: ProyeksiMin, p: PandangPeta, lebarPx: nu
 }
 
 // ------------------------------------------------------------------ berkas peta per tim
-export type BerkasTim = { berkas: string; ukuran: number; versi: string };
+/** hash/subsls hanya ada pada berkas peta KEGIATAN (lib/petaKegiatan.ts): sidik himpunan sub SLS saat berkas dipotong dan jumlahnya. */
+export type BerkasTim = { berkas: string; ukuran: number; versi: string; hash?: string; subsls?: number };
 export type ManifestDasar = { versi: string; dibuat: string; tim: Record<string, BerkasTim> };
 
 export const namaBerkasTim = (pmlId: number) => `tim-${pmlId}.pmtiles`;
@@ -59,6 +60,8 @@ export function bacaManifestDasar(mentah: unknown): ManifestDasar | null {
     if (typeof b.berkas !== "string" || !/^[\w.-]+\.pmtiles$/.test(b.berkas)) continue;
     if (typeof b.ukuran !== "number" || !(b.ukuran > 0)) continue;
     tim[k] = { berkas: b.berkas, ukuran: b.ukuran, versi: typeof b.versi === "string" ? b.versi : m.versi };
+    if (typeof b.hash === "string" && /^[0-9a-f]{8}$/.test(b.hash)) tim[k].hash = b.hash;
+    if (typeof b.subsls === "number" && Number.isInteger(b.subsls) && b.subsls >= 0) tim[k].subsls = b.subsls;
   }
   return { versi: m.versi, dibuat: typeof m.dibuat === "string" ? m.dibuat : "", tim };
 }

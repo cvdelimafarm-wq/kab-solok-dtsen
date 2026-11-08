@@ -2,6 +2,7 @@
 
 // app/sigap/pendataan/PetaDasar.tsx
 //
+// (8 Nov 2026) kanvas SVG yang diikuti kini diambil dari proj.lebar x proj.tinggi (page Pendataan 360 x 440 seperti dulu; peta mini sub SLS 340 x 260).
 // (20 Okt 2026) LATAR peta jalan di bawah titik KK (tab Peta Lembar Pendataan). Hanya latar: tidak menerima sentuhan; PetaKk (SVG) tetap yang
 // menggeser/mencubit/memilih titik, dan peta ini mengikuti kameranya (lib/petaDasar.ts kameraDariPandang). Dimuat lewat next/dynamic (tanpa SSR)
 // supaya pustaka peta (maplibre-gl, pmtiles) tidak membebani halaman lain. Gagal apa pun (tanpa WebGL, berkas hilang, sinyal) -> onStatus("gagal")
@@ -46,7 +47,7 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
     if (!m || !el) return;
     const w = el.clientWidth;
     const h = el.clientHeight;
-    const k = kameraDariPandang(terbaru.current.proj, terbaru.current.pandang, w, h);
+    const k = kameraDariPandang(terbaru.current.proj, terbaru.current.pandang, w, h, terbaru.current.proj.lebar, terbaru.current.proj.tinggi);
     if (k) m.jumpTo({ center: [k.lng, k.lat], zoom: k.zoom });
   }
 
@@ -96,7 +97,7 @@ export default function PetaDasar({ proj, pandang, sumber, onStatus }: Props) {
           layers: dasar.layers("protomaps", flavor, { lang: "id" }) as StyleSpecification["layers"],
         };
 
-        const k = kameraDariPandang(terbaru.current.proj, terbaru.current.pandang, wadah.current.clientWidth || 360, wadah.current.clientHeight || 440);
+        const k = kameraDariPandang(terbaru.current.proj, terbaru.current.pandang, wadah.current.clientWidth || 360, wadah.current.clientHeight || 440, terbaru.current.proj.lebar, terbaru.current.proj.tinggi);
         const m = new ml.Map({
           container: wadah.current,
           style: gaya,

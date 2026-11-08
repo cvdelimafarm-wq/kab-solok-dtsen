@@ -8,7 +8,7 @@ import { jalurBatas, type FiturBatas } from "./batasSubsls";
 
 export type PeranTitik = "utama" | "cadangan" | "lain";
 export type TitikKk = { id: number; nama: string; x: number; y: number; peran: PeranTitik };
-export type GambarPeta = { lebar: number; tinggi: number; jalur: string; titik: TitikKk[]; tanpaKoordinat: number; adaBatas: boolean; meterPerSatuan: number };
+export type GambarPeta = { lebar: number; tinggi: number; jalur: string; titik: TitikKk[]; tanpaKoordinat: number; adaBatas: boolean; meterPerSatuan: number; /** (8 Nov 2026) dipakai latar peta jalan supaya kameranya sama dengan kanvas */ proyeksi: Proyeksi };
 
 type BarisKk = { id: number; nama_kk: string; lat: number | null; lng: number | null };
 
@@ -43,7 +43,7 @@ export function siapkanPetaSub(
   // yang bertanda digambar terakhir supaya tidak tertutup titik lain
   const urut: Record<PeranTitik, number> = { lain: 0, cadangan: 1, utama: 2 };
   titik.sort((a, b) => urut[a.peran] - urut[b.peran]);
-  return { lebar, tinggi, jalur, titik, tanpaKoordinat: kk.length - berKoordinat.length, adaBatas: jalur !== "", meterPerSatuan: proj.meterPerSatuan };
+  return { lebar, tinggi, jalur, titik, tanpaKoordinat: kk.length - berKoordinat.length, adaBatas: jalur !== "", meterPerSatuan: proj.meterPerSatuan, proyeksi: proj };
 }
 
 /** Panjang batang skala yang enak dibaca (meter) dan lebarnya di kanvas. */

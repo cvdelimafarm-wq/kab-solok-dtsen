@@ -7,7 +7,7 @@
 // tetap berlaku (jadwal dibuka, kewenangan, usulan belum diajukan). Logika murni: lib/keu/isiNiat.ts. Tidak ada SQL baru.
 
 import { useMemo, useState } from "react";
-import { isiDariNiat, isiTulisLangkah, kalimatIsi } from "@/lib/keu/isiNiat";
+import { isiDariNiat, isiTulisGeseran, isiTulisLangkah, kalimatIsi, pasangkanGeseran } from "@/lib/keu/isiNiat";
 import { n, type BarisKk } from "@/lib/keu/kk";
 import { LABEL_NIAT, normalisasiNiat, susunRencana } from "@/lib/keu/niat";
 import { semuaItem } from "@/lib/keu/kebutuhan";
@@ -32,6 +32,8 @@ export default function KartuIsiNiat({ jadwal, ro, bisa, sesudah }: { jadwal: nu
     return susunRencana(semuaItem(pohon), normalisasiNiat(niat.baris ?? []));
   }, [ang.anggaran, niat.baris, ro]);
   const hasil = useMemo(() => (rencana && kk.baris ? isiDariNiat(rencana, kk.baris) : null), [rencana, kk.baris]);
+  const ges = useMemo(() => (hasil && kk.baris ? pasangkanGeseran(hasil.langkah, kk.baris) : null), [hasil, kk.baris]);
+  const itemBaru = (ang.itemBaru ?? []).filter((x) => Number(x.jumlah_rab) > 0);
   const adaRencana = (rencana ?? []).some((r) => r.niat === "lepas" || r.niat === "tambal" || r.niat === "tambahan");
 
   if (niat.galat || kk.galat || ang.galat) return null; // tabel niat belum ada atau data gagal dimuat: kartu tidak perlu tampil
@@ -57,7 +59,15 @@ export default function KartuIsiNiat({ jadwal, ro, bisa, sesudah }: { jadwal: nu
       if (!h.ok) { setGalat(`${l.uraian}: ${h.pesan}`); break; }
       selesai += 1;
     }
-    if (selesai > 0) setKabar(`${selesai} baris kertas kerja diisi dari rencana tindakan.`);
+    let nGeseran = 0;
+    if (selesai === hasil.langkah.length && ges) {
+      for (const g of ges.geseran) {
+        const h = await tulisKeuKlien("keu_kk_geseran", "insert", isiTulisGeseran(jadwal, g));
+        if (!h.ok) { setGalat(`Catatan geseran gagal (baris kertas kerja sudah terisi; catat manual di Buku geseran): ${h.pesan}`); break; }
+        nGeseran += 1;
+      }
+    }
+    if (selesai > 0) setKabar(`${selesai} baris kertas kerja diisi dari rencana tindakan${nGeseran > 0 ? ` dan ${nGeseran} catatan geseran dibuat` : ""}.`);
     await kk.muat();
     await sesudah();
     setSibuk(false);
@@ -92,6 +102,12 @@ export default function KartuIsiNiat({ jadwal, ro, bisa, sesudah }: { jadwal: nu
               ))}
             </ul>
           )}
+          {ges && hasil.langkah.length > 0 && (
+            <p className="m-0 text-[12.5px] text-[#44546F]">
+              {ges.geseran.length > 0 ? `${ges.geseran.length} catatan geseran donor ke penerima akan dibuat (sekelompok belanja).` : "Tidak ada pasangan donor dan penerima sekelompok belanja, jadi tidak ada catatan geseran."}
+              {ges.tanpaPenerima > 0 ? ` Dana dilepas ${rupiah(ges.tanpaPenerima)} belum punya penerima di RO ini.` : ""}{ges.tanpaDonor > 0 ? ` Tambahan ${rupiah(ges.tanpaDonor)} belum punya donor di RO ini.` : ""}
+            </p>
+          )}
           {hasil.dilewati.length > 0 && (
             <details className="text-[12.5px] text-[#5B6B84]">
               <summary className="cursor-pointer">{hasil.dilewati.length} butir dilewati</summary>
@@ -105,6 +121,13 @@ export default function KartuIsiNiat({ jadwal, ro, bisa, sesudah }: { jadwal: nu
         </>
       )}
 
+      {itemBaru.length > 0 && (
+        <details className="text-[12.5px] text-[#5B6B84]">
+          <summary className="cursor-pointer">{itemBaru.length} item baru di RAB belum ada di POK</summary>
+          <p className="m-0 mt-1">Tambahkan lewat form "Item baru dan Dana penggenap" di bawah; volume, harga, dan satuan baku harus diisi sendiri.</p>
+          <ul className="m-0 mt-1 list-disc pl-5">{itemBaru.map((x, i) => <li key={`${x.item_id ?? i}`}>{x.akun_kode ? `${String(x.akun_kode).slice(0, 6)} ` : ""}{x.uraian ?? "Item baru"}: {rupiah(Number(x.jumlah_rab))}</li>)}</ul>
+        </details>
+      )}
       {kabar && <p role="status" className="m-0 rounded-md bg-[#E6F4EA] px-3 py-2 text-[12.5px] text-[#1B7A3E]">{kabar}</p>}
       {galat && <p role="alert" className="m-0 rounded-md bg-[#FDECEC] px-3 py-2 text-[12.5px] text-[#B42318]">{galat}</p>}
     </section>
