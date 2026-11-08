@@ -28,6 +28,8 @@ export type HasilKesiapan = {
   siap: boolean;
   /** Selisih hari dari hari ini (WIB) ke hari mulai; negatif = sudah lewat. */
   hariKe: number | null;
+  /** Hari terakhir pelatihan sudah lewat: butir yang belum hijau tetap dilaporkan, tetapi tidak dianggap mendesak lagi. */
+  berakhir: boolean;
   mendesak: boolean;
 };
 
@@ -90,7 +92,9 @@ const daftarNama = (nama: string[], maks = 6) => (nama.length <= maks ? nama.joi
 export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
   const hariIni = tanggalWib(m.sekarang);
   const hariKe = m.mulai ? selisihHari(hariIni, m.mulai) : null;
-  const mendesak = hariKe !== null && hariKe <= 3;
+  const akhir = m.selesai && m.mulai && m.selesai >= m.mulai ? m.selesai : m.mulai;
+  const berakhir = akhir !== null && akhir < hariIni;
+  const mendesak = hariKe !== null && hariKe <= 3 && !berakhir;
   const tanggal = daftarTanggal(m.mulai, m.selesai);
   const jumlahHari = Math.max(1, tanggal.length);
 
@@ -330,5 +334,5 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
 
   const wajib = butir.filter((b) => b.wajib);
   const wajibOk = wajib.filter((b) => b.status === "ok").length;
-  return { butir, wajibOk, wajibTotal: wajib.length, siap: wajibOk === wajib.length, hariKe, mendesak };
+  return { butir, wajibOk, wajibTotal: wajib.length, siap: wajibOk === wajib.length, hariKe, berakhir, mendesak };
 }

@@ -21,6 +21,7 @@ const TITIK: Record<StatusButir, { teks: string; kelas: string; label: string }>
 
 function teksWaktu(h: HasilKesiapan): string {
   if (h.hariKe === null) return "Tanggal pelatihan belum diisi";
+  if (h.berakhir) return "Pelatihan sudah selesai";
   if (h.hariKe > 1) return `Pelatihan mulai ${h.hariKe} hari lagi (H-${h.hariKe})`;
   if (h.hariKe === 1) return "Pelatihan mulai besok (H-1)";
   if (h.hariKe === 0) return "Pelatihan berlangsung hari ini";
@@ -80,7 +81,7 @@ export default function KesiapanKartu({ onBuka }: { onBuka: (tab: string, sub?: 
 
   const wajib = h.butir.filter((b) => b.wajib);
   const lain = h.butir.filter((b) => !b.wajib);
-  const lencana = h.siap ? <Chip w="ok">Siap</Chip> : h.mendesak ? <Chip w="bad">Belum siap · mendesak</Chip> : <Chip w="wait">Belum siap</Chip>;
+  const lencana = h.siap ? <Chip w="ok">Siap</Chip> : h.mendesak ? <Chip w="bad">Belum siap · mendesak</Chip> : h.berakhir ? <Chip w="mut">Tidak lengkap · sudah selesai</Chip> : <Chip w="wait">Belum siap</Chip>;
 
   return (
     <Kartu

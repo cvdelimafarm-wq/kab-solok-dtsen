@@ -24,7 +24,8 @@ export function petakanTab(tab: string | null | undefined, sub?: string | null):
       if (s === "vanguard") return { tab: "materi", sub: "vanguard" };
       return { tab: "komunikasi", sub: "tampilan" };
     case "tim":
-      return { tab: "peserta", sub: s && ["pengaturan", "hierarki", "instruktur", "kelas"].includes(s) ? s : "pengaturan" };
+      // Instruktur dan Rencana kelas kini bagian dari "Orang & kelas" (sub pengaturan)
+      return { tab: "peserta", sub: s === "hierarki" ? "hierarki" : "pengaturan" };
     case "harikerja":
       return { tab: "peserta", sub: "harikerja" };
     case "soal":
@@ -47,7 +48,7 @@ export function petakanTab(tab: string | null | undefined, sub?: string | null):
     case "kuispra":
       return { tab: "materi", sub: "kuispra" };
     case "kelas":
-      return { tab: "peserta", sub: "kelas" };
+      return { tab: "peserta", sub: "pengaturan" };
     case "tampilan":
       return { tab: "komunikasi", sub: "tampilan" };
     case "instrumen":

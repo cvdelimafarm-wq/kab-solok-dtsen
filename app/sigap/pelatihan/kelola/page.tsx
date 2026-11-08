@@ -18,9 +18,7 @@ import Administrasi from "./administrasi";
 import KesiapanKartu from "./kesiapan"; // (8 Nov 2026) kartu Kesiapan di atas tab Persiapan: daftar periksa + tombol Perbaiki ke tab/sub yang tepat
 import GabungTab, { type Bagian } from "./gabungTab"; // (8 Nov 2026) perekat tujuh tab: satu tab = beberapa bagian (sub)
 import { KartuHierarki } from "./hierarki";
-import PengaturanKelasKelola from "./pengaturanKelas";
-import InstrukturKelola from "./instruktur";
-import KelasIdentKelola from "./kelasIdent";
+import OrangKelasKelola from "./orangKelas"; // (8 Nov 2026) Orang & kelas: libatkan orang, kelas, peserta per kelas, panitia, instruktur, pembanding rencana kelas
 import InstrumenKelola from "./instrumen";
 import VanguardKelola from "./vanguardKelola";
 import PersiapanKelola from "./tampilan"; // tampilan peserta, ketentuan undangan, absen, aturan nilai (dipecah bertahap: tahap 3-5)
@@ -276,10 +274,8 @@ export default function KelolaPelatihan() {
           key={`${kegId ?? 0}-${navKey}`}
           label="Bagian Peserta & Kelas"
           bagian={[
-            { kode: "pengaturan", label: "Pengaturan kelas", ket: "Jumlah dan nama kelas, siapa peserta tiap kelas, instruktur, dan panitia. Semua pilihan kelas di Adu Sigap dan Monitoring mengikuti ini.", isi: (pilih) => <PengaturanKelasKelola bukaInstruktur={() => pilih("instruktur")} /> },
+            { kode: "pengaturan", label: "👥 Orang & kelas", ket: "Satu pintu: libatkan orang, atur kelas dan peserta per kelas, tetapkan panitia dan instruktur. Semua pilihan kelas di Adu Sigap dan Monitoring mengikuti ini.", isi: () => <OrangKelasKelola /> },
             { kode: "hierarki", label: "Hierarki", ket: "Siapa melapor kepada siapa. Menentukan siapa yang dapat memantau progres siapa di Monitoring peserta.", isi: () => <KartuHierarki /> },
-            { kode: "instruktur", label: "Instruktur", ket: "Tetapkan instruktur per kelas, tanpa SQL.", isi: () => <InstrukturKelola /> },
-            { kode: "kelas", label: "Rencana kelas", ket: "Kelas menurut perencanaan (hanya baca).", isi: () => <KelasIdentKelola /> },
             { kode: "harikerja", label: "📅 Hari kerja", ket: "Matriks peserta x tanggal: buatkan, lepas, atau pindahkan dari kegiatan lain.", isi: () => <HariKerjaKelola /> },
           ] as Bagian[]}
         />

@@ -25,6 +25,8 @@ describe("petakanTab", () => {
     expect(petakanTab("persiapan", "vanguard")).toEqual({ tab: "materi", sub: "vanguard" });
     expect(petakanTab("tim", "hierarki")).toEqual({ tab: "peserta", sub: "hierarki" });
     expect(petakanTab("tim", "ngawur")).toEqual({ tab: "peserta", sub: "pengaturan" });
+    expect(petakanTab("tim", "instruktur")).toEqual({ tab: "peserta", sub: "pengaturan" }); // kini bagian Orang & kelas
+    expect(petakanTab("tim", "kelas")).toEqual({ tab: "peserta", sub: "pengaturan" });
     expect(petakanTab("kuis", "kuispra")).toEqual({ tab: "materi", sub: "kuispra" });
     expect(petakanTab("kuis", "rapat")).toEqual({ tab: "harih", sub: "rapat" });
     expect(petakanTab("kuis")).toEqual({ tab: "harih", sub: "adusigap" });
@@ -35,7 +37,7 @@ describe("petakanTab", () => {
     expect(petakanTab("pengumuman")).toEqual({ tab: "komunikasi", sub: "pengumuman" });
     expect(petakanTab("rapat")).toEqual({ tab: "harih", sub: "rapat" });
     expect(petakanTab("kuispra")).toEqual({ tab: "materi", sub: "kuispra" });
-    expect(petakanTab("kelas")).toEqual({ tab: "peserta", sub: "kelas" });
+    expect(petakanTab("kelas")).toEqual({ tab: "peserta", sub: "pengaturan" });
     expect(petakanTab("tampilan")).toEqual({ tab: "komunikasi", sub: "tampilan" });
     expect(petakanTab("instrumen")).toEqual({ tab: "materi", sub: "instrumen" });
     expect(petakanTab("vanguard")).toEqual({ tab: "materi", sub: "vanguard" });

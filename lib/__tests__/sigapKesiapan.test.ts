@@ -89,13 +89,24 @@ describe("hitungKesiapan", () => {
     expect(cari(h3, "panitia").status).toBe("merah");
   });
 
-  it("pelatihan sudah mulai/lewat = mendesak", () => {
+  it("pelatihan sedang berlangsung = mendesak", () => {
     const sedang = hitungKesiapan(dasar({ sekarang: new Date("2026-11-09T05:00:00Z") }));
     expect(sedang.hariKe).toBe(0);
     expect(sedang.mendesak).toBe(true);
-    const lewat = hitungKesiapan(dasar({ sekarang: new Date("2026-11-12T05:00:00Z") }));
-    expect(lewat.hariKe).toBeLessThan(0);
-    expect(lewat.mendesak).toBe(true);
+  });
+
+  it("sudah berakhir (hari terakhir lewat) = tidak lagi mendesak, tetapi butir wajib tetap dilaporkan", () => {
+    const tanpaPanitia = { penugasan: dasar().penugasan.filter((p) => p.peran !== "panitia") };
+    const hari2 = hitungKesiapan(dasar({ ...tanpaPanitia, sekarang: new Date("2026-11-10T05:00:00Z") })); // hari terakhir
+    expect(hari2.berakhir).toBe(false);
+    expect(hari2.mendesak).toBe(true);
+    const lewat = dasar({ ...tanpaPanitia, sekarang: new Date("2026-11-12T05:00:00Z") });
+    const h = hitungKesiapan(lewat);
+    expect(h.hariKe).toBeLessThan(0);
+    expect(h.berakhir).toBe(true);
+    expect(h.mendesak).toBe(false);
+    expect(cari(lewat, "panitia").status).toBe("kuning");
+    expect(h.siap).toBe(false);
   });
 
   it("butir non-wajib tidak menggagalkan lencana Siap", () => {
