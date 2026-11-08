@@ -26,6 +26,7 @@ const BLOK_NILAI: { kode: Blok; nama: string }[] = [
   { kode: "F", nama: "V.F" }, { kode: "G", nama: "V.G" }, { kode: "VI", nama: "VI" }, { kode: "VII", nama: "VII" },
 ];
 const WARNA = { benar: { bg: "#E3F6EC", bd: "#0F8A4F", tx: "#0F5C38", nama: "Benar" }, salah: { bg: "#FDE7E4", bd: "#C2362B", tx: "#8E1F16", nama: "Salah" }, kosong: { bg: "#FFF0DC", bd: "#D9822B", tx: "#8A4B00", nama: "Kosong padahal harus diisi" } } as const;
+const TOMBOL_LEBAR = { width: "100%", height: "auto", minHeight: 46, padding: "10px 12px", whiteSpace: "normal", lineHeight: 1.25 } as const;
 const fmtPoin = (x: number) => x.toLocaleString("id-ID", { maximumFractionDigits: 1 });
 
 async function ambil(kegiatan: number, query = ""): Promise<KeadaanRoleplay | null> {
@@ -47,12 +48,14 @@ export default function RoleplayHalaman() {
   const [langkahLihat, setLangkahLihat] = useState<number | null>(null);
   const [pesertaLihat, setPesertaLihat] = useState<number | null>(null);
   const sibukRef = useRef(false);
+  const galatAksi = useRef(false); // galat dari aksi (kirim/simpan) tidak boleh terhapus oleh polling; hilang saat aksi berikutnya berhasil
+  const setGalatAksi = useCallback((s: string | null) => { galatAksi.current = s !== null; setGalat(s); }, []);
 
   const muat = useCallback(async () => {
     if (!kegiatan || sibukRef.current) return;
     try {
       const r = await ambil(kegiatan, `${kelas ? `&kelas=${kelas}` : ""}${langkahLihat ? `&langkah=${langkahLihat}` : ""}${pesertaLihat ? `&peserta=${pesertaLihat}` : ""}`);
-      if (r) { setData(r); setGalat(null); if (adalahKelola(r) && kelas === null && r.kelas !== null) setKelas(r.kelas); }
+      if (r) { setData(r); if (!galatAksi.current) setGalat(null); if (adalahKelola(r) && kelas === null && r.kelas !== null) setKelas(r.kelas); }
     } catch (e) { setGalat(e instanceof Error ? e.message : "Gagal memuat roleplay."); }
   }, [kegiatan, kelas, langkahLihat, pesertaLihat]);
 
@@ -67,15 +70,16 @@ export default function RoleplayHalaman() {
   const kirim = useCallback(async (isi: Record<string, unknown>): Promise<boolean> => {
     if (!kegiatan) return false;
     sibukRef.current = true;
+    setGalatAksi(null);
     try {
       const r = await apiPortal<KeadaanRoleplay>("/api/sigap/vanguard/roleplay", { method: "POST", body: JSON.stringify({ kegiatan, kelas, ...isi }) });
-      setData(r); setGalat(null);
+      setData(r);
       return true;
     } catch (e) {
-      if (!(e instanceof Error && e.message === "SESI_BERAKHIR")) setGalat(e instanceof Error ? e.message : "Gagal memproses.");
+      if (!(e instanceof Error && e.message === "SESI_BERAKHIR")) setGalatAksi(e instanceof Error ? e.message : "Gagal memproses.");
       return false;
     } finally { sibukRef.current = false; }
-  }, [kegiatan, kelas]);
+  }, [kegiatan, kelas, setGalatAksi]);
 
   const kepala = (
     <div className="vgtop">
@@ -89,7 +93,7 @@ export default function RoleplayHalaman() {
   if (!kegiatan) return bungkus(<div className="sheet"><h2>Pelatihan tidak ditentukan</h2><p style={{ fontSize: 13 }}>Buka roleplay dari kartu di tab Hari ini.</p></div>);
   if (!data) return bungkus(<div className="sheet" style={{ fontSize: 13 }}>Memuat…</div>);
   if (!data.aktif) return bungkus(<div className="sheet"><h2>Roleplay belum aktif</h2><p style={{ fontSize: 13 }}>{data.alasan ?? "Roleplay belum diaktifkan di pelatihan ini."}</p></div>);
-  if (adalahPeserta(data)) return <LayarPeserta data={data} kegiatan={kegiatan} kepala={kepala} galat={galat} setGalat={setGalat} />;
+  if (adalahPeserta(data)) return <LayarPeserta data={data} kegiatan={kegiatan} kepala={kepala} galat={galat} setGalat={setGalatAksi} />;
   if (adalahKelola(data)) {
     return (
       <div className="vg"><div className="phone">{kepala}
@@ -134,7 +138,7 @@ function LayarPeserta({ data, kegiatan, kepala, galat, setGalat }: { data: Keada
       try {
         const r = await apiPortal<{ ok: boolean; isian: { iv1: Isian[]; nilai: Record<string, number> }; ditolak: string[] }>("/api/sigap/vanguard/roleplay", { method: "POST", body: JSON.stringify({ kegiatan, aksi: "simpan", isian: { iv1: isian, nilai: nilaiAngka } }) });
         if (r.ditolak.length > 0) { setIsian(r.isian.iv1); setNilai(Object.fromEntries(Object.entries(r.isian.nilai).map(([k, v]) => [k, String(v)]))); setGalat("Sebagian jawaban terkunci karena sesinya sudah diperiksa instruktur; isian dikembalikan."); }
-        else kotor.current = false;
+        else { kotor.current = false; setGalat(null); }
         setSimpan("tersimpan");
       } catch (e) {
         if (e instanceof Error && e.message === "SESI_BERAKHIR") return;
@@ -206,7 +210,7 @@ function HasilTampil({ h }: { h: TampilHasil }) {
     <>
       <div className="res good" role="status">
         <div className="vd"><span className="ic" aria-hidden>★</span><div><strong>Poin roleplay: {fmtPoin(h.poin)}</strong><small>{h.benar} benar · {h.salah} salah · {h.kosong} kosong dari {h.dinilai} isian dinilai{h.luar.length ? ` · ${h.luar.length} di luar cakupan` : ""}</small></div></div>
-        <section><div className="ref">Skor = benar × 1 + salah × (−0,3). Poin = 100 × skor ÷ isian dinilai. Poin ini tidak masuk nilai pelatihan.</div></section>
+        <section><div className="ref">Skor = benar × 1 + (salah + kosong + di luar cakupan) × (−0,3). Poin = 100 × skor ÷ isian dinilai, paling rendah 0. Poin ini tidak masuk nilai pelatihan.</div></section>
       </div>
       <div role="tablist" className="kp-tabs">
         <button type="button" role="tab" aria-selected={tab === "review"} className="kp-tab" onClick={() => setTab("review")}>Review jawaban</button>
@@ -266,8 +270,8 @@ function FormCakupan({ f, setF, aktif }: { f: FormBerikut; setF: (x: FormBerikut
         </select></label>
       {f.bagian === "iv1" && (
         <div className="kp-2">
-          <label className="kp-f"><span>Dari R</span><input inputMode="numeric" value={f.dari} onChange={(e) => setF({ ...f, dari: e.target.value })} /></label>
-          <label className="kp-f"><span>Sampai R <small>(kosong = satu rincian)</small></span><input inputMode="numeric" value={f.sampai} onChange={(e) => setF({ ...f, sampai: e.target.value })} /></label>
+          <label className="kp-f"><span>Dari R <small>(nomor rincian)</small></span><input inputMode="numeric" placeholder="mis. 2" value={f.dari} onChange={(e) => setF({ ...f, dari: e.target.value })} /></label>
+          <label className="kp-f"><span>Sampai R <small>(kosong = satu rincian)</small></span><input inputMode="numeric" placeholder="mis. 10" value={f.sampai} onChange={(e) => setF({ ...f, sampai: e.target.value })} /></label>
         </div>
       )}
     </div>
@@ -285,13 +289,14 @@ function LayarKelola({ data, kirim, galat, setKelas, lihatLangkah, lihatPeserta 
   const formSah = form.bagian !== "iv1" || (/^\d+$/.test(form.dari) && (form.sampai === "" || /^\d+$/.test(form.sampai)));
   const sudahIsi = data.rekap.filter((r) => r.sudah_isi).length;
   const selesai = rp?.status === "selesai";
+  const kelasNama = data.kelas_pilihan.find((k) => k.nomor === data.kelas)?.nama ?? null;
 
   return (
     <>
       <div className="appbar">
         <div className="l1"><b>ROLEPLAY · {data.peran === "pengelola" ? "PANITIA/ADMIN" : "INSTRUKTUR"}</b><span className="r">{selesai ? "SELESAI" : rp ? "BERJALAN" : "BELUM DIBUKA"}</span></div>
         <h1>{rp?.judul ?? "Roleplay bareng kelas"}</h1>
-        <div className="l3"><span>{data.jumlah_peserta} peserta kelas · {sudahIsi} sudah mengisi</span></div>
+        <div className="l3"><span>{kelasNama ? `${kelasNama} · ` : ""}{data.jumlah_peserta} peserta · {sudahIsi} sudah mengisi</span></div>
       </div>
       <div className="scroll"><div className="stack">
         {galat && <div className="catat gagal" role="alert">{galat}</div>}
@@ -331,7 +336,7 @@ function LayarKelola({ data, kirim, galat, setKelas, lihatLangkah, lihatPeserta 
               <div className="sheet">
                 <span className="tag">{akhir ? "Sesi berikutnya" : "Sesi pertama"}</span>
                 <FormCakupan f={form} setF={setForm} />
-                <div className="pad"><button type="button" className="btn pri" disabled={kerja || !formSah} onClick={() => void jalan({ aksi: "tambah_langkah", ...bentukBerikut(form) })}>Mulai sesi</button></div>
+                <div className="pad"><button type="button" className="btn pri" disabled={kerja || !formSah} onClick={() => void jalan({ aksi: "tambah_langkah", ...bentukBerikut(form) }).then((ok) => { if (ok) setForm(kosongForm); })}>Mulai sesi</button></div>
               </div>
             )}
 
@@ -352,12 +357,13 @@ function LayarKelola({ data, kirim, galat, setKelas, lihatLangkah, lihatPeserta 
               <div className="sheet">
                 <span className="tag">Ditandai {akhir.sudah_tanda} dari {akhir.perlu_tanda}</span>
                 {!akhir.siap_lanjut && <p style={{ fontSize: 12.5 }}>Tombol lanjut aktif setelah semua isian ditandai. Variasi yang tidak dicentang dianggap salah.</p>}
-                <h3 style={{ fontSize: 13, marginTop: 8 }}>Sesi berikutnya (opsional)</h3>
+                <h3 style={{ fontSize: 13, marginTop: 8 }}>Sesi berikutnya</h3>
+                <p style={{ fontSize: 12.5 }}>Isi cakupan di bawah bila ingin lanjut ke sesi berikutnya. Bila ini sesi terakhir, langsung pilih Selesaikan.</p>
                 <FormCakupan f={form} setF={setForm} aktif={akhir.siap_lanjut} />
-                <div className="btns" style={{ padding: "10px 0 0", border: 0 }}>
-                  <button type="button" className="btn" disabled={kerja} onClick={() => void jalan({ aksi: "buka_kembali" })}>Buka kembali</button>
-                  <button type="button" className="btn amb" disabled={kerja || !akhir.siap_lanjut || !formSah} onClick={() => void jalan({ aksi: "lanjut", berikut: bentukBerikut(form) })}>Lanjut ke sesi berikutnya</button>
-                  <button type="button" className="btn pri" disabled={kerja || !akhir.siap_lanjut} onClick={() => { if (window.confirm("Selesaikan roleplay dan umumkan poin ke peserta?")) void jalan({ aksi: "selesai" }); }}>Selesaikan roleplay dan umumkan poin</button>
+                <div style={{ padding: "10px 0 0", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <button type="button" className="btn" style={TOMBOL_LEBAR} disabled={kerja} onClick={() => void jalan({ aksi: "buka_kembali" })}>Buka kembali</button>
+                  <button type="button" className="btn amb" style={TOMBOL_LEBAR} disabled={kerja || !akhir.siap_lanjut || !formSah} onClick={() => void jalan({ aksi: "lanjut", berikut: bentukBerikut(form) }).then((ok) => { if (ok) setForm(kosongForm); })}>Lanjut ke sesi berikutnya</button>
+                  <button type="button" className="btn pri" style={TOMBOL_LEBAR} disabled={kerja || !akhir.siap_lanjut} onClick={() => { if (window.confirm("Selesaikan roleplay dan umumkan poin ke peserta?")) void jalan({ aksi: "selesai" }); }}>Selesaikan roleplay dan umumkan poin</button>
                 </div>
               </div>
             )}
@@ -395,9 +401,10 @@ function LayarKelola({ data, kirim, galat, setKelas, lihatLangkah, lihatPeserta 
 }
 
 function Pemetaan({ p, aktif, kerja, tandai }: { p: NonNullable<KeadaanKelola["pemetaan"]>; aktif: boolean; kerja: boolean; tandai: (kunci: string, benar: string[]) => void }) {
-  if (p.satuan.length === 0) return <div className="sheet" style={{ fontSize: 13 }}>Tidak ada isian peserta pada sesi {p.langkah}. Tidak ada yang perlu ditandai.</div>;
+  if (p.satuan.length === 0) return <div><h3 style={{ fontSize: 13.5, margin: "4px 0" }}>Pemetaan sesi {p.langkah}</h3><div className="sheet" style={{ fontSize: 13 }}>Tidak ada isian peserta pada sesi {p.langkah}. Tidak ada yang perlu ditandai.</div></div>;
   return (
     <div>
+      <h3 style={{ fontSize: 13.5, margin: "4px 0" }}>Pemetaan sesi {p.langkah}</h3>
       {p.satuan.map((s) => {
         const benar = s.variasi.filter((v) => v.benar).map((v) => v.tanda);
         const alih = (tanda: string) => tandai(s.kunci, benar.includes(tanda) ? benar.filter((x) => x !== tanda) : [...benar, tanda]);

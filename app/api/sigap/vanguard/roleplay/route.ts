@@ -223,6 +223,12 @@ export async function POST(req: NextRequest) {
       if (akhir.status === "diperiksa") {
         const tanda = await muatTanda(db as Db, [akhir]);
         if (!sesiTuntasDitandai(satuanCakupan(cakupanLangkah(akhir)), peserta, tanda.get(akhir.id) ?? new Map())) return galat("Masih ada jawaban yang belum ditandai.", 409);
+        // Sesi berikutnya diperiksa SEBELUM sesi ini ditutup: bila cakupannya tidak sah atau bentrok, sesi ini tetap diperiksa (tidak setengah jalan).
+        if (aksi === "lanjut" && b.berikut !== undefined && b.berikut !== null) {
+          const c = periksaCakupan(b.berikut);
+          if (!c.ok) return galat(c.pesan, 409);
+          if (bentrokCakupan(c.cakupan, langkah.map(cakupanLangkah)).length > 0) return galat("Sebagian isian pada cakupan itu sudah dipakai sesi lain pada roleplay ini.", 409);
+        }
         const { error } = await db.from("sigap_vanguard_roleplay_langkah").update({ status: "selesai", selesai_at: new Date().toISOString() }).eq("id", akhir.id).eq("status", "diperiksa");
         if (error) return galat("Gagal menyelesaikan sesi.", 500);
       }
