@@ -118,9 +118,20 @@ export default function KelolaPendataan() {
         <>
           {f.persiapan_sasaran && <UnggahKk />}
           {f.persiapan_lembar && <PengaturanLembar />}
-          {f.persiapan_sampel && <ModelSampel key={`w${kegId}`} kegiatanId={kegId} nama={nama} />}
-          {f.persiapan_sampel && <PetaTim key={`p${kegId}`} kegiatanId={kegId} nama={nama} />}
-          {f.persiapan_sampel && <TagSampel key={`t${kegId}`} kegiatanId={kegId} nama={nama} />}
+          {f.persiapan_sampel && (
+            // (8 Nov 2026) PetaTim dan TagSampel hanya relevan untuk model 1 (alokasi sub SLS + KK master); ModelSampel menyembunyikannya untuk model 2/3.
+            <ModelSampel
+              key={`w${kegId}`}
+              kegiatanId={kegId}
+              nama={nama}
+              modelSatu={
+                <>
+                  <PetaTim key={`p${kegId}`} kegiatanId={kegId} nama={nama} />
+                  <TagSampel key={`t${kegId}`} kegiatanId={kegId} nama={nama} />
+                </>
+              }
+            />
+          )}
           {f.persiapan_sampel && (
             // (7 Nov 2026) Cara LAMA: unggah KK sampel lengkap (utama + cadangan + koordinat) per baris. Digantikan alur 2 stage di atas
             // (stage 1 daftar sub SLS + plotting petugas, stage 2 tag KK dari master). Disimpan tertutup agar tidak membingungkan.

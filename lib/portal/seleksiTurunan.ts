@@ -5,12 +5,15 @@
 
 import type { Db } from "@/lib/sigap";
 import { muatLanjutanTertaut } from "@/lib/portal/kelasIdent";
+import { dataSeleksiObjek } from "@/lib/portal/sampelObjek";
+import { wilayahDariObjek } from "@/lib/seleksiTurunanObjek";
 import { koordinatPerSls, usulanKebutuhan, wilayahDariSampel, type BarisSampelMin, type HasilWilayahSampel, type UsulanKebutuhan } from "@/lib/seleksiTurunan";
 
 export type UsulanSeleksi = {
   identifikasi: { tersambung: boolean; nama: string | null; status_lanjutan: "draf" | "final" | null; versi: number | null };
   kebutuhan: (UsulanKebutuhan & { organik_ppl: number; organik_pml: number }) | null;
-  sampel: HasilWilayahSampel & { ada: boolean };
+  /** `sumber`: model 1 (sigap_sampel, per SLS) atau daftar objek model 2/3 (per wilayah pada tingkat profil). */
+  sampel: HasilWilayahSampel & { ada: boolean; sumber?: "sampel" | "objek"; model?: 2 | 3 | null; tanpa_wilayah?: number };
 };
 
 async function halaman<T>(ambil: (dari: number, sampai: number) => PromiseLike<{ data: T[] | null; error: unknown }>, batas = 20): Promise<T[]> {
@@ -23,6 +26,8 @@ async function halaman<T>(ambil: (dari: number, sampai: number) => PromiseLike<{
   }
   return hasil;
 }
+
+const tingkatKelompokSls = (t: string): boolean => t === "sls" || t === "sub_sls";
 
 export async function usulanSeleksi(db: Db, kegiatanId: number): Promise<UsulanSeleksi> {
   const lanj = await muatLanjutanTertaut(db, kegiatanId);
@@ -54,9 +59,27 @@ export async function usulanSeleksi(db: Db, kegiatanId: number): Promise<UsulanS
     hasil = wilayahDariSampel(sampel, koord);
   }
 
+  // (8 Nov 2026, D4) Tanpa sampel model 1: bila kegiatan memakai daftar objek model 2/3, wilayah diturunkan dari objek itu.
+  if (sampel.length === 0) {
+    try {
+      const d = await dataSeleksiObjek(db, kegiatanId);
+      if (d.ada && d.tingkat) {
+        const koord = tingkatKelompokSls(d.tingkat) ? koordinatPerSls(await halaman<{ idsubsls: string; lat: number; lon: number }>((a, b) => db.from("bencana_subsls_koordinat").select("idsubsls, lat, lon").order("idsubsls").range(a, b), 5)) : new Map();
+        const o = wilayahDariObjek(d.baris, d.tingkat, d.nama, koord);
+        return {
+          identifikasi: { tersambung: lanj.tersambung, nama: lanj.ident_nama, status_lanjutan: lanj.status_lanjutan, versi: lanj.versi },
+          kebutuhan,
+          sampel: { wilayah: o.wilayah, sls: o.jumlah_wilayah, baris_utama: o.sampel, tak_dikenal: o.tak_dikenal, terpotong: o.terpotong, ada: true, sumber: "objek", model: d.model, tanpa_wilayah: o.tanpa_wilayah },
+        };
+      }
+    } catch {
+      /* usulan hanya bantuan: abaikan dan tampilkan seperti belum ada sampel */
+    }
+  }
+
   return {
     identifikasi: { tersambung: lanj.tersambung, nama: lanj.ident_nama, status_lanjutan: lanj.status_lanjutan, versi: lanj.versi },
     kebutuhan,
-    sampel: { ...hasil, ada: sampel.length > 0 },
+    sampel: { ...hasil, ada: sampel.length > 0, sumber: "sampel" },
   };
 }

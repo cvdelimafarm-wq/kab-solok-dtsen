@@ -62,7 +62,7 @@ export function KartuWilayah({ isi, ubah, mati, sampel }: Props & { sampel?: Wil
           </p>
           <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
             <span className="rounded-full bg-[#E9F0FB] px-2.5 py-0.5 font-semibold text-[#0F3D7A]">{d.nagari.length} nagari</span>
-            <span className="rounded-full bg-[#E9F0FB] px-2.5 py-0.5 font-semibold text-[#0F3D7A]">{d.total_sub_sls} sub SLS</span>
+            <span className="rounded-full bg-[#E9F0FB] px-2.5 py-0.5 font-semibold text-[#0F3D7A]">{d.total_sub_sls} {d.satuan ?? "sub SLS"}</span>
             <span className="rounded-full bg-[#E9F0FB] px-2.5 py-0.5 font-semibold text-[#0F3D7A]">target {d.total_target} sampel</span>
             <Link href="/sigap/kelola/pendataan" className="font-bold text-[#1F5FD1] underline">Ubah alokasi di Kelola Pendataan</Link>
           </div>
@@ -81,7 +81,7 @@ export function KartuWilayah({ isi, ubah, mati, sampel }: Props & { sampel?: Wil
               </tbody>
             </table>
           </div>
-          {d.tanpa_master > 0 && <Cat>{d.tanpa_master} sub SLS beralokasi belum punya nama kecamatan/nagari di master wilayah, sehingga tidak masuk daftar nagari.</Cat>}
+          {d.tanpa_master > 0 && <Cat>{d.tanpa_master} {d.satuan === "objek" ? "objek" : "sub SLS"} beralokasi belum punya nama kecamatan/nagari di master wilayah, sehingga tidak masuk daftar nagari.</Cat>}
           {(sampel?.terpotong ?? 0) > 0 && <Cat>Daftar terlalu panjang untuk satu isian (maks 2000 huruf): {sampel?.terpotong} nagari terakhir tidak ikut teks surat. Pisahkan surat per kecamatan bila perlu.</Cat>}
           {berbeda && !mati && <Cat>Daftar yang tersimpan berbeda dengan alokasi terbaru; menyimpan sekarang akan memperbarui tujuan surat pengantar.</Cat>}
           {berbeda && mati && <Cat>Daftar yang tersimpan berbeda dengan alokasi terbaru. Tekan Revisi lalu simpan untuk memperbarui tujuan surat pengantar.</Cat>}

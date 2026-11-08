@@ -29,6 +29,7 @@ import PilihNama from "../../PilihNama";
 import ImporPetugas from "./ImporPetugas";
 import { Bagian, Cat } from "../../Kontrol";
 import { KelasSatu, lengkapiKerangka, type Ubah } from "./Isian";
+import { KartuUsulanSampel } from "./KartuUsulanSampel";
 import { TabelSaring, type Kol } from "../../TabelSaring";
 import SelectCari from "@/app/components/SelectCari";
 
@@ -135,7 +136,7 @@ function AngkaJumlah({ nilai, minimal, mati, nama, onUbah, onTolak }: { nilai: n
   );
 }
 
-export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan; ubah: Ubah; mati: boolean; form: Form | null; tahun: number | null }) {
+export function TabelPeran({ isi, ubah, mati, form, tahun, identId }: { isi: IsiLanjutan; ubah: Ubah; mati: boolean; form: Form | null; tahun: number | null; identId?: number }) {
   const [tolak, setTolak] = useState<string | null>(null);
   useEffect(() => { if (mati) setTolak(null); }, [mati]);
   const selisih = useMemo(() => selisihDariAwal(isi, form, tahun), [isi, form, tahun]);
@@ -205,6 +206,7 @@ export function TabelPeran({ isi, ubah, mati, form, tahun }: { isi: IsiLanjutan;
         </Pesan>
       )}
       {tolak && <Pesan>{tolak}</Pesan>}
+      {identId !== undefined && <KartuUsulanSampel identId={identId} isi={isi} ubah={ubah} mati={mati} />}
       <TabelSaring label="Jumlah petugas per peran" kols={kols} data={data} kunci={(r) => r.kode} />
       {(isi.peran.pml.on || isi.peran.ppl.on) && <BebanTugasBlok isi={isi} ubah={ubah} mati={mati} />}
     </Bagian>

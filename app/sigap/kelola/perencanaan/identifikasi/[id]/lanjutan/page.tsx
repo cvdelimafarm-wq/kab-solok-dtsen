@@ -229,7 +229,7 @@ function Isi() {
                 sampel={{ data: wilayahSampel, memuat: id !== null && !ws.data && !ws.galat, galat: ws.galat === "SESI_BERAKHIR" ? null : ws.galat, terpotong: alokasiTeks?.terpotong ?? 0, tersimpan: tersimpan ? normalisasiLanjutan(tersimpan.isi).wilayah : null } satisfies WilayahSampelLayar}
               />
               <TabelKelas isi={isi} ubah={ubah} mati={matiForm} form={formSah} organik={lj.organik} tahun={tahun} />
-              <TabelPeran isi={isi} ubah={ubah} mati={matiForm} form={formSah} tahun={tahun} />
+              <TabelPeran isi={isi} ubah={ubah} mati={matiForm} form={formSah} tahun={tahun} identId={row.id} />
               <TabelPetugas isi={isi} ubah={ubah} mati={matiForm} organik={lj.organik} mitra={lj.mitra} galatDaftar={lj.daftarNamaGalat} tugasTerbit={tugasTerbit} hrefTim={`/sigap/kelola/perencanaan/identifikasi/${row.id}/tim`} />
             </div>
             <div className="flex min-w-0 flex-col gap-3.5 xl:sticky xl:top-[68px] xl:max-h-[calc(100vh-84px)] xl:overflow-y-auto xl:pr-1 xl:[scrollbar-width:thin]">

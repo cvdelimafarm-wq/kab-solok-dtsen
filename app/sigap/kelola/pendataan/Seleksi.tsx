@@ -349,12 +349,15 @@ export default function Seleksi({ kegiatanId, nama }: { kegiatanId: number; nama
                       {usulan.sampel.ada ? (
                         <>
                           <p>
-                            Sampel yang diunggah: {usulan.sampel.baris_utama} sampel utama di {usulan.sampel.sls} SLS.
-                            {usulan.sampel.tak_dikenal > 0 && <span className="text-[#8A6200]"> {usulan.sampel.tak_dikenal} SLS tidak dikenal master wilayah (domisili tidak bisa dicocokkan).</span>}
-                            {usulan.sampel.terpotong > 0 && <span className="text-[#B42329]"> {usulan.sampel.terpotong} SLS melebihi batas wilayah per seleksi dan tidak dimasukkan.</span>}
+                            {usulan.sampel.sumber === "objek"
+                              ? `Daftar sampel model ${usulan.sampel.model ?? ""}: ${usulan.sampel.baris_utama} sampel di ${usulan.sampel.sls} wilayah.`
+                              : `Sampel yang diunggah: ${usulan.sampel.baris_utama} sampel utama di ${usulan.sampel.sls} SLS.`}
+                            {(usulan.sampel.tanpa_wilayah ?? 0) > 0 && <span className="text-[#8A6200]"> {usulan.sampel.tanpa_wilayah} objek tanpa kode wilayah tidak ikut.</span>}
+                            {usulan.sampel.tak_dikenal > 0 && <span className="text-[#8A6200]"> {usulan.sampel.tak_dikenal} {usulan.sampel.sumber === "objek" ? "wilayah" : "SLS"} tidak dikenal master wilayah (domisili tidak bisa dicocokkan).</span>}
+                            {usulan.sampel.terpotong > 0 && <span className="text-[#B42329]"> {usulan.sampel.terpotong} {usulan.sampel.sumber === "objek" ? "wilayah" : "SLS"} melebihi batas wilayah per seleksi dan tidak dimasukkan.</span>}
                           </p>
                           <button type="button" className={`${tombolPutih} mt-2`} disabled={!bolehUbah} onClick={() => setForm((f) => (f ? { ...f, wilayah: usulan.sampel.wilayah } : f))}>
-                            Ganti wilayah dengan wilayah dari sampel ({usulan.sampel.wilayah.length} SLS)
+                            Ganti wilayah dengan wilayah dari sampel ({usulan.sampel.wilayah.length} {usulan.sampel.sumber === "objek" ? "wilayah" : "SLS"})
                           </button>
                         </>
                       ) : (

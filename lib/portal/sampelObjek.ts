@@ -8,6 +8,7 @@ import type { AkunPortal } from "@/lib/portal/server";
 import { GalatSampel, akunBolehDitugaskan, peranSampel, petugasKegiatan } from "@/lib/portal/sampel";
 import { bentukTimJson, bandingkanPenugasan, ringkasTim, type BandingPenugasan, type PemetaanAtasan, type PeranTim, type RingkasTim, type SimpulTim } from "@/lib/timSampel";
 import type { GalatBaris, InfoSampel, Pemetaan } from "@/lib/sampelSls";
+import { kodeKelompok, tingkatKelompok as kodeKelompokObjek } from "@/lib/seleksiTurunanObjek";
 import {
   KUNCI_BEBAS, bacaProfil, bentukObjekJson, cocokkanPetugasObjek, kolomProfil, periksaBarisObjek, periksaCatatHasil, periksaObjek, periksaWilayahObjek,
   rekapHasilObjek, rekapObjek, tingkatPlot, validasiProfil, bacaHasilObjek,
@@ -341,7 +342,9 @@ async function petaNamaWilayah(db: Db, level: TingkatWilayah | null, kode: reado
   const unik = Array.from(new Set(kode.filter((x): x is string => !!x)));
   if (unik.length === 0) return hasil;
   const kolomKode = level === "kecamatan" ? "kd_kec" : level === "nagari" ? "iddesa" : level === "sls" ? "idsls" : "idsubsls";
-  for (const bagian of potong(unik, 150)) {
+  // PostgREST memotong 1.000 baris per permintaan; satu kecamatan bisa memuat ratusan sub SLS, jadi tingkat kasar dibaca dalam kelompok kecil.
+  const ukuran = level === "kecamatan" ? 2 : level === "nagari" ? 15 : 150;
+  for (const bagian of potong(unik, ukuran)) {
     const { data, error } = await db.from("master_wilayah").select("idsubsls, kd_kec, iddesa, idsls, kecamatan, nagari, sls, sub_sls").in(kolomKode, bagian).range(0, 999);
     if (error) {
       if (belumMigrasi(error)) throw new GalatSampel(PESAN_BELUM_MIGRASI, 503);
@@ -411,6 +414,53 @@ export async function catatHasilObjek(db: Db, akun: AkunPortal, kegiatanId: numb
   const r = data as { ok?: boolean; pesan?: string; kode?: string; hasil?: string | null; jumlah_didata?: number | null } | null;
   if (!r?.ok) throw new GalatSampel(r?.pesan ?? "Hasil gagal dicatat.", 400, r?.kode);
   return { hasil: bacaHasilObjek(r.hasil), jumlah_didata: num(r.jumlah_didata) };
+}
+
+/**
+ * Objek aktif sebuah kegiatan model 2/3 dalam bentuk ringan (kode wilayah, jumlah, petugas) untuk modul lain yang hanya MEMBACA turunan sampel
+ * (wilayah tugas identifikasi lanjutan, usulan jumlah petugas). `profil` null = model 1 atau tabel belum ada; baris kosong bila belum ada daftar.
+ */
+export async function objekRingan(db: Db, kegiatanId: number, denganTitik = false): Promise<{ profil: ProfilTersimpan | null; baris: { kode_wilayah: string | null; jumlah: number; ppl_akun_id: number | null; pml_akun_id: number | null; lat: number | null; lng: number | null }[] }> {
+  const { profil } = await muatProfil(db, kegiatanId).catch(() => ({ profil: null as ProfilTersimpan | null }));
+  if (!profil || (profil.model !== 2 && profil.model !== 3)) return { profil: null, baris: [] };
+  const baris: { kode_wilayah: string | null; jumlah: number; ppl_akun_id: number | null; pml_akun_id: number | null; lat: number | null; lng: number | null }[] = [];
+  for (let i = 0; i < 30; i++) {
+    const { data, error } = await db.from("sigap_sampel_objek").select(denganTitik ? "kode_wilayah, jumlah, ppl_akun_id, pml_akun_id, atribut" : "kode_wilayah, jumlah, ppl_akun_id, pml_akun_id").eq("kegiatan_id", kegiatanId).is("nonaktif_at", null).order("id").range(i * 1000, i * 1000 + 999);
+    if (error) return { profil, baris: [] };
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const at = (r.atribut ?? {}) as Record<string, unknown>;
+      baris.push({ kode_wilayah: (r.kode_wilayah as string | null) ?? null, jumlah: Math.max(1, num(r.jumlah) ?? 1), ppl_akun_id: num(r.ppl_akun_id), pml_akun_id: num(r.pml_akun_id), lat: num(at.lat), lng: num(at.lng) });
+    }
+    if ((data ?? []).length < 1000) break;
+  }
+  return { profil, baris };
+}
+
+/** Objek -> baris (kecamatan, nagari, target=jumlah) seperti alokasi, untuk daftar nagari wilayah tugas. Objek tanpa master wilayah muncul dengan nama kosong (dihitung tanpa_master). */
+export async function wilayahObjekRingan(db: Db, kegiatanId: number): Promise<{ ada: boolean; objek: number; wilayah: { kecamatan: string; nagari: string; target: number }[] }> {
+  const { profil, baris } = await objekRingan(db, kegiatanId);
+  if (!profil || baris.length === 0) return { ada: false, objek: 0, wilayah: [] };
+  const nama = await petaNamaWilayah(db, profil.level, baris.map((b) => b.kode_wilayah));
+  const wilayah = baris
+    .filter((b) => b.kode_wilayah)
+    .map((b) => {
+      const m = nama.get(String(b.kode_wilayah));
+      return { kecamatan: m?.kecamatan ?? "", nagari: m?.nagari ?? "", target: b.jumlah };
+    });
+  return { ada: true, objek: baris.length, wilayah };
+}
+
+/** Bahan usulan wilayah seleksi dari objek model 2/3: baris (kode, jumlah, titik), tingkat profil, dan nama wilayah per kode kelompok (tingkat sub SLS naik ke SLS). */
+export async function dataSeleksiObjek(db: Db, kegiatanId: number): Promise<{ ada: boolean; model: 2 | 3 | null; tingkat: TingkatWilayah | null; baris: { kode_wilayah: string | null; jumlah: number; lat: number | null; lng: number | null }[]; nama: Map<string, { kecamatan: string; nagari: string; sls: string }> }> {
+  const { profil, baris } = await objekRingan(db, kegiatanId, true);
+  const kosong = { ada: false, model: null, tingkat: null, baris: [], nama: new Map<string, { kecamatan: string; nagari: string; sls: string }>() };
+  if (!profil || baris.length === 0 || !profil.level) return kosong;
+  const kelompok = kodeKelompokObjek(profil.level);
+  const kode = Array.from(new Set(baris.map((b) => kodeKelompok(b.kode_wilayah, profil.level as TingkatWilayah)).filter((x): x is string => !!x)));
+  const m = await petaNamaWilayah(db, kelompok, kode);
+  const nama = new Map<string, { kecamatan: string; nagari: string; sls: string }>();
+  for (const [k, v] of m) nama.set(k, { kecamatan: v.kecamatan, nagari: v.nagari, sls: v.sls });
+  return { ada: true, model: profil.model as 2 | 3, tingkat: profil.level, baris, nama };
 }
 
 /** Ringkasan modul tahap Beranda untuk kegiatan MODEL 2/3. null = bukan petugas, bukan model 2/3, belum ada sampel atas nama akun ini, atau tabel belum ada. */

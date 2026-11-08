@@ -9,7 +9,7 @@
 // Model 2/3 ditetapkan lewat PROFIL VARIABEL (centang variabel yang ada pada daftar sampel + label 5 kolom bebas); profil menentukan templat unggah. Sebelum migrasi
 // 20261108a dijalankan, komponen ini hanya menampilkan AlokasiWilayah seperti biasa (tanpa pemilih).
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { API_OBJEK_ADMIN, KATALOG_VARIABEL, KUNCI_BEBAS, MAKS_LABEL_BEBAS, ringkasProfil, validasiProfil, type DataObjekAdmin, type KelompokVariabel, type KunciBebas, type KunciVariabel, type ProfilSampel } from "@/lib/sampelObjek";
 import { BTN, BTN_O, Kartu, Memuat, Pesan } from "../../admin/ui";
@@ -38,7 +38,8 @@ const AWAL: Record<2 | 3, KunciVariabel[]> = {
   3: ["jumlah", "ppl", "pml"],
 };
 
-export default function ModelSampel({ kegiatanId, nama }: { kegiatanId: number; nama: string }) {
+/** `modelSatu` = kartu yang hanya relevan untuk model 1 (peta tim, tag sampel); tidak ditampilkan untuk kegiatan model 2/3. */
+export default function ModelSampel({ kegiatanId, nama, modelSatu }: { kegiatanId: number; nama: string; modelSatu?: ReactNode }) {
   const [data, setData] = useState<DataObjekAdmin | null>(null);
   const [galatMuat, setGalatMuat] = useState(false);
   const [pilihan, setPilihan] = useState<Model | null>(null);
@@ -106,7 +107,12 @@ export default function ModelSampel({ kegiatanId, nama }: { kegiatanId: number; 
   }
 
   // sebelum migrasi atau bila pemuatan gagal: perilaku lama (model 1 saja)
-  if (galatMuat || (data && !data.siap)) return <AlokasiWilayah kegiatanId={kegiatanId} nama={nama} />;
+  if (galatMuat || (data && !data.siap)) return (
+    <>
+      <AlokasiWilayah kegiatanId={kegiatanId} nama={nama} />
+      {modelSatu}
+    </>
+  );
   if (!data) return <Kartu judul="Model sampel"><Memuat /></Kartu>;
 
   return (
@@ -228,7 +234,12 @@ export default function ModelSampel({ kegiatanId, nama }: { kegiatanId: number; 
         )}
       </Kartu>
 
-      {efektif === 1 && data.model === 1 && <AlokasiWilayah kegiatanId={kegiatanId} nama={nama} />}
+      {efektif === 1 && data.model === 1 && (
+        <>
+          <AlokasiWilayah kegiatanId={kegiatanId} nama={nama} />
+          {modelSatu}
+        </>
+      )}
       {data.profil && data.model === efektif && <ObjekSampel kegiatanId={kegiatanId} nama={nama} data={data} muat={muat} />}
     </>
   );

@@ -20,9 +20,11 @@ export type DataWilayahSampel = {
   total_target: number;
   /** sub SLS beralokasi yang kecamatan/nagarinya tidak ditemukan di master (tidak ikut daftar nagari) */
   tanpa_master: number;
+  /** Isi kolom `sub_sls` per nagari dan total: sub SLS (model 1), objek (model 2/3), atau campuran. Tanpa nilai = sub SLS. (8 Nov 2026, D4) */
+  satuan?: "sub SLS" | "objek" | "unit";
 };
 
-export const WILAYAH_SAMPEL_KOSONG: DataWilayahSampel = { tertaut: false, siap: true, kegiatan: [], nagari: [], total_sub_sls: 0, total_target: 0, tanpa_master: 0 };
+export const WILAYAH_SAMPEL_KOSONG: DataWilayahSampel = { tertaut: false, siap: true, kegiatan: [], nagari: [], total_sub_sls: 0, total_target: 0, tanpa_master: 0, satuan: "sub SLS" };
 
 const ANGKA_ROMAWI = /^(?=[IVXLC]+$)(?:X{0,3})(?:IX|IV|V?I{0,3})$/;
 
