@@ -36,7 +36,8 @@ const SUB: ItemSub[] = [
   { kode: "kelas", label: "Rencana kelas", ket: "Kelas menurut perencanaan (hanya baca)." },
 ];
 
-function KartuHierarki() {
+/** (8 Nov 2026) diekspor agar tab Peserta & Kelas dapat menyusunnya sebagai satu bagian. */
+export function KartuHierarki() {
   const [d, setD] = useState<Data | null>(null);
   const [simpul, setSimpul] = useState<SimpulHierarki[]>([]);
   const [galat, setGalat] = useState<string | null>(null);

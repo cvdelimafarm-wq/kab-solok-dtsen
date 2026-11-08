@@ -16,12 +16,23 @@ import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
 import KesiapanKartu from "./kesiapan"; // (8 Nov 2026) kartu Kesiapan di atas tab Persiapan: daftar periksa + tombol Perbaiki ke tab/sub yang tepat
-import PersiapanGabung from "./persiapanGabung"; // (2 Nov 2026) tab Persiapan: Pengaturan (tampilan peserta, ketentuan, absen, aturan nilai) + Instrumen (unggah kuesioner, pedoman, PPT)
-import TimPesertaKelola from "./hierarki"; // (2 Nov 2026) tab Tim & Peserta: hierarki + kelas
+import GabungTab, { type Bagian } from "./gabungTab"; // (8 Nov 2026) perekat tujuh tab: satu tab = beberapa bagian (sub)
+import { KartuHierarki } from "./hierarki";
+import PengaturanKelasKelola from "./pengaturanKelas";
+import InstrukturKelola from "./instruktur";
+import KelasIdentKelola from "./kelasIdent";
+import InstrumenKelola from "./instrumen";
+import VanguardKelola from "./vanguardKelola";
+import PersiapanKelola from "./tampilan"; // tampilan peserta, ketentuan undangan, absen, aturan nilai (dipecah bertahap: tahap 3-5)
 import KendalaKelola from "./kendala"; // (3 Nov 2026) tab Kendala: petugas menolak / mundur -> ganti, kosongkan, atau alihkan
 import KoreksiKelola from "./koreksi"; // (6 Nov 2026) tab Kendala: kendala tes, soal bermasalah, pindah kelas / atasan, tambah peserta mendadak
 import HariKerjaKelola from "./hariKerja"; // (2 Nov 2026) tab Hari Kerja: matriks peserta x tanggal, buatkan / lepas / pindahkan dari kegiatan lain
-import { KomunikasiKelola, KuisRapatKelola } from "./grup"; // (2 Nov 2026) tab gabungan: Kuis & Rapat, Notifikasi (+ Pengumuman)
+import KuisPraKelola from "./kuisPra";
+import KuisLive from "./kuis";
+import RapatKelola from "./rapat";
+import NotifikasiKelola from "./notifikasi";
+import PengumumanKelola from "./pengumuman";
+import { petakanTab, type TabKelola } from "@/lib/sigapKelolaTab";
 import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard (tampil bila kegiatan memakai Vanguard)
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
 import { InputSikap, PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
@@ -52,21 +63,12 @@ const dariInputWib = (s: string) => new Date(`${s}:00+07:00`).getTime();
 const tampilWaktuWib = (iso: string) => { const d = new Date(new Date(iso).getTime() + 7 * 3_600_000); const bln = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"][d.getUTCMonth()]; return `${d.getUTCDate()} ${bln} ${String(d.getUTCHours()).padStart(2, "0")}.${String(d.getUTCMinutes()).padStart(2, "0")}`; };
 const tambahMenit = (s: string, m: number) => keInputWib(new Date(dariInputWib(s) + m * 60_000).toISOString());
 
-// (2 Nov 2026) 10 tab dirapikan menjadi 7. Alamat lama (?tab=pengumuman, rapat, kuispra, kelas, ...) tetap dikenali lewat PETA_TAB_LAMA.
-type TabK = "persiapan" | "tim" | "kendala" | "harikerja" | "soal" | "kuis" | "notifikasi" | "monitoring" | "administrasi";
-const TAB_SAH: TabK[] = ["persiapan", "tim", "kendala", "harikerja", "soal", "kuis", "notifikasi", "monitoring", "administrasi"];
-const PETA_TAB_LAMA: Record<string, { tab: TabK; sub?: string }> = {
-  pengumuman: { tab: "notifikasi", sub: "pengumuman" },
-  rapat: { tab: "kuis", sub: "rapat" },
-  kuispra: { tab: "kuis", sub: "kuispra" },
-  kelas: { tab: "tim", sub: "kelas" },
-  tampilan: { tab: "persiapan" },
-  instrumen: { tab: "persiapan", sub: "instrumen" },
-  vanguard: { tab: "persiapan", sub: "vanguard" },
-};
+// (8 Nov 2026) Tujuh tab menurut waktu pakai: Kesiapan · Peserta & Kelas · Materi & Penilaian · Komunikasi · Hari H · Kendala · Hasil & Administrasi.
+// Alamat lama (?tab=soal, ?tab=kuis&sub=rapat, ...) dialihkan oleh petakanTab (lib/sigapKelolaTab.ts).
+type TabK = TabKelola;
 
 export default function KelolaPelatihan() {
-  const [tab, setTab] = useState<TabK>("persiapan");
+  const [tab, setTab] = useState<TabK>("kesiapan");
   // (8 Nov 2026) navKey: naik tiap tombol "Perbaiki" dipakai, supaya bagian (sub) di tab tujuan dipasang ulang dan membaca ?sub= yang baru.
   const [navKey, setNavKey] = useState(0);
   const [ringkas, setRingkas] = useState<Ringkas | null>(null);
@@ -112,7 +114,7 @@ export default function KelolaPelatihan() {
     window.history.pushState(null, "", urlKelola(window.location.pathname, "", { survei: s.kode, kegiatan: awal?.id ?? null }));
     setSurveiKode(s.kode);
     setKegId(awal?.id ?? null);
-    setTab("persiapan");
+    setTab("kesiapan");
     setMode("kelola");
     window.scrollTo(0, 0);
   }
@@ -134,7 +136,7 @@ export default function KelolaPelatihan() {
     window.history.pushState(null, "", urlKelola(window.location.pathname, window.location.search, { survei: kode, kegiatan: id }));
     setSurveiKode(kode);
     setKegId(id);
-    setTab("persiapan");
+    setTab("kesiapan");
   }
   function keDaftar() {
     window.history.pushState(null, "", window.location.pathname);
@@ -155,16 +157,20 @@ export default function KelolaPelatihan() {
   useEffect(() => {
     if (!bacaSesi()) return keMasuk();
     try {
-      const t = new URLSearchParams(window.location.search).get("tab");
-      const lama = t ? PETA_TAB_LAMA[t] : undefined;
-      if (lama) {
-        setTab(lama.tab);
-        if (lama.sub && !new URLSearchParams(window.location.search).get("sub")) {
+      const q = new URLSearchParams(window.location.search);
+      const t = q.get("tab");
+      const tujuan = petakanTab(t, q.get("sub"));
+      if (tujuan) {
+        setTab(tujuan.tab);
+        // alamat lama dialihkan: tulis ulang ?tab= dan ?sub= ke tempat barunya
+        if (t !== tujuan.tab || (tujuan.sub ?? null) !== q.get("sub")) {
           const u = new URL(window.location.href);
-          u.searchParams.set("sub", lama.sub);
+          u.searchParams.set("tab", tujuan.tab);
+          if (tujuan.sub) u.searchParams.set("sub", tujuan.sub);
+          else u.searchParams.delete("sub");
           window.history.replaceState(null, "", u.toString());
         }
-      } else if (t && (TAB_SAH as string[]).includes(t)) setTab(t as TabK);
+      }
     } catch {
       /* abaikan */
     }
@@ -177,25 +183,38 @@ export default function KelolaPelatihan() {
     muat();
   }, [kegId, surveiKode, mode, muat]);
 
-  /** Tombol "Perbaiki" di kartu Kesiapan: pindah tab, set ?sub=, lalu gulir ke atas. */
+  /** Tombol "Perbaiki" di kartu Kesiapan (kode tab boleh lama atau baru): pindah tab, set ?sub=, lalu gulir ke atas. */
   const bukaTab = useCallback((t: string, sub?: string) => {
-    if (!(TAB_SAH as string[]).includes(t)) return;
+    const tujuan = petakanTab(t, sub);
+    if (!tujuan) return;
     try {
       const u = new URL(window.location.href);
-      u.searchParams.set("tab", t);
-      if (sub) u.searchParams.set("sub", sub);
+      u.searchParams.set("tab", tujuan.tab);
+      if (tujuan.sub) u.searchParams.set("sub", tujuan.sub);
       else u.searchParams.delete("sub");
       window.history.replaceState(null, "", u.toString());
     } catch {
       /* abaikan */
     }
     setNavKey((n) => n + 1);
-    setTab(t as TabK);
+    setTab(tujuan.tab);
     try {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       /* abaikan */
     }
+  }, []);
+  /** Klik tab: bagian (?sub=) tab sebelumnya dilepas supaya tab baru dibuka di bagian pertamanya. */
+  const gantiTab = useCallback((t: TabK) => {
+    try {
+      const u = new URL(window.location.href);
+      u.searchParams.delete("sub");
+      u.searchParams.set("tab", t);
+      window.history.replaceState(null, "", u.toString());
+    } catch {
+      /* abaikan */
+    }
+    setTab(t);
   }, []);
 
   if (mode !== "kelola")
@@ -228,60 +247,100 @@ export default function KelolaPelatihan() {
       kecil="SIGAP · Kelola Pelatihan"
       jejak={["Pelatihan", "Kelola", surveiAktif?.nama ?? namaPelatihan ?? "Pelatihan"]}
       judul="Kelola Pelatihan"
-      sub={`Persiapan, tim, kendala, soal & jadwal, kuis, notifikasi & monitoring${namaPelatihan ? ` · ${namaPelatihan}` : ""}`}
+      sub={`Kesiapan, peserta, materi, komunikasi, hari H, kendala & hasil${namaPelatihan ? ` · ${namaPelatihan}` : ""}`}
       kembali={{ label: "Daftar survei", onKlik: keDaftar }}
       tab={[
-        { kode: "persiapan", label: "🧭 Persiapan" },
-        { kode: "tim", label: "👥 Tim & Peserta" },
+        { kode: "kesiapan", label: "✅ Kesiapan" },
+        { kode: "peserta", label: "👥 Peserta & Kelas" },
+        { kode: "materi", label: "📚 Materi & Penilaian" },
+        { kode: "komunikasi", label: "📣 Komunikasi" },
+        { kode: "harih", label: "🎯 Hari H" },
         { kode: "kendala", label: "🛠 Kendala" },
-        { kode: "harikerja", label: "📅 Hari Kerja" },
-        { kode: "soal", label: "Soal & Jadwal" },
-        { kode: "kuis", label: "🎮 Kuis & Rapat" },
-        { kode: "notifikasi", label: "🔔 Notifikasi" },
-        { kode: "monitoring", label: "Monitoring" },
-        { kode: "administrasi", label: "🗂 Administrasi" },
+        { kode: "hasil", label: "🗂 Hasil & Administrasi" },
       ]}
       aktifTab={tab}
-      onTab={setTab}
+      onTab={gantiTab}
     >
       <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={kegId} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} onDibuat={setelahDibuat} />
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       <TautanDasborVanguard kegiatanId={kegId} />
       {!ringkas && !galat && <Memuat />}
-      {ringkas && tab === "soal" && (
-        <div key={kegId ?? 0} className="grid gap-3 lg:grid-cols-2">
-          {DAFTAR_JENIS_TES.map((j) => {
-            const t = ringkas.tes.find((x) => x.jenis === j);
-            return t ? <KartuSoal key={j} tes={t} bisaKelola={ringkas.boleh_kelola} setelahSimpan={muat} /> : null;
-          })}
-          <div className="lg:col-span-2">
-            <SkemaNilaiMandiri asal="soal" />
-          </div>
-          <div className="lg:col-span-2">
-            <PengaturanPresensiKartu />
-          </div>
-        </div>
+      {ringkas && tab === "kesiapan" &&
+        (ringkas.boleh_kelola ? (
+          <KesiapanKartu key={`s${kegId ?? 0}`} onBuka={bukaTab} />
+        ) : (
+          <Pesan jenis="info">Kesiapan pelatihan hanya tampil bagi pengelola. Buka tab lain di atas.</Pesan>
+        ))}
+      {ringkas && tab === "peserta" && (
+        <GabungTab
+          key={`${kegId ?? 0}-${navKey}`}
+          label="Bagian Peserta & Kelas"
+          bagian={[
+            { kode: "pengaturan", label: "Pengaturan kelas", ket: "Jumlah dan nama kelas, siapa peserta tiap kelas, instruktur, dan panitia. Semua pilihan kelas di Adu Sigap dan Monitoring mengikuti ini.", isi: (pilih) => <PengaturanKelasKelola bukaInstruktur={() => pilih("instruktur")} /> },
+            { kode: "hierarki", label: "Hierarki", ket: "Siapa melapor kepada siapa. Menentukan siapa yang dapat memantau progres siapa di Monitoring peserta.", isi: () => <KartuHierarki /> },
+            { kode: "instruktur", label: "Instruktur", ket: "Tetapkan instruktur per kelas, tanpa SQL.", isi: () => <InstrukturKelola /> },
+            { kode: "kelas", label: "Rencana kelas", ket: "Kelas menurut perencanaan (hanya baca).", isi: () => <KelasIdentKelola /> },
+            { kode: "harikerja", label: "📅 Hari kerja", ket: "Matriks peserta x tanggal: buatkan, lepas, atau pindahkan dari kegiatan lain.", isi: () => <HariKerjaKelola /> },
+          ] as Bagian[]}
+        />
       )}
-      {ringkas && tab === "persiapan" && (
-        <>
-          {ringkas.boleh_kelola && <KesiapanKartu key={`s${kegId ?? 0}`} onBuka={bukaTab} />}
-          <PersiapanGabung key={`${kegId ?? 0}-${navKey}`} />
-        </>
+      {ringkas && tab === "materi" && (
+        <GabungTab
+          key={`${kegId ?? 0}-${navKey}`}
+          label="Bagian Materi & Penilaian"
+          bagian={[
+            {
+              kode: "tes",
+              label: "📝 Tes",
+              ket: "Soal, jadwal, dan saklar tampil Pretest dan Posttest.",
+              isi: () => (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {DAFTAR_JENIS_TES.map((j) => {
+                    const t = ringkas.tes.find((x) => x.jenis === j);
+                    return t ? <KartuSoal key={j} tes={t} bisaKelola={ringkas.boleh_kelola} setelahSimpan={muat} /> : null;
+                  })}
+                </div>
+              ),
+            },
+            { kode: "penilaian", label: "🏅 Penilaian", ket: "Cara menghitung nilai akhir (tidak menayangkan tes).", isi: () => <SkemaNilaiMandiri asal="soal" /> },
+            { kode: "instrumen", label: "Instrumen", ket: "Kuesioner, buku pedoman, dan PPT materi yang diunduh peserta.", isi: () => <InstrumenKelola /> },
+            { kode: "vanguard", label: "Vanguard", ket: "Nyalakan simulasi pengisian kuesioner untuk pelatihan ini dan buka dasbor serta pengaturannya.", isi: () => <VanguardKelola /> },
+            { kode: "kuispra", label: "🧠 Kuis Pra", ket: "Kuis sebelum pelatihan.", isi: () => <KuisPraKelola /> },
+          ] as Bagian[]}
+        />
       )}
-      {ringkas && tab === "tim" && <TimPesertaKelola key={`${kegId ?? 0}-${navKey}`} />}
+      {ringkas && tab === "komunikasi" && (
+        <GabungTab
+          key={`${kegId ?? 0}-${navKey}`}
+          label="Bagian Komunikasi"
+          bagian={[
+            { kode: "tampilan", label: "Undangan & tampilan", ket: "Tampilan peserta, ketentuan undangan, absen, dan aturan nilai (bagian absen dan aturan nilai akan dipindah ke tempatnya pada tahap berikutnya).", isi: () => <PersiapanKelola /> },
+            { kode: "notifikasi", label: "🔔 Notifikasi", ket: "Pengingat push ke HP peserta.", isi: () => <NotifikasiKelola /> },
+            { kode: "pengumuman", label: "📢 Pengumuman", ket: "Modal pengumuman di aplikasi peserta.", isi: () => <PengumumanKelola /> },
+          ] as Bagian[]}
+        />
+      )}
+      {ringkas && tab === "harih" && (
+        <GabungTab
+          key={`${kegId ?? 0}-${navKey}`}
+          label="Bagian Hari H"
+          bagian={[
+            { kode: "monitoring", label: "📊 Monitoring", ket: "Pantau tes, akses, presensi, dan Transport Lokal.", isi: () => <MonitoringBagian /> },
+            { kode: "presensi", label: "📍 Absen & presensi", ket: "Sesi, jendela, radius, dan titik presensi.", isi: () => <PengaturanPresensiKartu /> },
+            { kode: "adusigap", label: "🎮 Adu Sigap", ket: "Kuis live bersama saat pelatihan berlangsung.", isi: () => <KuisLive bisaKelolaAwal={ringkas.boleh_kelola} /> },
+            { kode: "rapat", label: "🎥 Rapat Zoom", ket: "Rapat daring dan presensinya.", isi: () => <RapatKelola kegiatanId={kegId} /> },
+          ] as Bagian[]}
+        />
+      )}
       {ringkas && tab === "kendala" && (
         <>
           <KendalaKelola key={kegId ?? 0} />
           <KoreksiKelola key={`k${kegId ?? 0}`} />
         </>
       )}
-      {ringkas && tab === "harikerja" && <HariKerjaKelola key={kegId ?? 0} />}
-      {ringkas && tab === "kuis" && <KuisRapatKelola key={kegId ?? 0} kegiatanId={kegId} bisaKelola={ringkas.boleh_kelola} />}
-      {ringkas && tab === "notifikasi" && <KomunikasiKelola key={`${kegId ?? 0}-${navKey}`} />}
-      {ringkas && tab === "monitoring" && <MonitoringBagian key={kegId ?? 0} />}
-      {ringkas && tab === "administrasi" && <Administrasi key={kegId ?? 0} />}
+      {ringkas && tab === "hasil" && <Administrasi key={kegId ?? 0} />}
       {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}
-      <ModalFotoPanitia sembunyi={tab === "administrasi"} />
+      <ModalFotoPanitia sembunyi={tab === "hasil"} />
     </Bingkai>
   );
 }
