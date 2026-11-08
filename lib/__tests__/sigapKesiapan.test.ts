@@ -201,6 +201,22 @@ describe("hitungKesiapan", () => {
     expect(cari(dasar({ ...kurang, sekarang: new Date("2026-11-09T05:00:00Z") }), "foto_pelaksanaan").status).toBe("kuning");
     expect(cari(dasar(), "foto_pelaksanaan").status).toBe("ok");
   });
+  it("foto per hari: hari yang belum berjalan tidak ditagih; hari berjalan yang kurang = kuning", () => {
+    const hariPertamaLengkap = Array.from({ length: 4 }, () => ({ kelas: 1, tanggal: "2026-11-09" }));
+    // 9 Nov berjalan, 10 Nov belum: hari pertama lengkap -> ok
+    const jalan = { sekarang: new Date("2026-11-09T05:00:00Z"), foto: [{ kelas: 1, jumlah: 4 }], fotoHari: hariPertamaLengkap };
+    expect(cari(dasar(jalan), "foto_pelaksanaan").status).toBe("ok");
+    // hari pertama baru 3 -> kuning
+    expect(cari(dasar({ ...jalan, fotoHari: hariPertamaLengkap.slice(0, 3) }), "foto_pelaksanaan").status).toBe("kuning");
+    // 10 Nov sudah berjalan, hari kedua kosong -> kuning, rincian per hari
+    const b = cari(dasar({ ...jalan, sekarang: new Date("2026-11-10T05:00:00Z") }), "foto_pelaksanaan");
+    expect(b.status).toBe("kuning");
+    expect(b.rincian[0]).toBe("Kelas 1: hari 1 4/4, hari 2 0/4");
+  });
+  it("foto lama tanpa tanggal dihitung hari pertama", () => {
+    const lama = Array.from({ length: 4 }, () => ({ kelas: 1, tanggal: null }));
+    expect(cari(dasar({ sekarang: new Date("2026-11-09T05:00:00Z"), foto: [{ kelas: 1, jumlah: 4 }], fotoHari: lama }), "foto_pelaksanaan").status).toBe("ok");
+  });
 
   it("tanpa tanggal: tidak mendesak dan tidak error", () => {
     const h = hitungKesiapan(dasar({ mulai: null, selesai: null, hariKerja: [] }));

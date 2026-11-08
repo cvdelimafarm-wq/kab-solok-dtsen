@@ -7,6 +7,7 @@
 // Butir WAJIB menentukan lencana "Siap": belum hijau = kuning, dan menjadi MERAH mulai H-3 (hari mulai pelatihan dikurangi 3 hari) atau bila pelatihan sudah mulai.
 
 import { agendaBelumDiatur } from "@/lib/sigapAgenda";
+import { FOTO_PER_HARI, ringkasPerHari } from "@/lib/sigapFotoHari";
 
 export type StatusButir = "ok" | "kuning" | "merah" | "info";
 
@@ -58,6 +59,8 @@ export type MasukanKesiapan = {
   /** Peran yang tarifnya terpasang (tarif > 0) di kegiatan. */
   tarifPeran: string[];
   foto: { kelas: number; jumlah: number }[];
+  /** (9 Nov 2026) Foto per kelas dengan tanggalnya (null = foto lama, dihitung hari pertama). undefined = kolom tanggal belum ada -> hitung total seperti dulu. */
+  fotoHari?: { kelas: number; tanggal: string | null }[];
   undanganBernomor: number;
   /** (9 Nov 2026) Baris agenda hari H yang sudah ada (jenis tes + kelas). undefined = tidak dimuat (tabel belum ada) -> butir hanya informatif. */
   agenda?: { jenis: string; kelas: number }[];
@@ -65,7 +68,7 @@ export type MasukanKesiapan = {
 };
 
 const BUKAN_PESERTA = new Set(["panitia", "instruktur"]);
-export const FOTO_PER_HARI_PER_KELAS = 4;
+export const FOTO_PER_HARI_PER_KELAS = FOTO_PER_HARI;
 
 
 /** YYYY-MM-DD menurut WIB. */
@@ -320,17 +323,24 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
   // 14. Foto pelaksanaan 4 per hari per kelas
   {
     const kelasDaftar = m.kelas.length ? m.kelas : [1];
-    const target = FOTO_PER_HARI_PER_KELAS * jumlahHari;
-    const rincian = kelasDaftar.map((k) => {
-      const n = m.foto.find((f) => f.kelas === k)?.jumlah ?? 0;
-      return `Kelas ${k}: ${n} dari ${target} foto`;
-    });
-    const kurangKelas = kelasDaftar.filter((k) => (m.foto.find((f) => f.kelas === k)?.jumlah ?? 0) < target);
+    const target = FOTO_PER_HARI * jumlahHari;
     const sudahMulai = hariKe !== null && hariKe <= 0;
+    let rincian: string[];
+    let kurangKelas: number[];
+    if (m.fotoHari) {
+      const fh = m.fotoHari;
+      const ringkas = (k: number) => ringkasPerHari(tanggal, fh.filter((f) => f.kelas === k).map((f) => ({ tanggal: f.tanggal, dibuat_oleh: null })), new Set());
+      rincian = kelasDaftar.map((k) => `Kelas ${k}: ${ringkas(k).map((r, i) => `hari ${i + 1} ${r.jumlah}/${FOTO_PER_HARI}`).join(", ")}`);
+      // hanya hari yang sudah berjalan yang dinilai kurang; hari mendatang belum ditagih
+      kurangKelas = kelasDaftar.filter((k) => ringkas(k).some((r) => r.kurang > 0 && (!sudahMulai ? true : r.tanggal <= hariIni)));
+    } else {
+      rincian = kelasDaftar.map((k) => `Kelas ${k}: ${m.foto.find((f) => f.kelas === k)?.jumlah ?? 0} dari ${target} foto`);
+      kurangKelas = kelasDaftar.filter((k) => (m.foto.find((f) => f.kelas === k)?.jumlah ?? 0) < target);
+    }
     tambah({
       kode: "foto_pelaksanaan", judul: "Foto pelaksanaan (4 per hari per kelas)", wajib: false,
       status: kurangKelas.length ? (sudahMulai ? "kuning" : "info") : "ok",
-      ringkas: kurangKelas.length ? `Target ${target} foto per kelas; ${kurangKelas.length} kelas belum cukup` : "Foto pelaksanaan cukup",
+      ringkas: kurangKelas.length ? `Target ${FOTO_PER_HARI} foto per hari per kelas; ${kurangKelas.length} kelas belum cukup` : "Foto pelaksanaan cukup",
       rincian,
       tab: "hasil",
     });

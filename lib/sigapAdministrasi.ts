@@ -36,6 +36,9 @@ import { LABEL_DASAR_KUIS, ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { nomorAsli, pulsaBanyak } from "@/lib/sigapPulsa";
 import { LABEL_JENIS_TES, UNDANGAN, skorResmi, type SesiBaris } from "@/lib/sigapTes";
 import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
+import { muatInstruktur } from "@/lib/sigapInstrukturDb";
+import { daftarTanggal } from "@/lib/sigapKesiapan";
+import { FOTO_PER_HARI, batasFotoKelas, catatanLampiran, jenisPengunggah, ringkasPerHari, tanggalEfektif, tglSingkat, type Pengunggah, type RingkasHari } from "@/lib/sigapFotoHari";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
 import { nilaiResmiTes } from "@/lib/sigapAturanTes";
 import { FILTER_BUKAN_ADMINISTRASI, SUMBER_ADMINISTRASI, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, muatPengaturanPresensi, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
@@ -375,11 +378,12 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
     if (selisih.length) kenaikan = selisih.reduce((x, y) => x + y, 0) / selisih.length;
   }
   const n = narasi[jenis];
-  const foto = await unduhFotoLaporan(db, kegiatanId, kelas);
+  const { foto, catatan: fotoCatatan } = await unduhFotoLaporan(db, kegiatanId, kelas);
   const nilai = await nilaiLaporan(db, kegiatanId, inti);
   return {
     info,
     foto,
+    fotoCatatan,
     nilai,
     jumlahPeserta: inti.length,
     hadir: inti.filter((p) => pres.has(p.akun_id)).length,
@@ -395,42 +399,90 @@ export async function dataLaporan(db: Db, kegiatanId: number, kelas: number, jen
 // ----------------------------------------------------------------------------------------------
 // Lampiran foto kegiatan (Laporan Pelatihan & Laporan Instruktur)
 // ----------------------------------------------------------------------------------------------
-// (9 Okt 2026) maks. 4 foto terbaik per kelas (4 kelas x 4) -- permintaan user (sebelumnya 8)
-export const MAKS_FOTO_LAPORAN = 4;
-export type BarisFoto = { id: number; urut: number; keterangan: string | null; url: string | null };
+// (9 Nov 2026) 4 foto PER HARI per kelas (sebelumnya 4 per kelas): panitia & instruktur kelas memakai satu kumpulan. Kolom `tanggal` baru;
+// bila SQL belum dipasang, semua fungsi di sini tetap jalan seperti dulu (tanpa tanggal, semua dihitung hari pertama).
+export const MAKS_FOTO_LAPORAN = FOTO_PER_HARI; // per hari
+export { batasFotoKelas };
+export type BarisFoto = { id: number; urut: number; keterangan: string | null; url: string | null; tanggal: string | null; pengunggah: Pengunggah };
 
-/** (9 Okt 2026) Jumlah foto lampiran per kelas (untuk pengingat panitia "unggah 4 foto terbaik per kelas"). */
-export async function hitungFotoLaporan(db: Db, kegiatanId: number, kelas: number[]): Promise<{ kelas: number; jumlah: number }[]> {
-  if (kelas.length === 0) return [];
-  const { data } = await db.from("sigap_pelatihan_laporan_foto").select("kelas").eq("kegiatan_id", kegiatanId).in("kelas", kelas);
-  const n = new Map<number, number>();
-  for (const r of data ?? []) n.set(Number(r.kelas), (n.get(Number(r.kelas)) ?? 0) + 1);
-  return kelas.map((k) => ({ kelas: k, jumlah: n.get(k) ?? 0 }));
+type BarisMentah = { id?: number; kelas?: number; urut?: number; file_path?: string; keterangan?: string | null; tanggal?: string | null; dibuat_oleh?: string | null };
+
+/** Baca baris foto; bila kolom tanggal belum ada, ulangi tanpa kolom itu. */
+async function bacaFoto(db: Db, kegiatanId: number, kelas: number | number[], kolom: string): Promise<BarisMentah[]> {
+  const q = (k: string) => {
+    let r = db.from("sigap_pelatihan_laporan_foto").select(k).eq("kegiatan_id", kegiatanId);
+    r = Array.isArray(kelas) ? r.in("kelas", kelas) : r.eq("kelas", kelas);
+    return r.order("urut").order("id").limit(2000);
+  };
+  const a = await q(`${kolom}, tanggal`);
+  if (!a.error) return (a.data ?? []) as BarisMentah[];
+  const b = await q(kolom);
+  return ((b.data ?? []) as BarisMentah[]).map((x) => ({ ...x, tanggal: null }));
 }
 
-/** Daftar foto lampiran satu kelas + tautan sementara (1 jam) untuk pratinjau. */
-export async function muatFotoLaporan(db: Db, kegiatanId: number, kelas: number): Promise<BarisFoto[]> {
-  const { data } = await db.from("sigap_pelatihan_laporan_foto").select("id, urut, file_path, keterangan").eq("kegiatan_id", kegiatanId).eq("kelas", kelas).order("urut").order("id");
-  const baris = data ?? [];
+/** Hari pelaksanaan pelatihan (mulai..selesai kegiatan). */
+export async function muatHariKegiatan(db: Db, kegiatanId: number): Promise<string[]> {
+  const { data } = await db.from("sigap_kegiatan").select("tanggal_mulai, tanggal_selesai").eq("id", kegiatanId).maybeSingle();
+  const m = (data?.tanggal_mulai as string | null) ?? null;
+  const e = (data?.tanggal_selesai as string | null) ?? null;
+  return daftarTanggal(m ? m.slice(0, 10) : null, e ? e.slice(0, 10) : null);
+}
+
+async function idInstrukturKelas(db: Db, kegiatanId: number, kelas: number): Promise<Set<number>> {
+  return new Set((await muatInstruktur(db, kegiatanId)).filter((i) => i.kelas === kelas).map((i) => i.akun_id));
+}
+
+export type FotoKelas = { kelas: number; jumlah: number; maks: number; hari: RingkasHari[] };
+
+/** Jumlah & ringkasan per hari foto lampiran tiap kelas (untuk pengingat panitia dan panel foto). */
+export async function hitungFotoLaporan(db: Db, kegiatanId: number, kelas: number[]): Promise<FotoKelas[]> {
+  if (kelas.length === 0) return [];
+  const [hari, baris, instr] = await Promise.all([muatHariKegiatan(db, kegiatanId), bacaFoto(db, kegiatanId, kelas, "kelas, dibuat_oleh"), muatInstruktur(db, kegiatanId)]);
+  const hariPakai = hari.length ? hari : [];
+  return kelas.map((k) => {
+    const ids = new Set(instr.filter((i) => i.kelas === k).map((i) => i.akun_id));
+    const milik = baris.filter((b) => Number(b.kelas) === k);
+    return { kelas: k, jumlah: milik.length, maks: batasFotoKelas(hariPakai.length), hari: ringkasPerHari(hariPakai, milik.map((b) => ({ tanggal: b.tanggal ?? null, dibuat_oleh: b.dibuat_oleh ?? null })), ids) };
+  });
+}
+
+/** Daftar foto lampiran satu kelas + tautan sementara (1 jam) untuk pratinjau; urut menurut tanggal lalu urutan unggah. */
+export async function muatFotoLaporan(db: Db, kegiatanId: number, kelas: number): Promise<{ hari: string[]; maks: number; foto: BarisFoto[]; ringkas: RingkasHari[] }> {
+  const [hari, baris, ids] = await Promise.all([muatHariKegiatan(db, kegiatanId), bacaFoto(db, kegiatanId, kelas, "id, urut, file_path, keterangan, dibuat_oleh"), idInstrukturKelas(db, kegiatanId, kelas)]);
   const paths = baris.map((b) => String(b.file_path));
   const url = new Map<string, string>();
   if (paths.length) {
     const { data: s } = await db.storage.from(BUCKET_SIGAP).createSignedUrls(paths, 3600);
     for (const x of s ?? []) if (x.path && x.signedUrl) url.set(x.path, x.signedUrl);
   }
-  return baris.map((b) => ({ id: b.id as number, urut: b.urut as number, keterangan: (b.keterangan as string | null) ?? null, url: url.get(String(b.file_path)) ?? null }));
+  const foto: BarisFoto[] = baris.map((b) => ({
+    id: Number(b.id),
+    urut: Number(b.urut),
+    keterangan: b.keterangan ?? null,
+    url: url.get(String(b.file_path)) ?? null,
+    tanggal: tanggalEfektif(b.tanggal ?? null, hari),
+    pengunggah: jenisPengunggah(b.dibuat_oleh ?? null, ids),
+  }));
+  foto.sort((a, b) => (a.tanggal ?? "").localeCompare(b.tanggal ?? "") || a.urut - b.urut || a.id - b.id);
+  const ringkas = ringkasPerHari(hari, baris.map((b) => ({ tanggal: b.tanggal ?? null, dibuat_oleh: b.dibuat_oleh ?? null })), ids);
+  return { hari, maks: batasFotoKelas(hari.length), foto, ringkas };
 }
 
-/** Foto lampiran siap sisip PDF (berkas diunduh dari storage; yang gagal dilewati). */
-async function unduhFotoLaporan(db: Db, kegiatanId: number, kelas: number): Promise<FotoLampiran[]> {
-  const { data } = await db.from("sigap_pelatihan_laporan_foto").select("file_path, keterangan").eq("kegiatan_id", kegiatanId).eq("kelas", kelas).order("urut").order("id");
+/** Foto lampiran siap sisip PDF (berkas diunduh dari storage; yang gagal dilewati) + catatan bila belum lengkap. */
+async function unduhFotoLaporan(db: Db, kegiatanId: number, kelas: number): Promise<{ foto: FotoLampiran[]; catatan: string | null }> {
+  const [hari, baris, ids] = await Promise.all([muatHariKegiatan(db, kegiatanId), bacaFoto(db, kegiatanId, kelas, "file_path, keterangan, urut, dibuat_oleh"), idInstrukturKelas(db, kegiatanId, kelas)]);
+  const urut = [...baris].sort((a, b) => (tanggalEfektif(a.tanggal ?? null, hari) ?? "").localeCompare(tanggalEfektif(b.tanggal ?? null, hari) ?? "") || Number(a.urut ?? 0) - Number(b.urut ?? 0));
   const hasil: FotoLampiran[] = [];
-  for (const b of data ?? []) {
+  for (const b of urut) {
     const { data: blob } = await db.storage.from(BUCKET_SIGAP).download(String(b.file_path));
     if (!blob) continue;
-    hasil.push({ bytes: new Uint8Array(await blob.arrayBuffer()), contentType: /\.png$/i.test(String(b.file_path)) ? "image/png" : "image/jpeg", keterangan: (b.keterangan as string | null) ?? null });
+    const t = tanggalEfektif(b.tanggal ?? null, hari);
+    const ket = (b.keterangan ?? "").trim();
+    const awalan = hari.length > 1 && t ? `${tglSingkat(t)}${ket ? " · " : ""}` : "";
+    hasil.push({ bytes: new Uint8Array(await blob.arrayBuffer()), contentType: /\.png$/i.test(String(b.file_path)) ? "image/png" : "image/jpeg", keterangan: `${awalan}${ket}` || null });
   }
-  return hasil;
+  const ringkas = ringkasPerHari(hari, baris.map((b) => ({ tanggal: b.tanggal ?? null, dibuat_oleh: b.dibuat_oleh ?? null })), ids);
+  return { foto: hasil, catatan: hari.length ? catatanLampiran(ringkas) : null };
 }
 
 // ----------------------------------------------------------------------------------------------

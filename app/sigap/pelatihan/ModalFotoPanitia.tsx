@@ -8,12 +8,22 @@
 // masih ada kelas (dalam cakupannya) yang fotonya kurang dari 4. Tombol utama membuka Kelola Pelatihan > Administrasi
 // langsung di kelas pertama yang belum lengkap, bagian foto. "Nanti" menyembunyikan sampai browser/aplikasi dibuka lagi.
 // Dipasang di Beranda (/) dan Kelola Pelatihan.
+// (9 Nov 2026) Target kini 4 foto PER HARI per kelas (panitia & instruktur satu kumpulan), hanya untuk hari yang sudah berjalan;
+// teks memakai nama pelatihan dari server (dulu terkunci pada PSP 8 Okt) dan tidak tampil sebelum pelatihan mulai.
 
 import { useEffect, useRef, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { bacaSesi } from "@/app/sigap/admin/api";
 
-type Ringkas = { boleh_kelola: boolean; maks: number; kelas: { kelas: number; jumlah: number }[] };
+type HariFoto = { tanggal: string; jumlah: number; panitia: number; instruktur: number; kurang: number };
+type Ringkas = { boleh_kelola: boolean; maks: number; nama?: string | null; hari?: string[]; hari_ini?: string; kelas: { kelas: number; jumlah: number; hari?: HariFoto[] }[] };
+const BULAN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const tgl = (t: string) => `${Number(t.slice(8, 10))} ${BULAN[Number(t.slice(5, 7)) - 1] ?? ""}`;
+/** Hari yang sudah berjalan dan masih kurang fotonya (server lama tanpa data hari: pakai jumlah total). */
+function hariKurang(d: Ringkas, k: Ringkas["kelas"][number]): HariFoto[] {
+  if (!k.hari || !d.hari_ini) return k.jumlah < d.maks ? [{ tanggal: "", jumlah: k.jumlah, panitia: 0, instruktur: 0, kurang: d.maks - k.jumlah }] : [];
+  return k.hari.filter((h) => h.tanggal <= (d.hari_ini as string) && h.kurang > 0);
+}
 const KUNCI_NANTI = "sigap_ingat_foto_pelatihan_nanti";
 
 export default function ModalFotoPanitia({ sembunyi = false }: { sembunyi?: boolean }) {
@@ -35,7 +45,7 @@ export default function ModalFotoPanitia({ sembunyi = false }: { sembunyi?: bool
       .catch(() => null); // tanpa izin / gagal -> tidak tampil apa-apa
   }, []);
 
-  const kurang = d?.boleh_kelola ? d.kelas.filter((k) => k.jumlah < d.maks) : [];
+  const kurang = d?.boleh_kelola ? d.kelas.filter((k) => hariKurang(d, k).length > 0) : [];
   const tampil = !tutup && !sembunyi && kurang.length > 0;
 
   useEffect(() => {
@@ -58,8 +68,7 @@ export default function ModalFotoPanitia({ sembunyi = false }: { sembunyi?: bool
   useTutupDenganBack(tampil && !!d, nanti); // (31 Okt 2026) Back HP = Nanti
   if (!tampil || !d) return null;
   const tujuan = `/sigap/kelola/pelatihan?tab=administrasi&kelas=${kurang[0].kelas}&fokus=foto`;
-  const totalMaks = d.kelas.length * d.maks;
-  const totalAda = d.kelas.reduce((n, k) => n + Math.min(k.jumlah, d.maks), 0);
+  const totalKurang = d.kelas.reduce((n, k) => n + hariKurang(d, k).reduce((m, h) => m + h.kurang, 0), 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" onClick={nanti}>
@@ -72,28 +81,25 @@ export default function ModalFotoPanitia({ sembunyi = false }: { sembunyi?: bool
         </div>
         <div className="mt-3 space-y-2 text-[14.5px] leading-relaxed text-[#1B2B4B]">
           <p>
-            Mohon unggah foto <b>Pelatihan Petugas PSP Pascabencana (8 Oktober 2026)</b> dan pilih yang terbaik: <b>maksimal {d.maks} foto per kelas</b>
-            {d.kelas.length > 1 ? ` (${d.kelas.length} kelas × ${d.maks} foto)` : ""}.
+            Mohon unggah foto pelaksanaan{d.nama ? <> <b>{d.nama}</b></> : ""}: <b>{d.maks} foto per hari per kelas</b>. Foto dipakai bersama oleh panitia dan instruktur kelas.
           </p>
           <p className="text-[13px] text-[#55657D]">Foto dipakai sebagai lampiran Laporan Pelatihan dan Laporan Instruktur.</p>
         </div>
-        <ul className="mt-3 grid grid-cols-2 gap-2">
-          {d.kelas.map((k) => {
-            const lengkap = k.jumlah >= d.maks;
-            return (
-              <li key={k.kelas}>
-                <a
-                  href={`/sigap/kelola/pelatihan?tab=administrasi&kelas=${k.kelas}&fokus=foto`}
-                  className={`flex items-center justify-between rounded-xl border px-3 py-2 text-[13px] font-bold ${lengkap ? "border-[#BFE3CF] bg-[#EEF8F2] text-[#1E7A4C]" : "border-[#F1D9A6] bg-[#FFF8E8] text-[#8A6200]"}`}
-                >
-                  <span>Kelas {k.kelas}</span>
-                  <span className="tabular-nums">{lengkap ? "✓ " : ""}{Math.min(k.jumlah, d.maks)}/{d.maks}</span>
-                </a>
-              </li>
-            );
-          })}
+        <ul className="mt-3 space-y-2">
+          {kurang.map((k) => (
+            <li key={k.kelas}>
+              <a href={`/sigap/kelola/pelatihan?tab=administrasi&kelas=${k.kelas}&fokus=foto`} className="block rounded-xl border border-[#F1D9A6] bg-[#FFF8E8] px-3 py-2 text-[13px] font-bold text-[#8A6200]">
+                Kelas {k.kelas}
+                {hariKurang(d, k).map((h) => (
+                  <span key={h.tanggal || "total"} className="block text-[12.5px] font-semibold">
+                    {h.tanggal ? `${tgl(h.tanggal)}: ` : ""}{h.jumlah}/{d.maks} foto{h.panitia + h.instruktur > 0 ? ` (${h.panitia} panitia, ${h.instruktur} instruktur)` : ""}
+                  </span>
+                ))}
+              </a>
+            </li>
+          ))}
         </ul>
-        {d.kelas.length > 1 && <p className="mt-2 text-[12px] text-[#6B7A90]">Terunggah {totalAda} dari {totalMaks} foto.</p>}
+        <p className="mt-2 text-[12px] text-[#6B7A90]">Kurang {totalKurang} foto.</p>
         <div className="mt-4 flex flex-col gap-2">
           <a ref={tombol} href={tujuan} className="flex w-full items-center justify-center rounded-xl bg-[#1F5FD1] px-4 py-3 text-center text-[14.5px] font-extrabold text-white shadow-sm hover:bg-[#1A4FB8]">
             Unggah foto Kelas {kurang[0].kelas} →

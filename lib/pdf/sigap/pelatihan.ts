@@ -261,10 +261,18 @@ class Kanvas {
    * Lampiran foto kegiatan: halaman baru, grid 2 kolom x 3 baris per halaman (foto "muat di kotak", tidak dipotong),
    * tiap foto diberi nomor + keterangan. Foto yang tidak bisa dibaca dilewati.
    */
-  async lampiranFoto(foto: FotoLampiran[]) {
-    if (foto.length === 0) return;
+  async lampiranFoto(foto: FotoLampiran[], catatan: string | null = null) {
+    if (foto.length === 0 && !catatan) return;
     this.baru();
     this.seksi("LAMPIRAN FOTO KEGIATAN");
+    if (catatan) {
+      // (9 Nov 2026) tanda "belum lengkap": laporan tetap boleh dicetak
+      for (const baris of bungkus(this.font, catatan, 9, CONTENT_W)) {
+        this.teks(baris, CONTENT_L, this.y, 9, { color: TEXT_SEC });
+        this.y += 12;
+      }
+      this.y += 6;
+    }
     const gap = 12;
     const w = (CONTENT_W - gap) / 2;
     const hFoto = 170;
@@ -406,6 +414,8 @@ export type DataLaporan = {
   info: InfoKelas;
   /** Lampiran foto kegiatan (opsional; tanpa foto = tidak ada halaman lampiran). */
   foto?: FotoLampiran[];
+  /** (9 Nov 2026) Catatan "foto belum lengkap" (4 per hari per kelas); tercetak di halaman lampiran. */
+  fotoCatatan?: string | null;
   jumlahPeserta: number;
   hadir: number;
   /** Nilai akhir per peserta (opsional; tanpa data = bagian tidak dicetak). */
@@ -481,7 +491,7 @@ export async function buatPdfLaporanPelatihan(d: DataLaporan): Promise<Uint8Arra
   k.seksi("KENDALA DAN TINDAK LANJUT");
   k.narasi(d.kendala, 4);
   k.tandaTangan([{ judul: "Panitia Pelatihan", nama: "" }, { judul: `Instruktur ${titelKelas(d.info)}`, nama: d.info.instruktur.join(", ") }], d.tanggalCetak);
-  await k.lampiranFoto(d.foto ?? []);
+  await k.lampiranFoto(d.foto ?? [], d.fotoCatatan ?? null);
   return k.simpan();
 }
 
@@ -502,6 +512,6 @@ export async function buatPdfLaporanInstruktur(d: DataLaporan): Promise<Uint8Arr
   k.seksi("KENDALA DAN SARAN");
   k.narasi(d.kendala, 4);
   k.tandaTangan([{ judul: "Mengetahui,\nPanitia Pelatihan", nama: "" }, { judul: `Instruktur ${titelKelas(d.info)}`, nama: d.info.instruktur.join(", ") }], d.tanggalCetak);
-  await k.lampiranFoto(d.foto ?? []);
+  await k.lampiranFoto(d.foto ?? [], d.fotoCatatan ?? null);
   return k.simpan();
 }

@@ -571,19 +571,36 @@ function PanelNarasi({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean
 // ======================================================================
 // Lampiran foto kegiatan (dipakai Laporan Pelatihan & Laporan Instruktur kelas ini)
 // ======================================================================
-type FotoLap = { id: number; urut: number; keterangan: string | null; url: string | null };
-const MAKS_FOTO = 4; // (9 Okt 2026) 4 foto terbaik per kelas -- permintaan user (sebelumnya 8)
+// (9 Nov 2026) 4 foto PER HARI per kelas (sebelumnya 4 per kelas); panitia dan instruktur satu kumpulan, tiap foto bertanggal & berlabel pengunggah.
+type FotoLap = { id: number; urut: number; keterangan: string | null; url: string | null; tanggal?: string | null; pengunggah?: "panitia" | "instruktur" | "lain" };
+type HariRingkas = { tanggal: string; jumlah: number; panitia: number; instruktur: number; lain: number; kurang: number };
+type DataFoto = { foto: FotoLap[]; hari?: string[]; maks?: number; ringkas?: HariRingkas[] };
+const FOTO_PER_HARI = 4;
+const BLN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const tglPendekFoto = (t: string) => `${Number(t.slice(8, 10))} ${BLN[Number(t.slice(5, 7)) - 1] ?? ""}`;
 
 function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }) {
   const [foto, setFoto] = useState<FotoLap[] | null>(null);
+  const [hari, setHari] = useState<string[]>([]);
+  const [ringkas, setRingkas] = useState<HariRingkas[]>([]);
+  const [maks, setMaks] = useState(FOTO_PER_HARI);
+  const [tanggal, setTanggal] = useState("");
   const [ket, setKet] = useState("");
   const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
   const [progres, setProgres] = useState<string | null>(null);
 
   const muat = useCallback(async () => {
     try {
-      const d = await fetchJson<{ foto: FotoLap[] }>(`${URL_ADM}?bagian=foto&kelas=${kelas}`);
+      const d = await fetchJson<DataFoto>(`${URL_ADM}?bagian=foto&kelas=${kelas}`);
       setFoto(d.foto);
+      setHari(d.hari ?? []);
+      setRingkas(d.ringkas ?? []);
+      setMaks(d.maks ?? FOTO_PER_HARI);
+      setTanggal((t) => {
+        if (t && (d.hari ?? []).includes(t)) return t;
+        const hariIni = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+        return (d.hari ?? []).includes(hariIni) ? hariIni : (d.hari ?? [])[0] ?? "";
+      });
     } catch (e) {
       if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
     }
@@ -598,13 +615,15 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
     const s = bacaSesi();
     if (!s) return;
     setPesan(null);
-    const sisa = MAKS_FOTO - (foto?.length ?? 0);
+    const sisaHari = tanggal ? FOTO_PER_HARI - (ringkas.find((r) => r.tanggal === tanggal)?.jumlah ?? 0) : Infinity;
+    const sisa = Math.min(maks - (foto?.length ?? 0), sisaHari);
     const daftar = Array.from(files).slice(0, Math.max(0, sisa));
     let sukses = 0;
     for (let i = 0; i < daftar.length; i++) {
       setProgres(`Mengunggah ${i + 1} dari ${daftar.length}…`);
       const fd = new FormData();
       fd.append("kelas", String(kelas));
+      if (tanggal) fd.append("tanggal", tanggal);
       fd.append("keterangan", ket);
       fd.append("file", daftar[i]);
       try {
@@ -620,7 +639,7 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
     setProgres(null);
     if (sukses > 0) {
       setKet("");
-      if (files.length > daftar.length) setPesan({ jenis: "galat", teks: `Maksimal ${MAKS_FOTO} foto per kelas; ${files.length - daftar.length} foto tidak diunggah.` });
+      if (files.length > daftar.length) setPesan({ jenis: "galat", teks: `Maksimal ${FOTO_PER_HARI} foto per hari per kelas (panitia dan instruktur satu kumpulan); ${files.length - daftar.length} foto tidak diunggah.` });
       else setPesan({ jenis: "ok", teks: `${sukses} foto ditambahkan.` });
     }
     muat();
@@ -646,7 +665,7 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
     }
   }
 
-  const penuh = (foto?.length ?? 0) >= MAKS_FOTO;
+  const penuh = (foto?.length ?? 0) >= maks || (!!tanggal && (ringkas.find((r) => r.tanggal === tanggal)?.jumlah ?? 0) >= FOTO_PER_HARI);
 
   // (9 Okt 2026) dibuka dari pengingat (?fokus=foto) -> gulir ke panel foto
   const sudahGulir = useRef(false);
@@ -665,10 +684,27 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
     <div id="panel-foto-pelatihan" className="mt-4 scroll-mt-20 border-t border-[#EDF0F4] pt-3">
       <div className="flex flex-wrap items-center gap-2">
         <b className="text-[13px]">Lampiran foto kegiatan Kelas {kelas}</b>
-        <span className="text-[12px] text-[#7B8794]">{foto ? `${foto.length}/${MAKS_FOTO} foto` : "memuat…"} · pilih {MAKS_FOTO} foto terbaik · tercetak di halaman lampiran kedua laporan</span>
+        <span className="text-[12px] text-[#7B8794]">{foto ? `${foto.length} foto` : "memuat…"} · target {FOTO_PER_HARI} foto per hari per kelas · tercetak di halaman lampiran kedua laporan</span>
       </div>
+      {ringkas.length > 0 && (
+        <ul className="mt-1.5 flex flex-wrap gap-1.5">
+          {ringkas.map((r, i) => (
+            <li key={r.tanggal} className={`rounded-lg border px-2 py-1 text-[12px] font-semibold ${r.kurang === 0 ? "border-[#BFE3CF] bg-[#EEF8F2] text-[#1E7A4C]" : "border-[#F1D9A6] bg-[#FFF8E8] text-[#8A6200]"}`}>
+              Hari {i + 1} ({tglPendekFoto(r.tanggal)}): {r.jumlah}/{FOTO_PER_HARI}
+              {r.panitia + r.instruktur + r.lain > 0 && <span className="font-normal"> · {[r.panitia ? `${r.panitia} panitia` : "", r.instruktur ? `${r.instruktur} instruktur` : "", r.lain ? `${r.lain} lain` : ""].filter(Boolean).join(", ")}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {bisaKelola && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          {hari.length > 0 && (
+            <select className={`${INPUT} w-auto`} value={tanggal} onChange={(e) => setTanggal(e.target.value)} aria-label="Tanggal foto">
+              {hari.map((t, i) => (
+                <option key={t} value={t}>Hari {i + 1} · {tglPendekFoto(t)}</option>
+              ))}
+            </select>
+          )}
           <input className={`${INPUT} min-w-[200px] flex-1`} placeholder="Keterangan foto (opsional, berlaku untuk foto yang diunggah sekarang)" value={ket} maxLength={160} onChange={(e) => setKet(e.target.value)} />
           <label className={`${BTN} ${penuh || progres ? "pointer-events-none opacity-50" : "cursor-pointer"}`}>
             ⬆ Pilih foto…
@@ -694,6 +730,12 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
                 <div className="grid h-28 place-items-center bg-[#F8FAFC] text-[12px] text-[#7B8794]">tidak tampil</div>
               )}
               <div className="space-y-1 p-2">
+                {(f.tanggal || f.pengunggah) && (
+                  <p className="text-[11px] font-semibold text-[#55657D]">
+                    {f.tanggal ? tglPendekFoto(f.tanggal) : ""}
+                    {f.pengunggah && f.pengunggah !== "lain" ? ` · ${f.pengunggah === "instruktur" ? "instruktur" : "panitia"}` : ""}
+                  </p>
+                )}
                 <input
                   className={`${INPUT} w-full !py-1 !text-[12px]`}
                   defaultValue={f.keterangan ?? ""}

@@ -75,7 +75,7 @@ export async function muatKesiapan(
     db.from("sigap_pelatihan_berkas").select("id", { count: "exact", head: true }).eq("kegiatan_id", kegiatanId).eq("aktif", true),
     db.from("sigap_pengumuman").select("id", { count: "exact", head: true }).eq("kegiatan_id", kegiatanId).eq("aktif", true),
     db.from("sigap_kegiatan_tarif").select("peran, tarif").eq("kegiatan_id", kegiatanId).limit(100),
-    db.from("sigap_pelatihan_laporan_foto").select("kelas").eq("kegiatan_id", kegiatanId).limit(1000),
+    db.from("sigap_pelatihan_laporan_foto").select("kelas, tanggal").eq("kegiatan_id", kegiatanId).limit(1000),
     db.from("arsip_nomor").select("id", { count: "exact", head: true }).eq("jenis", "undangan").eq("kegiatan_id", kegiatanId).eq("status", "terpakai"),
   ]);
 
@@ -94,8 +94,17 @@ export async function muatKesiapan(
     const pasang: [string, string][] = [["pakai_pretest", "bobot_pretest"], ["pakai_posttest", "bobot_posttest"], ["pakai_kuis", "bobot_kuis"], ["pakai_disiplin", "bobot_disiplin"], ["pakai_sikap", "bobot_sikap"]];
     totalBobot = pasang.reduce((t, [p, b]) => t + (skema[p] === true ? Number(skema[b] ?? 0) : 0), 0);
   }
+  // (9 Nov 2026) kolom tanggal belum dipasang -> baca ulang tanpa tanggal; fotoHari undefined = hitung total seperti dulu
+  let fotoBaris = (foto.data ?? []) as Baris[];
+  let fotoHari: { kelas: number; tanggal: string | null }[] | undefined;
+  if (foto.error) {
+    const { data: lama } = await db.from("sigap_pelatihan_laporan_foto").select("kelas").eq("kegiatan_id", kegiatanId).limit(1000);
+    fotoBaris = (lama ?? []) as Baris[];
+  } else {
+    fotoHari = fotoBaris.map((f) => ({ kelas: ang(f.kelas), tanggal: typeof f.tanggal === "string" ? f.tanggal.slice(0, 10) : null }));
+  }
   const fotoPer = new Map<number, number>();
-  for (const f of (foto.data ?? []) as Baris[]) fotoPer.set(ang(f.kelas), (fotoPer.get(ang(f.kelas)) ?? 0) + 1);
+  for (const f of fotoBaris) fotoPer.set(ang(f.kelas), (fotoPer.get(ang(f.kelas)) ?? 0) + 1);
 
   const masukan: MasukanKesiapan = {
     mulai,
@@ -115,6 +124,7 @@ export async function muatKesiapan(
     pengumuman: umum.count ?? 0,
     tarifPeran: ((tarif.data ?? []) as Baris[]).filter((t) => Number(t.tarif) > 0).map((t) => String(t.peran)),
     foto: Array.from(fotoPer.entries()).map(([k, jumlah]) => ({ kelas: k, jumlah })),
+    fotoHari,
     undanganBernomor: undangan.count ?? 0,
     agenda,
     sekarang,

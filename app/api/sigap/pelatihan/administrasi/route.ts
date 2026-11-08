@@ -10,7 +10,7 @@
 // GET ?bagian=kandidat&kelas=N&q=teks          -> pencarian Mitra+organik (belum jadi peserta) utk ditambahkan manual
 // GET ?bagian=narasi&kelas=N                   -> narasi Laporan Pelatihan & Laporan Instruktur tersimpan
 // GET ?bagian=pulsa_csv&kelas=N                  -> CSV nomor HP pengisian pulsa peserta kelas (diisi peserta lewat pop-up)
-// GET ?bagian=foto_ringkas                    -> (9 Okt 2026) jumlah foto lampiran per kelas cakupan + batas
+// GET ?bagian=foto_ringkas                    -> (9 Okt 2026) jumlah foto lampiran per kelas cakupan; (9 Nov 2026) + ringkasan per hari (4 per hari per kelas)
 // GET ?bagian=foto&kelas=N                     -> foto lampiran laporan (tautan sementara); unggah/hapus: ./foto/route.ts
 // GET ?bagian=cetak&kelas=N&penugasan=1,2&jenis=kwitansi,visum,daftar_hadir&format=gabungan|zip[&unduh=1]
 // POST {aksi:"tambah_peserta", kelas, akun_id, peran?}   -> peserta manual / panitia / instruktur (hanya administrasi; peran ppl|pml|korwil|panitia|instruktur)
@@ -23,7 +23,8 @@ import { GalatSpj, headerBerkas } from "@/lib/sigapDokumen";
 import { undanganUntuk } from "@/lib/sigapTesDb";
 import { muatSkema } from "@/lib/sigapNilai";
 import { ringkasSkema } from "@/lib/sigapNilaiHitung";
-import { SUMBER_ADMINISTRASI, buatCetak, kelompokDari, tambahPesertaAdministrasi, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi, MAKS_FOTO_LAPORAN, hitungFotoLaporan } from "@/lib/sigapAdministrasi";
+import { hariIniWib } from "@/lib/sigap";
+import { SUMBER_ADMINISTRASI, buatCetak, kelompokDari, tambahPesertaAdministrasi, csvPulsaKelas, galatJson, kelasBoleh, muatFotoLaporan, muatNarasi, muatPeserta, parseJenisCetak, siapkanAdministrasi, MAKS_FOTO_LAPORAN, hitungFotoLaporan, muatHariKegiatan } from "@/lib/sigapAdministrasi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +44,8 @@ export async function GET(req: NextRequest) {
     }
     // (9 Okt 2026) pengingat panitia: jumlah foto lampiran per kelas yang boleh diakses akun
     if (bagian === "foto_ringkas") {
-      return NextResponse.json({ boleh_kelola: k.bisaKelola, maks: MAKS_FOTO_LAPORAN, kelas: await hitungFotoLaporan(k.db, k.kegiatanId, k.cakupan.kelas) });
+      const [kelasFoto, hari, keg] = await Promise.all([hitungFotoLaporan(k.db, k.kegiatanId, k.cakupan.kelas), muatHariKegiatan(k.db, k.kegiatanId), k.db.from("sigap_kegiatan").select("nama").eq("id", k.kegiatanId).maybeSingle()]);
+      return NextResponse.json({ boleh_kelola: k.bisaKelola, maks: MAKS_FOTO_LAPORAN, per_hari: MAKS_FOTO_LAPORAN, hari, hari_ini: hariIniWib(), nama: (keg.data?.nama as string | null) ?? null, kegiatan_id: k.kegiatanId, kelas: kelasFoto });
     }
 
     const kelas = kelasBoleh(k, sp.get("kelas"));
@@ -85,7 +87,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    if (bagian === "foto") return NextResponse.json({ kelas, foto: await muatFotoLaporan(k.db, k.kegiatanId, kelas) });
+    if (bagian === "foto") return NextResponse.json({ kelas, ...(await muatFotoLaporan(k.db, k.kegiatanId, kelas)) });
 
     if (bagian === "narasi") return NextResponse.json({ kelas, ...(await muatNarasi(k.db, k.kegiatanId, kelas)) });
 
