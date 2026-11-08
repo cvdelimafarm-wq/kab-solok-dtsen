@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { alamatVanguard } from "@/lib/vanguard/navigasi";
 import { teksRuntutan, type RuntutanKartu } from "@/lib/vanguardPelatihan";
@@ -22,6 +23,8 @@ const simpan = (kegiatanId: number, c: CatatanModalVg): void => {
   try { window.localStorage.setItem(kunciSimpan(kegiatanId), JSON.stringify(c)); } catch { /* tanpa penyimpanan: tampil sekali per pemuatan */ }
 };
 
+// (8 Nov 2026) Dirender lewat portal ke <body>: di tab Hari ini pembungkus halaman membentuk lapisan tumpuk sendiri (relative z-10), sehingga "fixed z-[80]"
+// tetap kalah dari bar bawah (z-30) dan tombolnya tertutup (laporan Iqbal, HP). Portal membuat modal benar-benar di atas semuanya.
 export default function ModalVanguardWajib({ kegiatanId, runtutan }: { kegiatanId: number; runtutan: RuntutanKartu }) {
   const [putusan, setPutusan] = useState<KeputusanModal | null>(null);
 
@@ -45,8 +48,8 @@ export default function ModalVanguardWajib({ kegiatanId, runtutan }: { kegiatanI
   const N = runtutan.hari_berturut;
   const hrefSertif = `${urlSertifikasiVg(kegiatanId)}&dari=${encodeURIComponent(typeof window === "undefined" ? "/" : `${window.location.pathname}${window.location.search}`)}`;
 
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="vg-modal-judul" onClick={tutup}>
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center" role="dialog" aria-modal="true" aria-labelledby="vg-modal-judul" onClick={tutup}>
       <div className="w-full max-w-[420px] rounded-[20px] bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <b id="vg-modal-judul" className="block text-[17px] font-extrabold leading-snug text-[#2A1763]">
           {ucapan ? "Selamat, Menu wajib Vanguard selesai" : sertifikasi ? "Tinggal Sertifikasi wajib" : runtutan.terputus ? "Runtutan Vanguard terputus" : "Vanguard hari ini"}
@@ -69,6 +72,7 @@ export default function ModalVanguardWajib({ kegiatanId, runtutan }: { kegiatanI
           {!ucapan && <Link href={sertifikasi ? hrefSertif : href} className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] bg-[#FFC000] text-[14px] font-extrabold text-[#111]">{sertifikasi ? "Ke Sertifikasi wajib" : "Buka Menu wajib"}</Link>}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

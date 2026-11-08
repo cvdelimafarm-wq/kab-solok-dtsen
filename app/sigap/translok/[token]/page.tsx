@@ -1054,6 +1054,8 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
   // (21 Okt 2026) Mode edit: sudah punya hari kerja -> kalender dikunci (hanya baca) sampai petugas menekan "Edit hari kerja"; belum punya -> langsung terbuka.
   const [edit, setEdit] = useState(pen.hari_kerja.length === 0);
   const [buka, setBuka] = useState<string | null>(null); // (8 Nov 2026) tanggal merah yang dibuka untuk "lengkapi kekurangan"
+  useTutupDenganBack(buka !== null, () => setBuka(null)); // Back HP menutup lembar "Lengkapi kekurangan"
+  const tahan = useRef<{ timer: ReturnType<typeof setTimeout> | null; terpicu: boolean }>({ timer: null, terpicu: false });
   useEffect(() => setPilih(new Set(pen.hari_kerja)), [pen.hari_kerja]);
 
   if (!pen.periode.mulai || !pen.periode.selesai)
@@ -1108,6 +1110,14 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
   const bisaDipulihkan = (t: string) => t < hariIni && !pilih.has(t) && dapatPulih.has(t);
   const bisaDibuka = (t: string) => !!data && !terkunci && t < hariIni && pilih.has(t) && !lengkapSet.has(t);
   const hariBuka = buka ? pen.hari.find((h) => h.tanggal === buka) ?? null : null;
+  // (8 Nov 2026) Tekan-tahan (0,5 dtk) pada tanggal merah membuka panel "Lengkapi kekurangan" kapan pun (juga saat mode edit, tanpa melepas tanggalnya).
+  const mulaiTahan = (t: string) => {
+    if (!bisaDibuka(t)) return;
+    tahan.current.terpicu = false;
+    if (tahan.current.timer) clearTimeout(tahan.current.timer);
+    tahan.current.timer = setTimeout(() => { tahan.current.terpicu = true; setBuka(t); }, 500);
+  };
+  const akhiriTahan = () => { if (tahan.current.timer) clearTimeout(tahan.current.timer); tahan.current.timer = null; };
 
   function batalEdit() {
     setPilih(new Set(pen.hari_kerja));
@@ -1116,6 +1126,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
   }
 
   function ketuk(t: string) {
+    if (tahan.current.terpicu) { tahan.current.terpicu = false; return; } // klik susulan dari tekan-tahan: panel sudah dibuka, jangan melepas tanggal
     if (terkunci || lain.has(t)) return;
     if (!edit) {
       if (bisaDibuka(t)) setBuka((b) => (b === t ? null : t));
@@ -1176,7 +1187,7 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
       )}
       {bukaEdit && pen.hari_kerja.length > 0 && (
         <p className="mt-2.5 rounded-xl bg-[#FFF6DD] px-3 py-2 text-[11.5px] leading-snug text-[#6B4A00]">
-          Mode edit. Ketuk tanggal untuk memilih atau melepas. Hari terlewat yang belum lengkap (bingkai merah) boleh dilepas agar kuota kembali; isian sebagian tetap tersimpan tetapi tidak dibayar. Bila tidak sengaja melepas, tanggal berbingkai kuning dapat dikembalikan dengan mengetuknya lagi (kembali merah). Hari yang sudah lengkap tetap terkunci.
+          Mode edit. Ketuk tanggal untuk memilih atau melepas. Hari terlewat yang belum lengkap (bingkai merah) boleh dilepas agar kuota kembali; isian sebagian tetap tersimpan tetapi tidak dibayar. Untuk melengkapi kekurangan tanpa melepas, tahan (tekan lama) tanggal merah. Bila tidak sengaja melepas, tanggal berbingkai kuning dapat dikembalikan dengan mengetuknya lagi (kembali merah). Hari yang sudah lengkap tetap terkunci.
         </p>
       )}
 
@@ -1217,9 +1228,14 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
                     key={t}
                     type="button"
                     disabled={terkunci || dipakaiLain || (edit ? lewat && !lepasLewat && !pulih : !bisaLengkapi)}
+                    onPointerDown={() => mulaiTahan(t)}
+                    onPointerUp={akhiriTahan}
+                    onPointerLeave={akhiriTahan}
+                    onPointerCancel={akhiriTahan}
+                    onContextMenu={(e) => { if (bisaDibuka(t)) e.preventDefault(); }}
                     onClick={() => ketuk(t)}
-                    className={`rounded-lg py-2 text-[13px] font-bold transition ${cls} ${t === hariIni ? "ring-2 ring-[#F5B841] ring-offset-1" : ""} ${lepasLewat ? "ring-2 ring-red-500" : ""} ${pulih ? "ring-2 ring-amber-500" : ""} ${buka === t ? "outline outline-2 outline-offset-1 outline-[#0F3D7A]" : ""}`}
-                    title={dipakaiLain ? "Dipakai kegiatan lain" : pulih ? "Dilepas tidak sengaja? Ketuk untuk mengembalikan (kembali merah)" : lepasLewat ? "Hari terlewat (belum lengkap): ketuk untuk melepas" : bisaLengkapi ? "Ketuk untuk melengkapi kekurangan" : undefined}
+                    className={`select-none rounded-lg py-2 text-[13px] font-bold transition [-webkit-touch-callout:none] ${cls} ${t === hariIni ? "ring-2 ring-[#F5B841] ring-offset-1" : ""} ${lepasLewat ? "ring-2 ring-red-500" : ""} ${pulih ? "ring-2 ring-amber-500" : ""} ${buka === t ? "outline outline-2 outline-offset-1 outline-[#0F3D7A]" : ""}`}
+                    title={dipakaiLain ? "Dipakai kegiatan lain" : pulih ? "Dilepas tidak sengaja? Ketuk untuk mengembalikan (kembali merah)" : lepasLewat ? "Hari terlewat (belum lengkap): ketuk untuk melepas, tahan untuk melengkapi kekurangan" : bisaLengkapi ? "Ketuk untuk melengkapi kekurangan" : undefined}
                   >
                     {tglObj(t).getUTCDate()}
                   </button>
@@ -1235,16 +1251,21 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
         <span className="font-bold text-red-700">■</span> terlewat (tidak dibayar) · bingkai emas = hari ini · coret = kegiatan lain.
         {bukaEdit && dapatPulih.size > 0 && <> Bingkai kuning = dilepas sendiri, dapat dikembalikan.</>}
       </p>
-      {!edit && nTerlewat > 0 && data && <p className="mt-1.5 rounded-xl bg-red-50 px-3 py-2 text-[11.5px] leading-snug text-red-900">Ketuk tanggal merah untuk melengkapi kekurangannya: laporan diketik manual, foto diunggah manual (hanya mengisi yang masih kosong).</p>}
-      {!edit && data && hariBuka && (
-        <div className="mt-3 space-y-3 rounded-2xl border-2 border-[#C9D6EA] bg-[#F6F8FB] p-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[13px] font-extrabold text-[#0F3D7A]">Lengkapi kekurangan</p>
-            <button type="button" onClick={() => setBuka(null)} className="min-h-[36px] rounded-lg border border-[#C9D6EA] bg-white px-3 text-[12px] font-bold text-[#55657D]">Tutup</button>
-          </div>
-          <KartuHari token={token} data={data} pen={pen} hari={hariBuka} onBerubah={onTersimpan} />
-        </div>
-      )}
+      {nTerlewat > 0 && data && <p className="mt-1.5 rounded-xl bg-red-50 px-3 py-2 text-[11.5px] leading-snug text-red-900">{edit ? "Tahan (tekan lama) tanggal merah" : "Ketuk tanggal merah"} untuk melengkapi kekurangannya: laporan diisi manual, foto diunggah manual (hanya mengisi yang masih kosong).</p>}
+      {data && hariBuka &&
+        createPortal(
+          // (8 Nov 2026) lembar bawah lewat portal ke <body> (bar bawah halaman tidak menutupinya); menutup dengan Tutup, ketuk latar, atau Back HP
+          <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 sm:items-center" role="dialog" aria-modal="true" aria-label="Lengkapi kekurangan" onClick={() => setBuka(null)}>
+            <div className="max-h-[92vh] w-full max-w-lg space-y-3 overflow-y-auto rounded-t-[20px] bg-[#F6F8FB] p-3 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl sm:rounded-[20px]" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[15px] font-extrabold text-[#0F3D7A]">Lengkapi kekurangan</p>
+                <button type="button" onClick={() => setBuka(null)} className="min-h-[40px] rounded-lg border border-[#C9D6EA] bg-white px-4 text-[13px] font-bold text-[#55657D]">Tutup</button>
+              </div>
+              <KartuHari token={token} data={data} pen={pen} hari={hariBuka} onBerubah={onTersimpan} />
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {kelompokPilihan.length > 0 && (
         <div className="mt-3 rounded-xl bg-[#F6F8FB] p-3">

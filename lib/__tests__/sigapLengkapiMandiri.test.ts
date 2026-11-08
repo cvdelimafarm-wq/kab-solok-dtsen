@@ -46,8 +46,9 @@ describe("tanggalDapatDipulihkan", () => {
       r(5, "2026-11-05", "tambah", olehMengembalikan("Oryza")), // sudah dikembalikan
       r(6, "2026-11-06", "hapus", olehMelepas("Oryza")), // sekarang hari kerja lagi
       r(7, "2026-11-09", "hapus", olehMelepas("Oryza")), // belum lewat
+      r(8, "2026-11-01", "hapus", "petugas:Oryza"), // pencatatan versi lama (tanpa keterangan)
     ];
-    expect(tanggalDapatDipulihkan(riwayat, "Oryza", hariIni, new Set(["2026-11-06"]))).toEqual(["2026-11-02"]);
+    expect(tanggalDapatDipulihkan(riwayat, "Oryza", hariIni, new Set(["2026-11-06"]))).toEqual(["2026-11-01", "2026-11-02"]);
   });
   it("urutan ditentukan id, bukan urutan larik", () => {
     const riwayat = [r(9, "2026-11-02", "tambah", olehMengembalikan("Oryza")), r(3, "2026-11-02", "hapus", olehMelepas("Oryza"))];

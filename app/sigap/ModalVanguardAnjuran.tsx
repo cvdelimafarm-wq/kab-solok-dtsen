@@ -7,12 +7,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { alamatVanguard } from "@/lib/vanguard/navigasi";
 import { bacaCatatanAnjuran, hariWib, putuskanAnjuran } from "@/lib/vanguardAnjuran";
 
 const kunciSimpan = (kegiatanId: number): string => `sigap-vg-anjuran-${kegiatanId}`;
 
+// (8 Nov 2026) Dirender lewat portal ke <body>: di tab Hari ini pembungkus halaman membentuk lapisan tumpuk sendiri (relative z-10), sehingga "fixed z-[80]"
+// tetap kalah dari bar bawah (z-30) dan tombolnya tertutup (laporan Iqbal, HP). Portal membuat modal benar-benar di atas semuanya.
 export default function ModalVanguardAnjuran({ kegiatanId, benar }: { kegiatanId: number; benar: number }) {
   const [tampil, setTampil] = useState(false);
 
@@ -30,8 +33,8 @@ export default function ModalVanguardAnjuran({ kegiatanId, benar }: { kegiatanId
   if (!tampil) return null;
 
   const href = alamatVanguard({ kegiatan: kegiatanId, dari: `${window.location.pathname}${window.location.search}` });
-  return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 p-3 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="vg-anjuran-judul" onClick={tutup}>
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center" role="dialog" aria-modal="true" aria-labelledby="vg-anjuran-judul" onClick={tutup}>
       <div className="w-full max-w-[420px] rounded-[20px] bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <b id="vg-anjuran-judul" className="block text-[17px] font-extrabold leading-snug text-[#2A1763]">Coba Vanguard dulu</b>
         <p className="mt-1.5 text-[14px] leading-snug text-[#333]">
@@ -42,6 +45,7 @@ export default function ModalVanguardAnjuran({ kegiatanId, benar }: { kegiatanId
           <Link href={href} className="inline-flex min-h-[44px] flex-1 items-center justify-center rounded-[12px] bg-[#FFC000] text-[14px] font-extrabold text-[#111]">Mulai latihan</Link>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

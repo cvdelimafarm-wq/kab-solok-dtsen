@@ -46,7 +46,7 @@ export const PESAN_FOTO_TERLALU_KURANG = `Foto yang kurang lebih dari ${MAKS_FOT
 export type BarisRiwayat = { tanggal: string; aksi: string; oleh: string | null; id: number };
 
 /**
- * Tanggal yang boleh DIKEMBALIKAN petugas: riwayat terakhir tanggal itu adalah "hapus" oleh petugas yang sama (melepas hari terlewat),
+ * Tanggal yang boleh DIKEMBALIKAN petugas: riwayat terakhir tanggal itu adalah "hapus" oleh petugas yang sama (melepas hari terlewat, atau pencatatan lama "petugas:<nama>"),
  * tanggalnya sudah lewat, dan sekarang bukan hari kerja. Riwayat boleh tidak berurutan; urutan ditentukan `id` terbesar.
  */
 export function tanggalDapatDipulihkan(riwayat: BarisRiwayat[], nama: string, hariIni: string, sekarangHariKerja: Set<string>): string[] {
@@ -57,7 +57,9 @@ export function tanggalDapatDipulihkan(riwayat: BarisRiwayat[], nama: string, ha
   }
   const hasil: string[] = [];
   for (const [t, r] of terakhir) {
-    if (t < hariIni && !sekarangHariKerja.has(t) && r.aksi === "hapus" && r.oleh === olehMelepas(nama)) hasil.push(t);
+    // Versi lama mencatat pelepasan tanpa keterangan "(melepas hari terlewat)" (hanya "petugas:<nama>"); keduanya adalah pelepasan oleh petugas itu sendiri.
+    const olehSendiri = r.oleh === olehMelepas(nama) || r.oleh === `petugas:${nama}`;
+    if (t < hariIni && !sekarangHariKerja.has(t) && r.aksi === "hapus" && olehSendiri) hasil.push(t);
   }
   return hasil.sort();
 }

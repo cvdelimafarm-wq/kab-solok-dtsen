@@ -7,6 +7,7 @@
 // Back HP menutup lembar ini (useTutupDenganBack).
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { JENDELA_SUSULAN_JAM, MAKS_ALASAN_SUSULAN, MIN_ALASAN_SUSULAN, tanggalIndo } from "@/lib/translokSusulan";
 
@@ -77,7 +78,8 @@ export default function LembarSusulan({
     }
   }
 
-  return (
+  // (8 Nov 2026) lewat portal ke <body>: pembungkus halaman translok membentuk lapisan tumpuk sendiri sehingga bar bawah menutupi lembar ini.
+  return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="judul-susulan" onClick={onTutup}>
       <div className="flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-2 bg-[#0F3D7A] px-5 py-4 text-white">
@@ -170,6 +172,7 @@ export default function LembarSusulan({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
