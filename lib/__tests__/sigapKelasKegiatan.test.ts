@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   aturJumlahKelas,
   bagiRataPeserta,
+  cabutPanitia,
+  cariAkunLibat,
   gabungKelas,
   hapusKelas,
+  keluarkanPeserta,
+  libatkanPeserta,
   kelasEfektif,
   labelKelasNama,
   masukkanBelumBerkelas,
@@ -14,6 +18,7 @@ import {
   periksaNamaKelas,
   pindahkanPesertaKelas,
   tambahKelas,
+  tambahPanitia,
   ubahKelas,
   ukuranBagiRata,
 } from "@/lib/sigapKelasKegiatan";
@@ -55,6 +60,7 @@ function dbTiruan(awal: Record<string, Baris[]>) {
           return q;
         },
         eq(k: string, v: unknown) { filters.push((b) => b[k] === v); return q; },
+        ilike(k: string, pola: string) { const kata = pola.replace(/%/g, "").toLowerCase(); filters.push((b) => String(b[k] ?? "").toLowerCase().includes(kata)); return q; },
         neq(k: string, v: unknown) { filters.push((b) => b[k] !== v); return q; },
         in(k: string, v: unknown[]) { filters.push((b) => v.includes(b[k])); return q; },
         not(k: string, op: string, v: unknown) { if (op === "is" && v === null) filters.push((b) => b[k] != null); return q; },
@@ -303,5 +309,92 @@ describe("muatPanitia", () => {
     });
     const p = await muatPanitia(db, 7);
     expect(p.map((x) => [x.nama, x.lingkup])).toEqual([["Rina", "kegiatan"], ["Iqbal", "semua"]]);
+  });
+});
+
+describe("melibatkan orang di pelatihan (panitia, peserta)", () => {
+  const dasar = () => ({
+    sigap_akun: [
+      { id: 1, nama: "Iqbal", aktif: true, jenis: "organik" },
+      { id: 478, nama: "Oryza Maria Ulva", aktif: true, jenis: "organik" },
+      { id: 9, nama: "Oryza Lama", aktif: false, jenis: "organik" },
+      { id: 20, nama: "Rina Mitra", aktif: true, jenis: "mitra" },
+    ],
+    sigap_peran: [{ id: 11, kode: "panitia_pelatihan" }, { id: 12, kode: "pengelola_psp" }],
+    sigap_peran_izin: [{ peran_id: 11, menu_kode: "pelatihan.kelola" }, { peran_id: 11, menu_kode: "pelatihan.administrasi" }],
+    sigap_akun_peran: [{ id: 5, akun_id: 478, peran_id: 11, kegiatan_id: 3 }],
+    sigap_kegiatan_tarif: [{ kegiatan_id: 7, peran: "ppl" }, { kegiatan_id: 7, peran: "pml" }],
+    sigap_pelatihan_kelas: [{ kegiatan_id: 7, nomor: 1, nama: "Kelas 1", kuota: null }],
+    sigap_penugasan: [] as Baris[],
+    sigap_kuis_instruktur_kelas: [] as Baris[],
+  });
+  const oleh = { aktorId: 1, adminAplikasi: false, diberiOleh: "pelatihan:1" };
+
+  it("tambahPanitia: peran panitia berlingkup pelatihan ini; panitia pelatihan lain tidak mengganggu; tanpa duplikat", async () => {
+    const { db, t } = dbTiruan(dasar());
+    const h = await tambahPanitia(db, 7, 478, oleh);
+    expect(h).toMatchObject({ ok: true, nama: "Oryza Maria Ulva" });
+    expect(t.sigap_akun_peran.filter((x) => x.akun_id === 478).map((x) => x.kegiatan_id).sort()).toEqual([3, 7]);
+    const lagi = await tambahPanitia(db, 7, 478, oleh);
+    expect(lagi.ok).toBe(false);
+    expect(t.sigap_akun_peran.filter((x) => x.akun_id === 478 && x.kegiatan_id === 7)).toHaveLength(1);
+  });
+
+  it("tambahPanitia: menolak diri sendiri (kecuali Admin Aplikasi), akun nonaktif, akun tak ada, dan peran yang memuat izin tertinggi", async () => {
+    const { db } = dbTiruan(dasar());
+    expect((await tambahPanitia(db, 7, 1, oleh)).ok).toBe(false);
+    expect((await tambahPanitia(db, 7, 1, { ...oleh, adminAplikasi: true })).ok).toBe(true);
+    expect((await tambahPanitia(db, 7, 9, oleh)).ok).toBe(false);
+    expect((await tambahPanitia(db, 7, 999, oleh)).ok).toBe(false);
+    const tinggi = dbTiruan({ ...dasar(), sigap_peran_izin: [{ peran_id: 11, menu_kode: "akses.kelola" }] });
+    expect((await tambahPanitia(tinggi.db, 7, 478, oleh)).ok).toBe(false);
+  });
+
+  it("cabutPanitia: hanya Panitia Pelatihan berlingkup pelatihan ini; bukan diri sendiri", async () => {
+    const d = dasar();
+    d.sigap_akun_peran.push({ id: 6, akun_id: 20, peran_id: 11, kegiatan_id: 7 }, { id: 7, akun_id: 20, peran_id: 12, kegiatan_id: 7 }, { id: 8, akun_id: 1, peran_id: 11, kegiatan_id: 7 });
+    const { db, t } = dbTiruan(d);
+    expect((await cabutPanitia(db, 7, 5, oleh)).ok).toBe(false); // lingkup pelatihan lain
+    expect((await cabutPanitia(db, 7, 7, oleh)).ok).toBe(false); // bukan peran panitia
+    expect((await cabutPanitia(db, 7, 8, oleh)).ok).toBe(false); // diri sendiri
+    expect((await cabutPanitia(db, 7, 6, oleh)).ok).toBe(true);
+    expect(t.sigap_akun_peran.map((x) => x.id).sort()).toEqual([5, 7, 8]);
+  });
+
+  it("libatkanPeserta: buat penugasan baru, aktifkan kembali yang lama, tolak peran/kelas yang tidak ada dan peserta ganda", async () => {
+    const d = dasar();
+    d.sigap_penugasan.push({ id: 50, kegiatan_id: 7, akun_id: 20, peran: "ppl", aktif: false, kelas: null, sumber: "admin:354" });
+    const { db, t } = dbTiruan(d);
+    expect((await libatkanPeserta(db, 7, 478, "ppl", 1, 1)).ok).toBe(true);
+    expect(t.sigap_penugasan.find((x) => x.akun_id === 478)).toMatchObject({ kegiatan_id: 7, peran: "ppl", aktif: true, kelas: 1, sumber: "pelatihan:1" });
+    expect((await libatkanPeserta(db, 7, 478, "ppl", 1, 1)).ok).toBe(false);
+    expect((await libatkanPeserta(db, 7, 20, "pml", null, 1)).ok).toBe(true);
+    expect(t.sigap_penugasan.find((x) => x.id === 50)).toMatchObject({ aktif: true, peran: "pml", sumber: "admin:354" });
+    expect((await libatkanPeserta(db, 7, 1, "korwil", null, 1)).ok).toBe(false);
+    expect((await libatkanPeserta(db, 7, 1, "ppl", 4, 1)).ok).toBe(false);
+    expect((await libatkanPeserta(db, 7, 9, "ppl", null, 1)).ok).toBe(false);
+  });
+
+  it("keluarkanPeserta: menonaktifkan, tidak menghapus; hanya di pelatihan itu", async () => {
+    const d = dasar();
+    d.sigap_penugasan.push({ id: 50, kegiatan_id: 7, akun_id: 20, peran: "ppl", aktif: true, kelas: 1 }, { id: 51, kegiatan_id: 3, akun_id: 20, peran: "ppl", aktif: true, kelas: 1 });
+    const { db, t } = dbTiruan(d);
+    expect((await keluarkanPeserta(db, 7, 51)).ok).toBe(false);
+    expect((await keluarkanPeserta(db, 7, 50)).ok).toBe(true);
+    expect(t.sigap_penugasan.find((x) => x.id === 50)).toMatchObject({ aktif: false });
+    expect(t.sigap_penugasan).toHaveLength(2);
+  });
+
+  it("cariAkunLibat: kata kunci minimal 2 huruf, akun nonaktif tak muncul, keterlibatan saat ini ditandai", async () => {
+    const d = dasar();
+    d.sigap_akun_peran.push({ id: 6, akun_id: 478, peran_id: 11, kegiatan_id: 7 });
+    d.sigap_penugasan.push({ id: 50, kegiatan_id: 7, akun_id: 478, peran: "ppl", aktif: true, kelas: 1 });
+    d.sigap_kuis_instruktur_kelas.push({ kegiatan_id: 7, akun_id: 478, kelas: 1 });
+    const { db } = dbTiruan(d);
+    expect(await cariAkunLibat(db, 7, "o")).toEqual([]);
+    const h = await cariAkunLibat(db, 7, "oryza");
+    expect(h.map((x) => x.id)).toEqual([478]);
+    expect(h[0].sebagai.sort()).toEqual(["Instruktur Kelas 1", "Panitia", "Peserta Kelas 1"]);
+    expect((await cariAkunLibat(db, 7, "rina"))[0].sebagai).toEqual([]);
   });
 });

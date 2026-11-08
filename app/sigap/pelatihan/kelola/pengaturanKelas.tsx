@@ -4,7 +4,7 @@
 //
 // (8 Nov 2026) Tab "Tim & Peserta" > Pengaturan kelas: berapa kelas pelatihan ini, nama dan kuotanya, siapa peserta tiap kelas, siapa instrukturnya, dan siapa panitianya.
 // Semua pilihan kelas di Adu Sigap, Monitoring, dan Instruktur mengikuti daftar ini. Pelatihan satu kelas tidak menampilkan "Semua Kelas".
-// Instruktur ditetapkan di bagian Instruktur; panitia di Pengelolaan > Peran dan akses (di sini hanya dibaca). API: /api/sigap/pelatihan/pengaturan-kelas.
+// Langkah "Libatkan orang" menandai siapa saja yang ikut pelatihan ini (peserta, instruktur, panitia): tidak semua pegawai wajib ikut. API: /api/sigap/pelatihan/pengaturan-kelas.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { bacaSesi, fetchJson, pesanGalat, SesiBerakhir, urlPelatihan } from "../../admin/api";
@@ -14,8 +14,8 @@ import SelectCari from "@/app/components/SelectCari";
 
 type Kelas = { nomor: number; nama: string; kuota: number | null; peserta: number; instruktur: { akun_id: number; nama: string }[] };
 type Peserta = { penugasan_id: number; akun_id: number; nama: string; peran: string; kelas: number | null; sumber: string | null };
-type Panitia = { akun_id: number; nama: string; peran: string; peran_nama: string; lingkup: "kegiatan" | "semua" };
-type Data = { kegiatan_id: number; nama: string; kelas: Kelas[]; peserta: Peserta[]; tanpa_kelas: number; panitia: Panitia[]; maks: number; boleh_kelola: boolean };
+type Panitia = { akun_peran_id: number; akun_id: number; nama: string; peran: string; peran_nama: string; lingkup: "kegiatan" | "semua" };
+type Data = { kegiatan_id: number; nama: string; kelas: Kelas[]; peserta: Peserta[]; tanpa_kelas: number; panitia: Panitia[]; peran_peserta: string[]; maks: number; boleh_kelola: boolean };
 
 const URL_API = "/api/sigap/pelatihan/pengaturan-kelas";
 const LABEL_PERAN: Record<string, string> = { ppl: "PPL", pml: "PML", korwil: "Korwil" };
@@ -57,6 +57,121 @@ function BarisKelas({ k, boleh, sibuk, onSimpan, onHapus }: { k: Kelas; boleh: b
   );
 }
 
+type AkunCari = { id: number; nama: string; jenis: string | null; sebagai: string[] };
+
+/** Langkah menandai siapa saja yang dilibatkan di pelatihan ini: cari akun, pilih sebagai peserta / instruktur / panitia. */
+function KartuLibatkan({ d, sibuk, kirim }: { d: Data; sibuk: boolean; kirim: (body: Record<string, unknown>, pesanOk: (r: { nama?: string }) => string) => Promise<boolean> }) {
+  const [q, setQ] = useState("");
+  const [hasil, setHasil] = useState<AkunCari[]>([]);
+  const [mencari, setMencari] = useState(false);
+  const [akun, setAkun] = useState<AkunCari | null>(null);
+  const [sebagai, setSebagai] = useState<"peserta" | "instruktur" | "panitia">("peserta");
+  const [peran, setPeran] = useState(d.peran_peserta[0] ?? "");
+  const [kelas, setKelas] = useState<number | "">("");
+  const [galat, setGalat] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (akun) return;
+    const kata = q.trim();
+    if (kata.length < 2) {
+      setHasil([]);
+      return;
+    }
+    let batal = false;
+    setMencari(true);
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetchJson<{ akun: AkunCari[] }>(urlPelatihan(`${URL_API}?cari=${encodeURIComponent(kata)}`));
+        if (!batal) setHasil(r.akun);
+      } catch (e) {
+        if (!batal && !(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+      } finally {
+        if (!batal) setMencari(false);
+      }
+    }, 300);
+    return () => {
+      batal = true;
+      clearTimeout(t);
+    };
+  }, [q, akun]);
+  useEffect(() => {
+    if (!peran && d.peran_peserta[0]) setPeran(d.peran_peserta[0]);
+  }, [d.peran_peserta, peran]);
+
+  const butuhKelas = sebagai === "instruktur";
+  const bisa = !!akun && !sibuk && (sebagai !== "peserta" || !!peran) && (!butuhKelas || kelas !== "");
+
+  async function libatkan(e: React.FormEvent) {
+    e.preventDefault();
+    if (!akun || !bisa) return;
+    setGalat(null);
+    const body: Record<string, unknown> = { aksi: "libatkan", akun_id: akun.id, sebagai };
+    if (sebagai === "peserta") {
+      body.peran = peran;
+      body.kelas = kelas === "" ? null : kelas;
+    }
+    if (sebagai === "instruktur") body.kelas = kelas;
+    const ket = sebagai === "peserta" ? "peserta" : sebagai === "instruktur" ? "instruktur" : "panitia";
+    const ok = await kirim(body, () => `${akun.nama} dilibatkan sebagai ${ket}.`);
+    if (ok) {
+      setAkun(null);
+      setQ("");
+      setHasil([]);
+    }
+  }
+
+  return (
+    <Kartu judul="Libatkan orang di pelatihan ini" ket="Tidak semua pegawai wajib ikut. Tandai hanya yang dilibatkan: sebagai peserta, instruktur, atau panitia. Satu orang boleh punya lebih dari satu peran di pelatihan ini.">
+      <form onSubmit={libatkan} className="flex flex-wrap items-start gap-2" data-testid="form-libatkan">
+        <div className="relative min-w-[220px] flex-1">
+          {akun ? (
+            <div className="flex items-center gap-2 rounded-lg border border-[#1F6FD1]/40 bg-[#E3EEFB] px-2.5 py-1.5 text-[13px]">
+              <b className="flex-1 truncate">{akun.nama}</b>
+              {akun.sebagai.length > 0 && <span className="text-[11px] text-[#4D5B6B]">{akun.sebagai.join(", ")}</span>}
+              <button type="button" onClick={() => setAkun(null)} className="font-bold text-[#1F6FD1]" aria-label="Ganti akun">×</button>
+            </div>
+          ) : (
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cari nama pegawai atau mitra…" className={`${INPUT} w-full`} aria-label="Cari akun yang dilibatkan" />
+          )}
+          {!akun && q.trim().length >= 2 && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+              {mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#7B8794]">Mencari…</p>}
+              {!mencari && hasil.length === 0 && <p className="px-3 py-2 text-[12px] text-[#7B8794]">Tidak ditemukan.</p>}
+              {hasil.map((a) => (
+                <button key={a.id} type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-[#F2F6FC]" onClick={() => setAkun(a)}>
+                  <span className="flex-1 truncate font-semibold text-[#1B2B4B]">{a.nama}</span>
+                  <span className="text-[11px] text-[#7B8794]">{a.jenis}</span>
+                  {a.sebagai.length > 0 && <Chip w="ok">{a.sebagai.join(", ")}</Chip>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <SelectCari className={INPUT} value={sebagai} onChange={(e) => setSebagai(e.target.value as typeof sebagai)} aria-label="Dilibatkan sebagai">
+          <option value="peserta">Sebagai peserta</option>
+          <option value="instruktur">Sebagai instruktur</option>
+          <option value="panitia">Sebagai panitia</option>
+        </SelectCari>
+        {sebagai === "peserta" && (
+          <SelectCari className={INPUT} value={peran} onChange={(e) => setPeran(e.target.value)} aria-label="Peran peserta">
+            {d.peran_peserta.length === 0 && <option value="">Belum ada peran di tarif kegiatan</option>}
+            {d.peran_peserta.map((r) => <option key={r} value={r}>{LABEL_PERAN[r] ?? r}</option>)}
+          </SelectCari>
+        )}
+        {sebagai !== "panitia" && (
+          <SelectCari className={INPUT} value={kelas} onChange={(e) => setKelas(e.target.value === "" ? "" : Number(e.target.value))} aria-label="Kelas">
+            <option value="">{sebagai === "peserta" ? "— belum berkelas —" : "Pilih kelas (wajib)"}</option>
+            {d.kelas.map((k) => <option key={k.nomor} value={k.nomor}>{k.nama}</option>)}
+          </SelectCari>
+        )}
+        <button type="submit" className={BTN} disabled={!bisa}>{sibuk ? "Menyimpan…" : "Libatkan"}</button>
+      </form>
+      {sebagai === "panitia" && <p className="mt-2 text-[12px] text-[#6B7A90]">Panitia Pelatihan hanya berlaku untuk pelatihan ini. Hak lain di aplikasi tidak berubah.</p>}
+      {galat && <div className="mt-2"><Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan></div>}
+    </Kartu>
+  );
+}
+
 export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstruktur?: () => void }) {
   const [d, setD] = useState<Data | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
@@ -84,11 +199,11 @@ export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstrukt
     void muat();
   }, [muat]);
 
-  async function kirim(body: Record<string, unknown>, pesanOk: (r: { berubah?: number; jumlah?: number }) => string) {
+  async function kirim(body: Record<string, unknown>, pesanOk: (r: { berubah?: number; jumlah?: number; nama?: string }) => string) {
     setSibuk(true);
     toast.tampil("simpan", "Menyimpan…");
     try {
-      const r = await fetchJson<{ ok: boolean; berubah?: number; jumlah?: number }>(urlPelatihan(URL_API), { method: "POST", body: JSON.stringify(body) });
+      const r = await fetchJson<{ ok: boolean; berubah?: number; jumlah?: number; nama?: string }>(urlPelatihan(URL_API), { method: "POST", body: JSON.stringify(body) });
       toast.tampil("ok", pesanOk(r));
       await muat();
       return true;
@@ -124,6 +239,8 @@ export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstrukt
   return (
     <div className="space-y-3">
       {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
+
+      {boleh && <KartuLibatkan d={d} sibuk={sibuk} kirim={kirim} />}
 
       <Kartu judul="Kelas pelatihan" ket={`${d.kelas.length} kelas · ${d.peserta.length} peserta aktif${d.tanpa_kelas > 0 ? ` · ${d.tanpa_kelas} belum berkelas` : ""}. Semua pilihan kelas di Adu Sigap, Monitoring, dan Instruktur mengikuti daftar ini.`}>
         {satuKelas && <p className="mb-3 rounded-lg bg-[#EAF1FD] px-3 py-2 text-[12.5px] text-[#1B3F7A]">Pelatihan ini hanya <b>1 kelas</b>, jadi Adu Sigap tidak menampilkan pilihan kelas maupun “Semua Kelas”; peserta langsung masuk ke kelas itu.</p>}
@@ -194,7 +311,7 @@ export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstrukt
           </div>
         )}
         {d.peserta.length === 0 ? (
-          <p className="text-[13px] text-[#6B7A90]">Belum ada peserta aktif di pelatihan ini. Tambahkan peserta lewat tab Persiapan atau Kendala.</p>
+          <p className="text-[13px] text-[#6B7A90]">Belum ada peserta aktif di pelatihan ini. Tandai yang dilibatkan lewat kartu “Libatkan orang di pelatihan ini” di atas.</p>
         ) : (
           <>
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -238,6 +355,7 @@ export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstrukt
                     <th className={TH}>Nama</th>
                     <th className={TH}>Peran</th>
                     <th className={TH}>Kelas</th>
+                    {boleh && <th className={TH} />}
                   </tr>
                 </thead>
                 <tbody>
@@ -268,11 +386,18 @@ export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstrukt
                           namaKelas.get(p.kelas as number)
                         )}
                       </td>
+                      {boleh && (
+                        <td className={TD}>
+                          <button type="button" className={BTN_O} disabled={sibuk} title="Keluarkan dari pelatihan ini (data tidak dihapus, bisa dilibatkan lagi)" onClick={() => void kirim({ aksi: "keluarkan", sebagai: "peserta", penugasan_id: p.penugasan_id }, () => `${p.nama} dikeluarkan dari pelatihan.`)}>
+                            Keluarkan
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                   {baris.length === 0 && (
                     <tr>
-                      <td className={`${TD} text-[#6B7A90]`} colSpan={boleh ? 4 : 3}>Tidak ada peserta yang cocok.</td>
+                      <td className={`${TD} text-[#6B7A90]`} colSpan={boleh ? 5 : 3}>Tidak ada peserta yang cocok.</td>
                     </tr>
                   )}
                 </tbody>
@@ -293,11 +418,16 @@ export default function PengaturanKelasKelola({ bukaInstruktur }: { bukaInstrukt
                 <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-[#1B2B4B]">{p.nama}</span>
                 <Chip w={p.lingkup === "kegiatan" ? "ok" : "mut"}>{p.peran_nama}</Chip>
                 {p.lingkup === "semua" && <span className="text-[11.5px] text-[#6B7A90]">semua kegiatan</span>}
+                {boleh && p.lingkup === "kegiatan" && p.peran === "panitia_pelatihan" && (
+                  <button type="button" className={BTN_O} disabled={sibuk} onClick={() => void kirim({ aksi: "keluarkan", sebagai: "panitia", akun_peran_id: p.akun_peran_id }, () => `${p.nama} tidak lagi menjadi panitia.`)}>
+                    Cabut
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-2 text-[12.5px] text-[#6B7A90]">Menambah atau mencabut panitia: Pengelolaan › Peran dan akses › Akun &amp; Peran, pilih akun lalu peran <i>Panitia Pelatihan</i> dengan lingkup pelatihan ini.</p>
+        <p className="mt-2 text-[12.5px] text-[#6B7A90]">Tambah panitia lewat kartu “Libatkan orang di pelatihan ini”. Peran dengan lingkup semua kegiatan atau peran lain dikelola di Pengelolaan › Peran dan akses.</p>
       </Kartu>
       <Toast isi={toast.isi} onTutup={toast.tutup} />
     </div>

@@ -103,7 +103,7 @@ export async function muatPesertaKelas(db: Db, kegiatanId: number): Promise<Pese
     .sort((a, b) => a.nama.localeCompare(b.nama));
 }
 
-export type Panitia = { akun_id: number; nama: string; peran: string; peran_nama: string; lingkup: "kegiatan" | "semua" };
+export type Panitia = { akun_peran_id: number; akun_id: number; nama: string; peran: string; peran_nama: string; lingkup: "kegiatan" | "semua" };
 
 /** Panitia = pemegang peran yang punya menu pelatihan.kelola untuk pelatihan ini (lingkup kegiatan ini atau semua kegiatan), tanpa peran instruktur. */
 export async function muatPanitia(db: Db, kegiatanId: number): Promise<Panitia[]> {
@@ -112,10 +112,10 @@ export async function muatPanitia(db: Db, kegiatanId: number): Promise<Panitia[]
   if (peranIds.length === 0) return [];
   const [{ data: peran }, { data: ap }] = await Promise.all([
     db.from("sigap_peran").select("id, kode, nama").in("id", peranIds),
-    db.from("sigap_akun_peran").select("akun_id, peran_id, kegiatan_id").in("peran_id", peranIds).or(`kegiatan_id.is.null,kegiatan_id.eq.${kegiatanId}`).limit(500),
+    db.from("sigap_akun_peran").select("id, akun_id, peran_id, kegiatan_id").in("peran_id", peranIds).or(`kegiatan_id.is.null,kegiatan_id.eq.${kegiatanId}`).limit(500),
   ]);
   const dataPeran = new Map(((peran ?? []) as { id: number; kode: string; nama: string }[]).map((p) => [Number(p.id), p]));
-  const baris = ((ap ?? []) as { akun_id: number; peran_id: number; kegiatan_id: number | null }[]).filter((r) => dataPeran.get(Number(r.peran_id))?.kode !== "instruktur_pelatihan");
+  const baris = ((ap ?? []) as { id: number; akun_id: number; peran_id: number; kegiatan_id: number | null }[]).filter((r) => dataPeran.get(Number(r.peran_id))?.kode !== "instruktur_pelatihan");
   if (baris.length === 0) return [];
   const { data: akun } = await db.from("sigap_akun").select("id, nama, aktif").in("id", [...new Set(baris.map((r) => Number(r.akun_id)))]);
   const nama = new Map(((akun ?? []) as { id: number; nama: string; aktif: boolean }[]).filter((a) => a.aktif !== false).map((a) => [Number(a.id), a.nama]));
@@ -124,10 +124,122 @@ export async function muatPanitia(db: Db, kegiatanId: number): Promise<Panitia[]
     const n = nama.get(Number(r.akun_id));
     const p = dataPeran.get(Number(r.peran_id));
     if (!n || !p) continue;
-    hasil.push({ akun_id: Number(r.akun_id), nama: n, peran: p.kode, peran_nama: p.nama, lingkup: r.kegiatan_id == null ? "semua" : "kegiatan" });
+    hasil.push({ akun_peran_id: Number(r.id), akun_id: Number(r.akun_id), nama: n, peran: p.kode, peran_nama: p.nama, lingkup: r.kegiatan_id == null ? "semua" : "kegiatan" });
   }
   // urut: lingkup kegiatan dahulu (yang ditetapkan khusus), lalu nama
   return hasil.sort((a, b) => (a.lingkup === b.lingkup ? 0 : a.lingkup === "kegiatan" ? -1 : 1) || a.nama.localeCompare(b.nama) || a.peran_nama.localeCompare(b.peran_nama));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Panitia: beri / cabut peran Panitia Pelatihan untuk SATU pelatihan (bersamaan dengan plotting kelas, peserta, instruktur)
+// ---------------------------------------------------------------------------------------------
+export const KODE_PERAN_PANITIA = "panitia_pelatihan";
+/** Menu yang menentukan hak tertinggi (sama dengan lib/aturanLingkup.MENU_HAK_TERTINGGI): peran yang memuatnya tidak boleh dibagikan lewat jalur ini. */
+const MENU_HAK_TERTINGGI_PANITIA = ["portal.kelola", "akses.kelola"];
+
+export type AkunCari = { id: number; nama: string; jenis: string | null; sebagai: string[] };
+
+/**
+ * Cari akun aktif (nama memuat kata kunci, min. 2 huruf) untuk dilibatkan di pelatihan ini. Hasil memuat `sebagai`: keterlibatan akun itu SAAT INI
+ * (mis. "Peserta Kelas 2", "Instruktur Kelas 1", "Panitia") supaya pemilih tahu siapa yang sudah dilibatkan; satu akun boleh punya lebih dari satu.
+ */
+export async function cariAkunLibat(db: Db, kegiatanId: number, q: string): Promise<AkunCari[]> {
+  const kata = q.replace(/[%_,()]/g, "").trim();
+  if (kata.length < 2) return [];
+  const { data } = await db.from("sigap_akun").select("id, nama, jenis").eq("aktif", true).ilike("nama", `%${kata}%`).order("nama").limit(20);
+  const akun = ((data ?? []) as { id: number; nama: string; jenis: string | null }[]).map((a) => ({ id: Number(a.id), nama: a.nama, jenis: a.jenis ?? null }));
+  if (akun.length === 0) return [];
+  const ids = akun.map((a) => a.id);
+  const { data: peran } = await db.from("sigap_peran").select("id").eq("kode", KODE_PERAN_PANITIA).maybeSingle();
+  const [{ data: pen }, { data: ins }, { data: pan }] = await Promise.all([
+    db.from("sigap_penugasan").select("akun_id, kelas").eq("kegiatan_id", kegiatanId).eq("aktif", true).in("akun_id", ids),
+    db.from("sigap_kuis_instruktur_kelas").select("akun_id, kelas").eq("kegiatan_id", kegiatanId).in("akun_id", ids),
+    peran ? db.from("sigap_akun_peran").select("akun_id").eq("peran_id", (peran as { id: number }).id).eq("kegiatan_id", kegiatanId).in("akun_id", ids) : Promise.resolve({ data: [] }),
+  ]);
+  const sebagai = new Map<number, string[]>();
+  const tambah = (id: unknown, t: string) => sebagai.set(Number(id), [...(sebagai.get(Number(id)) ?? []), t]);
+  for (const x of (pen ?? []) as { akun_id: number; kelas: number | null }[]) tambah(x.akun_id, x.kelas == null ? "Peserta (belum berkelas)" : `Peserta Kelas ${x.kelas}`);
+  for (const x of (ins ?? []) as { akun_id: number; kelas: number }[]) tambah(x.akun_id, `Instruktur Kelas ${x.kelas}`);
+  for (const x of (pan ?? []) as { akun_id: number }[]) tambah(x.akun_id, "Panitia");
+  return akun.map((a) => ({ ...a, sebagai: sebagai.get(a.id) ?? [] }));
+}
+
+/** Peran yang boleh dipakai peserta pelatihan = peran yang terdaftar di tarif kegiatan ini (mis. ppl, pml). */
+export async function peranPesertaKegiatan(db: Db, kegiatanId: number): Promise<string[]> {
+  const { data } = await db.from("sigap_kegiatan_tarif").select("peran").eq("kegiatan_id", kegiatanId).limit(50);
+  return [...new Set(((data ?? []) as { peran: string }[]).map((x) => String(x.peran)))];
+}
+
+/** Libatkan satu akun sebagai peserta: buat penugasan baru atau aktifkan kembali yang lama (kelas dan peran diperbarui; data lain tetap). */
+export async function libatkanPeserta(db: Db, kegiatanId: number, akunId: number, peran: string, kelas: number | null, aktorId: number): Promise<Hasil & { nama?: string }> {
+  if (!Number.isInteger(akunId) || akunId <= 0) return gagal("Pilih akun yang akan dilibatkan.");
+  if (kelas !== null) {
+    if (!nomorKelasSah(kelas)) return gagal("Kelas tidak sah.");
+    if (!(await muatKelasKegiatan(db, kegiatanId)).some((k) => k.nomor === kelas)) return gagal("Kelas itu tidak ada di pelatihan ini.");
+  }
+  if (!(await peranPesertaKegiatan(db, kegiatanId)).includes(peran)) return gagal("Peran peserta belum terdaftar di kegiatan ini (atur di menu Kegiatan & Tarif).");
+  const { data: akun } = await db.from("sigap_akun").select("id, nama, aktif").eq("id", akunId).maybeSingle();
+  if (!akun || (akun as { aktif: boolean }).aktif === false) return gagal("Akun tidak ditemukan atau tidak aktif.");
+  const nama = (akun as { nama: string }).nama;
+  const { data: ada } = await db.from("sigap_penugasan").select("id, aktif").eq("kegiatan_id", kegiatanId).eq("akun_id", akunId).maybeSingle();
+  if (ada) {
+    const a = ada as { id: number; aktif: boolean };
+    if (a.aktif) return gagal(`${nama} sudah menjadi peserta pelatihan ini.`);
+    const { error } = await db.from("sigap_penugasan").update({ aktif: true, peran, kelas }).eq("id", a.id);
+    if (error) return gagal(error.message);
+    return { ok: true, nama };
+  }
+  const { error } = await db.from("sigap_penugasan").insert({ kegiatan_id: kegiatanId, akun_id: akunId, peran, aktif: true, kelas, sumber: `pelatihan:${aktorId}` });
+  if (error) return gagal(error.message);
+  return { ok: true, nama };
+}
+
+/** Keluarkan peserta dari pelatihan: penugasan dinonaktifkan (data dan riwayat tes tidak dihapus; dapat dilibatkan lagi). */
+export async function keluarkanPeserta(db: Db, kegiatanId: number, penugasanId: number): Promise<Hasil & { nama?: string }> {
+  const { data: x } = await db.from("sigap_penugasan").select("id, akun_id, aktif").eq("id", penugasanId).eq("kegiatan_id", kegiatanId).maybeSingle();
+  if (!x) return gagal("Peserta tidak ditemukan di pelatihan ini.");
+  const b = x as { id: number; akun_id: number; aktif: boolean };
+  const { data: akun } = await db.from("sigap_akun").select("nama").eq("id", b.akun_id).maybeSingle();
+  if (!b.aktif) return { ok: true, nama: (akun as { nama?: string } | null)?.nama };
+  const { error } = await db.from("sigap_penugasan").update({ aktif: false }).eq("id", b.id);
+  if (error) return gagal(error.message);
+  return { ok: true, nama: (akun as { nama?: string } | null)?.nama };
+}
+
+/**
+ * Beri peran Panitia Pelatihan (lingkup pelatihan ini saja) kepada satu akun aktif.
+ * Aturan: pemberi tidak boleh memberi ke dirinya sendiri kecuali Admin Aplikasi; peran harus tidak memuat hak tertinggi; tanpa duplikat.
+ */
+export async function tambahPanitia(db: Db, kegiatanId: number, akunId: number, p: { aktorId: number; adminAplikasi: boolean; diberiOleh: string }): Promise<Hasil & { nama?: string }> {
+  if (!Number.isInteger(akunId) || akunId <= 0) return gagal("Pilih akun yang akan dijadikan panitia.");
+  if (!p.adminAplikasi && p.aktorId === akunId) return gagal("Anda tidak dapat menambahkan diri sendiri sebagai panitia. Minta Admin Aplikasi.");
+  const { data: akun } = await db.from("sigap_akun").select("id, nama, aktif").eq("id", akunId).maybeSingle();
+  if (!akun || (akun as { aktif: boolean }).aktif === false) return gagal("Akun tidak ditemukan atau tidak aktif.");
+  const { data: peran } = await db.from("sigap_peran").select("id, kode").eq("kode", KODE_PERAN_PANITIA).maybeSingle();
+  if (!peran) return gagal("Peran Panitia Pelatihan belum ada. Hubungi Admin Aplikasi.");
+  const peranId = Number((peran as { id: number }).id);
+  const { data: izin } = await db.from("sigap_peran_izin").select("menu_kode").eq("peran_id", peranId);
+  if (((izin ?? []) as { menu_kode: string }[]).some((x) => MENU_HAK_TERTINGGI_PANITIA.includes(x.menu_kode))) return gagal("Peran Panitia Pelatihan memuat izin tertinggi, hanya Admin Aplikasi yang dapat memberikannya.");
+  const { data: ada } = await db.from("sigap_akun_peran").select("id").eq("akun_id", akunId).eq("peran_id", peranId).eq("kegiatan_id", kegiatanId).maybeSingle();
+  if (ada) return gagal(`${(akun as { nama: string }).nama} sudah menjadi panitia pelatihan ini.`);
+  const { error } = await db.from("sigap_akun_peran").insert({ akun_id: akunId, peran_id: peranId, kegiatan_id: kegiatanId, diberi_oleh: p.diberiOleh });
+  if (error) return gagal(error.message);
+  return { ok: true, nama: (akun as { nama: string }).nama };
+}
+
+/** Cabut peran Panitia Pelatihan yang berlingkup pelatihan ini (peran lain atau lingkup semua kegiatan tidak dapat dicabut dari sini). */
+export async function cabutPanitia(db: Db, kegiatanId: number, akunPeranId: number, p: { aktorId: number; adminAplikasi: boolean }): Promise<Hasil & { nama?: string }> {
+  const { data: x } = await db.from("sigap_akun_peran").select("id, akun_id, peran_id, kegiatan_id").eq("id", akunPeranId).maybeSingle();
+  if (!x) return gagal("Data panitia tidak ditemukan.");
+  const baris = x as { id: number; akun_id: number; peran_id: number; kegiatan_id: number | null };
+  if (baris.kegiatan_id !== kegiatanId) return gagal("Peran ini bukan peran khusus pelatihan ini; kelola lewat Peran dan akses.");
+  const { data: peran } = await db.from("sigap_peran").select("kode").eq("id", baris.peran_id).maybeSingle();
+  if ((peran as { kode?: string } | null)?.kode !== KODE_PERAN_PANITIA) return gagal("Hanya peran Panitia Pelatihan yang dapat dicabut dari sini.");
+  if (!p.adminAplikasi && Number(baris.akun_id) === p.aktorId) return gagal("Anda tidak dapat mencabut peran Anda sendiri. Minta Admin Aplikasi.");
+  const { data: akun } = await db.from("sigap_akun").select("nama").eq("id", baris.akun_id).maybeSingle();
+  const { error } = await db.from("sigap_akun_peran").delete().eq("id", akunPeranId);
+  if (error) return gagal(error.message);
+  return { ok: true, nama: (akun as { nama?: string } | null)?.nama ?? `Akun ${baris.akun_id}` };
 }
 
 // ---------------------------------------------------------------------------------------------
