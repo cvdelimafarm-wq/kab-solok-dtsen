@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
+import PemblokirSesi from "./PemblokirSesi"; // (9 Nov 2026) modal pemblokir saat sesi tes/roleplay/kuis dibuka (peserta saja)
 
 // (5 Okt 2026) SIGAP -- awalnya "Gerak Anggaran & Pertanggungjawaban".
 // (11 Okt 2026) Judul diseragamkan "SIGAP · Sistem Integrasi Kegiatan BPS" (sama dengan header Beranda) -- keputusan user.
@@ -16,6 +17,7 @@ export default function SigapLayout({ children }: { children: React.ReactNode })
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       {children}
+      <PemblokirSesi />
     </div>
   );
 }

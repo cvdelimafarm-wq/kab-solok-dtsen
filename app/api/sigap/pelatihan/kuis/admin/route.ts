@@ -43,6 +43,8 @@ import {
   type RuangBaris,
   kelasInstruktur,
 } from "@/lib/sigapKuisDb";
+import { ALAMAT_KUIS, pesanSesiDibuka } from "@/lib/sigapSesiTerbuka";
+import { kabariPesertaKelas } from "@/lib/sigapSesiPush";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -290,6 +292,7 @@ export async function POST(req: NextRequest) {
       const h = await bukaRuang(db, kegiatanId, kelas, akun.id, now);
       if (!h.ok) return galat(h.error, h.status);
       await catatAudit(db, akun.id, "pelatihan_kuis_buka_ruang", { kelas, kuis_id: h.ruang.kuis_id, ruang_id: h.ruang.id });
+      void kabariPesertaKelas(db as Db, kegiatanId, kelas === 0 ? null : kelas, { ...pesanSesiDibuka("kuis"), url: ALAMAT_KUIS, tag: `kuis-${h.ruang.id}` }); // (9 Nov 2026) push + modal pemblokir peserta
       return NextResponse.json({ ok: true, ruang_id: h.ruang.id, ...(await keadaanHost(db, h.ruang, now)) });
     }
 

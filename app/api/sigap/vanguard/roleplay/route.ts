@@ -22,6 +22,8 @@ import {
 import { bentrokCakupan, bersihkanIsian, gabungIsianTerkunci, periksaCakupan, satuanTerkunci } from "@/lib/vanguard/roleplay/isian";
 import { petakanVariasi, satuanCakupan, satuanPerluTanda, sesiTuntasDitandai } from "@/lib/vanguard/roleplay/penilaian";
 import { cakupanLangkah, ringkasLangkah, semuaSatuan, susunHasilPeserta, susunPemetaan, susunRekap, tandaGabungan, teksCakupan, type LangkahBaris } from "@/lib/vanguard/roleplay/susun";
+import { alamatRoleplayPeserta, pesanSesiDibuka } from "@/lib/sigapSesiTerbuka";
+import { kabariPesertaKelas } from "@/lib/sigapSesiPush";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -169,6 +171,7 @@ export async function POST(req: NextRequest) {
       const { error } = await db.from("sigap_vanguard_roleplay").insert({ kegiatan_id: kegiatan, kelas, judul, dibuat_oleh: akunId });
       if (error) return galat((error as { code?: string }).code === "23505" ? "Roleplay kelas ini sedang berjalan." : "Gagal membuka roleplay.", (error as { code?: string }).code === "23505" ? 409 : 500);
       await catatAudit(db as Db, akunId, "vanguard_roleplay_buka", { kegiatan_id: kegiatan, kelas });
+      void kabariPesertaKelas(db as Db, kegiatan, kelas, { ...pesanSesiDibuka("roleplay"), url: alamatRoleplayPeserta(kegiatan), tag: `roleplay-${kegiatan}-k${kelas}` }); // (9 Nov 2026) push + modal pemblokir peserta
       return jawab();
     }
 

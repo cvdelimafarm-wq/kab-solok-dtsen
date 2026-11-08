@@ -14,8 +14,9 @@ import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatTesDaftar } from "@/lib/sigapTesDb";
 import { muatInstruktur } from "@/lib/sigapInstrukturDb";
-import { KOLOM_AGENDA, aksiAgendaSah, pesanMulaiPush, statusAgenda, tutupJendela, type BarisAgenda, type StatusAgenda } from "@/lib/sigapAgenda";
-import { kirimKeAkun, pushSiap } from "@/lib/sigapPush";
+import { KOLOM_AGENDA, aksiAgendaSah, statusAgenda, tutupJendela, type BarisAgenda, type StatusAgenda } from "@/lib/sigapAgenda";
+import { alamatTes, pesanSesiDibuka } from "@/lib/sigapSesiTerbuka";
+import { kabariPesertaKelas } from "@/lib/sigapSesiPush";
 import { bacaBarisAgenda } from "@/lib/sigapAgendaDb";
 
 export const runtime = "nodejs";
@@ -49,23 +50,6 @@ async function siapkan(req: NextRequest) {
   if (!kegiatanId) return { err: galat("Pelatihan tidak ditemukan.", 404) } as const;
   const kelasSaya = (await muatInstruktur(db, kegiatanId)).filter((i) => i.akun_id === akun.id).map((i) => i.kelas);
   return { db: db as Db, akun, kegiatanId, kelasSaya } as const;
-}
-
-/**
- * Notifikasi ke peserta kelas bahwa tes sudah dimulai. Dijalankan tanpa ditunggu dan semua galat ditelan: Mulai tidak boleh gagal/tertunda gara-gara push.
- * Peserta = penugasan aktif kelas itu selain panitia dan instruktur.
- */
-async function kabariPeserta(db: Db, kegiatanId: number, kelas: number, tesId: number, jenis: string, judul: string) {
-  try {
-    if (!pushSiap()) return;
-    const { data } = await db.from("sigap_penugasan").select("akun_id, peran").eq("kegiatan_id", kegiatanId).eq("aktif", true).eq("kelas", kelas).limit(2000);
-    const ids = ((data ?? []) as { akun_id: number; peran: string }[]).filter((x) => x.peran !== "panitia" && x.peran !== "instruktur").map((x) => Number(x.akun_id));
-    if (!ids.length) return;
-    const { judul: j, isi } = pesanMulaiPush(jenis, judul);
-    await kirimKeAkun(db, ids, { judul: j, isi, url: `/sigap/pelatihan/tes/${encodeURIComponent(jenis)}`, tag: `agenda-${tesId}-k${kelas}` });
-  } catch {
-    /* push opsional */
-  }
 }
 
 async function susun(db: Db, kegiatanId: number, kelasSaya: number[], sekarang: Date) {
@@ -142,7 +126,10 @@ export async function POST(req: NextRequest) {
         if (error) return galat(error.message, 500);
         await catatAudit(p.db, p.akun.id, "pelatihan_agenda_mulai", { kegiatan_id: p.kegiatanId, tes_id: tesId, kelas: baris.kelas });
         const infoTes = (await muatTesDaftar(p.db, p.kegiatanId)).find((t) => t.id === tesId);
-        if (infoTes) void kabariPeserta(p.db, p.kegiatanId, baris.kelas, tesId, String(infoTes.jenis), String(infoTes.judul));
+        if (infoTes && (infoTes.jenis === "pretest" || infoTes.jenis === "posttest")) {
+          const pesan = pesanSesiDibuka(infoTes.jenis, String(infoTes.judul));
+          void kabariPesertaKelas(p.db, p.kegiatanId, baris.kelas, { ...pesan, url: alamatTes(infoTes.jenis), tag: `agenda-${tesId}-k${baris.kelas}` });
+        }
       }
     } else if (body.aksi === "selesai") {
       if (st === "berjalan") {
