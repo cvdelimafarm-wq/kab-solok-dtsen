@@ -82,7 +82,8 @@ function CentangDok({ d, on, ubah }: { d: { k: string; label: string; ket: strin
   );
 }
 
-export default function Administrasi() {
+/** (9 Nov 2026) `onLibatkan`: pintu utama menambah orang kini "Libatkan orang" di Peserta & Kelas; menambah manual tetap ada untuk yang hanya perlu administrasi. */
+export default function Administrasi({ onLibatkan }: { onLibatkan?: () => void } = {}) {
   const [info, setInfo] = useState<Ringkas | null>(null);
   const [kelas, setKelas] = useState<number | null>(null);
   const [data, setData] = useState<DataPeserta | null>(null);
@@ -310,9 +311,19 @@ export default function Administrasi() {
             <button type="button" className={BTN_O} disabled={sibuk === "pulsa"} onClick={unduhPulsa}>
               {sibuk === "pulsa" ? "Menyiapkan…" : "⬇ CSV nomor pulsa"}
             </button>
+            {info.boleh_kelola && onLibatkan && (
+              <button type="button" className={BTN} onClick={onLibatkan}>
+                + Libatkan orang (Peserta &amp; Kelas)
+              </button>
+            )}
             {info.boleh_kelola && (
-              <button type="button" className={BTN} onClick={() => setTambah(true)}>
-                {instr ? "+ Tambah instruktur manual" : "+ Tambah peserta / panitia manual"}
+              <button
+                type="button"
+                className={onLibatkan ? "px-1 text-[12px] font-semibold text-[#1F5FD1] underline" : BTN}
+                title="Orang yang hanya perlu masuk administrasi kelas ini (tanpa tes, kuis, presensi)"
+                onClick={() => setTambah(true)}
+              >
+                {onLibatkan ? (instr ? "tambah instruktur hanya untuk administrasi" : "tambah hanya untuk administrasi") : instr ? "+ Tambah instruktur manual" : "+ Tambah peserta / panitia manual"}
               </button>
             )}
           </div>
@@ -332,7 +343,7 @@ export default function Administrasi() {
         {data?.skema && (
           <p className="mb-2 rounded-lg bg-[#F1F6FD] px-3 py-1.5 text-[12px] text-[#0F3D7A]">
             🎯 Nilai akhir = <b>{data.skema.ringkas}</b>
-            {data.skema.tersimpan ? "" : " (skema bawaan — belum disimpan)"}. Diatur di Kelola Pelatihan › Materi & Penilaian › Penilaian.
+            {data.skema.tersimpan ? "" : " (skema bawaan — belum disimpan)"}. Diatur di Kelola Pelatihan › Soal & Jadwal / Monitoring.
           </p>
         )}
         {!data ? (

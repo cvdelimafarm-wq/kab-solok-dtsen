@@ -329,7 +329,7 @@ export default function KelolaPelatihan() {
             {
               kode: "presensi",
               label: "📍 Absen & presensi",
-              ket: "Pengaturan absen peserta (sesi, jendela, radius) dan presensi lokasi (titik, akurasi).",
+              ket: "Dua mekanisme berbeda: Absen peserta (absen per sesi dengan jendela dan radar) dan Presensi di lokasi (kedatangan di titik pelatihan, sekali atau beberapa kali per hari).",
               isi: () => (
                 <div className="space-y-3">
                   <KartuAturAbsen bisa={ringkas.boleh_kelola} />
@@ -348,7 +348,7 @@ export default function KelolaPelatihan() {
           <KoreksiKelola key={`k${kegId ?? 0}`} />
         </>
       )}
-      {ringkas && tab === "hasil" && <Administrasi key={kegId ?? 0} />}
+      {ringkas && tab === "hasil" && <Administrasi key={kegId ?? 0} onLibatkan={() => bukaTab("peserta", "pengaturan")} />}
       {/* (9 Okt 2026) pengingat unggah 4 foto terbaik per kelas -- tidak tampil saat sudah di tab Administrasi */}
       <ModalFotoPanitia sembunyi={tab === "hasil"} />
     </Bingkai>
