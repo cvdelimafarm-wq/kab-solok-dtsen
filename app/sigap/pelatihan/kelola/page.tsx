@@ -15,13 +15,13 @@ import { BTN, BTN_G, BTN_O, Chip, INPUT, Kartu, KartuAngka, Memuat, Pesan, TD, T
 import Bingkai from "../../kontrak/Bingkai";
 import { formatSisa, useJamServer } from "../komponen";
 import Administrasi from "./administrasi";
-import KesiapanKartu from "./kesiapan"; // (8 Nov 2026) kartu Kesiapan di atas tab Persiapan: daftar periksa + tombol Perbaiki ke tab/sub yang tepat
+import KesiapanKartu from "./kesiapan"; // (8 Nov 2026) tab Kesiapan: daftar periksa + tombol Perbaiki ke tab/sub yang tepat
 import GabungTab, { type Bagian } from "./gabungTab"; // (8 Nov 2026) perekat tujuh tab: satu tab = beberapa bagian (sub)
 import { KartuHierarki } from "./hierarki";
 import OrangKelasKelola from "./orangKelas"; // (8 Nov 2026) Orang & kelas: libatkan orang, kelas, peserta per kelas, panitia, instruktur, pembanding rencana kelas
 import InstrumenKelola from "./instrumen";
 import VanguardKelola from "./vanguardKelola";
-import PersiapanKelola from "./tampilan"; // tampilan peserta, ketentuan undangan, absen, aturan nilai (dipecah bertahap: tahap 3-5)
+import PersiapanKelola, { KartuAturAbsen, KartuAturanNilai } from "./tampilan"; // PersiapanKelola = tampilan peserta + ketentuan undangan; absen -> Hari H; aturan nilai -> Penilaian
 import KendalaKelola from "./kendala"; // (3 Nov 2026) tab Kendala: petugas menolak / mundur -> ganti, kosongkan, atau alihkan
 import KoreksiKelola from "./koreksi"; // (6 Nov 2026) tab Kendala: kendala tes, soal bermasalah, pindah kelas / atasan, tambah peserta mendadak
 import HariKerjaKelola from "./hariKerja"; // (2 Nov 2026) tab Hari Kerja: matriks peserta x tanggal, buatkan / lepas / pindahkan dari kegiatan lain
@@ -31,9 +31,8 @@ import RapatKelola from "./rapat";
 import NotifikasiKelola from "./notifikasi";
 import PengumumanKelola from "./pengumuman";
 import { petakanTab, type TabKelola } from "@/lib/sigapKelolaTab";
-import TautanDasborVanguard from "../../vanguard/TautanDasborVanguard"; // (1 Nov 2026) pintasan ke dasbor Vanguard (tampil bila kegiatan memakai Vanguard)
 import { MonitoringAkses, MonitoringPresensi, MonitoringTranslok, PengaturanPresensiKartu } from "./kehadiran";
-import { InputSikap, PanelSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
+import { InputSikap, RingkasSkemaNilai, SkemaNilaiMandiri, useSkemaNilai } from "./skemaNilai";
 import { LABEL_DASAR_KUIS, SKEMA_BAWAAN as SKEMA_BAWAAN_KLIEN, hitungAkhir, lulusAkhirDari, ringkasSkema, tambahanDari, type HasilAkhir } from "@/lib/sigapNilaiHitung";
 import { BarFilterMonitoring, OPSI_JENIS, OPSI_PERAN, ThKontrol, lolosDasar, sortKolom, urutkan, useFilterMon, type Opsi } from "./monitorKit";
 import ModalFotoPanitia from "../ModalFotoPanitia";
@@ -261,7 +260,6 @@ export default function KelolaPelatihan() {
     >
       <PemilihSurveiPelatihan daftar={daftarSurvei} survei={surveiAktif} kegiatanId={kegId} onSurvei={gantiSurvei} onPelatihan={gantiPelatihan} onDibuat={setelahDibuat} />
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
-      <TautanDasborVanguard kegiatanId={kegId} />
       {!ringkas && !galat && <Memuat />}
       {ringkas && tab === "kesiapan" &&
         (ringkas.boleh_kelola ? (
@@ -298,7 +296,13 @@ export default function KelolaPelatihan() {
                 </div>
               ),
             },
-            { kode: "penilaian", label: "🏅 Penilaian", ket: "Cara menghitung nilai akhir (tidak menayangkan tes).", isi: () => <SkemaNilaiMandiri asal="soal" /> },
+            { kode: "penilaian", label: "🏅 Penilaian", ket: "Aturan nilai dan kelulusan, lalu cara menghitung nilai akhir (tidak menayangkan tes). Skema nilai hanya diubah di sini.", isi: () => (
+                <div className="space-y-3">
+                  <KartuAturanNilai bisa={ringkas.boleh_kelola} />
+                  <SkemaNilaiMandiri asal="soal" />
+                </div>
+              ),
+            },
             { kode: "instrumen", label: "Instrumen", ket: "Kuesioner, buku pedoman, dan PPT materi yang diunduh peserta.", isi: () => <InstrumenKelola /> },
             { kode: "vanguard", label: "Vanguard", ket: "Nyalakan simulasi pengisian kuesioner untuk pelatihan ini dan buka dasbor serta pengaturannya.", isi: () => <VanguardKelola /> },
             { kode: "kuispra", label: "🧠 Kuis Pra", ket: "Kuis sebelum pelatihan.", isi: () => <KuisPraKelola /> },
@@ -310,7 +314,7 @@ export default function KelolaPelatihan() {
           key={`${kegId ?? 0}-${navKey}`}
           label="Bagian Komunikasi"
           bagian={[
-            { kode: "tampilan", label: "Undangan & tampilan", ket: "Tampilan peserta, ketentuan undangan, absen, dan aturan nilai (bagian absen dan aturan nilai akan dipindah ke tempatnya pada tahap berikutnya).", isi: () => <PersiapanKelola /> },
+            { kode: "tampilan", label: "Undangan & tampilan", ket: "Tampilan peserta dan ketentuan undangan.", isi: () => <PersiapanKelola /> },
             { kode: "notifikasi", label: "🔔 Notifikasi", ket: "Pengingat push ke HP peserta.", isi: () => <NotifikasiKelola /> },
             { kode: "pengumuman", label: "📢 Pengumuman", ket: "Modal pengumuman di aplikasi peserta.", isi: () => <PengumumanKelola /> },
           ] as Bagian[]}
@@ -321,8 +325,18 @@ export default function KelolaPelatihan() {
           key={`${kegId ?? 0}-${navKey}`}
           label="Bagian Hari H"
           bagian={[
-            { kode: "monitoring", label: "📊 Monitoring", ket: "Pantau tes, akses, presensi, dan Transport Lokal.", isi: () => <MonitoringBagian /> },
-            { kode: "presensi", label: "📍 Absen & presensi", ket: "Sesi, jendela, radius, dan titik presensi.", isi: () => <PengaturanPresensiKartu /> },
+            { kode: "monitoring", label: "📊 Monitoring", ket: "Pantau tes, akses, presensi, dan Transport Lokal.", isi: () => <MonitoringBagian onUbahSkema={() => bukaTab("materi", "penilaian")} /> },
+            {
+              kode: "presensi",
+              label: "📍 Absen & presensi",
+              ket: "Pengaturan absen peserta (sesi, jendela, radius) dan presensi lokasi (titik, akurasi).",
+              isi: () => (
+                <div className="space-y-3">
+                  <KartuAturAbsen bisa={ringkas.boleh_kelola} />
+                  <PengaturanPresensiKartu />
+                </div>
+              ),
+            },
             { kode: "adusigap", label: "🎮 Adu Sigap", ket: "Kuis live bersama saat pelatihan berlangsung.", isi: () => <KuisLive bisaKelolaAwal={ringkas.boleh_kelola} /> },
             { kode: "rapat", label: "🎥 Rapat Zoom", ket: "Rapat daring dan presensinya.", isi: () => <RapatKelola kegiatanId={kegId} /> },
           ] as Bagian[]}
@@ -720,7 +734,7 @@ function ChipStatus({ c, jam }: { c: CelTes | undefined; jam: () => number }) {
 }
 
 type SubMon = "tes" | "akses" | "presensi" | "translok";
-function MonitoringBagian() {
+function MonitoringBagian({ onUbahSkema }: { onUbahSkema?: () => void }) {
   const [sub, setSub] = useState<SubMon>("tes");
   const item: { k: SubMon; label: string }[] = [
     { k: "tes", label: "📝 Pretest & Posttest" },
@@ -745,7 +759,7 @@ function MonitoringBagian() {
         ))}
       </div>
       {sub === "akses" && <MonitoringAkses />}
-      {sub === "tes" && <Monitoring />}
+      {sub === "tes" && <Monitoring onUbahSkema={onUbahSkema} />}
       {sub === "presensi" && <MonitoringPresensi />}
       {sub === "translok" && <MonitoringTranslok />}
     </div>
@@ -767,7 +781,7 @@ function nilaiPeserta(p: PesertaMon, d: ReturnType<typeof useSkemaNilai>["data"]
   return hitungAkhir(d?.skema ?? SKEMA_BAWAAN_KLIEN, { pretest: skor("pretest"), posttest: skor("posttest"), kuis, disiplin: d?.disiplin?.[id] ?? null, sikap: d?.sikap?.[id] ?? null }, d?.aturan?.versi ?? 1);
 }
 
-function Monitoring() {
+function Monitoring({ onUbahSkema }: { onUbahSkema?: () => void }) {
   const [data, setData] = useState<Monitor | null>(null);
   const [galat, setGalat] = useState<string | null>(null);
   const f = useFilterMon();
@@ -933,7 +947,7 @@ function Monitoring() {
     <div className="space-y-3">
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
 
-      <PanelSkemaNilai nilai={nilai} asal="monitoring" />
+      <RingkasSkemaNilai nilai={nilai} onUbah={onUbahSkema} />
 
       <BarFilterMonitoring f={f} total={total} semua={semua} statusOpsi={OPSI_STATUS_TES} catatan="Kartu & tabel di bawah hanya menghitung peserta ini." />
 

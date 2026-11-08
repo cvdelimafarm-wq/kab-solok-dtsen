@@ -332,7 +332,7 @@ export default function Administrasi() {
         {data?.skema && (
           <p className="mb-2 rounded-lg bg-[#F1F6FD] px-3 py-1.5 text-[12px] text-[#0F3D7A]">
             🎯 Nilai akhir = <b>{data.skema.ringkas}</b>
-            {data.skema.tersimpan ? "" : " (skema bawaan — belum disimpan)"}. Diatur di Kelola Pelatihan › Soal & Jadwal / Monitoring.
+            {data.skema.tersimpan ? "" : " (skema bawaan — belum disimpan)"}. Diatur di Kelola Pelatihan › Materi & Penilaian › Penilaian.
           </p>
         )}
         {!data ? (

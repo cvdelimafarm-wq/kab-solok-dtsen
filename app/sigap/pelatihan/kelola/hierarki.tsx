@@ -31,7 +31,7 @@ const ASAL: Record<NonNullable<SimpulHierarki["asal"]>, { teks: string; w: "mut"
 
 const SUB: ItemSub[] = [
   { kode: "pengaturan", label: "Pengaturan kelas", ket: "Jumlah dan nama kelas, siapa peserta tiap kelas, instruktur, dan panitia. Semua pilihan kelas di Adu Sigap dan Monitoring mengikuti ini." },
-  { kode: "hierarki", label: "Hierarki", ket: "Siapa melapor kepada siapa. Menentukan siapa yang dapat memantau progres siapa di tab Monitoring peserta." },
+  { kode: "hierarki", label: "Hierarki", ket: "Siapa melapor kepada siapa. Menentukan siapa yang dapat memantau progres siapa di Hari H › Monitoring peserta." },
   { kode: "instruktur", label: "Instruktur", ket: "Tetapkan instruktur per kelas, tanpa SQL." },
   { kode: "kelas", label: "Rencana kelas", ket: "Kelas menurut perencanaan (hanya baca)." },
 ];
@@ -422,7 +422,7 @@ export default function TimPesertaKelola() {
   const [sub, pilih] = useSub(SUB);
   return (
     <div>
-      <PilihSub daftar={SUB} aktif={sub} onPilih={pilih} label="Bagian Tim & Peserta" />
+      <PilihSub daftar={SUB} aktif={sub} onPilih={pilih} label="Bagian Peserta & Kelas" />
       {sub === "pengaturan" && <PengaturanKelasKelola bukaInstruktur={() => pilih("instruktur")} />}
       {sub === "hierarki" && <KartuHierarki />}
       {sub === "instruktur" && <InstrukturKelola />}

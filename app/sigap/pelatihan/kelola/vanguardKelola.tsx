@@ -190,7 +190,7 @@ export default function VanguardKelola() {
                   {d.tanggal_pretest && tgEfektif.sumber === "atur" && tgEfektif.tenggat >= d.tanggal_pretest && <> Perhatian: Pretest dibuka {tglTeks(d.tanggal_pretest)}, tidak sesudah tenggat ini.</>}
                 </>
               ) : (
-                <>Tenggat belum bisa dihitung: isi tenggat di atas atau jadwalkan Pretest di Soal &amp; Jadwal.</>
+                <>Tenggat belum bisa dihitung: isi tenggat di atas atau jadwalkan Pretest di Materi &amp; Penilaian › Tes.</>
               )}
             </div>
           )}

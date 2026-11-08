@@ -115,7 +115,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: nonaktif.length ? "kuning" : "ok",
       ringkas: nonaktif.length ? `${peserta.length} aktif, ${nonaktif.length} nonaktif` : `${peserta.length} peserta aktif`,
       rincian: nonaktif.map((p) => `${p.nama} (${p.peran.toUpperCase()}) nonaktif`),
-      tab: "tim", sub: "pengaturan",
+      tab: "peserta", sub: "pengaturan",
     });
   }
 
@@ -140,7 +140,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: daftar.length ? kurang(true) : "ok",
       ringkas: daftar.length ? `${daftar.length} orang belum punya hari kerja` : tanggal.length ? `Lengkap untuk ${tanggal.length} hari` : "Tanggal pelatihan belum diisi",
       rincian: daftar.map((e) => `${e.nama}: ${e.n} hari belum ada`),
-      tab: "harikerja",
+      tab: "peserta", sub: "harikerja",
     });
   }
 
@@ -153,7 +153,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: belum.length ? "kuning" : "ok",
       ringkas: belum.length ? `${belum.length} dari ${peserta.length} belum menjawab (boleh sampai hari H)` : `Semua ${peserta.length} sudah menjawab`,
       rincian: belum.map((p) => p.nama),
-      tab: "notifikasi",
+      tab: "komunikasi", sub: "notifikasi",
     });
   }
 
@@ -166,7 +166,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: tanpa.length ? "kuning" : "ok",
       ringkas: tanpa.length ? `${tanpa.length} PPL belum punya atasan` : "Setiap PPL punya atasan",
       rincian: tanpa.map((p) => p.nama),
-      tab: "tim", sub: "hierarki",
+      tab: "peserta", sub: "hierarki",
     });
   }
 
@@ -180,7 +180,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: adaMasalah ? kurang(true) : "ok",
       ringkas: kelas.length === 0 ? "Belum ada kelas" : tanpaInstruktur.length ? `${tanpaInstruktur.length} kelas belum punya instruktur` : `${kelas.length} kelas, ${m.instruktur.length} instruktur`,
       rincian: tanpaInstruktur.map((k) => `Kelas ${k} belum punya instruktur`),
-      tab: "tim", sub: "instruktur",
+      tab: "peserta", sub: "pengaturan",
     });
   }
 
@@ -190,7 +190,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
     status: panitia.length ? "ok" : kurang(true),
     ringkas: panitia.length ? `${panitia.length} panitia: ${daftarNama(panitia.map((p) => p.nama))}` : "Belum ada panitia",
     rincian: [],
-    tab: "tim", sub: "pengaturan",
+    tab: "peserta", sub: "pengaturan",
   });
 
   // 7. Pretest dan Posttest tayang
@@ -211,7 +211,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: masalah ? kurang(true) : "ok",
       ringkas: masalah ? "Ada tes yang belum memenuhi soal, jadwal, atau saklar tampil" : "Soal, jadwal, dan saklar tampil lengkap",
       rincian,
-      tab: "soal",
+      tab: "materi", sub: "tes",
     });
   }
 
@@ -235,7 +235,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: masalah ? "kuning" : "ok",
       ringkas: masalah ? "Periksa jadwal Pretest dan Posttest" : "Jadwal sesuai",
       rincian,
-      tab: "soal",
+      tab: "materi", sub: "tes",
     });
   }
 
@@ -248,7 +248,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: !s.tersimpan ? "info" : benar ? "ok" : "kuning",
       ringkas: !s.tersimpan ? "Memakai skema bawaan (belum disimpan)" : benar ? "Tersimpan, total bobot 100%" : `Total bobot ${s.totalBobot}%, harus 100%`,
       rincian: [],
-      tab: "soal",
+      tab: "materi", sub: "penilaian",
     });
   }
 
@@ -258,7 +258,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
     status: m.presensi.titikAktif > 0 ? "ok" : kurang(true),
     ringkas: m.presensi.titikAktif > 0 ? `${m.presensi.titikAktif} titik aktif` : "Belum ada titik presensi aktif",
     rincian: [],
-    tab: "persiapan", sub: "pengaturan",
+    tab: "harih", sub: "presensi",
   });
 
   // 11. Materi
@@ -267,7 +267,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
     status: m.materi + m.berkas > 0 ? "ok" : "info",
     ringkas: m.materi + m.berkas > 0 ? `${m.materi} materi, ${m.berkas} berkas` : "Belum ada materi atau berkas",
     rincian: [],
-    tab: "persiapan", sub: "instrumen",
+    tab: "materi", sub: "instrumen",
   });
 
   // 12. Pengumuman
@@ -276,7 +276,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
     status: m.pengumuman > 0 ? "ok" : "info",
     ringkas: m.pengumuman > 0 ? `${m.pengumuman} pengumuman aktif` : "Tidak ada pengumuman aktif",
     rincian: [],
-    tab: "notifikasi", sub: "pengumuman",
+    tab: "komunikasi", sub: "pengumuman",
   });
 
   // 13. Tarif peran
@@ -288,7 +288,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: tanpaTarif.length ? "kuning" : "ok",
       ringkas: tanpaTarif.length ? `Peran tanpa tarif: ${tanpaTarif.map((p) => p.toUpperCase()).join(", ")}` : "Tarif terpasang untuk semua peran",
       rincian: [],
-      tab: "administrasi",
+      tab: "hasil",
     });
   }
 
@@ -307,7 +307,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: kurangKelas.length ? (sudahMulai ? "kuning" : "info") : "ok",
       ringkas: kurangKelas.length ? `Target ${target} foto per kelas; ${kurangKelas.length} kelas belum cukup` : "Foto pelaksanaan cukup",
       rincian,
-      tab: "administrasi",
+      tab: "hasil",
     });
   }
 
@@ -317,7 +317,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
     status: m.undanganBernomor > 0 ? "ok" : "kuning",
     ringkas: m.undanganBernomor > 0 ? `${m.undanganBernomor} nomor undangan tercatat di Arsip` : "Belum ada nomor undangan untuk pelatihan ini di Arsip",
     rincian: [],
-    tab: "notifikasi",
+    tab: "komunikasi", sub: "tampilan",
   });
 
   // 16. Bentrokan jadwal
@@ -328,7 +328,7 @@ export function hitungKesiapan(m: MasukanKesiapan): HasilKesiapan {
       status: m.bentrok.length ? kurang(true) : "ok",
       ringkas: m.bentrok.length ? `${m.bentrok.length} bentrokan belum diputuskan` : "Tidak ada bentrokan",
       rincian,
-      tab: "harikerja",
+      tab: "peserta", sub: "harikerja",
     });
   }
 

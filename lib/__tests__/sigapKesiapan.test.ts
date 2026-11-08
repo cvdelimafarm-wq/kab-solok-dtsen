@@ -2,6 +2,7 @@
 // (8 Nov 2026) Uji fungsi murni kartu Kesiapan Kelola Pelatihan.
 import { describe, expect, it } from "vitest";
 import { FOTO_PER_HARI_PER_KELAS, daftarTanggal, hitungKesiapan, tanggalWib, tglPendek, type MasukanKesiapan } from "../sigapKesiapan";
+import { TAB_KELOLA, petakanTab } from "../sigapKelolaTab";
 
 const SEKARANG = new Date("2026-11-01T00:00:00Z"); // 1 Nov 07.00 WIB -> H-8
 
@@ -185,5 +186,12 @@ describe("hitungKesiapan", () => {
     const m = dasar({ penugasan: [...dasar().penugasan, { akun_id: 9, nama: "Dedi", peran: "ppl", aktif: false, kelas: 1 }] });
     expect(cari(m, "peserta_aktif").status).toBe("kuning");
     expect(cari(m, "hari_kerja").status).toBe("ok");
+  });
+
+  it("setiap butir menunjuk tab baru yang sah, dan tidak perlu dialihkan lagi", () => {
+    for (const b of hitungKesiapan(dasar()).butir) {
+      expect(TAB_KELOLA, b.kode).toContain(b.tab);
+      expect(petakanTab(b.tab, b.sub), b.kode).toEqual({ tab: b.tab, sub: b.sub });
+    }
   });
 });

@@ -2,6 +2,8 @@
 
 // app/sigap/pelatihan/kelola/tampilan.tsx
 //
+// (8 Nov 2026) Berkas ini kini dipecah menurut tempat pakainya: PersiapanKelola (default) = Tampilan peserta + Ketentuan undangan -> tab Komunikasi;
+// KartuAturAbsen -> tab Hari H (Absen & presensi); KartuAturanNilai -> tab Materi & Penilaian (Penilaian). Isi kartu tidak berubah.
 // (2 Nov 2026) Tab "Persiapan" di Kelola Pelatihan: (1) tampilan peserta (OTOMATIS bawaan: lima tab selama pelatihan belum selesai; dapat dipaksa baru / lama),
 // (2) ketentuan undangan, (3) pengaturan Absen peserta (sesi, jendela, radius), (4) aturan nilai dan kelulusan (versi lama / baru). Setiap setelan diberi penanda Bawaan / Diubah.
 // API: /api/sigap/pelatihan/ketentuan, /api/sigap/pelatihan/absen (aksi "atur") dan /api/sigap/pelatihan/nilai (aksi "simpan_aturan").
@@ -37,7 +39,7 @@ const sama = (a: AturAbsen, b: AturAbsen) => JSON.stringify(a) === JSON.stringif
 const BAWAAN_ABSEN: AturAbsen = { sesi: SESI_BAWAAN.map((x) => ({ ...x })), jendela_menit: JENDELA_MENIT_BAWAAN, radius_m: RADIUS_RADAR_BAWAAN_M };
 
 /** Pengaturan Absen peserta: daftar sesi (label + jam rencana), jendela absen, radius radar. */
-function KartuAturAbsen({ bisa }: { bisa: boolean }) {
+export function KartuAturAbsen({ bisa }: { bisa: boolean }) {
   const [asal, setAsal] = useState<AturAbsen | null>(null);
   const [f, setF] = useState<AturAbsen>(BAWAAN_ABSEN);
   const [ada, setAda] = useState(true);
@@ -141,7 +143,7 @@ function KartuAturAbsen({ bisa }: { bisa: boolean }) {
 type AturanKeg = { versi: VersiAturan; blokir_tahap: boolean; izin_ajukan: boolean; eksplisit: boolean };
 
 /** Aturan nilai & kelulusan: versi 1 (lama: nilai tertinggi, lulus bila >= ambang) atau 2 (baru: nilai percobaan pertama, lulus bila > ambang; hanya flag). */
-function KartuAturanNilai({ bisa }: { bisa: boolean }) {
+export function KartuAturanNilai({ bisa }: { bisa: boolean }) {
   const [a, setA] = useState<AturanKeg | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
@@ -205,7 +207,7 @@ function KartuAturanNilai({ bisa }: { bisa: boolean }) {
       </div>
       <p className="mt-2 text-[12.5px] text-[#6B7A90]">
         Kelulusan hanya penanda untuk laporan ke pimpinan; tidak memblokir pendataan. Mengubah aturan mengubah cara nilai dihitung untuk semua peserta kegiatan ini, termasuk yang sudah mengerjakan. Pelatihan PSP Pascabencana tetap aturan lama bila tidak diubah.
-        Ambang kelulusan nilai akhir diatur di Soal &amp; Jadwal (skema nilai), bawaan 70. Pengulangan sampai 100 diatur per tes di Soal &amp; Jadwal (centang &quot;Wajib 100&quot;).
+        Ambang kelulusan nilai akhir diatur di Materi &amp; Penilaian › Penilaian (skema nilai), bawaan 70. Pengulangan sampai 100 diatur per tes di Materi &amp; Penilaian › Tes (centang &quot;Wajib 100&quot;).
       </p>
       <fieldset className="mt-3 border-t border-[#EDF0F4] pt-3">
         <legend className="text-[13.5px] font-extrabold text-[#0F2A52]">Urutan tahapan</legend>
@@ -440,8 +442,6 @@ export default function PersiapanKelola() {
         )}
       </Kartu>
 
-      <KartuAturAbsen bisa={bisa} />
-      <KartuAturanNilai bisa={bisa} />
     </div>
   );
 }

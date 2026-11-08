@@ -111,7 +111,7 @@ export function PanelSkemaNilai({ nilai, asal }: { nilai: PakaiSkemaNilai; asal:
     >
       <p className="mb-2 text-[12px] text-[#55657D]">
         Bagian ini hanya menentukan cara menghitung nilai akhir; tidak membuka atau menayangkan Pretest/Posttest (itu diatur di kartu tesnya masing-masing, saklar "Tampilkan tes ke peserta"). Centang komponen yang diperhitungkan lalu isi bobotnya (total 100%). Kedisiplinan dihitung otomatis dari presensi; Sikap diisi panitia di tab Monitoring.{" "}
-        {asal === "soal" ? "Pengaturan yang sama juga ada di Monitoring › Pretest & Posttest." : "Pengaturan yang sama juga ada di Soal & Jadwal."} Skema ini otomatis dipakai tab Administrasi dan Laporan Pelatihan.
+        Ini satu-satunya tempat mengubah skema; Hari H dan Hasil & Administrasi hanya menampilkan ringkasannya. Skema ini otomatis dipakai Monitoring, Administrasi, dan Laporan Pelatihan.
       </p>
       <div className="grid gap-2 sm:grid-cols-3">
         {KOMPONEN.map((k) => (
@@ -234,6 +234,21 @@ export function PanelSkemaNilai({ nilai, asal }: { nilai: PakaiSkemaNilai; asal:
 export function SkemaNilaiMandiri({ asal }: { asal: "soal" | "monitoring" }) {
   const nilai = useSkemaNilai(0);
   return <PanelSkemaNilai nilai={nilai} asal={asal} />;
+}
+
+/** (8 Nov 2026) Ringkasan skema (hanya baca) untuk Hari H dan Hasil: satu tempat ubah ada di Materi & Penilaian. */
+export function RingkasSkemaNilai({ nilai, onUbah }: { nilai: PakaiSkemaNilai; onUbah?: () => void }) {
+  const { data, galat } = nilai;
+  if (!data) return galat ? <Pesan jenis="galat">{galat}</Pesan> : null;
+  return (
+    <Kartu
+      judul="🎯 Skema nilai akhir"
+      ket={`${ringkasSkema(data.skema ?? SKEMA_BAWAAN)}${data.tersimpan ? "" : " · skema bawaan (belum disimpan)"}`}
+      kanan={onUbah ? <button type="button" className={BTN_O} onClick={onUbah}>Ubah di Materi & Penilaian</button> : undefined}
+    >
+      <p className="text-[12px] text-[#55657D]">Hanya ringkasan. Skema diubah di satu tempat: Materi & Penilaian › Penilaian.</p>
+    </Kartu>
+  );
 }
 
 /** Kolom Sikap di Monitoring: input 0-100, tersimpan saat meninggalkan kotak (kosong = hapus). */
