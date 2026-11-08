@@ -5,13 +5,14 @@
 // tombol Sebelumnya/Berikutnya. Berkas ini SATU-SATUNYA tempat yang menentukan urutan dan status langkah (selesai / terlewat / bisa dikerjakan),
 // dipakai oleh halaman Langkah (page.tsx) dan oleh Kerangka halaman-halaman lain, supaya status di semua halaman selalu sama.
 //
+// (8 Nov 2026) + langkah 8 "Roleplaying by Vanguard" (sesudah Adu Sigap) dan penanda `lepas`: presensi, absen sesi, roleplay, foto Translok boleh tidak berurutan.
 // Urutan: 1 undangan · 2 instrumen · (Vanguard, lima tab) · 3 pretest · 4 presensi · (Adu Sigap, tambahan, bila admin membuat kuis) · (foto sebelum posttest, bila kelas perlu foto)
 //         · posttest · (foto sesudah posttest). Aturan status disalin dari page.tsx lama tanpa perubahan arti.
 
 import { bagiFoto, keadaanHari, type PengaturanPresensi, type RingkasHari } from "./sigapPresensi";
 import { posisiAlur, type PosisiAlur, type TahapAlur } from "./alurKelola";
 
-export type KodeLangkah = "undangan" | "instrumen" | "vanguard" | "pretest" | "hadir" | "sesi" | "kuis" | "foto_awal" | "posttest" | "foto_akhir";
+export type KodeLangkah = "undangan" | "instrumen" | "vanguard" | "pretest" | "hadir" | "sesi" | "kuis" | "roleplay" | "foto_awal" | "posttest" | "foto_akhir";
 
 export type StatusLangkah = "selesai" | "terlewat" | "sekarang" | "menyusul";
 
@@ -33,6 +34,11 @@ export type LangkahPelatihan = {
   href: string;
   /** (2 Nov 2026) Terhalang tahapan sebelumnya (blokir tahapan): tidak "bisaSekarang" sampai tahapan itu tuntas atau kunci dibuka. */
   terkunci?: boolean;
+  /**
+   * (8 Nov 2026) Langkah LEPAS dari urutan: boleh dikerjakan kapan saja, tidak mengunci langkah sesudahnya, dan tidak dipakai sebagai penunjuk "Berikutnya"
+   * (presensi, absen sesi, roleplay Vanguard, dua foto Translok). Daftar: LANGKAH_LEPAS.
+   */
+  lepas?: boolean;
 };
 
 export type MasukanLangkah = {
@@ -50,6 +56,12 @@ export type MasukanLangkah = {
    * `wajib` = mode "N hari berturut-turut" (langkah wajib, dihitung dalam progres); selain itu langkah tambahan. `tuntas` = runtutan selesai; `benar` = jumlah kasus yang sudah benar.
    */
   vanguard?: { wajib: boolean; tuntas: boolean; hariIniSudah: boolean; benar: number } | null;
+  /**
+   * (8 Nov 2026) Roleplaying by Vanguard (langkah 8, tab Hari ini): diisi HANYA pada tampilan lima tab bila Vanguard menyala untuk peserta ini; null/tidak diisi = langkah tidak ada.
+   * `ada` = sudah ada sesi roleplay di kelas peserta, `terbuka` = ada sesi yang sedang berjalan, `sudahIsi` = peserta sudah mengisi di sesi yang berjalan, `selesai` = roleplay diumumkan.
+   * Langkah tambahan dan lepas dari urutan.
+   */
+  roleplay?: { ada: boolean; terbuka: boolean; sudahIsi: boolean; selesai: boolean } | null;
   /** Kelas luring/hybrid/belum tertaut = true; kelas Daring = false (tanpa foto Transport Lokal). */
   fotoTranslok: boolean;
   /** Jam mulai pelatihan (ms epoch); langkah foto "menyala" sejak saat ini. */
@@ -61,6 +73,10 @@ export const ALAMAT_LANGKAH = "/sigap/pelatihan";
 
 /** (3 Nov 2026) Ringkasan kuis "belum ada ruang": tampilan lima tab tetap memunculkan langkah Adu Sigap (status Menyusul) walau panitia belum membuat kuis. */
 export const KUIS_BELUM_ADA = { pernah_ikut: false, ada_ruang_selesai: false, ada_ruang_aktif: false } as const;
+/** (8 Nov 2026) Tampilan lima tab tetap memunculkan langkah Roleplay (status Menyusul) walau belum ada sesi. */
+export const ROLEPLAY_BELUM_ADA = { ada: false, terbuka: false, sudahIsi: false, selesai: false } as const;
+/** (8 Nov 2026) Langkah yang dapat dikerjakan tanpa urutan (tidak mengunci tahap sesudahnya). Tes dan Vanguard/Pretest tetap berurutan. */
+export const LANGKAH_LEPAS: readonly KodeLangkah[] = ["hadir", "sesi", "roleplay", "foto_awal", "foto_akhir"];
 const alamatDalamLangkah = (kode: KodeLangkah) => `${ALAMAT_LANGKAH}?langkah=${kode}`;
 
 /** Jam mulai & selesai pelatihan (ms epoch) dari tanggal_iso + "pukul" undangan, mis. "08.00–16.00 WIB". Bawaan 08.00-16.00. */
@@ -144,6 +160,17 @@ export function hitungLangkahPelatihan(m: MasukanLangkah): LangkahPelatihan[] {
     });
   }
 
+  // (8 Nov 2026) Roleplaying by Vanguard = langkah 8 (sesudah Adu Sigap, sebelum foto Translok pertama). Tambahan; selesai bila roleplay sudah diumumkan.
+  if (m.roleplay) {
+    const r = m.roleplay;
+    hasil.push({
+      ...dasar("roleplay", "Roleplaying by Vanguard", "Roleplay", false, `${ALAMAT_LANGKAH}/hari-ini?langkah=roleplay`),
+      selesai: r.selesai,
+      bisaSekarang: r.terbuka && !r.selesai,
+      tambahan: true,
+    });
+  }
+
   const fotoTotal = L?.foto_total ?? 5;
   const { awal, akhir } = bagiFoto(fotoTotal);
   const langkahFoto = (kode: "foto_awal" | "foto_akhir", slotIni: number[], judul: string, singkat: string): LangkahPelatihan => {
@@ -153,7 +180,7 @@ export function hitungLangkahPelatihan(m: MasukanLangkah): LangkahPelatihan[] {
   if (m.fotoTranslok && awal.length) hasil.push(langkahFoto("foto_awal", awal, `Unggah ${awal.length} foto Translok sebelum Posttest`, "Foto Translok"));
   hasil.push(langkahTes("posttest", "Kerjakan Posttest", "Posttest"));
   if (m.fotoTranslok && akhir.length) hasil.push(langkahFoto("foto_akhir", akhir, `Unggah ${akhir.length} foto Translok sesudah Posttest`, "Foto Translok"));
-  return hasil;
+  return hasil.map((l) => (LANGKAH_LEPAS.includes(l.kode) ? { ...l, lepas: true } : l));
 }
 
 /**
@@ -161,7 +188,7 @@ export function hitungLangkahPelatihan(m: MasukanLangkah): LangkahPelatihan[] {
  * yang belum selesai = "Berikutnya") / menyusul. Aturan persis halaman Langkah.
  */
 export function statusLangkah(daftar: readonly LangkahPelatihan[]): StatusLangkah[] {
-  const pertama = daftar.findIndex((l) => !l.selesai && !l.terlewat && !l.tambahan);
+  const pertama = daftar.findIndex((l) => !l.selesai && !l.terlewat && !l.tambahan && !l.lepas); // (8 Nov 2026) langkah lepas tidak jadi penunjuk "Berikutnya"
   return daftar.map((l, i) => {
     if (l.selesai) return "selesai";
     if (l.terlewat) return "terlewat";
@@ -206,7 +233,7 @@ export function catatanBerikutnya(daftar: readonly LangkahPelatihan[], aktif: st
   return `${b.singkat} belum bisa dikerjakan sekarang. Buka saja untuk melihat jadwal atau syaratnya.`;
 }
 
-const KODE_VALID: readonly string[] = ["undangan", "instrumen", "vanguard", "pretest", "hadir", "sesi", "kuis", "foto_awal", "posttest", "foto_akhir"];
+const KODE_VALID: readonly string[] = ["undangan", "instrumen", "vanguard", "pretest", "hadir", "sesi", "kuis", "roleplay", "foto_awal", "posttest", "foto_akhir"];
 /** Nilai ?langkah= dari alamat -> kode yang dikenal, selain itu null (alamat sembarangan tidak boleh dipakai mencari elemen). */
 export function bacaLangkahDariAlamat(q: string | null | undefined): KodeLangkah | null {
   return q && KODE_VALID.includes(q) ? (q as KodeLangkah) : null;

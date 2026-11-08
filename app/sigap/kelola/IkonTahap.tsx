@@ -170,6 +170,15 @@ const G = {
       <circle cx="12" cy="13.5" r="3.5" />
     </>
   ),
+  // (8 Nov 2026) balon percakapan: langkah Roleplaying by Vanguard
+  balon: () => (
+    <>
+      <path d="M4 5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H9l-4 3.5V14H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+      <path d="M20 9.5V16a1 1 0 0 1-1 1h-1v3l-3-3" />
+      <path d="M7 8.5h6" />
+      <path d="M7 11h4" />
+    </>
+  ),
   titik: () => <circle cx="12" cy="12" r="3" />,
 } satisfies Record<string, () => ReactNode>;
 
@@ -202,6 +211,7 @@ const PETA: Record<string, NamaIkon> = {
   hadir: "lokasi",
   sesi: "cek", // (3 Nov 2026) absen sesi pelatihan
   vanguard: "perisai", // (3 Nov 2026) latihan Vanguard
+  roleplay: "balon", // (8 Nov 2026) Roleplaying by Vanguard
   foto_awal: "kamera",
   foto_akhir: "kamera",
 };

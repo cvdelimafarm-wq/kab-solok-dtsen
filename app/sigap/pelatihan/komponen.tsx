@@ -27,6 +27,7 @@ import { useKelasSaya } from "./kartuKelas";
 import { LangkahGeser, PenunjukPelatihan } from "./AlurPelatihan";
 import { ringkasAbsenSaya, useAbsenSaya } from "./absenSaya"; // (3 Nov 2026) langkah Absen sesi
 import { useVanguardSaya } from "../vanguardSaya"; // (3 Nov 2026) langkah Vanguard
+import { useRoleplaySaya } from "../roleplaySaya"; // (8 Nov 2026) langkah 8 Roleplaying by Vanguard (hanya bila dicentang di Kelola Pelatihan)
 import { TabPelatihanOtomatis, useBenderaTab, useTerkunciUndangan, type TabAktif } from "./TabPelatihan"; // (2 Nov 2026) bilah 5 tab, hanya bila kegiatan memakai tampilan baru
 import { TEKS_TERKUNCI } from "@/lib/gerbangUndangan"; // (3 Nov 2026) gerbang undangan
 import type { KunciTes } from "./KartuTerkunci";
@@ -176,6 +177,7 @@ function AlurKerangka({ kode, hub: hubLuar, selesai, tersembunyi, children }: { 
   const lima = !!bendera?.tab_baru;
   const absen = useAbsenSaya(lima);
   const vg = useVanguardSaya(lima && hub?.peserta ? hub.kegiatan_id ?? null : null);
+  const rp = useRoleplaySaya(lima && hub?.peserta ? hub.kegiatan_id ?? null : null);
   const sekarangServer = hub?.sekarang;
   const selisih = useMemo(() => (sekarangServer ? new Date(sekarangServer).getTime() - Date.now() : 0), [sekarangServer]);
   const adaDataAbsen = !!absen.data;
@@ -190,13 +192,14 @@ function AlurKerangka({ kode, hub: hubLuar, selesai, tersembunyi, children }: { 
       kuis: lima ? hub.kuis ?? KUIS_BELUM_ADA : hub.kuis,
       absenSesi: lima && adaDataAbsen ? ringkasAbsenSaya(absen.data, nowMs) : null,
       vanguard: lima ? vg.langkah : null,
+      roleplay: lima ? rp.langkah : null,
       fotoTranslok,
       mulaiMs: jendelaPelatihan(hub.undangan).mulai,
       now: nowMs,
     });
     return selesai && kode ? d.map((l) => (l.kode === kode ? { ...l, selesai: true, terlewat: false } : l)) : d;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hub, fotoTranslok, selisih, selesai, kode, lima, adaDataAbsen, absenTotal, absen.data, vg.langkah]);
+  }, [hub, fotoTranslok, selisih, selesai, kode, lima, adaDataAbsen, absenTotal, absen.data, vg.langkah, rp.langkah]);
   const status = useMemo(() => (daftar ? statusLangkah(daftar) : []), [daftar]);
   const tampil = !tersembunyi && !!daftar && (kode === null || daftar.some((l) => l.kode === kode));
   const hrefAlih = useMemo<Partial<Record<string, string>>>(() => (lima && hub?.kegiatan_id ? { foto_awal: `/sigap/foto?kegiatan=${hub.kegiatan_id}`, foto_akhir: `/sigap/foto?kegiatan=${hub.kegiatan_id}` } : {}), [lima, hub?.kegiatan_id]);

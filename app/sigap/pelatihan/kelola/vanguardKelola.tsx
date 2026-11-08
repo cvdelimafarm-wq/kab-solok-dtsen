@@ -12,6 +12,7 @@ import { BTN, Chip, Kartu, Memuat, Pesan } from "../../admin/ui";
 import { alamatDasbor } from "@/lib/vanguard/navigasi";
 import { LABEL_MODE_VANGUARD, MODE_VANGUARD, adalahTanggalSah, tambahHari, tentukanTenggat, type AturanVanguard, type ModeVanguard } from "@/lib/runtutanVanguard";
 import { teksModeVanguard } from "@/lib/vanguardPelatihan";
+import RoleplayKelola from "./roleplayKelola"; // (8 Nov 2026) centang Roleplay bareng kelas
 import { PILIHAN_VANGUARD, pilihanDari, teksSumberVanguard, type KeadaanVanguardKelola, type PilihanVanguard } from "@/lib/vanguardPelatihan";
 
 export default function VanguardKelola() {
@@ -230,6 +231,7 @@ export default function VanguardKelola() {
           )}
         </Kartu>
       )}
+      <RoleplayKelola />
     </div>
   );
 }

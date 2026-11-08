@@ -13,6 +13,7 @@ import Link from "next/link";
 import { bukaBlob, fetchJson, pesanGalat } from "../../admin/api";
 import { BTN, BTN_O, BTN_R, Kartu, Memuat, Pesan } from "../../admin/ui";
 import KartuVanguardHariIni from "../../KartuVanguardHariIni";
+import KartuRoleplayHariIni from "../../KartuRoleplayHariIni"; // (8 Nov 2026) Roleplaying by Vanguard (langkah 8)
 import AbsenPeserta from "../AbsenPeserta";
 import KartuIzinBuka from "../KartuIzinBuka";
 import { Kerangka } from "../komponen";
@@ -283,6 +284,7 @@ export default function HalamanHariIni() {
           {!vg.mendesak && !terkunciUndangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
           {!terkunciUndangan && <AbsenPeserta />}
           {!terkunciUndangan && <KartuKuis />}
+          {!terkunciUndangan && <KartuRoleplayHariIni kegiatanId={d.kegiatan_id} />}
           {/* (2 Nov 2026) nomor pulsa: dikonfirmasi sekali lewat pop-up; di sini hanya kartu redup di bagian bawah (permintaan user) */}
           {!terkunciUndangan && <PulsaPeserta tampilan="kartu" judul={judulPelatihan(info)} />}
           {!d.tab_baru && (
