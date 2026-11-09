@@ -12,6 +12,7 @@ import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan } from "@/lib/sigapTesDb";
 import { muatKelasKegiatan } from "@/lib/sigapKelasKegiatan";
 import { cariAkun, kelasTersedia, lepasInstruktur, muatInstruktur, tetapkanInstruktur } from "@/lib/sigapInstrukturDb";
+import { tambahPesertaAdministrasi } from "@/lib/sigapAdministrasiDaftar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +58,20 @@ export async function POST(req: NextRequest) {
       const hasil = await tetapkanInstruktur(p.db, p.kegiatanId, akunId, Number(body.kelas));
       if (!hasil.ok) return galat(hasil.pesan);
       await catatAudit(p.db, p.akun.id, "pelatihan_instruktur_tetapkan", { kegiatan_id: p.kegiatanId, akun_id: akunId, kelas: Number(body.kelas) });
-      return NextResponse.json({ ok: true });
+      // (9 Nov 2026) Transport Lokal ikut peran instruktur: instruktur otomatis masuk daftar administrasi (peran instruktur, bukan peserta tes) supaya Kamera dan Translok aktif.
+      // Sudah punya penugasan aktif (mis. PML) = tidak diubah; tarif instruktur belum diatur atau gagal = pelatihan tetap tersimpan, hanya diberi catatan.
+      let translok: string | null = null;
+      try {
+        const t = await tambahPesertaAdministrasi(p.db, p.kegiatanId, { akunId, peran: "instruktur", kelas: Number(body.kelas) });
+        if (t.ok) {
+          translok = "aktif";
+          await catatAudit(p.db, p.akun.id, "pelatihan_instruktur_translok", { kegiatan_id: p.kegiatanId, akun_id: akunId, penugasan_id: t.penugasan_id });
+        } else if (t.status === 409 && /sudah ada di daftar/.test(t.pesan)) translok = "sudah";
+        else translok = t.pesan;
+      } catch {
+        translok = null;
+      }
+      return NextResponse.json({ ok: true, translok });
     }
     if (body.aksi === "lepas") {
       const hasil = await lepasInstruktur(p.db, p.kegiatanId, akunId);
