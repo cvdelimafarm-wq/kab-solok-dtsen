@@ -91,3 +91,22 @@ export function pilihTanggalBawaan(hari: readonly string[], hariIni: string): st
   if (hari.length === 0) return null;
   return hari.includes(hariIni) ? hariIni : hari[0];
 }
+
+// ---- Foto dari Kamera peserta (sigap_dokumentasi) dipakai sebagai lampiran laporan: berkas DISALIN, jejak asal ada pada nama berkas ----
+
+/** Alamat berkas lampiran hasil salinan; `dok<ID>_` menandai foto Kamera asalnya (mencegah pemakaian ganda tanpa kolom baru). */
+export function pathSalinanKamera(kegiatanId: number, kelas: number, dokumentasiId: number, acak: string, asal = ""): string {
+  const ekstensi = /\.png$/i.test(asal) ? "png" : "jpg"; // PDF memilih penyemat menurut ekstensi
+  return `pelatihan-laporan/${kegiatanId}/${kelas}/dok${dokumentasiId}_${acak}.${ekstensi}`;
+}
+
+/** id sigap_dokumentasi dari alamat berkas lampiran; null bila bukan salinan Kamera. */
+export function dokumentasiIdDariPath(path: string | null | undefined): number | null {
+  const m = /\/dok(\d+)_[^/]*$/.exec(path ?? "");
+  return m ? Number(m[1]) : null;
+}
+
+/** Berapa foto lagi yang boleh dipilih pada tanggal itu (target 4 per hari) dan di kelas (batas 4 x hari). */
+export function sisaPilih(hariIni: number, totalKelas: number, jumlahHari: number, target = FOTO_PER_HARI): number {
+  return Math.max(0, Math.min(target - hariIni, batasFotoKelas(jumlahHari) - totalKelas));
+}

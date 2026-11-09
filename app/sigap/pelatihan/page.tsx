@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { usePeranMasuk } from "./peranMasuk"; // (9 Nov 2026) pengelola berperan ganda dibawa ke Hari ini (ada tombol "Masuk sebagai"), bukan ke Kelola
 import { useBenderaTab } from "./TabPelatihan";
 import { useInfoPelatihan } from "./infoPelatihan";
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
@@ -720,9 +721,13 @@ export default function HalamanPelatihan() {
   }, []);
   const now = jam.sekarang();
   // (7 Okt 2026) /sigap/pelatihan = tab Langkah bagi peserta. Pengelola yang bukan peserta langsung dibawa ke Kelola Pelatihan.
+  // (9 Nov 2026) Pengelola yang juga punya peran nyata lain (mis. PJ + instruktur) dibawa ke Hari ini: di sana ada tombol "Masuk sebagai". Pengelola satu peran tetap ke Kelola.
+  const peranAlih = usePeranMasuk();
   useEffect(() => {
-    if (data && !data.peserta && data.boleh_lihat_kelola) router.replace("/sigap/kelola/pelatihan");
-  }, [data, router]);
+    if (!data || data.peserta || !data.boleh_lihat_kelola || peranAlih.memuat) return;
+    if (peranAlih.nyata.length >= 2) router.replace(`/sigap/pelatihan/hari-ini${window.location.search}`);
+    else router.replace("/sigap/kelola/pelatihan");
+  }, [data, router, peranAlih.memuat, peranAlih.nyata.length]);
   // (2 Nov 2026) Kegiatan yang memakai tampilan 5 tab: halaman puncak pelatihan = tab "Hari ini". Tab "Pelatihan" membuka halaman ini dengan ?tab=pelatihan (tidak dialihkan).
   const bendera = useBenderaTab();
   // (2 Nov 2026) Tampilan lima tab: tab Pelatihan hanya memuat kartu Pretest / Adu Sigap / Posttest (tanpa daftar tahapan bernomor, yang membingungkan; undangan dan presensi ada di Hari ini,

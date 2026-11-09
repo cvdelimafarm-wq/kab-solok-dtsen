@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catatanLampiran, hariKurang, idDariLabel, jenisPengunggah, pilihTanggalBawaan, ringkasPerHari, tanggalEfektif, teksHari, totalDihitung, batasFotoKelas } from "@/lib/sigapFotoHari";
+import { dokumentasiIdDariPath, pathSalinanKamera, sisaPilih, catatanLampiran, hariKurang, idDariLabel, jenisPengunggah, pilihTanggalBawaan, ringkasPerHari, tanggalEfektif, teksHari, totalDihitung, batasFotoKelas } from "@/lib/sigapFotoHari";
 
 const hari = ["2026-11-09", "2026-11-10"];
 const ins = new Set([7]);
@@ -50,5 +50,19 @@ describe("sigapFotoHari", () => {
     expect(pilihTanggalBawaan(hari, "2026-11-10")).toBe("2026-11-10");
     expect(pilihTanggalBawaan(hari, "2026-11-20")).toBe("2026-11-09");
     expect(pilihTanggalBawaan([], "2026-11-10")).toBeNull();
+  });
+  it("jejak foto Kamera pada nama berkas", () => {
+    const p = pathSalinanKamera(7, 1, 345, "abc123");
+    expect(p).toBe("pelatihan-laporan/7/1/dok345_abc123.jpg");
+    expect(dokumentasiIdDariPath(p)).toBe(345);
+    expect(pathSalinanKamera(7, 1, 345, "abc", "dok/x/1.PNG")).toBe("pelatihan-laporan/7/1/dok345_abc.png");
+    expect(dokumentasiIdDariPath("pelatihan-laporan/7/1/1794_x.jpg")).toBeNull();
+    expect(dokumentasiIdDariPath(null)).toBeNull();
+  });
+  it("sisa pilih mengikuti 4 per hari dan batas kelas", () => {
+    expect(sisaPilih(1, 1, 1)).toBe(3);
+    expect(sisaPilih(4, 4, 1)).toBe(0);
+    expect(sisaPilih(2, 8, 2)).toBe(0);
+    expect(sisaPilih(0, 4, 2)).toBe(4);
   });
 });

@@ -574,6 +574,7 @@ function PanelNarasi({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean
 // (9 Nov 2026) 4 foto PER HARI per kelas (sebelumnya 4 per kelas); panitia dan instruktur satu kumpulan, tiap foto bertanggal & berlabel pengunggah.
 type FotoLap = { id: number; urut: number; keterangan: string | null; url: string | null; tanggal?: string | null; pengunggah?: "panitia" | "instruktur" | "lain" };
 type HariRingkas = { tanggal: string; jumlah: number; panitia: number; instruktur: number; lain: number; kurang: number };
+type FotoKamera = { id: number; nama: string; slot: number; url: string | null; dipakai: boolean };
 type DataFoto = { foto: FotoLap[]; hari?: string[]; maks?: number; ringkas?: HariRingkas[] };
 const FOTO_PER_HARI = 4;
 const BLN = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
@@ -585,6 +586,9 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
   const [ringkas, setRingkas] = useState<HariRingkas[]>([]);
   const [maks, setMaks] = useState(FOTO_PER_HARI);
   const [tanggal, setTanggal] = useState("");
+  const [kamera, setKamera] = useState<{ foto: FotoKamera[]; total: number } | null>(null);
+  const [bukaKamera, setBukaKamera] = useState(false);
+  const [pilihKamera, setPilihKamera] = useState<number[]>([]);
   const [ket, setKet] = useState("");
   const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
   const [progres, setProgres] = useState<string | null>(null);
@@ -665,6 +669,39 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
     }
   }
 
+  // (9 Nov 2026) ambil dari Foto Kamera peserta (disalin; satu foto Kamera hanya sekali dipakai)
+  async function muatKamera() {
+    if (!tanggal) return;
+    setKamera(null);
+    setPilihKamera([]);
+    try {
+      setKamera(await fetchJson<{ foto: FotoKamera[]; total: number }>(`${URL_ADM}/foto/kamera?kelas=${kelas}&tanggal=${tanggal}`));
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    }
+  }
+  useEffect(() => {
+    if (bukaKamera) void muatKamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bukaKamera, tanggal, kelas]);
+
+  async function pakaiKamera() {
+    if (pilihKamera.length === 0) return;
+    setProgres("Menyalin foto Kamera…");
+    setPesan(null);
+    try {
+      const r = await fetchJson<{ ditambah: number }>(`${URL_ADM}/foto/kamera`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kelas, tanggal, ids: pilihKamera }) });
+      setPesan({ jenis: "ok", teks: `${r.ditambah} foto Kamera ditambahkan ke lampiran.` });
+      setPilihKamera([]);
+      await muat();
+      await muatKamera();
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    } finally {
+      setProgres(null);
+    }
+  }
+
   const penuh = (foto?.length ?? 0) >= maks || (!!tanggal && (ringkas.find((r) => r.tanggal === tanggal)?.jumlah ?? 0) >= FOTO_PER_HARI);
 
   // (9 Okt 2026) dibuka dari pengingat (?fokus=foto) -> gulir ke panel foto
@@ -710,9 +747,52 @@ function PanelFoto({ kelas, bisaKelola }: { kelas: number; bisaKelola: boolean }
             ⬆ Pilih foto…
             <input type="file" accept="image/*" multiple className="hidden" disabled={penuh || !!progres} onChange={(e) => { unggah(e.target.files); e.target.value = ""; }} />
           </label>
+          <button type="button" className={BTN_O} disabled={!tanggal || !!progres} onClick={() => setBukaKamera((b) => !b)}>
+            📷 {bukaKamera ? "Tutup Foto Kamera" : "Ambil dari Foto Kamera"}
+          </button>
         </div>
       )}
       {progres && <p className="mt-1.5 text-[12.5px] text-[#1F6FD1]">{progres}</p>}
+      {bukaKamera && bisaKelola && (
+        <div className="mt-2 rounded-xl border border-[#DDE6F3] bg-[#F8FAFC] p-2.5">
+          <p className="text-[12.5px] text-[#55657D]">
+            Foto Kamera peserta Kelas {kelas} tanggal {tanggal ? tglPendekFoto(tanggal) : "-"}. Pilih paling banyak {Math.max(0, FOTO_PER_HARI - (ringkas.find((r) => r.tanggal === tanggal)?.jumlah ?? 0))} foto (sisa target hari ini).
+          </p>
+          {!kamera && <p className="mt-1.5 text-[12.5px] text-[#1F6FD1]">Memuat foto Kamera…</p>}
+          {kamera && kamera.foto.length === 0 && <p className="mt-1.5 text-[12.5px] text-[#7B8794]">Belum ada foto Kamera peserta pada tanggal ini.</p>}
+          {kamera && kamera.foto.length > 0 && (
+            <>
+              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                {kamera.foto.map((f) => {
+                  const on = pilihKamera.includes(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      disabled={f.dipakai || !f.url}
+                      onClick={() => setPilihKamera((l) => (on ? l.filter((x) => x !== f.id) : [...l, f.id]))}
+                      className={`overflow-hidden rounded-lg border text-left ${on ? "border-[#1F5FD1] ring-2 ring-[#1F5FD1]/30" : "border-[#E3E8EE]"} ${f.dipakai ? "opacity-40" : ""}`}
+                      aria-pressed={on}
+                    >
+                      {f.url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={f.url} alt={`${f.nama} foto ${f.slot}`} className="h-20 w-full bg-white object-cover" />
+                      ) : (
+                        <div className="grid h-20 place-items-center bg-white text-[11px] text-[#7B8794]">tidak tampil</div>
+                      )}
+                      <span className="block truncate px-1.5 py-1 text-[11px] font-semibold text-[#1B2B4B]">{f.dipakai ? "✓ sudah dipakai · " : ""}{f.nama} · #{f.slot}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {kamera.total > kamera.foto.length && <p className="mt-1.5 text-[11.5px] text-[#7B8794]">Menampilkan {kamera.foto.length} dari {kamera.total} foto.</p>}
+              <button type="button" className={`${BTN} mt-2`} disabled={pilihKamera.length === 0 || !!progres} onClick={() => void pakaiKamera()}>
+                Pakai {pilihKamera.length} foto terpilih
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {pesan && (
         <div className="mt-2">
           <Pesan jenis={pesan.jenis} onTutup={() => setPesan(null)}>{pesan.teks}</Pesan>
