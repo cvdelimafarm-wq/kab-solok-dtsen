@@ -57,7 +57,17 @@ export async function GET(req: NextRequest) {
     const berubah = ketentuanBerubah(respons, ketentuan);
     // (2 Nov 2026) Tab "Kamera SIGAP" membuka halaman Kamera SIGAP kegiatan ini (/sigap/foto), sama dengan Pendataan Pascabencana -- bukan panduan Translok.
     // Kegiatan harus bermode "kamera" (sigap_foto_pengaturan_kegiatan); bila belum, halaman itu menjelaskannya.
-    const kameraHref: string | null = peserta ? `/sigap/foto?kegiatan=${kegiatanId}` : null;
+    // (9 Nov 2026) Kamera juga untuk akun yang punya penugasan aktif di kegiatan ini tanpa terhitung peserta (instruktur / panitia berpenugasan "administrasi"): mereka butuh foto Transport Lokal.
+    let punyaPenugasan = !!peserta;
+    if (!punyaPenugasan) {
+      try {
+        const { data: pen } = await db.from("sigap_penugasan").select("id").eq("kegiatan_id", kegiatanId).eq("akun_id", akun.id).eq("aktif", true).limit(1);
+        punyaPenugasan = !!pen && pen.length > 0;
+      } catch {
+        punyaPenugasan = false;
+      }
+    }
+    const kameraHref: string | null = punyaPenugasan ? `/sigap/foto?kegiatan=${kegiatanId}` : null;
     // Tahap C: jumlah materi wajib (video / tautan) yang belum selesai -> penanda di ikon tab Instrumen. Gagal / SQL belum ada = 0.
     let instrumenBelum = 0;
     if (peserta && tampilan.tab_baru) {

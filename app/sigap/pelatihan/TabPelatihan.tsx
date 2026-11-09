@@ -72,6 +72,8 @@ export function daftarTab(kameraHref: string | null, peran: TabPeran = TAB_PESER
     { kode: "instrumen", label: "Instrumen", href: "/sigap/pelatihan/instrumen", ikon: IKON.instrumen },
   ];
   if (peran.pelatihan) tab.push({ kode: "pelatihan", label: "Pelatihan", href: "/sigap/pelatihan?tab=pelatihan", ikon: IKON.pelatihan });
+  // (9 Nov 2026) instruktur / panitia / PJ juga punya tab "Pelatihan": layar sesi (Mulai Pretest/Posttest, Roleplay Vanguard, Adu Sigap), bukan kartu tes peserta
+  else if (peran.absen) tab.push({ kode: "pelatihan", label: "Pelatihan", href: "/sigap/pelatihan/sesi", ikon: IKON.pelatihan });
   if (peran.absen) tab.push({ kode: "absen", label: "Absen", href: "/sigap/pelatihan/absen", ikon: IKON.absen });
   tab.push(
     { kode: "kamera", label: "Kamera", href: kameraHref, ikon: IKON.kamera },
@@ -171,7 +173,8 @@ export function TabPelatihanOtomatis({ aktif }: { aktif: TabAktif }) {
   const bServer = useBenderaTab();
   const pm = usePeranMasuk();
   // (3 Nov 2026) akun berperan ganda: tab bawah mengikuti peran yang dipilih (Peserta: Pelatihan + Kamera; selain itu: Absen peserta, Kamera nonaktif)
-  const b = bServer && { ...bServer, terkunci: pm.terkunci, ...(pm.peran && (pm.peran !== "peserta" || pm.nyata.includes("peserta")) ? { tab: tabUntukPeran(pm.peran), kamera_href: pm.peran === "peserta" ? bServer.kamera_href : null } : {}) };
+  const b = bServer && { ...bServer, terkunci: pm.terkunci, ...(pm.peran && (pm.peran !== "peserta" || pm.nyata.includes("peserta")) ? { tab: tabUntukPeran(pm.peran) } : {}) };
+  // (9 Nov 2026) Kamera mengikuti penugasan akun, bukan peran yang dipilih: instruktur juga butuh Transport Lokal
   const menyala = !!b && b.tab_baru && !b.terkunci; // terkunci (undangan belum diterima): tidak menyiapkan tab lain di belakang
   const rencana = menyala && b ? rencanaTab(aktif, daftarTab(b.kamera_href, b.tab).map((t) => ({ kode: t.kode, href: t.href })), urlPelatihan) : { rute: [], data: [] };
   useSiapkan(rencana, menyala);
