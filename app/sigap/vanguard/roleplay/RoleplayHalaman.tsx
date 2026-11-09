@@ -62,8 +62,10 @@ export default function RoleplayHalaman() {
   useEffect(() => {
     if (!bacaSesi()) { window.location.replace(`/?lanjut=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`); return; }
     void muat();
-    const t = setInterval(() => { if (document.visibilityState === "visible") void muat(); }, 4000);
-    return () => clearInterval(t);
+    const t = setInterval(() => { if (document.visibilityState === "visible") void muat(); }, 15000);
+    const lihat = () => { if (document.visibilityState === "visible") void muat(); };
+    document.addEventListener("visibilitychange", lihat);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", lihat); };
   }, [muat]);
 
   /** Kirim aksi ke server lalu pakai keadaan terbaru dari balasannya. */
@@ -373,14 +375,35 @@ function LayarKelola({ data, kirim, galat, setKelas, lihatLangkah, lihatPeserta 
         {rp && tab === "rekap" && (
           <div className="sheet">
             <span className="tag">{selesai ? "Poin akhir" : "Poin sementara"}</span>
-            <p style={{ fontSize: 12.5, marginBottom: 6 }}>Dari isian yang sudah ditandai. Ketuk nama untuk melihat review berwarna.</p>
+            <p style={{ fontSize: 12.5, marginBottom: 6 }}>B = benar, S = salah, K = kosong padahal harus diisi. Skor = +1 benar, −0,3 lainnya. Poin = skor ÷ jumlah dinilai × 100.</p>
+            <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, margin: "6px 0 4px" }}>Lihat review peserta</label>
+            <select
+              className="inp"
+              style={{ width: "100%", minHeight: 40, marginBottom: 8 }}
+              value={data.review?.akun_id ?? ""}
+              onChange={(e) => lihatPeserta(e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">— pilih peserta —</option>
+              {data.rekap.map((r) => <option key={r.akun_id} value={r.akun_id}>{r.nama}</option>)}
+            </select>
             <table className="tbl">
-              <thead><tr><th>Nama</th><th style={{ textAlign: "right" }}>Poin</th><th style={{ textAlign: "right" }}>✓ / ✗ / –</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>#</th><th>Peserta</th>
+                  <th style={{ textAlign: "right" }}>B</th><th style={{ textAlign: "right" }}>S</th><th style={{ textAlign: "right" }}>K</th>
+                  <th style={{ textAlign: "right" }}>Skor</th><th style={{ textAlign: "right" }}>Poin</th>
+                </tr>
+              </thead>
               <tbody>
-                {data.rekap.map((r) => (
-                  <tr key={r.akun_id}>
-                    <td><button type="button" className="tog" onClick={() => lihatPeserta(data.review?.akun_id === r.akun_id ? null : r.akun_id)}>{r.nama}</button>{!r.sudah_isi ? <small> (belum mengisi)</small> : null}{r.luar ? <small> · {r.luar} di luar cakupan</small> : null}</td>
-                    <td className="n">{fmtPoin(r.poin)}</td><td className="n">{r.benar} / {r.salah} / {r.kosong}</td>
+                {data.rekap.map((r, i) => (
+                  <tr key={r.akun_id} style={data.review?.akun_id === r.akun_id ? { background: "#EAF1FB" } : undefined}>
+                    <td className="n">{r.sudah_isi ? i + 1 : "–"}</td>
+                    <td>
+                      <button type="button" className="tog" onClick={() => lihatPeserta(data.review?.akun_id === r.akun_id ? null : r.akun_id)}>{r.nama}</button>
+                      {!r.sudah_isi ? <small> (belum mengisi)</small> : null}{r.luar ? <small> · {r.luar} di luar cakupan</small> : null}
+                    </td>
+                    <td className="n">{r.benar}</td><td className="n">{r.salah}</td><td className="n">{r.kosong}</td>
+                    <td className="n">{fmtPoin(r.skor)}</td><td className="n"><b>{fmtPoin(r.poin)}</b></td>
                   </tr>
                 ))}
               </tbody>

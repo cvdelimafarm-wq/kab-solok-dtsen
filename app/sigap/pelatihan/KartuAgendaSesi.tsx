@@ -54,8 +54,10 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
 
   useEffect(() => {
     void muat();
-    const t = setInterval(() => void muat(), 5000);
-    return () => clearInterval(t);
+    const t = setInterval(() => { if (document.visibilityState === "visible") void muat(); }, 15000);
+    const lihat = () => { if (document.visibilityState === "visible") void muat(); };
+    document.addEventListener("visibilitychange", lihat);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", lihat); };
   }, [muat]);
 
   async function jalankan(s: Sesi, aksi: AksiAgenda) {
