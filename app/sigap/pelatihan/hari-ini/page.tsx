@@ -254,6 +254,8 @@ export default function HalamanHariIni() {
       {d && pratinjauPeserta && <Pesan jenis="info">Anda belum terdaftar sebagai peserta pelatihan ini, jadi tampilan peserta tidak ada isinya. Pilih peran lain di "Masuk sebagai", atau daftarkan diri Anda sebagai peserta di Kelola Pelatihan.</Pesan>}
       {d && sebagaiPengelola && <RingkasanPengelola bolehKelola={d.boleh_lihat_kelola} sebagai={pm.peran ? LABEL_PERAN[pm.peran] : undefined} />}
       {d && !terkunciUndangan && <KartuAgendaSesi kegiatanId={d.kegiatan_id} />}
+      {/* (9 Nov 2026) instruktur/panitia/PJ: kartu Roleplaying by Vanguard (buka sesi, periksa, pemetaan). Sebelumnya hanya digambar di blok peserta, jadi akun pengelola tidak melihatnya. */}
+      {d && !terkunciUndangan && sebagaiPengelola && <KartuRoleplayHariIni kegiatanId={d.kegiatan_id} />}
       {d && !terkunciUndangan && <KartuIzinBuka />}
       {d && sebagaiPeserta && nada && (
         <>
