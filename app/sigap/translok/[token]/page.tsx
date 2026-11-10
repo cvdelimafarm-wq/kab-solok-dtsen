@@ -35,6 +35,7 @@ import LembarSusulan from "@/app/sigap/translok/LembarSusulan";
 import LengkapiLaporanSls from "@/app/sigap/translok/LengkapiLaporanSls"; // (8 Nov 2026) lengkapi laporan hari terlewat: form rincian SLS
 import { pakaiFormSls } from "@/lib/sigapLengkapiMandiri";
 import KartuVanguardHariIni from "@/app/sigap/KartuVanguardHariIni"; // (1 Nov 2026) hanya bila Vanguard menyala di kegiatan ini (dicatat)
+import KartuPenilaian360 from "@/app/sigap/KartuPenilaian360"; // (10 Nov 2026) penilaian 360 antaranggota tim; tampil hanya bagi anggota tim / admin (server yang memutuskan)
 import BarKegiatan, { useBarKegiatan } from "@/app/sigap/BarKegiatan";
 import { popDariLapisan } from "@/app/portal/lapisan";
 import { tabBarDariTranslok, type ItemBar } from "@/lib/sigapMenuKegiatan";
@@ -646,6 +647,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
             />
             <Ringkasan pen={pen} hariIni={data.hari_ini} />
             <KartuVanguardHariIni kegiatanId={pen.kegiatan.id} />
+            <KartuPenilaian360 kegiatanId={pen.kegiatan.id} />
             <IsianHariIni token={token} data={data} pen={pen} onBerubah={muat} />
           </>
         )}
