@@ -22,8 +22,8 @@ import SelectCari from "@/app/components/SelectCari";
 // (7 Okt 2026) + "pelatihan" (halaman peserta) & "pelatihan_kelola" (admin soal/jadwal/monitoring tes)
 // (24 Okt 2026) + "anggaran" (halaman Anggaran: daftar RO, ruang kerja RO, jadwal revisi, realisasi -- /sigap/ro, /sigap/revisi, /sigap/realisasi)
 // (11 Okt 2026) + "perencanaan" (uji coba Perencanaan kegiatan: RO -> kegiatan utama -> tahap GSBPM; /sigap/kelola/perencanaan)
-export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei" | "masukan" | "masukan_kelola" | "master_wilayah" | "arsip";
-export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei" | "masukan" | "masukan_kelola" | "master_wilayah" | "arsip">;
+export type KodeMenu = "beranda" | "monitoring" | "penugasan" | "kegiatan" | "verifikasi" | "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei" | "masukan" | "masukan_kelola" | "umpan_balik" | "master_wilayah" | "arsip";
+export type KodeTabAdmin = Exclude<KodeMenu, "akses" | "kontrak" | "pedia" | "pedia_kelola" | "pelatihan" | "pelatihan_kelola" | "perencanaan" | "pendataan_kelola" | "anggaran" | "identifikasi_survei" | "masukan" | "masukan_kelola" | "umpan_balik" | "master_wilayah" | "arsip">;
 
 /** Sub-menu Admin transport (urutan = urutan tampil), dipakai sidebar, palet & halaman admin. */
 export const MENU_ADMIN: { kode: Exclude<KodeTabAdmin, "beranda">; label: string; menu: string }[] = [

@@ -1,4 +1,5 @@
 // app/api/sigap/penilaian360/route.ts
+// UMPAN-BALIK: penilaian360   (penanda penjaga lib/__tests__/umpanBalikMonitoring.test.ts; registri lib/umpanBalik.ts; pantauan /sigap/kelola/umpan-balik/penilaian360)
 //
 // (10 Nov 2026) Penilaian 360 antaranggota tim (Pendataan Bencana). Aturan murni: lib/penilaian360.ts; tabel: sigap_penilaian360.
 //   GET  ?kegiatan=ID        -> { ada:false, bolehRekap } bila akun bukan anggota tim; selain itu

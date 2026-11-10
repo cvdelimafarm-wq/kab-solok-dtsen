@@ -1,4 +1,5 @@
 // app/api/sigap/vanguard/usulan/route.ts
+// UMPAN-BALIK: usulan_kasus   (penanda penjaga lib/__tests__/umpanBalikMonitoring.test.ts; registri lib/umpanBalik.ts; pantauan /sigap/kelola/umpan-balik)
 //
 // (1 Nov 2026) VANGUARD V8b: Usul Kasus oleh petugas (kasus janggal dari lapangan, tanpa data responden asli) dan tinjauan admin. Tabel sigap_vanguard_usulan (SQL 20261101za).
 //   GET             -> { usulan:[{id, judul, status, catatan_admin, dibuat_at}] }                        usulan milik akun sendiri

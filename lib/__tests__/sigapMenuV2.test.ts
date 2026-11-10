@@ -145,7 +145,7 @@ describe("susunMenu v2", () => {
 
   it("Pengelolaan memuat SDM & Mitra, Tata kelola, SIGAP PEDIA, Kantor, Diseminasi lalu item pengaturan sesuai izin", () => {
     const k = susunMenu(SEMUA).find((x) => x.kode === "pengelolaan")!;
-    expect(k.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi", "peran-akses", "aplikasi-periode", "delego", "kirim-masukan", "usulan-perbaikan"]);
+    expect(k.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi", "peran-akses", "aplikasi-periode", "delego", "kirim-masukan", "usulan-perbaikan", "umpan-balik"]);
     const kosong = susunMenu(KOSONG).find((x) => x.kode === "pengelolaan")!;
     expect(kosong.item.map((x) => x.id)).toEqual(["sdm-mitra", "tata-kelola", "pedia", "kantor", "diseminasi", "kirim-masukan"]);
   });
@@ -180,5 +180,11 @@ describe("menu masukan", () => {
     // keduanya ada di kelompok Pengelolaan
     const peng = susunMenu(SEMUA).find((k) => k.kode === "pengelolaan")!;
     expect(peng.item.map((x) => x.id)).toEqual(expect.arrayContaining(["kirim-masukan", "usulan-perbaikan"]));
+  });
+
+  it("Umpan balik pengguna (10 Nov 2026): pantauan semua umpan balik, bersama Usulan perbaikan hanya untuk admin aplikasi", () => {
+    expect(cari(KOSONG, "umpan-balik")).toBeUndefined();
+    expect(cari(SEMUA, "umpan-balik")).toMatchObject({ href: "/sigap/kelola/umpan-balik", aktifKode: "umpan_balik" });
+    expect(cari({ ...KOSONG, usulan: true }, "umpan-balik")).toBeDefined();
   });
 });

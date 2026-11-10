@@ -1,4 +1,5 @@
 // app/api/sigap/masukan/route.ts
+// UMPAN-BALIK: masukan   (penanda penjaga lib/__tests__/umpanBalikMonitoring.test.ts; registri lib/umpanBalik.ts; pantauan /sigap/kelola/umpan-balik)
 //
 // (28 Okt 2026) Tombol "Masukan" melayang + menu "Usulan perbaikan" di SIGAP Kelola.
 // POST (multipart: jenis, isi, halaman, peran, versi, perangkat, gambar?)  -> akun mana pun yang masuk mengirim masukan (maks 10 per jam).

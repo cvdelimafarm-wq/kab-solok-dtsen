@@ -211,6 +211,8 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
         // (28 Okt 2026) Menu cadangan tombol "Masukan" melayang: semua akun; "Usulan perbaikan" (baca & tangani usulan) hanya admin aplikasi.
         { id: "kirim-masukan", ikon: "siaran", label: "Kirim masukan", href: "/sigap/masukan", aktifKode: "masukan", title: "Kirim masukan, laporkan galat, atau ajukan saran perbaikan aplikasi", ketPalet: "laporkan galat, saran, pertanyaan" },
         ...jika(i.usulan, { id: "usulan-perbaikan", ikon: "lonceng", label: "Usulan perbaikan", href: "/sigap/kelola/masukan", aktifKode: "masukan_kelola", title: "Masukan dari pengguna: baca, tandai diproses/selesai, beri catatan", ketPalet: "masukan pengguna, galat, saran" }),
+        // (10 Nov 2026) Pantauan SEMUA umpan balik pengguna (masukan, penilaian 360, usulan kasus, dst.), dibangun dari registri lib/umpanBalik.ts.
+        ...jika(i.usulan, { id: "umpan-balik", ikon: "lonceng", label: "Umpan balik pengguna", href: "/sigap/kelola/umpan-balik", aktifKode: "umpan_balik", title: "Pantau semua fitur yang mengumpulkan masukan, penilaian, atau usulan dari pengguna", ketPalet: "umpan balik, polling, penilaian 360, usulan" }),
       ],
     },
   };
