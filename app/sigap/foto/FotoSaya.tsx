@@ -190,7 +190,7 @@ function BagikanSusulan({ f, jumlahNomor, muat }: { f: Diambil; jumlahNomor: num
   const lain = f.tag.filter((x) => x.peran_tag !== "pemotret");
   const sisa = Math.max(0, MAKS_TAG - lain.length);
   if (!jendelaBagiFoto(f.tanggal, hariIni)) {
-    return <p className="text-[11.5px] leading-snug text-[#55657D]">Berbagi foto ditutup: hanya bisa sampai akhir hari sesudah tanggal foto (H+1).</p>;
+    return <p className="text-[11.5px] leading-snug text-[#55657D]">Berbagi foto ditutup: hanya bisa selama periode pendataan.</p>;
   }
   async function kirim() {
     setSibuk(true);

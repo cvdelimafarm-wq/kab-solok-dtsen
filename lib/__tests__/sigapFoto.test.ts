@@ -144,16 +144,18 @@ describe("labelFotoTanpaSinyal", () => {
   });
 });
 
-describe("jendelaBagiFoto (berbagi foto sampai H+1)", () => {
-  it("batas 1 hari: H dan H+1 boleh, H+2 tidak", () => {
-    expect(BATAS_HARI_BAGI).toBe(1);
+describe("jendelaBagiFoto (berbagi foto selama periode pendataan)", () => {
+  it("jendela lebar: H, H+1, dan hari-hari sesudahnya boleh; tak boleh melewati batas atas", () => {
+    expect(BATAS_HARI_BAGI).toBe(120);
     expect(jendelaBagiFoto("2026-10-23", "2026-10-23")).toBe(true);
     expect(jendelaBagiFoto("2026-10-23", "2026-10-24")).toBe(true);
-    expect(jendelaBagiFoto("2026-10-23", "2026-10-25")).toBe(false);
+    expect(jendelaBagiFoto("2026-10-23", "2026-10-25")).toBe(true);
+    expect(jendelaBagiFoto("2026-10-23", "2026-11-20")).toBe(true);
+    expect(jendelaBagiFoto("2026-01-01", "2026-10-23")).toBe(false);
   });
   it("lintas bulan dan tanggal tidak wajar", () => {
     expect(jendelaBagiFoto("2026-09-30", "2026-10-01")).toBe(true);
-    expect(jendelaBagiFoto("2026-09-29", "2026-10-01")).toBe(false);
+    expect(jendelaBagiFoto("2026-09-29", "2026-10-01")).toBe(true);
     expect(jendelaBagiFoto("2026-10-24", "2026-10-23")).toBe(false);
     expect(jendelaBagiFoto("bukan-tanggal", "2026-10-23")).toBe(false);
   });

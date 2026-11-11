@@ -7,7 +7,7 @@
 //  - Penerima dari tim / pemotret: penugasan harus di kegiatan yang SAMA dengan foto.
 //  - Penerima di luar tim: boleh penugasan miliknya sendiri; kegiatan itu harus bermode kamera (keputusan user: sah sebagai bukti).
 //  - Hari kerja, 23.59 WIB, kunci, periode: cekAksesIsian terhadap TANGGAL FOTO (bukan hari ini).
-//    Foto yang dibagikan (bukan tag pemotret) boleh diterima sampai akhir H+1 (BATAS_HARI_BAGI, 26 Okt 2026).
+//    Foto yang dibagikan (bukan tag pemotret) boleh diterima selama periode pendataan (BATAS_HARI_BAGI; dulu H+1 sejak 26 Okt 2026).
 //  - Foto merah / dipertanyakan -> tag 'ditahan' sampai PML/admin menandai 'diperiksa'. Tag LUAR TIM di luar wilayah penerima (> 10 km, nomor 2-4) juga ditahan.
 //    (1 Nov 2026) Rekan satu tim TIDAK ditahan karena jarak (satu tim bekerja bersama di wilayah rekan); lihat perluTahanTag di lib/sigapFoto.ts.
 //  - Setelah diterima, nomor tidak diubah penerima (mengubah berarti mencabut baris = hapus). Pilih nomor dengan teliti sebelum Terima.

@@ -45,7 +45,9 @@ export function bolehFotoLaporan(jumlahFoto: number): boolean {
 }
 // (26 Okt 2026) BERBAGI FOTO (menandai rekan + penerima menekan Terima) dibuka paling lama sampai akhir H+1:
 // foto tanggal H masih bisa dibagikan dan diterima sampai 23.59 WIB tanggal H+1. Nomor foto milik pemotret sendiri tidak ikut dilonggarkan.
-export const BATAS_HARI_BAGI = 1;
+// (11 Nov 2026) Diperlebar: berbagi foto dibuka SELAMA PERIODE PENDATAAN (bukan lagi H+1). Angka ini hanya batas atas longgar; batas sebenarnya adalah periode kegiatan,
+// hari kerja, dan kunci SPJ/arsip yang tetap dijaga server (cekAksesIsian).
+export const BATAS_HARI_BAGI = 120;
 export function jendelaBagiFoto(tanggalFoto: string, hariIni: string): boolean {
   return dalamToleransiKirim(tanggalFoto, hariIni, BATAS_HARI_BAGI);
 }
