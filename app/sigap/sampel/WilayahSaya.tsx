@@ -12,7 +12,7 @@ import { LABEL_MODEL, kodeSubslsPendek, type DataAlokasiSaya, type KkMaster, typ
 import { tautanLihatSampel, tautanPetaSampel } from "@/lib/sampelSls";
 import { KET_JENDELA, LABEL_HASIL, formatSisa, selisihJam, sisaDetik, statusEfektif, type DataTagSub, type HasilTag, type InfoJendela, type PeranTag, type TagKk } from "@/lib/tagSampel";
 import type { AksiTag, HasilMuatKk } from "./useAlokasi";
-import PetaSubSls from "./PetaSubSls";
+import PetaSampel, { adaKoordinat } from "./PetaSampel";
 import { kunciPetaSaya } from "@/lib/petaKegiatan";
 import {
   ALASAN_GANTI, LABEL_ALASAN, LABEL_STATUS_GANTI, MAKS_CATATAN, MIN_CATATAN_TOLAK, bisaMengajukanGanti, cadanganTersedia, menunggu as gantiMenunggu, periksaIsianGanti,
@@ -75,7 +75,8 @@ export function BarisKk({ k, no, tag, aksi }: { k: KkMaster; no: number; tag: Ta
         {k.anggota_lain && <p className="text-[12px] leading-snug text-[#55657D]">Anggota ruta lain: {k.anggota_lain}</p>}
         {k.patokan && <p className="text-[12px] leading-snug text-[#55657D]">Patokan: {k.patokan}</p>}
         <span className="mt-1.5 flex flex-wrap gap-1.5">
-          {k.lat != null && k.lng != null && (
+          {!adaKoordinat(k) && <span className="w-full text-[11.5px] font-semibold text-[#8A6200]">Koordinat tidak tersedia untuk KK ini</span>}
+          {adaKoordinat(k) && (
             <>
               <a href={tautanPetaSampel(k.lat, k.lng)} target="_blank" rel="noopener noreferrer" className={`${TOMBOL} bg-[#EAF1FC] text-[#1F5FD1] active:bg-[#DCE8FB]`} aria-label={`Arahkan ke ${k.nama_kk}`}>
                 Arahkan
@@ -277,6 +278,7 @@ function KartuWilayah({
   const [cari, setCari] = useState("");
   const [lihat, setLihat] = useState<"semua" | "sampel">("semua");
   const [peta, setPeta] = useState(false);
+  const [dipilih, setDipilih] = useState<number | null>(null);
   const [formGanti, setFormGanti] = useState<KkMaster | null>(null);
   const [td, setTd] = useState<Sudah | null>(null);
   const [sibuk, setSibuk] = useState(false);
@@ -332,16 +334,31 @@ function KartuWilayah({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kk, td]);
 
-  const petaPeran = useMemo(() => {
-    const m = new Map<number, "utama" | "cadangan">();
-    for (const t of td?.dt.tag ?? []) m.set(t.kk_id, t.peran);
-    return m;
-  }, [td]);
 
+  const kkDipilih = dipilih !== null ? (kk ?? []).find((k) => k.id === dipilih) ?? null : null;
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase();
     return (kk ?? []).filter((k) => (lihat === "semua" && !ditetapkan ? true : tagPerKk.has(k.id)) && (!q || k.nama_kk.toLowerCase().includes(q) || (k.anggota_lain ?? "").toLowerCase().includes(q)));
   }, [kk, cari, lihat, tagPerKk, ditetapkan]);
+
+  const aksiUntuk = (k: KkMaster): AksiBaris => ({
+    bisaTandai,
+    bisaHasil,
+    sibuk,
+    cadanganAda: jatahCad > 0,
+    utamaPenuh: nUtama >= target && tagPerKk.get(k.id)?.peran !== "utama",
+    cadanganPenuh: nCad >= jatahCad && tagPerKk.get(k.id)?.peran !== "cadangan",
+    onTag: (p) => void kirim({ aksi: "tag", s: w.idsubsls, kk: k.id, peran: p }),
+    onLepas: () => void kirim({ aksi: "lepas", kk: k.id }),
+    onHasil: (h) => void kirim({ aksi: "hasil", kk: k.id, hasil: h }),
+    ganti: bisaAjukan && tagPerKk.get(k.id)?.peran === "utama"
+      ? (() => {
+          const tg = tagPerKk.get(k.id);
+          const c = bisaMengajukanGanti({ tag: tg, jendela: status, bolehGanti, daftar: gantiDaftar, tag_sub: td?.dt.tag ?? [] });
+          return { bisa: c.bisa, keterangan: c.alasan, menunggu: gantiMenunggu(gantiDaftar).some((x) => x.utama_kk_id === k.id), onAjukan: () => setFormGanti(k) };
+        })()
+      : undefined,
+  });
 
   async function kirim(a: AksiTag) {
     if (!aksiTag || sibuk) return;
@@ -431,9 +448,13 @@ function KartuWilayah({
                 {kk.length > 12 && !ditetapkan && (
                   <input type="search" value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama KK…" aria-label="Cari nama KK" className="min-h-[44px] min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-[#F7FAFF] px-3 text-[14px] text-[#0F2A52] outline-none focus:border-[#1F5FD1]" />
                 )}
-                <button type="button" onClick={() => setPeta((v) => !v)} aria-pressed={peta} className={`min-h-[40px] rounded-[10px] px-3 text-[12.5px] font-bold ${peta ? "bg-[#1F5FD1] text-white" : "bg-[#EAF1FC] text-[#1F5FD1]"}`}>
-                  {peta ? "Tutup peta" : "Lihat peta"}
-                </button>
+                <span className="flex gap-1" role="tablist" aria-label="Tampilan sampel">
+                  {([false, true] as const).map((p) => (
+                    <button key={String(p)} type="button" role="tab" aria-selected={peta === p} onClick={() => { setPeta(p); setDipilih(null); }} className={`min-h-[40px] rounded-[10px] px-3.5 text-[12.5px] font-bold ${peta === p ? "bg-[#1F5FD1] text-white" : "bg-[#EAF1FC] text-[#1F5FD1]"}`}>
+                      {p ? "Peta" : "Daftar"}
+                    </button>
+                  ))}
+                </span>
                 {tagPerKk.size > 0 && !ditetapkan && (
                   <span className="flex gap-1" role="group" aria-label="Tampilan daftar">
                     {(["semua", "sampel"] as const).map((v) => (
@@ -444,36 +465,30 @@ function KartuWilayah({
                   </span>
                 )}
               </div>
-              {peta && <PetaSubSls idsubsls={w.idsubsls} kk={kk} peran={petaPeran} kunciDasar={kunciDasar} />}
-              <ol>
+              {peta && <PetaSampel idsubsls={w.idsubsls} kk={kk} tag={tagPerKk} hanyaBertag={ditetapkan} kunciDasar={kunciDasar} terpilih={dipilih} onPilih={setDipilih} />}
+              {!peta && <ol>
                 {tampil.map((k, i) => (
                   <BarisKk
                     key={k.id}
                     k={k}
                     no={i + 1}
                     tag={tagPerKk.get(k.id)}
-                    aksi={{
-                      bisaTandai,
-                      bisaHasil,
-                      sibuk,
-                      cadanganAda: jatahCad > 0,
-                      utamaPenuh: nUtama >= target && tagPerKk.get(k.id)?.peran !== "utama",
-                      cadanganPenuh: nCad >= jatahCad && tagPerKk.get(k.id)?.peran !== "cadangan",
-                      onTag: (p) => void kirim({ aksi: "tag", s: w.idsubsls, kk: k.id, peran: p }),
-                      onLepas: () => void kirim({ aksi: "lepas", kk: k.id }),
-                      onHasil: (h) => void kirim({ aksi: "hasil", kk: k.id, hasil: h }),
-                      ganti: bisaAjukan && tagPerKk.get(k.id)?.peran === "utama"
-                        ? (() => {
-                            const tg = tagPerKk.get(k.id);
-                            const c = bisaMengajukanGanti({ tag: tg, jendela: status, bolehGanti, daftar: gantiDaftar, tag_sub: td?.dt.tag ?? [] });
-                            return { bisa: c.bisa, keterangan: c.alasan, menunggu: gantiMenunggu(gantiDaftar).some((x) => x.utama_kk_id === k.id), onAjukan: () => setFormGanti(k) };
-                          })()
-                        : undefined,
-                    }}
+                    aksi={aksiUntuk(k)}
                   />
                 ))}
                 {tampil.length === 0 && <li className="px-3.5 py-3 text-[13px] text-[#55657D]">Tidak ada KK yang cocok dengan pencarian.</li>}
-              </ol>
+              </ol>}
+              {peta && kkDipilih && (
+                <div role="dialog" aria-label={`KK ${kkDipilih.nama_kk}`} className="fixed inset-x-0 bottom-[var(--bar-bawah,0px)] z-[55] mx-auto max-h-[70vh] max-w-xl overflow-y-auto rounded-t-[22px] bg-white pb-3 pt-1.5 shadow-[0_-12px_36px_rgba(15,42,82,.25)]">
+                  <div className="flex items-center justify-between px-3.5">
+                    <span aria-hidden="true" className="mx-auto h-1 w-10 rounded-full bg-[#D5DDEA]" />
+                    <button type="button" onClick={() => setDipilih(null)} aria-label="Tutup kartu KK" className="absolute right-2 top-1.5 grid h-9 w-9 place-items-center rounded-full text-[18px] text-[#55657D] active:bg-[#F1F5FC]">✕</button>
+                  </div>
+                  <ul>
+                    <BarisKk k={kkDipilih} no={Math.max(1, tampil.findIndex((x) => x.id === kkDipilih.id) + 1)} tag={tagPerKk.get(kkDipilih.id)} aksi={aksiUntuk(kkDipilih)} />
+                  </ul>
+                </div>
+              )}
             </>
           )}
         </div>

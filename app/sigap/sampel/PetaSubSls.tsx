@@ -63,7 +63,7 @@ function muatBerkas(berkas: string, versi: string): Promise<FiturBatas[] | null>
   return p;
 }
 
-function useBatasSub(idsubsls: string): Muat {
+export function useBatasSub(idsubsls: string): Muat {
   const [s, setS] = useState<Muat>({ status: "memuat" });
   useEffect(() => {
     let batal = false;
