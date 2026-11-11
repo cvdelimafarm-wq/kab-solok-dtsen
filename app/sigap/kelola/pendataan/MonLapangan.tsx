@@ -38,6 +38,7 @@ import {
   type StatusTranslok,
 } from "@/lib/lapangan";
 import SelectCari from "@/app/components/SelectCari";
+import { BatangCapaian, KE_NOTIFIKASI, KE_VERIFIKASI_TRANSLOK, PapanMasalah, TumpukHarian, type BatangItem, type Masalah, type SegmenHari } from "./monMasalah";
 
 type Data = { sekarang: string; hari_ini: string; aturan: AturanIsian; kegiatan: { id: number; nama: string } | null; baris: BarisLapangan[] };
 type Cepat = "hari" | "kemarin" | "3hari" | "semua" | "kustom";
@@ -66,6 +67,10 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
   const [halaman, setHalaman] = useState(1);
   const [mengekspor, setMengekspor] = useState(false);
   const awal = useRef(true); // saringan tanggal bawaan hanya diterapkan sekali
+  // (11 Nov 2026) HP: saringan dilipat di balik satu tombol; daftar bisa menaruh yang bermasalah di atas
+  const [bukaFilter, setBukaFilter] = useState(false);
+  const [masalahDulu, setMasalahDulu] = useState(true);
+  const daftarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!bacaSesi() || dl.galat === "SESI_BERAKHIR") router.replace("/");
@@ -84,12 +89,131 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
   const semua = data?.baris ?? [];
   const tim = useMemo(() => daftarTim(semua), [semua]);
   const tersaring = useMemo(() => (aturan ? saring(semua, s, aturan) : []), [semua, s, aturan]);
-  const tertata = useMemo(() => urutkan(tersaring, urut.kunci, urut.turun), [tersaring, urut]);
+  const tertata = useMemo(() => {
+    const t = urutkan(tersaring, urut.kunci, urut.turun);
+    if (!masalahDulu || !aturan) return t;
+    const bobot = (b: BarisLapangan) => {
+      const x = statusTranslok(b, aturan);
+      return x === "anomali" ? 3 : x === "sebagian" ? 2 : 0;
+    };
+    return [...t].sort((a, b) => bobot(b) - bobot(a)); // urut stabil: urutan pilihan tetap di dalam kelompok
+  }, [tersaring, urut, masalahDulu, aturan]);
   const ringk = useMemo(() => (aturan ? ringkas(tersaring, aturan) : null), [tersaring, aturan]);
   const agr = useMemo(() => agregatAkhir(tersaring), [tersaring]);
   const jmlHari = data ? Math.max(1, Math.ceil(tertata.length / PER_HAMAN)) : 1;
   const hal = Math.min(halaman, jmlHari);
   const potong = tertata.slice((hal - 1) * PER_HAMAN, hal * PER_HAMAN);
+
+  const hariIni = data?.hari_ini ?? "";
+  function lihat(nama: string) {
+    setS((x) => ({ ...x, cari: nama }));
+    setHalaman(1);
+    setMasalahDulu(false);
+    setTimeout(() => daftarRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+  const daftarTgl = (ts: string[]) => {
+    const u = [...new Set(ts)].sort();
+    return u.slice(0, 3).map(tgl).join(", ") + (u.length > 3 ? ` +${u.length - 3}` : "");
+  };
+  // siapa bermasalah + apa masalahnya + ke mana menyelesaikannya (menurut baris yang tersaring)
+  const masalah = useMemo<Masalah[]>(() => {
+    if (!aturan) return [];
+    type Per = { b: BarisLapangan; tanpaHasil: string[]; tanpaHari: string[]; kurang: { t: string; apa: string }[]; ada: boolean; lampau: boolean };
+    const per = new Map<number, Per>();
+    for (const b of tersaring) {
+      let p = per.get(b.akun_id);
+      if (!p) per.set(b.akun_id, (p = { b, tanpaHasil: [], tanpaHari: [], kurang: [], ada: false, lampau: false }));
+      const st = statusTranslok(b, aturan);
+      if (statusLapangan(b) !== "belum") p.ada = true;
+      if (st === "anomali") {
+        if (b.hari_kerja) p.tanpaHasil.push(b.tanggal);
+        else p.tanpaHari.push(b.tanggal);
+        if (b.tanggal < hariIni) p.lampau = true;
+      } else if (st === "sebagian") {
+        const apa: string[] = [];
+        if (aturan.wajib_laporan && !b.ada_laporan) apa.push("laporan harian belum ada");
+        if (b.jumlah_foto < aturan.jumlah_foto) apa.push(`foto ${b.jumlah_foto}/${aturan.jumlah_foto}`);
+        p.kurang.push({ t: b.tanggal, apa: apa.join(", ") || "belum lengkap" });
+      }
+    }
+    const hasil: Masalah[] = [];
+    for (const [id, p] of per) {
+      const b = p.b;
+      const sub = `${LABEL_PERAN[b.peran]}${b.pml_nama ? ` · Tim ${b.pml_nama}` : ""}`;
+      const kalimat: string[] = [];
+      if (p.tanpaHasil.length) kalimat.push(`Hari kerja dipilih tetapi belum ada hasil lapangan (${daftarTgl(p.tanpaHasil)}).`);
+      if (p.tanpaHari.length) kalimat.push(`Ada hasil/laporan/foto tetapi hari kerja tidak dipilih (${daftarTgl(p.tanpaHari)}).`);
+      if (p.kurang.length) {
+        const t = [...p.kurang].sort((x, y) => (x.t < y.t ? 1 : -1)).slice(0, 2);
+        kalimat.push(`Translok sebagian: ${t.map((x) => `${tgl(x.t)} ${x.apa}`).join("; ")}${p.kurang.length > 2 ? ` (+${p.kurang.length - 2} hari)` : ""}.`);
+      }
+      const anomali = p.tanpaHasil.length + p.tanpaHari.length > 0;
+      if (!kalimat.length && !p.ada && b.peran !== "korwil") kalimat.push("Belum ada hasil lapangan pada rentang ini.");
+      if (!kalimat.length) continue;
+      const berat: 1 | 2 | 3 = anomali ? (p.lampau ? 3 : 2) : p.kurang.length ? 2 : 1;
+      hasil.push({
+        kunci: String(id),
+        nama: b.nama,
+        sub,
+        berat,
+        masalah: kalimat.join(" "),
+        aksi: [
+          ...(anomali ? [{ teks: "Verifikasi translok", href: KE_VERIFIKASI_TRANSLOK }] : []),
+          { teks: "Kirim pengingat", href: KE_NOTIFIKASI },
+          { teks: "Lihat barisnya", klik: () => lihat(b.nama) },
+        ],
+      });
+    }
+    return hasil;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tersaring, aturan, hariIni]);
+
+  const batangTim = useMemo<BatangItem[]>(() => {
+    if (!aturan) return [];
+    const m = new Map<number, { nama: string; l: number; s: number; a: number }>();
+    for (const b of tersaring) {
+      if (b.pml_id == null) continue;
+      const st = statusTranslok(b, aturan);
+      if (st === "tidak_ada") continue;
+      let t = m.get(b.pml_id);
+      if (!t) m.set(b.pml_id, (t = { nama: b.pml_nama ?? `PML ${b.pml_id}`, l: 0, s: 0, a: 0 }));
+      if (st === "lengkap") t.l++;
+      else if (st === "sebagian") t.s++;
+      else t.a++;
+    }
+    return [...m.entries()].map(([id, t]) => {
+      const n = t.l + t.s + t.a;
+      return { kunci: String(id), label: `Tim ${t.nama}`, persen: n ? Math.round((t.l / n) * 100) : 0, ket: `${t.l} lengkap · ${t.s} sebagian · ${t.a} anomali`, klik: () => ubah({ pml_id: id }) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tersaring, aturan]);
+
+  const tumpukHari = useMemo<SegmenHari[]>(() => {
+    if (!aturan) return [];
+    const m = new Map<string, Record<StatusTranslok, number>>();
+    for (const b of tersaring) {
+      let c = m.get(b.tanggal);
+      if (!c) m.set(b.tanggal, (c = { lengkap: 0, sebagian: 0, anomali: 0, tidak_ada: 0 }));
+      c[statusTranslok(b, aturan)]++;
+    }
+    if (m.size < 2) return [];
+    return [...m.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .slice(0, 10)
+      .map(([t, c]) => ({
+        kunci: t,
+        label: tgl(t),
+        bagian: [
+          { n: c.lengkap, warna: "bg-[#19A463]", nama: "Lengkap" },
+          { n: c.sebagian, warna: "bg-[#D99A00]", nama: "Sebagian" },
+          { n: c.anomali, warna: "bg-[#B42329]", nama: "Anomali" },
+          { n: c.tidak_ada, warna: "bg-[#B8C2D2]", nama: "Tanpa klaim" },
+        ],
+        klik: () => ubah({ dari: t, sampai: t }, "kustom"),
+      }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tersaring, aturan]);
+  const filterAktif = (s.peran !== "semua" ? 1 : 0) + (s.pml_id != null ? 1 : 0) + (s.cari ? 1 : 0) + (s.lapangan !== "semua" ? 1 : 0) + (s.translok !== "semua" ? 1 : 0);
 
   function ubah(p: Partial<SaringanLapangan>, k?: Cepat) {
     setS((x) => ({ ...x, ...p }));
@@ -107,6 +231,7 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
   }
   function urutPada(kunci: KunciUrut) {
     setUrut((u) => (u.kunci === kunci ? { kunci, turun: !u.turun } : { kunci, turun: kunci === "nama" ? false : true }));
+    setMasalahDulu(false);
     setHalaman(1);
   }
   const panah = (kunci: KunciUrut) => (urut.kunci === kunci ? (urut.turun ? " ▾" : " ▴") : "");
@@ -176,8 +301,17 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
 
         {data && aturan && ringk && (
           <>
-            <div className="mt-5 rounded-[18px] bg-white p-4 shadow-[0_8px_22px_rgba(15,42,82,.08)]">
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="mt-5 rounded-[18px] bg-white p-3 shadow-[0_8px_22px_rgba(15,42,82,.08)] sm:p-4">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                {chip("hari", "Hari ini")}
+                {chip("kemarin", "Kemarin")}
+                {chip("3hari", "3 hari")}
+                {chip("semua", "Semua")}
+                <button type="button" onClick={() => setBukaFilter((x) => !x)} aria-expanded={bukaFilter} className="ml-auto min-h-[40px] rounded-full bg-[#E4ECFA] px-3.5 text-[12.5px] font-extrabold text-[#0F2A52] md:hidden">
+                  Saringan{filterAktif > 0 ? ` (${filterAktif})` : ""} {bukaFilter ? "▴" : "▾"}
+                </button>
+              </div>
+              <div className={`${bukaFilter ? "grid" : "hidden"} grid-cols-2 gap-3 md:grid md:grid-cols-4`}>
                 <label className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-[#6B7A90]">
                   Peran
                   <SelectCari className={`${sel} mt-1`} value={s.peran} onChange={(e) => ubah({ peran: e.target.value as SaringanLapangan["peran"] })}>
@@ -232,25 +366,23 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
                   </SelectCari>
                 </label>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {chip("hari", "Hari ini")}
-                {chip("kemarin", "Kemarin")}
-                {chip("3hari", "3 hari")}
-                {chip("semua", "Semua")}
-                <button type="button" onClick={() => { setS({ ...SARINGAN_AWAL }); setCepat("semua"); setHalaman(1); }} className="ml-auto min-h-[40px] px-2 text-[12.5px] font-bold text-[#1F5FD1]">
-                  Atur ulang
-                </button>
-              </div>
+              {(bukaFilter || filterAktif > 0) && (
+                <div className="mt-2 flex justify-end">
+                  <button type="button" onClick={() => { setS({ ...SARINGAN_AWAL }); setCepat("semua"); setHalaman(1); }} className="min-h-[40px] px-2 text-[12.5px] font-bold text-[#1F5FD1]">
+                    Atur ulang saringan
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div className={kartu}>
+              <button type="button" onClick={() => { ubah({ lapangan: "belum" }); setBukaFilter(true); }} className={`${kartu} text-left active:bg-[#F5F8FE]`} aria-label="Tampilkan baris yang belum ada hasil">
                 <span className="text-[12px] text-[#55657D]">Petugas aktif (ada hasil)</span>
                 <b className="mt-1 block text-[26px] text-[#0F2A52]">
                   {ringk.orang_berhasil} <span className="text-[14px] font-bold text-[#6B7A90]">dari {ringk.orang}</span>
                 </b>
-                <small className="mt-1 block text-[11.5px] text-[#6B7A90]">{ringk.belum_ada_hasil} baris belum ada hasil</small>
-              </div>
+                <small className="mt-1 block text-[11.5px] text-[#1F5FD1]">{ringk.belum_ada_hasil} baris belum ada hasil ›</small>
+              </button>
               <div className={kartu}>
                 <span className="text-[12px] text-[#55657D]">Sub SLS diidentifikasi</span>
                 <b className="mt-1 block text-[26px] text-[#0F2A52]">{fmt(ringk.sub_idf)}</b>
@@ -266,16 +398,72 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
                   {(ringk.qc_lengkap > 0 || agr.qc > 0) && ` · korwil: ${fmt(ringk.qc_lengkap)} lembar QC lengkap (agregat ${fmt(agr.qc)})`}
                 </small>
               </div>
-              <div className={ringk.translok.anomali > 0 ? "rounded-[16px] bg-[#FDE8E8] p-4" : kartu}>
+              <button type="button" onClick={() => { ubah({ translok: "anomali" }); setBukaFilter(true); setTimeout(() => daftarRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }} className={`${ringk.translok.anomali > 0 ? "rounded-[16px] bg-[#FDE8E8] p-4" : kartu} text-left active:opacity-80`} aria-label="Tampilkan baris translok anomali">
                 <span className="text-[12px] text-[#55657D]">Translok lengkap / anomali</span>
                 <b className="mt-1 block text-[26px] text-[#0F2A52]">
                   {ringk.translok.lengkap} <span className="text-[14px] font-bold text-[#6B7A90]">/</span> <span className={ringk.translok.anomali > 0 ? "text-[#9B1C23]" : ""}>{ringk.translok.anomali}</span>
                 </b>
-                <small className="mt-1 block text-[11.5px] text-[#6B7A90]">sebagian {ringk.translok.sebagian} · tanpa klaim {ringk.translok.tidak_ada}</small>
-              </div>
+                <small className="mt-1 block text-[11.5px] text-[#6B7A90]">sebagian {ringk.translok.sebagian} · tanpa klaim {ringk.translok.tidak_ada}{ringk.translok.anomali > 0 ? " · ketuk untuk lihat anomali" : ""}</small>
+              </button>
             </div>
 
-            <div className="mt-4 overflow-x-auto rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)]">
+            <PapanMasalah judul="Perlu tindakan" daftar={masalah} kosong="Tidak ada petugas bermasalah pada saringan ini." />
+            <div className="lg:grid lg:grid-cols-2 lg:gap-4">
+              <BatangCapaian judul="Translok lengkap per tim" catatan="Persentase hari berstatus Lengkap dari hari yang ada klaim/hasil. Ketuk tim untuk menyaring." item={batangTim} />
+              <TumpukHarian judul="Status translok per tanggal" catatan="Ketuk tanggal untuk menyaring ke hari itu." baris={tumpukHari} legenda={[{ nama: "Lengkap", warna: "bg-[#19A463]" }, { nama: "Sebagian", warna: "bg-[#D99A00]" }, { nama: "Anomali", warna: "bg-[#B42329]" }, { nama: "Tanpa klaim", warna: "bg-[#B8C2D2]" }]} />
+            </div>
+
+            <div ref={daftarRef} className="mt-5 flex flex-wrap items-center justify-between gap-2 scroll-mt-4">
+              <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Rincian per petugas per tanggal</h2>
+              <button type="button" onClick={() => setMasalahDulu((x) => !x)} aria-pressed={masalahDulu} className={`min-h-[40px] rounded-full px-3.5 text-[12.5px] font-extrabold ${masalahDulu ? "bg-[#0F2A52] text-white" : "bg-white text-[#55657D] shadow-[0_2px_6px_rgba(15,42,82,.08)]"}`}>
+                Bermasalah dulu
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-2.5 md:hidden">
+              {potong.length === 0 && <p className="rounded-[14px] bg-white px-4 py-6 text-center text-[13px] text-[#6B7A90]">Tidak ada baris pada saringan ini.</p>}
+              {potong.map((b) => {
+                const sl = statusLapangan(b);
+                const st = statusTranslok(b, aturan);
+                const alasan = alasanAnomali(b, aturan);
+                return (
+                  <article key={`${b.akun_id}-${b.tanggal}`} className={`rounded-[14px] bg-white p-3 shadow-[0_4px_14px_rgba(15,42,82,.07)] ${st === "anomali" ? "border-l-[5px] border-l-[#B42329]" : st === "sebagian" ? "border-l-[5px] border-l-[#D99A00]" : ""}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <b className="block break-words text-[14px] leading-tight text-[#0F2A52]">{b.nama}</b>
+                        <span className="text-[11.5px] text-[#6B7A90]">{LABEL_PERAN[b.peran]}{b.pml_nama ? ` · Tim ${b.pml_nama}` : ""}</span>
+                      </div>
+                      <span className="shrink-0 text-[12px] font-bold text-[#55657D]">{tgl(b.tanggal)}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold ${sl === "belum" ? "bg-[#EEF2F7] text-[#6B7A90]" : sl === "identifikasi" ? "bg-[#E1F0F9] text-[#12618F]" : "bg-[#E3F6EC] text-[#13794B]"}`}>{LABEL_STATUS_LAPANGAN[sl]}</span>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold ${GAYA_TRANSLOK[st]}`}>Translok: {LABEL_STATUS_TRANSLOK[st]}</span>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-3 gap-2">
+                      <div className="rounded-[10px] bg-[#F5F8FE] px-2 py-1.5">
+                        <dt className="text-[10.5px] text-[#6B7A90]">{b.peran === "pml" ? "Sub SLS idf." : hariQc(b) ? "Lembar QC" : "KK berhasil"}</dt>
+                        <dd className="text-[16px] font-extrabold tabular-nums text-[#0F2A52]">{b.peran === "pml" ? b.sub_idf : hariQc(b) ? b.kk_berhasil : kkDihitung(b)}</dd>
+                      </div>
+                      <div className="rounded-[10px] bg-[#F5F8FE] px-2 py-1.5">
+                        <dt className="text-[10.5px] text-[#6B7A90]">Agregat</dt>
+                        <dd className="text-[16px] font-extrabold tabular-nums text-[#0F2A52]">{fmt(jumlahAgregat(b))}</dd>
+                      </div>
+                      <div className="rounded-[10px] bg-[#F5F8FE] px-2 py-1.5">
+                        <dt className="text-[10.5px] text-[#6B7A90]">Foto</dt>
+                        <dd className={`text-[16px] font-extrabold tabular-nums ${b.jumlah_foto >= aturan.jumlah_foto ? "text-[#13794B]" : "text-[#0F2A52]"}`}>{b.jumlah_foto}/{aturan.jumlah_foto}</dd>
+                      </div>
+                    </dl>
+                    <p className="mt-2 text-[11.5px] text-[#55657D]">
+                      Hari kerja <b className={b.hari_kerja ? "text-[#13794B]" : "text-[#9B1C23]"}>{b.hari_kerja ? "✓" : "✗"}</b> · Laporan <b className={b.ada_laporan ? "text-[#13794B]" : "text-[#9B1C23]"}>{b.ada_laporan ? "✓" : "✗"}</b>
+                      {b.peran !== "pml" && !hariQc(b) && b.kk_tdk_ditemukan > 0 ? ` · ${b.kk_tdk_ditemukan} tdk ditemukan` : ""}
+                    </p>
+                    {alasan && <p className="mt-1.5 text-[11.5px] font-bold text-[#9B1C23]">{alasan}</p>}
+                  </article>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 hidden overflow-x-auto rounded-[18px] bg-white shadow-[0_8px_22px_rgba(15,42,82,.08)] md:block">
               <div className="min-w-[1180px]">
                 <div className={`${kolom} border-b border-[#EEF2F7] bg-[#F7FAFE] px-5 py-2.5`}>
                   <button type="button" className={`${th} text-left`} onClick={() => urutPada("tanggal")}>Tanggal{panah("tanggal")}</button>

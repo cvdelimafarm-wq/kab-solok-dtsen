@@ -13,6 +13,7 @@ import { muatData, ubahCache, useData } from "@/app/portal/dataBersama";
 import { berhasil, persen, saringPpl, saringTim, type DataMonitoringPendataan, type Hitung3 } from "@/lib/pendataanMonitor";
 import { Kartu, Kpi, Persen, fmt, fmt1, jam, sel, td, tdAngka, th } from "./monUi";
 import SelectCari from "@/app/components/SelectCari";
+import { BatangCapaian, KE_ALOKASI_TIM, KE_NOTIFIKASI, PapanMasalah, type BatangItem, type Masalah } from "./monMasalah";
 
 const PATH = "/api/portal/pendataan/monitoring";
 type Rekap = "ppl" | "pml" | "tim";
@@ -31,6 +32,8 @@ export default function MonProgres() {
   const [cari, setCari] = useState("");
   const [urut, setUrut] = useState<Urut>("bawaan");
   const [memuat, setMemuat] = useState(false);
+  const [bukaFilter, setBukaFilter] = useState(false); // HP: Tim / Cari / Urutkan dilipat di balik satu tombol
+  const sembunyi = bukaFilter ? "" : "max-sm:hidden";
 
   useEffect(() => {
     if (!bacaSesi() || dm.galat === "SESI_BERAKHIR") router.replace("/");
@@ -66,6 +69,63 @@ export default function MonProgres() {
     return [...d].sort((a, b) => (urut === "rendah" ? k(a) - k(b) : k(b) - k(a)) || a.pml_nama.localeCompare(b.pml_nama));
   }, [data, pml, cari, urut]);
   const adaSaringan = pml != null || cari.trim() !== "";
+
+  // (11 Nov 2026) siapa bermasalah + apa masalahnya + ke mana menyelesaikannya
+  const masalah = useMemo<Masalah[]>(() => {
+    if (!data) return [];
+    const hasil: Masalah[] = [];
+    const lihat = (nama: string) => () => {
+      setRekap("ppl");
+      setCari(nama);
+      setUrut("bawaan");
+    };
+    for (const p of data.ppl) {
+      const b = berhasil(p.hasil);
+      const sub = p.pml_nama ? `PPL · Tim ${p.pml_nama}` : "PPL";
+      const kal: string[] = [];
+      let berat: 1 | 2 | 3 = 1;
+      const aksi: Masalah["aksi"] = [];
+      if (p.pml_id == null) {
+        kal.push("Belum masuk tim PML mana pun, jadi tidak punya target.");
+        berat = 3;
+        aksi.push({ teks: "Atur tim", href: KE_ALOKASI_TIM });
+      } else if (p.target <= 0) {
+        kal.push("Targetnya 0 KK: tim belum punya Sub SLS aktif.");
+        berat = 2;
+        aksi.push({ teks: "Atur alokasi", href: KE_ALOKASI_TIM });
+      } else if (b === 0) {
+        kal.push(`Belum mendata satu KK pun (target ${fmt(p.target)} KK).`);
+        berat = 3;
+      } else if (persen(b, p.target) < 50) {
+        kal.push(`Capaian ${persen(b, p.target)}%: ${fmt(b)} dari ${fmt(p.target)} KK, sisa ${fmt(Math.max(0, p.target - b))}.`);
+        berat = 2;
+      }
+      const tdk = p.hasil.tidak_ditemukan;
+      if (tdk > 0 && tdk >= 3 && tdk / (b + tdk) >= 0.2) kal.push(`${fmt(tdk)} KK tidak ditemukan (${Math.round((tdk / (b + tdk)) * 100)}% dari yang dikunjungi): perlu dicek alamat/patokan.`);
+      if (!kal.length) continue;
+      if (p.pml_id != null) aksi.push({ teks: "Kirim pengingat", href: KE_NOTIFIKASI });
+      aksi.push({ teks: "Lihat kartunya", klik: lihat(p.nama) });
+      hasil.push({ kunci: `ppl-${p.petugas_id}`, nama: p.nama, sub, berat, masalah: kal.join(" "), aksi });
+    }
+    for (const t of data.tim) {
+      const kal: string[] = [];
+      let berat: 1 | 2 | 3 = 2;
+      if (t.ppl === 0) {
+        kal.push("Tim tidak punya PPL, sehingga targetnya tidak ada yang mendata.");
+        berat = 3;
+      }
+      if (t.idf_ditugaskan != null && t.idf_selesai != null && t.idf_ditugaskan > 0 && persen(t.idf_selesai, t.idf_ditugaskan) < 50) kal.push(`Identifikasi Sub SLS baru ${t.idf_selesai} dari ${t.idf_ditugaskan} (${persen(t.idf_selesai, t.idf_ditugaskan)}%).`);
+      if (!kal.length) continue;
+      hasil.push({ kunci: `tim-${t.pml_id}`, nama: t.pml_nama, sub: "PML", berat, masalah: kal.join(" "), aksi: [t.ppl === 0 ? { teks: "Atur tim", href: KE_ALOKASI_TIM } : { teks: "Kirim pengingat", href: KE_NOTIFIKASI }] });
+    }
+    return hasil;
+  }, [data]);
+
+  const batang = useMemo<BatangItem[]>(() => {
+    if (rekap === "ppl") return ppl.filter((p) => p.target > 0).map((p) => ({ kunci: String(p.petugas_id), label: p.nama, sub: p.pml_nama ? `Tim ${p.pml_nama}` : undefined, persen: persen(berhasil(p.hasil), p.target), ket: `${fmt(berhasil(p.hasil))} dari ${fmt(p.target)} KK`, klik: () => setCari(p.nama) }));
+    if (rekap === "tim") return tim.filter((t) => t.kk_target > 0).map((t) => ({ kunci: String(t.pml_id), label: `Tim ${t.pml_nama}`, sub: `${t.ppl} PPL`, persen: persen(berhasil(t.hasil), t.kk_target), ket: `${fmt(berhasil(t.hasil))} dari ${fmt(t.kk_target)} KK`, klik: () => setPml(t.pml_id) }));
+    return tim.filter((t) => t.idf_ditugaskan != null && t.idf_selesai != null && t.idf_ditugaskan > 0).map((t) => ({ kunci: String(t.pml_id), label: t.pml_nama, sub: "Identifikasi Sub SLS", persen: persen(t.idf_selesai ?? 0, t.idf_ditugaskan ?? 0), ket: `${t.idf_selesai} dari ${t.idf_ditugaskan} Sub SLS`, klik: () => setPml(t.pml_id) }));
+  }, [rekap, ppl, tim]);
 
   // angka ringkas mengikuti tabel yang tampil; tanpa saringan memakai jumlah keseluruhan (Sub SLS bersama dihitung sekali)
   const ringkas = useMemo(() => {
@@ -106,7 +166,10 @@ export default function MonProgres() {
               ))}
             </div>
           </div>
-          <label className="flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">
+          <button type="button" onClick={() => setBukaFilter((x) => !x)} aria-expanded={bukaFilter} className="col-span-2 min-h-[44px] rounded-[10px] bg-[#EEF2F7] px-4 text-[13px] font-extrabold text-[#0F2A52] sm:hidden">
+            Saringan{pml != null || cari.trim() ? " (aktif)" : ""} {bukaFilter ? "▴" : "▾"}
+          </button>
+          <label className={`flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90] ${sembunyi}`}>
             Tim (PML)
             <SelectCari value={pml ?? ""} onChange={(e) => setPml(e.target.value ? Number(e.target.value) : null)} className={`${sel} w-full min-h-[44px] font-normal normal-case tracking-normal sm:min-h-[40px] sm:min-w-[170px]`}>
               <option value="">Semua tim</option>
@@ -117,11 +180,11 @@ export default function MonProgres() {
               ))}
             </SelectCari>
           </label>
-          <label className="flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">
+          <label className={`flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90] ${sembunyi}`}>
             Cari nama
             <input value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Nama petugas" className={`${sel} w-full min-h-[44px] font-normal normal-case tracking-normal sm:min-h-[40px] sm:min-w-[150px]`} />
           </label>
-          <label className="flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90]">
+          <label className={`flex flex-col gap-1 text-[11px] font-extrabold uppercase tracking-[0.08em] text-[#6B7A90] ${sembunyi}`}>
             Urutkan
             <SelectCari value={urut} onChange={(e) => setUrut(e.target.value as Urut)} className={`${sel} w-full min-h-[44px] font-normal normal-case tracking-normal sm:min-h-[40px] sm:min-w-[160px]`}>
               <option value="bawaan">Tim lalu nama</option>
@@ -129,7 +192,7 @@ export default function MonProgres() {
               <option value="tinggi">Capaian tertinggi</option>
             </SelectCari>
           </label>
-          <div className="col-span-2 grid grid-cols-2 gap-2.5 sm:contents">
+          <div className={`col-span-2 grid grid-cols-2 gap-2.5 sm:contents ${sembunyi}`}>
             <button type="button" onClick={() => void unduh()} disabled={!data} className="min-h-[44px] rounded-[10px] bg-[#E4ECFA] px-4 text-[13px] font-extrabold text-[#0F2A52] disabled:opacity-50 sm:min-h-[40px]">
             Unduh Excel
           </button>
@@ -145,6 +208,18 @@ export default function MonProgres() {
 
       {galat && <p className="mt-4 rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
       {!data && !galat && <p className="mt-4 text-[13px] text-[#55657D]">Memuat data monitoring…</p>}
+
+      {data && <PapanMasalah judul="Perlu tindakan" daftar={masalah} kosong="Tidak ada PPL atau tim yang bermasalah menurut aturan di bawah." />}
+      {data && (
+        <BatangCapaian
+          judul={rekap === "pml" ? "Identifikasi Sub SLS per PML" : `Capaian terhadap target per ${rekap === "ppl" ? "PPL" : "tim"}`}
+          catatan="Urut dari capaian terendah. Ketuk batang untuk menyaring ke petugas/tim itu."
+          item={batang}
+        />
+      )}
+      {data && (
+        <p className="mt-1.5 px-1 text-[11.5px] leading-snug text-[#6B7A90]">Aturan penanda: mendesak = belum masuk tim, tim tanpa PPL, atau 0 KK didata; perhatian = capaian di bawah 50%, target 0, banyak KK tidak ditemukan, atau identifikasi di bawah 50%.</p>
+      )}
 
       {data && ringkas && (
         <div className="mt-4 rounded-[18px] bg-white p-3 shadow-[0_8px_22px_rgba(15,42,82,.08)] sm:p-4">
