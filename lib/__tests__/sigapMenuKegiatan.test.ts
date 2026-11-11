@@ -18,8 +18,10 @@ describe("template menu kegiatan", () => {
     expect(pakaiTemplateMenu(pasca)).toBe(true);
     // tanpa modul pemicu (lembar pendataan / supervisi) belum bertemplate
     expect(pakaiTemplateMenu([{ isi: ["konfirmasi"] }, { isi: ["pelatihan", "translok:3"] }, { isi: ["wilayah_tim", "translok:1"] }, { isi: [] }])).toBe(false);
-    // modul rutin yang halamannya belum berbar membatalkan template
-    expect(pakaiTemplateMenu([{ isi: ["pendataan", "sampel:9"] }])).toBe(false);
+    // (11 Nov 2026) "sampel:<id>" kini berbar (halaman /sigap/sampel memasang bar): ikut bertemplate
+    expect(pakaiTemplateMenu([{ isi: ["pendataan", "sampel:9"] }])).toBe(true);
+    // modul bukan rutin dan bukan sekali jalan/informasi membatalkan template
+    expect(pakaiTemplateMenu([{ isi: ["pendataan", "modul_asing"] }])).toBe(false);
     // hanya pelatihan: bukan kegiatan bermenu
     expect(pakaiTemplateMenu([{ isi: ["pelatihan", "translok:3"] }])).toBe(false);
   });
@@ -70,8 +72,10 @@ describe("template menu kegiatan", () => {
     expect(langkahSekali("pascabencana", [{ ...modul[0], status: "selesai" }, { ...modul[1], href: null }])).toEqual([]);
   });
 
-  it("kegiatan rutin yang halamannya belum berbar belum memakai template", () => {
-    expect(pakaiTemplateMenu([{ isi: ["sampel:5"] }, { isi: ["translok:2"] }])).toBe(false);
+  it("kegiatan dengan modul asing, tanpa isi, atau tanpa pemicu belum memakai template", () => {
+    expect(pakaiTemplateMenu([{ isi: ["sampel:5"] }, { isi: ["translok:2"] }])).toBe(true); // (11 Nov 2026) sampel + translok = Seruti dengan tab Sampel
+    expect(pakaiTemplateMenu([{ isi: ["modul_asing"] }, { isi: ["translok:2"] }])).toBe(false);
+    expect(pakaiTemplateMenu([{ isi: ["sampel:5"] }])).toBe(false); // tanpa translok dan tanpa pemicu lain
     expect(pakaiTemplateMenu([])).toBe(false);
     expect(pakaiTemplateMenu([{ isi: [] }])).toBe(false);
   });
@@ -190,7 +194,9 @@ describe("Seruti TW IV: pendataan yang isinya hanya Transport Lokal (7 Nov 2026)
     expect(pakaiTemplateMenu([{ isi: ["pelatihan", "translok:7"] }])).toBe(false);
   });
   it("modul rutin lain yang belum berbar, atau modul wilayah/konfirmasi tanpa pemicu, tetap tidak bertemplate", () => {
-    expect(pakaiTemplateMenu([{ isi: ["sampel:5"] }, { isi: ["translok:2"] }])).toBe(false);
+    expect(pakaiTemplateMenu([{ isi: ["modul_asing"] }, { isi: ["translok:2"] }])).toBe(false);
+    expect(hanyaTranslok([{ isi: ["sampel:5", "translok:2"] }])).toBe(true); // (11 Nov 2026) sampel boleh menyertai translok
+    expect(hanyaTranslok([{ isi: ["sampel:5"] }])).toBe(false);
     expect(hanyaTranslok([{ isi: ["wilayah_tim", "translok:1"] }])).toBe(false);
     expect(hanyaTranslok([])).toBe(false);
   });
