@@ -85,7 +85,8 @@ function Isi() {
   }, [md.data]);
 
   const kamera = (mode?.kegiatan ?? []).filter((k) => k.mode === "kamera");
-  const aktif = kamera.find((k) => k.kegiatan_id === pilih) ?? kamera[0] ?? null;
+  // (11 Nov 2026) Tanpa pilihan eksplisit, utamakan kegiatan yang hari ini hari kerjanya (mis. pendataan), bukan kegiatan pertama di daftar (mis. pelatihan yang sudah lewat).
+  const aktif = kamera.find((k) => k.kegiatan_id === pilih) ?? kamera.find((k) => k.hari_kerja_hari_ini === true) ?? kamera[0] ?? null;
   // (31 Okt 2026) Hari ini bukan hari kerja (tidak ada hari Translok) pada SEMUA penugasan kegiatan ini: Kamera memotret FOTO LAPORAN yang menempati nomor 3
   // dan menimpa foto lamanya; unggah dari galeri hanya diizinkan di kondisi ini. Data lama/simpanan HP tanpa bidang ini dianggap hari kerja biasa (server yang memutuskan).
   const penugasanIni = aktif ? kamera.filter((k) => k.kegiatan_id === aktif.kegiatan_id) : [];

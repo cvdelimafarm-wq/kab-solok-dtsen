@@ -1146,7 +1146,8 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
     setPesan(null);
     try {
       await kirimJson(token, { aksi: "hari_kerja", penugasan_id: pen.id, tanggal: Array.from(pilih) });
-      await onTersimpan();
+      // (11 Nov 2026) Muat ulang data kerja itu berat (master wilayah, realisasi otomatis, foto); jangan ditunggu agar tombol tidak lama "Menyimpan…".
+      void Promise.resolve(onTersimpan()).catch(() => {});
       setPesan({ teks: "Rencana hari kerja tersimpan. Kwitansi, Visum & Surat Pernyataan ikut diperbarui.", ok: true });
       setEdit(false);
     } catch (e) {
