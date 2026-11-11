@@ -81,42 +81,64 @@ export default function MonProgres() {
     };
     for (const p of data.ppl) {
       const b = berhasil(p.hasil);
-      const sub = p.pml_nama ? `PPL · Tim ${p.pml_nama}` : "PPL";
+      const sub = p.pml_nama ? `PPL · Tim ${p.pml_nama}` : "PPL · belum masuk tim";
+      const jenis: string[] = [];
       const kal: string[] = [];
       let berat: 1 | 2 | 3 = 1;
+      let dampak = "";
       const aksi: Masalah["aksi"] = [];
       if (p.pml_id == null) {
+        jenis.push("Belum masuk tim");
         kal.push("Belum masuk tim PML mana pun, jadi tidak punya target.");
+        dampak = "KK yang seharusnya didata tidak ada penanggung jawabnya.";
         berat = 3;
         aksi.push({ teks: "Atur tim", href: KE_ALOKASI_TIM });
       } else if (p.target <= 0) {
+        jenis.push("Target 0");
         kal.push("Targetnya 0 KK: tim belum punya Sub SLS aktif.");
+        dampak = "Capaian tidak bisa dihitung.";
         berat = 2;
         aksi.push({ teks: "Atur alokasi", href: KE_ALOKASI_TIM });
       } else if (b === 0) {
+        jenis.push("Belum mendata");
         kal.push(`Belum mendata satu KK pun (target ${fmt(p.target)} KK).`);
+        dampak = `${fmt(p.target)} KK belum tersentuh.`;
         berat = 3;
       } else if (persen(b, p.target) < 50) {
-        kal.push(`Capaian ${persen(b, p.target)}%: ${fmt(b)} dari ${fmt(p.target)} KK, sisa ${fmt(Math.max(0, p.target - b))}.`);
+        jenis.push("Capaian rendah");
+        kal.push(`Capaian ${persen(b, p.target)}%: ${fmt(b)} dari ${fmt(p.target)} KK.`);
+        dampak = `Sisa ${fmt(Math.max(0, p.target - b))} KK dari target ${fmt(p.target)}.`;
         berat = 2;
       }
       const tdk = p.hasil.tidak_ditemukan;
-      if (tdk > 0 && tdk >= 3 && tdk / (b + tdk) >= 0.2) kal.push(`${fmt(tdk)} KK tidak ditemukan (${Math.round((tdk / (b + tdk)) * 100)}% dari yang dikunjungi): perlu dicek alamat/patokan.`);
-      if (!kal.length) continue;
+      if (tdk >= 3 && tdk / (b + tdk) >= 0.2) {
+        jenis.push("Banyak KK tidak ditemukan");
+        kal.push(`${fmt(tdk)} KK tidak ditemukan (${Math.round((tdk / (b + tdk)) * 100)}% dari yang dikunjungi): perlu dicek alamat/patokan.`);
+        dampak = dampak ? `${dampak} Ditambah ${fmt(tdk)} KK perlu dilacak ulang.` : `${fmt(tdk)} KK perlu dilacak ulang.`;
+      }
+      if (!jenis.length) continue;
       if (p.pml_id != null) aksi.push({ teks: "Kirim pengingat", href: KE_NOTIFIKASI });
       aksi.push({ teks: "Lihat kartunya", klik: lihat(p.nama) });
-      hasil.push({ kunci: `ppl-${p.petugas_id}`, nama: p.nama, sub, berat, masalah: kal.join(" "), aksi });
+      hasil.push({ kunci: `ppl:${p.petugas_id}`, nama: p.nama, sub, berat, jenis: jenis.join(" + "), masalah: kal.join(" "), tanda: jenis.join("+"), dampak, pj: p.pml_nama ? `PML ${p.pml_nama}` : "Admin (Ketua Tim)", aksi });
     }
     for (const t of data.tim) {
+      const jenis: string[] = [];
       const kal: string[] = [];
       let berat: 1 | 2 | 3 = 2;
+      let dampak = "";
       if (t.ppl === 0) {
+        jenis.push("Tim tanpa PPL");
         kal.push("Tim tidak punya PPL, sehingga targetnya tidak ada yang mendata.");
+        dampak = `Target tim ${fmt(t.kk_target)} KK tidak bergerak.`;
         berat = 3;
       }
-      if (t.idf_ditugaskan != null && t.idf_selesai != null && t.idf_ditugaskan > 0 && persen(t.idf_selesai, t.idf_ditugaskan) < 50) kal.push(`Identifikasi Sub SLS baru ${t.idf_selesai} dari ${t.idf_ditugaskan} (${persen(t.idf_selesai, t.idf_ditugaskan)}%).`);
-      if (!kal.length) continue;
-      hasil.push({ kunci: `tim-${t.pml_id}`, nama: t.pml_nama, sub: "PML", berat, masalah: kal.join(" "), aksi: [t.ppl === 0 ? { teks: "Atur tim", href: KE_ALOKASI_TIM } : { teks: "Kirim pengingat", href: KE_NOTIFIKASI }] });
+      if (t.idf_ditugaskan != null && t.idf_selesai != null && t.idf_ditugaskan > 0 && persen(t.idf_selesai, t.idf_ditugaskan) < 50) {
+        jenis.push("Identifikasi rendah");
+        kal.push(`Identifikasi Sub SLS baru ${t.idf_selesai} dari ${t.idf_ditugaskan} (${persen(t.idf_selesai, t.idf_ditugaskan)}%).`);
+        dampak = dampak ? `${dampak} Sisa ${t.idf_ditugaskan - t.idf_selesai} Sub SLS belum diidentifikasi.` : `Sisa ${t.idf_ditugaskan - t.idf_selesai} Sub SLS belum diidentifikasi.`;
+      }
+      if (!jenis.length) continue;
+      hasil.push({ kunci: `tim:${t.pml_id}`, nama: t.pml_nama, sub: "PML", berat, jenis: jenis.join(" + "), masalah: kal.join(" "), tanda: jenis.join("+"), dampak, pj: t.ppl === 0 ? "Admin (Ketua Tim)" : `PML ${t.pml_nama}`, aksi: [t.ppl === 0 ? { teks: "Atur tim", href: KE_ALOKASI_TIM } : { teks: "Kirim pengingat", href: KE_NOTIFIKASI }, { teks: "Lihat tim", klik: () => { setRekap("tim"); setPml(t.pml_id); } }] });
     }
     return hasil;
   }, [data]);
@@ -209,7 +231,7 @@ export default function MonProgres() {
       {galat && <p className="mt-4 rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat}</p>}
       {!data && !galat && <p className="mt-4 text-[13px] text-[#55657D]">Memuat data monitoring…</p>}
 
-      {data && <PapanMasalah judul="Perlu tindakan" daftar={masalah} kosong="Tidak ada PPL atau tim yang bermasalah menurut aturan di bawah." />}
+      {data && <PapanMasalah judul="Perlu tindakan" sumber="progres" daftar={masalah} kosong="Tidak ada PPL atau tim yang bermasalah menurut aturan di bawah." />}
       {data && (
         <BatangCapaian
           judul={rekap === "pml" ? "Identifikasi Sub SLS per PML" : `Capaian terhadap target per ${rekap === "ppl" ? "PPL" : "tim"}`}

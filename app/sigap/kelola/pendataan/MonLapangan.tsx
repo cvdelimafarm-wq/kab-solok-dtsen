@@ -118,13 +118,14 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
   // siapa bermasalah + apa masalahnya + ke mana menyelesaikannya (menurut baris yang tersaring)
   const masalah = useMemo<Masalah[]>(() => {
     if (!aturan) return [];
-    type Per = { b: BarisLapangan; tanpaHasil: string[]; tanpaHari: string[]; kurang: { t: string; apa: string }[]; ada: boolean; lampau: boolean };
+    type Per = { b: BarisLapangan; tanpaHasil: string[]; tanpaHari: string[]; kurang: { t: string; apa: string }[]; ada: boolean; lampau: boolean; lampauAda: boolean };
     const per = new Map<number, Per>();
     for (const b of tersaring) {
       let p = per.get(b.akun_id);
-      if (!p) per.set(b.akun_id, (p = { b, tanpaHasil: [], tanpaHari: [], kurang: [], ada: false, lampau: false }));
+      if (!p) per.set(b.akun_id, (p = { b, tanpaHasil: [], tanpaHari: [], kurang: [], ada: false, lampau: false, lampauAda: false }));
       const st = statusTranslok(b, aturan);
       if (statusLapangan(b) !== "belum") p.ada = true;
+      if (b.tanggal < hariIni) p.lampauAda = true;
       if (st === "anomali") {
         if (b.hari_kerja) p.tanpaHasil.push(b.tanggal);
         else p.tanpaHari.push(b.tanggal);
@@ -148,17 +149,26 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
         kalimat.push(`Translok sebagian: ${t.map((x) => `${tgl(x.t)} ${x.apa}`).join("; ")}${p.kurang.length > 2 ? ` (+${p.kurang.length - 2} hari)` : ""}.`);
       }
       const anomali = p.tanpaHasil.length + p.tanpaHari.length > 0;
-      if (!kalimat.length && !p.ada && b.peran !== "korwil") kalimat.push("Belum ada hasil lapangan pada rentang ini.");
+      // "belum ada hasil" hanya jadi masalah bila rentang memuat hari yang sudah lewat (hari ini belum selesai, jadi tidak dihitung)
+      if (!kalimat.length && !p.ada && b.peran !== "korwil" && p.lampauAda) kalimat.push("Belum ada hasil lapangan pada rentang ini.");
       if (!kalimat.length) continue;
       const berat: 1 | 2 | 3 = anomali ? (p.lampau ? 3 : 2) : p.kurang.length ? 2 : 1;
+      const jenis = [p.tanpaHasil.length ? "Hari kerja tanpa hasil" : "", p.tanpaHari.length ? "Hasil tanpa hari kerja" : "", p.kurang.length ? "Translok sebagian" : "", !p.tanpaHasil.length && !p.tanpaHari.length && !p.kurang.length ? "Belum ada hasil" : ""].filter(Boolean);
+      const semuaTgl = [...p.tanpaHasil, ...p.tanpaHari, ...p.kurang.map((x) => x.t)].sort();
+      const hari = new Set(semuaTgl).size;
+      const penanggung = b.peran === "ppl" && b.pml_nama ? `PML ${b.pml_nama}` : "Admin (Ketua Tim)";
       hasil.push({
-        kunci: String(id),
+        kunci: `akun:${id}`,
         nama: b.nama,
         sub,
         berat,
+        jenis: jenis.join(" + "),
         masalah: kalimat.join(" "),
+        tanda: `${jenis.join("+")}@${semuaTgl[semuaTgl.length - 1] ?? "-"}`,
+        dampak: hari ? `${hari} hari bermasalah pada rentang ini; SPJ translok hari itu belum bisa dianggap lengkap.` : "Belum ada hasil yang masuk untuk dihitung ke capaian.",
+        pj: penanggung,
         aksi: [
-          ...(anomali ? [{ teks: "Verifikasi translok", href: KE_VERIFIKASI_TRANSLOK }] : []),
+          ...(anomali || p.kurang.length ? [{ teks: "Verifikasi translok", href: KE_VERIFIKASI_TRANSLOK }] : []),
           { teks: "Kirim pengingat", href: KE_NOTIFIKASI },
           { teks: "Lihat barisnya", klik: () => lihat(b.nama) },
         ],
@@ -407,7 +417,7 @@ export default function MonLapangan({ tertanam = false }: { tertanam?: boolean }
               </button>
             </div>
 
-            <PapanMasalah judul="Perlu tindakan" daftar={masalah} kosong="Tidak ada petugas bermasalah pada saringan ini." />
+            <PapanMasalah judul="Perlu tindakan" sumber="lapangan" daftar={masalah} kosong="Tidak ada petugas bermasalah pada saringan ini." />
             <div className="lg:grid lg:grid-cols-2 lg:gap-4">
               <BatangCapaian judul="Translok lengkap per tim" catatan="Persentase hari berstatus Lengkap dari hari yang ada klaim/hasil. Ketuk tim untuk menyaring." item={batangTim} />
               <TumpukHarian judul="Status translok per tanggal" catatan="Ketuk tanggal untuk menyaring ke hari itu." baris={tumpukHari} legenda={[{ nama: "Lengkap", warna: "bg-[#19A463]" }, { nama: "Sebagian", warna: "bg-[#D99A00]" }, { nama: "Anomali", warna: "bg-[#B42329]" }, { nama: "Tanpa klaim", warna: "bg-[#B8C2D2]" }]} />
