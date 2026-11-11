@@ -25,10 +25,10 @@ describe("susunDaftarKartu", () => {
   const spdt = INDUK("spdt", [T("pendataan", 1, ["spdt_lembar", "translok:2"])], { spdt: { peran: "ppl", total: 10 } as never });
   const keg = [TL(3, "hijau"), TL(1, "emas", HI()), TL(2, "biru", HI({ slot: [1, 2], laporanSudah: true }))];
 
-  it("satu kartu per survei, Pelatihan dan Pendataan terpisah", () => {
+  it("satu kartu per survei: Pelatihan dan Pendataan satu induk bermenu digabung (11 Nov 2026)", () => {
     const akt = [...aktivitasDariInduk(K(pasca, keg)), ...aktivitasDariInduk(K(spdt, keg))];
     const d = susunDaftarKartu({ kegiatan: akt, induk: [pasca, spdt], keg, tugasPelatihan: null, nowMs: NOW });
-    expect(d.map((k) => k.judul).sort()).toEqual(["Pendataan pascabencana", "Pendataan spdt", "Pelatihan pascabencana"].sort());
+    expect(d.map((k) => k.judul).sort()).toEqual(["Pendataan pascabencana", "Pendataan spdt"].sort());
     expect(new Set(d.map((k) => k.id)).size).toBe(d.length);
   });
 
@@ -51,10 +51,12 @@ describe("susunDaftarKartu", () => {
     expect(d.filter((k) => k.redup)).toHaveLength(1);
   });
 
-  it("tugas pelatihan dipasang di kartu Pelatihan", () => {
+  it("tugas pelatihan dibawa ke kartu survei gabungan", () => {
     const tp: TugasUtama = { skor: 92, ikon: "tes", label: "TUGAS HARI INI", judul: "Kerjakan Pretest", uraian: "20 soal", lencana: { teks: "tutup 10.00", nada: "emas" }, href: "/sigap/pelatihan/tes/pretest", aksi: "Mulai Pretest" };
-    const d = susunDaftarKartu({ kegiatan: aktivitasDariInduk(K(pasca, keg)), induk: [pasca], keg, tugasPelatihan: tp, nowMs: NOW });
-    const pel = d.find((k) => k.jenis === "pelatihan")!;
+    const d = susunDaftarKartu({ kegiatan: aktivitasDariInduk(K(pasca, keg)), induk: [pasca], keg: [], tugasPelatihan: tp, nowMs: NOW }); // tanpa ringkasan Translok: poin Pelatihan jadi cadangan kartu
+    expect(d.find((k) => k.jenis === "pelatihan")).toBeUndefined(); // tergabung ke kartu survei
+    const pel = d.find((k) => k.jenis === "pendataan")!;
+    expect(pel.href).toBe("/sigap/kegiatan/pascabencana");
     expect(pel.poin).toMatchObject({ judul: "Kerjakan Pretest", nada: "emas", aksi: "Mulai Pretest", href: "/sigap/pelatihan/tes/pretest" });
     expect(poinDariTugas(null)).toBeNull();
   });
@@ -103,8 +105,8 @@ describe("tugas pelatihan pada peserta dua pelatihan (1 Nov 2026)", () => {
 
   it("tugas dipasang di kartu Pelatihan milik kegiatan hub (Seruti), bukan kartu Pelatihan pertama (PSP)", () => {
     const d = susunDaftarKartu({ kegiatan: akt, induk: [pasca, seruti], keg, tugasPelatihan: tp, tugasPelatihanKegiatanId: 7, nowMs: NOW });
-    const pelPsp = d.find((k) => k.id === "akt-pascabencana-pelatihan")!;
-    const pelSeruti = d.find((k) => k.id === "akt-seruti_tw4-pelatihan")!;
+    const pelPsp = d.find((k) => k.id === "akt-pascabencana-pendataan")!;
+    const pelSeruti = d.find((k) => k.id === "akt-seruti_tw4-pendataan")!;
     expect(pelSeruti.poin).toMatchObject({ judul: "Baca undangan pelatihan", href: "/sigap/pelatihan/undangan?kegiatan=7" });
     expect(pelPsp.poin?.judul).not.toBe("Baca undangan pelatihan");
   });
@@ -112,7 +114,7 @@ describe("tugas pelatihan pada peserta dua pelatihan (1 Nov 2026)", () => {
   it("id kegiatan kosong atau tidak cocok: perilaku lama (kartu Pelatihan pertama)", () => {
     for (const id of [undefined, null, 999]) {
       const d = susunDaftarKartu({ kegiatan: akt, induk: [pasca, seruti], keg, tugasPelatihan: tp, tugasPelatihanKegiatanId: id, nowMs: NOW });
-      const pertama = d.filter((k) => k.jenis === "pelatihan").map((k) => k.poin?.judul);
+      const pertama = d.map((k) => k.poin?.judul);
       expect(pertama.filter((j) => j === "Baca undangan pelatihan")).toHaveLength(1);
     }
   });

@@ -59,7 +59,10 @@ export function susunDaftarKartu(b: BahanDaftar): KartuBeranda[] {
       const ind = b.induk?.find((i) => i.kode === x.indukKode);
       const info = poinGabung.get(x.indukKode) && x.jenis === "pendataan" ? (poinGabung.get(x.indukKode) ?? null) : x.info ? poinInfo(x.info.teks, x.info.href) : null;
       if (x.jenis === "pendataan" && ind && pakaiTemplateMenu(ind.tahap)) {
-        return kartuTemplate({ id: x.id, judul: x.judul, href, nada: x.nada }, { induk: ind, keg: kegTL, idTranslok: idTranslokMenu(ind.tahap), nowMs: b.nowMs }, info);
+        const k = kartuTemplate({ id: x.id, judul: x.judul, href, nada: x.nada }, { induk: ind, keg: kegTL, idTranslok: idTranslokMenu(ind.tahap), nowMs: b.nowMs }, info);
+        // tugas Pelatihan yang mendesak (merah/emas) mengalahkan poin Pendataan yang tidak merah, supaya tidak tersembunyi di balik kartu gabungan
+        const pg = poinGabung.get(x.indukKode) ?? null;
+        return pg && (pg.nada === "merah" || pg.nada === "emas") && k.poin?.nada !== "merah" && !k.redup ? { ...k, poin: pg } : k;
       }
       if (x.jenis === "pelatihan" && !pelatihanTerpakai && b.tugasPelatihan && (sasaranTugas === null || x.id === sasaranTugas)) {
         pelatihanTerpakai = true;
