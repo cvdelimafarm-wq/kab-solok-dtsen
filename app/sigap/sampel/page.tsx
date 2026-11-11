@@ -15,6 +15,7 @@ import SheetGanti from "./SheetGanti";
 import WilayahSaya from "./WilayahSaya";
 import { useAlokasiSaya } from "./useAlokasi";
 import DaftarObjek from "./DaftarObjek";
+import BarKegiatan, { useBarKegiatan } from "../BarKegiatan"; // (11 Nov 2026) tab Sampel di bar bawah kegiatan (Hari Ini | Sampel | Kamera | Translok)
 import { useObjekSaya } from "./useObjek";
 
 function Angka({ nilai, label }: { nilai: number; label: string }) {
@@ -28,16 +29,22 @@ function Angka({ nilai, label }: { nilai: number; label: string }) {
 
 export default function HalamanSampel() {
   const [kegiatan, setKegiatan] = useState<number | null | undefined>(undefined);
+  const [kodeBar, setKodeBar] = useState<string | null>(null);
   useEffect(() => {
     try {
-      const n = Number(new URLSearchParams(window.location.search).get("k"));
+      const q = new URLSearchParams(window.location.search);
+      const n = Number(q.get("k"));
       setKegiatan(Number.isInteger(n) && n > 0 ? n : null);
+      const kb = q.get("kb");
+      if (kb && /^[a-z0-9_]{2,30}$/.test(kb)) setKodeBar(kb);
     } catch {
       setKegiatan(null);
     }
   }, []);
 
   const { data, galat, luring, memuat, muat, ganti, batal } = useSampelSaya(kegiatan ?? null);
+  // bar bawah hanya bila kegiatan bertemplate menu; tanpa ?kb= induk dicari dari modul "sampel:<id>" (halaman lama/tautan langsung)
+  const bar = useBarKegiatan(kodeBar, kegiatan ? `sampel:${kegiatan}` : undefined);
   // (7 Nov 2026) Wilayah saya: alokasi sub SLS + daftar KK master (tidak bergantung pada ada-tidaknya sampel yang sudah ditandai)
   const alokasi = useAlokasiSaya(kegiatan ?? null);
   // (8 Nov 2026) Model 2/3: daftar objek sampel dari pusat. Kegiatan model 1 dijawab "bukan model 2/3" (data null) dan memakai tampilan model 1.
@@ -83,7 +90,7 @@ export default function HalamanSampel() {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-2.5 px-2.5 pb-8 pt-2.5">
+      <div className={`mx-auto flex w-full max-w-xl flex-1 flex-col gap-2.5 px-2.5 pt-2.5 ${bar.items && bar.kode ? "pb-28" : "pb-8"}`}>
         {kegiatan === null && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">Alamat halaman tidak lengkap (kegiatan tidak disebutkan). Buka dari menu tahap.</p>}
         {(galat ?? objek.galat) && !objek.data && <p className="rounded-[14px] border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{galat ?? objek.galat}</p>}
         {luring && !objek.data && <p className="rounded-[14px] bg-[#FFF4D6] px-3 py-2 text-[12.5px] font-semibold text-[#8A6200]">Tidak tersambung. Menampilkan data terakhir yang tersimpan di HP; penggantian sampel butuh sinyal.</p>}
@@ -105,12 +112,14 @@ export default function HalamanSampel() {
 
         {data && !objek.data && (
           <>
+            {(alokasi.data?.wilayah.length ?? 0) === 0 && (
             <div className="flex gap-2">
               {peran === "pml" && <Angka nilai={rekap.ppl} label="PPL" />}
               <Angka nilai={rekap.sls} label="SLS" />
               <Angka nilai={rekap.utama} label="Sampel utama" />
               <Angka nilai={rekap.diganti} label="Diganti" />
             </div>
+            )}
 
             {rows.length === 0 && (alokasi.data?.wilayah.length ?? 0) === 0 && <p className="rounded-[18px] bg-white px-4 py-8 text-center text-[13.5px] leading-snug text-[#55657D]">Belum ada wilayah atau sampel yang dialokasikan kepada Anda pada kegiatan ini. Hubungi admin kegiatan bila ini keliru.</p>}
 
@@ -133,6 +142,8 @@ export default function HalamanSampel() {
           </>
         )}
       </div>
+
+      {bar.items && bar.kode && <BarKegiatan kode={bar.kode} items={bar.items} aktif="sampel" />}
 
       {diganti && (
         <SheetGanti

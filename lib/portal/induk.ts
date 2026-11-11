@@ -16,6 +16,7 @@ import type { InfoSpdt } from "@/lib/spdtNtp";
 import type { InfoSampel } from "@/lib/sampelSls";
 import { ringkasModulSampel } from "@/lib/portal/sampel";
 import { ringkasModulObjek } from "@/lib/portal/sampelObjek";
+import { ringkasModulAlokasi } from "@/lib/portal/sampelAlokasi"; // (11 Nov 2026) sampel model 1 dari alokasi + tag
 import { adalahSupervisorSpdt, ringkasModulSpdt } from "@/lib/portal/spdt";
 import { ambilPml, daftarIdentifikasi } from "@/lib/portal/identifikasi";
 import { idSubNonaktif, ringkasModulPendataan } from "@/lib/portal/pendataan";
@@ -257,7 +258,7 @@ export async function indukUntukAkun(db: Db, akun: AkunPortal, kode?: string | n
     perlu("spdt_lembar") ? ringkasModulSpdt(db, akun) : Promise.resolve<InfoSpdt | null>(null),
     // (19 Okt 2026) Monitoring Korwil: hanya kortim kelompok pendataan (null = modul tidak tampil); gagal membaca tidak boleh merusak Beranda
     perlu("monitoring_korwil") ? ringkasModulKorwil(db, akun).catch((): InfoKorwil | null => null) : Promise.resolve<InfoKorwil | null>(null),
-    Promise.all(idSampel.map((id) => ringkasModulSampel(db, akun, id).then((r) => r ?? ringkasModulObjek(db, akun, id)).catch((): InfoSampel | null => null))),
+    Promise.all(idSampel.map((id) => ringkasModulSampel(db, akun, id).then((r) => r ?? ringkasModulObjek(db, akun, id)).then((r) => r ?? ringkasModulAlokasi(db, akun, id)).catch((): InfoSampel | null => null))),
   ]);
   const sampelPerKegiatan = new Map<number, InfoSampel>();
   for (const s of sampelList) if (s) sampelPerKegiatan.set(s.kegiatan_id, s);

@@ -25,7 +25,8 @@ export function modulRutin(kode: string): boolean {
  * garis waktu tahap sampai halamannya ikut dipasangi bar). Tambahkan kode modul di sini ketika halamannya selesai diadaptasi.
  */
 const MODUL_BERBAR = new Set<string>(["spdt_lembar", "pendataan", "monitoring_korwil"]);
-const adaBar = (kode: string) => MODUL_BERBAR.has(kode) || /^translok:\d+$/.test(kode);
+// (11 Nov 2026) halaman /sigap/sampel kini juga memasang bar bawah, jadi "sampel:<id>" ikut berbar
+const adaBar = (kode: string) => MODUL_BERBAR.has(kode) || /^translok:\d+$/.test(kode) || /^sampel:\d+$/.test(kode);
 
 /** Langkah SEKALI JALAN: tidak menjadi tab, melainkan kartu "Selesaikan dulu" di Hari Ini selama belum selesai. */
 export const MODUL_SEKALI = ["konfirmasi", "identifikasi"] as const;
@@ -71,7 +72,8 @@ export function pakaiTemplateMenu(tahap: readonly { isi: readonly string[] }[]):
  */
 export function hanyaTranslok(tahap: readonly { isi: readonly string[] }[]): boolean {
   const semua = tahapMenu(tahap).flatMap((t) => [...t.isi]);
-  return semua.length > 0 && semua.every((m) => /^translok:\d+$/.test(m));
+  // (11 Nov 2026) + modul "sampel:<id>" (tab Sampel Seruti); tetap wajib ada sedikitnya satu translok
+  return semua.length > 0 && semua.every((m) => /^translok:\d+$/.test(m) || /^sampel:\d+$/.test(m)) && semua.some((m) => /^translok:\d+$/.test(m));
 }
 
 /**
@@ -159,7 +161,8 @@ export function susunBar(b: BahanBar): ItemBar[] {
   const ist = b.istilah ?? {};
   const item: ItemBar[] = [{ kunci: "hari_ini", label: "Hari Ini", href: alamatHariIni(b) }];
   const sampel = alamatSampel(b.modul);
-  if (sampel) item.push({ kunci: "sampel", label: ist.sampel ?? "Sampel", href: tambahParam(sampel, { k: b.kode }) });
+  // (11 Nov 2026) Halaman /sigap/sampel memakai ?k=<ID KEGIATAN angka>; kode induk bar dibawa lewat ?kb= supaya tidak menimpa id itu
+  if (sampel) item.push({ kunci: "sampel", label: ist.sampel ?? "Sampel", href: tambahParam(sampel, /[?&]k=\d+(&|$)/.test(sampel) ? { kb: b.kode } : { k: b.kode }) });
   const awas = alamatPengawasan(b.modul, b.peran);
   if (awas) item.push({ kunci: "pengawasan", label: b.peran === "supervisor" ? (ist.supervisi ?? "Supervisi") : (ist.pengawasan ?? "Pengawasan"), href: tambahParam(awas, { k: b.kode }) });
   if (b.translok) {
