@@ -5,6 +5,7 @@ import { agendaBelumDiatur, aksiAgendaSah, aksiTersedia, jendelaSah, pesanMulaiP
 import { batasPengerjaan, hasilBolehTampil, hitungBatas, statusTes, type TesBaris } from "../sigapTes";
 
 const MULAI = "2026-11-09T01:05:00.000Z"; // 08.05 WIB
+const AKHIR_HARI = "2026-11-09T16:59:59.999Z"; // 23.59.59 WIB hari yang sama
 const menit = (m: number) => new Date(new Date(MULAI).getTime() + m * 60_000);
 const tes: TesBaris = {
   id: 19, kegiatan_id: 7, jenis: "pretest", judul: "Pretest", buka_at: "2026-11-09T00:00:00.000Z", durasi_menit: 15, tutup_at: "2026-11-09T15:00:00.000Z", aktif: true, ulang_maks: 1,
@@ -17,11 +18,12 @@ describe("jendela dan status agenda", () => {
     expect(tutupJendela(baru)).toBeNull();
     expect(statusAgenda(baru, menit(0))).toBe("menunggu");
   });
-  it("dimulai: berjalan sampai Mulai + jendela, lalu selesai", () => {
-    expect(tutupJendela(jalan)).toBe(menit(30).toISOString());
+  it("dimulai: terbuka seharian, berjalan sampai 23.59 WIB hari yang sama (bukan 30 menit), lalu selesai", () => {
+    expect(tutupJendela(jalan)).toBe(AKHIR_HARI);
     expect(statusAgenda(jalan, menit(1))).toBe("berjalan");
-    expect(statusAgenda(jalan, menit(29.9))).toBe("berjalan");
-    expect(statusAgenda(jalan, menit(30))).toBe("selesai");
+    expect(statusAgenda(jalan, menit(30))).toBe("berjalan");
+    expect(statusAgenda(jalan, menit(600))).toBe("berjalan"); // 18.05 WIB
+    expect(statusAgenda(jalan, new Date(AKHIR_HARI))).toBe("selesai");
   });
   it("Selesai ditekan lebih awal menutup jendela saat itu juga", () => {
     const a = { ...jalan, selesai_at: menit(10).toISOString() };
@@ -29,8 +31,11 @@ describe("jendela dan status agenda", () => {
     expect(statusAgenda(a, menit(9))).toBe("berjalan");
     expect(statusAgenda(a, menit(10))).toBe("selesai");
   });
-  it("Selesai yang ditekan sesudah jendela habis tidak memperpanjang", () => {
-    expect(tutupJendela({ ...jalan, selesai_at: menit(50).toISOString() })).toBe(menit(30).toISOString());
+  it("Selesai yang ditekan sesudah akhir hari tidak memperpanjang", () => {
+    expect(tutupJendela({ ...jalan, selesai_at: "2026-11-10T03:00:00.000Z" })).toBe(AKHIR_HARI);
+  });
+  it("jendela_menit tidak lagi memengaruhi penutupan", () => {
+    expect(tutupJendela({ ...jalan, jendela_menit: 5 })).toBe(AKHIR_HARI);
   });
   it("aksi yang tersedia mengikuti status", () => {
     expect(aksiTersedia("menunggu")).toEqual(["mulai"]);
@@ -57,12 +62,13 @@ describe("tesDenganAgenda", () => {
     expect(statusTes({ ...t, aktif: false }, 50, null, menit(5))).toBe("nonaktif"); // "Tarik tes dari peserta" tetap menang
     expect(statusTes(t, 0, null, menit(5))).toBe("soal_belum_ada");
   });
-  it("sesudah Mulai: buka sampai jendela habis, lalu terlewat bagi yang belum mulai", () => {
+  it("sesudah Mulai: buka seharian, lalu terlewat bagi yang belum mulai setelah akhir hari", () => {
     const t = tesDenganAgenda(tes, jalan, true);
     expect(t.buka_at).toBe(MULAI);
-    expect(t.tutup_at).toBe(menit(30).toISOString());
+    expect(t.tutup_at).toBe(AKHIR_HARI);
     expect(statusTes(t, 50, null, menit(1))).toBe("buka");
-    expect(statusTes(t, 50, null, menit(30))).toBe("terlewat");
+    expect(statusTes(t, 50, null, menit(30))).toBe("buka");
+    expect(statusTes(t, 50, null, new Date(AKHIR_HARI))).toBe("terlewat");
   });
   it("Mulai lebih awal dari jadwal tes diperbolehkan", () => {
     const awal = tesDenganAgenda({ ...tes, buka_at: "2026-11-09T05:00:00.000Z" }, jalan, true);

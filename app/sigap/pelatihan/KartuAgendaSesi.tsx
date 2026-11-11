@@ -95,7 +95,7 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
                 {s.kelas > 0 && <span className="text-[12px] text-[#6B7A90]">Kelas {s.kelas}</span>}
               </div>
               <p className="mt-1 text-[12.5px] leading-snug text-[#55657D]">
-                {s.jumlah_soal} soal · {s.durasi_menit} menit per peserta · jendela mulai {s.jendela_menit} menit
+                {s.jumlah_soal} soal · {s.durasi_menit} menit per peserta · terbuka sampai 23.59 WIB hari yang sama
                 {s.status === "berjalan" && s.mulai_at ? ` · dimulai ${jamWib(s.mulai_at)} WIB, jendela tutup ${s.tutup_at ? jamWib(s.tutup_at) : ""} WIB${sisaMenit !== null ? ` (sisa ${sisaMenit} menit)` : ""}` : ""}
                 {s.status === "selesai" && s.mulai_at ? ` · dimulai ${jamWib(s.mulai_at)} WIB, jendela ditutup ${s.tutup_at ? jamWib(s.tutup_at) : ""} WIB` : ""}
               </p>
@@ -136,7 +136,7 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
             </div>
           );
         })}
-        <p className="text-[11.5px] leading-snug text-[#6B7A90]">Setelah Mulai, peserta kelas Anda bisa mengerjakan saat itu juga. Tiap peserta mendapat waktu yang sama sejak ia menekan Mulai di HP-nya; jendela hanya membatasi kapan peserta boleh mulai.</p>
+        <p className="text-[11.5px] leading-snug text-[#6B7A90]">Setelah Mulai, peserta kelas Anda bisa mengerjakan saat itu juga. Tiap peserta mendapat waktu yang sama sejak ia menekan Mulai di HP-nya; tes terbuka seharian (sampai 23.59 WIB hari yang sama) atau sampai Anda menekan Selesai.</p>
       </div>
     </Kartu>
   );

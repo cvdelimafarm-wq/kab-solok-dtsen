@@ -15,6 +15,6 @@ describe("menu Master wilayah", () => {
   it("tampil di Pengelolaan dengan alamat dan penanda aktif bagi pemegang izin", () => {
     const pengelolaan = susunMenu({ ...dasar, masterWilayah: true }).find((k) => k.kode === "pengelolaan");
     const item = pengelolaan?.item.find((x) => x.id === "master-wilayah");
-    expect(item).toMatchObject({ href: "/sigap/kelola/master", aktifKode: "master_wilayah", label: "Master wilayah" });
+    expect(item).toMatchObject({ href: "/sigap/kelola/master", aktifKode: "master_wilayah", label: "Master" });
   });
 });
