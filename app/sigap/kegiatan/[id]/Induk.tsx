@@ -111,7 +111,7 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
 export default function HalamanInduk({ kode }: { kode: string }) {
   const router = useRouter();
   const bar = useBarKegiatan(kode);
-  const { induk, tahap } = useInduk(kode);
+  const { induk, tahap, siap: indukSiap } = useInduk(kode);
   // (11 Nov 2026) Survei yang punya tahap Pelatihan: halaman ini lebih dulu menampilkan PEMILIH TAHAP (Pelatihan | Pendataan); lembar masing-masing tetap yang sudah ada.
   // "?tahap=pendataan" = langsung ke Pendataan (perilaku lama). Dibaca setelah mount (bukan useSearchParams) supaya halaman tetap statis.
   const [pilih, setPilih] = useState<string | null | undefined>(undefined);
@@ -123,12 +123,14 @@ export default function HalamanInduk({ kode }: { kode: string }) {
   useEffect(() => {
     if (alihKeTranslok && hariIni && pilih !== undefined && !pemilih) router.replace(hariIni.href);
   }, [alihKeTranslok, hariIni, router, pilih, pemilih]);
+  // pemilih juga untuk survei tanpa menu rutin (mis. Seruti): Pendataan membuka halaman tahap pendataannya
+  if (pilih === undefined || (pilih === null && !indukSiap && !bar.items)) return <KerangkaMuat />;
+  if (pemilih && tahapPelatihan) {
+    const tahapData = tahap.find((t) => !t.isi.includes("pelatihan") && (t.kode === "pendataan" || t.isi.some((m) => m === "pendataan" || m.startsWith("translok:")))) ?? null;
+    const hrefData = bar.items ? (alihKeTranslok && hariIni ? hariIni.href : `/sigap/kegiatan/${kode}?tahap=pendataan`) : (tahapData?.rute ?? `/sigap/kegiatan/${kode}?tahap=pendataan`);
+    return <PemilihTahap nama={induk?.nama ?? "Kegiatan"} pelatihan={tahapPelatihan} hrefPendataan={hrefData} />;
+  }
   if (bar.items && bar.kode) {
-    if (pilih === undefined) return <KerangkaMuat />;
-    if (pemilih && tahapPelatihan) {
-      const hrefData = alihKeTranslok && hariIni ? hariIni.href : `/sigap/kegiatan/${kode}?tahap=pendataan`;
-      return <PemilihTahap nama={induk?.nama ?? "Kegiatan"} pelatihan={tahapPelatihan} hrefPendataan={hrefData} />;
-    }
     return alihKeTranslok ? <KerangkaMuat /> : <HariIniSederhana kode={bar.kode} items={bar.items} peran={bar.peran} langkah={bar.langkah} />;
   }
   // belum diketahui kegiatan ini bermenu rutin atau tidak: jangan kedip-kedip menampilkan garis waktu lalu berganti (galat -> halaman lama yang menampilkannya)

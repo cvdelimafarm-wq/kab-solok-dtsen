@@ -44,7 +44,7 @@ export function susunDaftarKartu(b: BahanDaftar): KartuBeranda[] {
     if (!adalahAktivitas(x) || x.jenis !== "pelatihan") continue;
     const ind = b.induk?.find((i) => i.kode === x.indukKode);
     const adaData = b.kegiatan.some((y) => adalahAktivitas(y) && y.jenis === "pendataan" && y.indukKode === x.indukKode);
-    if (ind && adaData && pakaiTemplateMenu(ind.tahap) && !gabung.has(x.indukKode)) gabung.set(x.indukKode, x);
+    if (ind && adaData && !gabung.has(x.indukKode)) gabung.set(x.indukKode, x);
   }
   const poinGabung = new Map<string, Poin | null>();
   for (const [kodeInduk, p] of gabung) {
@@ -68,7 +68,9 @@ export function susunDaftarKartu(b: BahanDaftar): KartuBeranda[] {
         pelatihanTerpakai = true;
         return kartuBiasa({ id: x.id, judul: x.judul, href, nada: x.nada, jenis: "pelatihan" }, poinDariTugas(b.tugasPelatihan));
       }
-      return kartuBiasa({ id: x.id, judul: x.judul, href, nada: x.nada, jenis: x.jenis }, info);
+      // survei tanpa menu rutin (mis. Seruti) yang tergabung: kartu membuka halaman tahap kegiatan (pilih Pelatihan/Pendataan), bukan langsung ke lembar Pendataan
+      const hrefGabung = x.jenis === "pendataan" && gabung.has(x.indukKode) ? `/sigap/kegiatan/${x.indukKode}` : href;
+      return kartuBiasa({ id: x.id, judul: x.judul, href: hrefGabung, nada: x.nada, jenis: x.jenis }, info);
     }
     // kegiatan lain (Transport Lokal tersendiri, penyisiran, DTSEN, ...)
     if (x.id === "pelatihan" && b.tugasPelatihan && !pelatihanTerpakai) {
