@@ -195,7 +195,7 @@ export function susunMenu(i: IzinMenuSidebar): KelompokMenu[] {
         { id: "kantor", ikon: "kantor", label: "Kantor", status: "segera" },
         { id: "diseminasi", ikon: "siaran", label: "Diseminasi", status: "segera" },
         // (7 Nov 2026, tahap C1) Master: wilayah, peta, dan keluarga (KK) lintas kegiatan. Hanya pemegang izin master.wilayah (Ketua); tidak ditampilkan "nonaktif" bagi yang lain.
-        ...jika(!!i.masterWilayah, { id: "master-wilayah", ikon: "arsip", label: "Master wilayah", href: "/sigap/kelola/master", aktifKode: "master_wilayah", title: "Master wilayah, peta, dan keluarga (KK) lintas kegiatan", ketPalet: "wilayah, peta, shapefile, KK master" }),
+        ...jika(!!i.masterWilayah, { id: "master-wilayah", ikon: "arsip", label: "Master", href: "/sigap/kelola/master", aktifKode: "master_wilayah", title: "Master: wilayah, peta, batas wilayah, KK, mitra, dan pegawai lintas kegiatan", ketPalet: "wilayah, peta, shapefile, KK master, mitra, pegawai" }),
         // (7 Nov 2026) Arsip: buku nomor surat, kode klasifikasi arsip, pola nomor (Peraturan BPS 1/2023). Hanya pemegang izin arsip.kelola.
         ...jika(!!i.arsip, { id: "arsip", ikon: "arsip", label: "Arsip & penomoran", href: "/sigap/kelola/arsip", aktifKode: "arsip", title: "Buku nomor surat, kode arsip, pola nomor", ketPalet: "nomor surat, kode arsip, buku agenda" }),
         ...jika(i.akses, { id: "peran-akses", ikon: "gembok", label: "Peran dan akses", href: "/sigap/kelola/akses", aktifKode: "akses" }),

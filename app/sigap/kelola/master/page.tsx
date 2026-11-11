@@ -55,8 +55,8 @@ export default function MasterWilayahHalaman() {
       aktif="master_wilayah"
       kecil="SIGAP · Master"
       jejak={["Pengelolaan", "Master", JUDUL[tab]]}
-      judul="Master wilayah dan peta"
-      sub="Satu sumber wilayah, peta, dan keluarga (KK) untuk semua kegiatan · khusus admin Master"
+      judul="Master"
+      sub="Satu sumber wilayah, peta, batas wilayah, keluarga (KK), serta mitra dan pegawai untuk semua kegiatan · khusus admin Master"
     >
       <div className="flex flex-col gap-3.5">
         <BarisTab tab={TAB} aktif={tab} onPilih={pilih} />
