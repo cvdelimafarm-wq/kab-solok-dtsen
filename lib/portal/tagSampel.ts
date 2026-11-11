@@ -14,6 +14,7 @@ import {
   JENDELA_AWAL, MAKS_BARIS_TAG, periksaTagUnggah, petaKolomTag, rekapTagSub,
   type BarisTemplatTag, type DataTagSub, type HasilTag, type HasilTagUnggah, type InfoJendela, type ModeTag, type PeranTag, type RekapTagSub, type TagKk,
 } from "@/lib/tagSampel";
+import { cocokkanKkUnggah, normSimpan, type HasilCocok, type KkBaru, type PerluKeputusan } from "@/lib/tagSampelKk"; // (11 Nov 2026) unggah sampel satu kali
 
 const PESAN_BELUM_MIGRASI = "Penandaan sampel belum aktif di basis data (migrasi 20261107f belum dijalankan).";
 const belumMigrasi = (e: { code?: string; message?: string } | null | undefined): boolean =>
@@ -246,9 +247,14 @@ export async function templatTagData(db: Db, kegiatanId: number): Promise<BarisT
     });
 }
 
-export type PratinjauTag = HasilTagUnggah & { mode: ModeTag; jendela: InfoJendela; boleh_unggah: boolean; alasan_tolak: string | null };
+export type PratinjauTag = HasilTagUnggah & {
+  mode: ModeTag; jendela: InfoJendela; boleh_unggah: boolean; alasan_tolak: string | null;
+  /** (11 Nov 2026) baris yang tidak cocok dengan KK master dan perlu (atau sudah) diputuskan; ringkasan pencocokan; jumlah KK yang akan ditambahkan ke master */
+  perlu: PerluKeputusan[]; ringkas_kk: HasilCocok["ringkas"]; kk_baru: number;
+};
+type SiapTag = PratinjauTag & { _baru: KkBaru[] };
 
-async function siapkanTag(db: Db, kegiatanId: number, mentah: unknown, mode: ModeTag): Promise<PratinjauTag> {
+async function siapkanTag(db: Db, kegiatanId: number, mentah: unknown, mode: ModeTag, keputusan: Readonly<Record<string, unknown>> = {}): Promise<SiapTag> {
   if (mode !== "tambah" && mode !== "ganti") throw new GalatSampel("Mode unggah harus tambah atau ganti.");
   if (!Array.isArray(mentah)) throw new GalatSampel("Isi berkas tidak terbaca.");
   const baris = mentah.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x));
@@ -265,24 +271,72 @@ async function siapkanTag(db: Db, kegiatanId: number, mentah: unknown, mode: Mod
   }
   const ids = Array.from(disebut);
   const [kk, tag] = ids.length > 0 ? await Promise.all([kkPadaSub(db, ids), tagAktif(db, kegiatanId, ids)]) : [[], []];
-  const hasil = periksaTagUnggah(baris, { alokasi, cadangan: konfig.cadangan_per_sls, kk: new Map(kk.map((k) => [k.id, k.idsubsls])), ada: new Map(tag.map((t) => [t.kk_id, { idsubsls: t.idsubsls, peran: t.peran, hasil: t.hasil }])) }, mode);
+  // (11 Nov 2026) pencocokan ke KK master (ID, lalu nama); yang tidak cocok diputuskan petugas (bawaan: tambahkan sebagai KK baru di master)
+  const pplAlokasi = new Map(wilayah.map((w) => [w.idsubsls, w.ppl_nama ?? null] as const));
+  const cocok = cocokkanKkUnggah(baris, kk, alokasi, keputusan, pplAlokasi);
+  const kkPeta = new Map<number, string>(kk.map((k) => [k.id, k.idsubsls] as const));
+  for (const b of cocok.baru) kkPeta.set(b.sintetis, b.idsubsls);
+  const periksa = periksaTagUnggah(cocok.rows, { alokasi, cadangan: konfig.cadangan_per_sls, kk: kkPeta, ada: new Map(tag.map((t) => [t.kk_id, { idsubsls: t.idsubsls, peran: t.peran, hasil: t.hasil }])) }, mode);
+  const barisBermasalah = new Set(cocok.galat.map((g) => g.baris));
+  const galatGabung = [...cocok.galat, ...periksa.galat.filter((g) => g.baris === 0 || !barisBermasalah.has(g.baris))].sort((a, b) => a.baris - b.baris);
+  const hasil: HasilTagUnggah = {
+    ...periksa,
+    galat: galatGabung,
+    peringatan: [...cocok.peringatan, ...periksa.peringatan],
+    bisa_simpan: galatGabung.length === 0 && periksa.baris.length > 0,
+    ringkas: { ...periksa.ringkas, baru: periksa.ringkas.baru },
+  };
   const { jendela, siap: siapTag } = await infoJendela(db, kegiatanId);
   const alasanTolak = !siapTag ? PESAN_BELUM_MIGRASI : jendela.status === "terkunci" ? "Daftar sampel sudah dikunci. Buka kembali jendela rilis (dengan alasan) bila perlu mengunggah." : null;
-  return { ...hasil, mode, jendela, boleh_unggah: alasanTolak === null, alasan_tolak: alasanTolak, bisa_simpan: hasil.bisa_simpan && alasanTolak === null };
+  return {
+    ...hasil, mode, jendela, boleh_unggah: alasanTolak === null, alasan_tolak: alasanTolak, bisa_simpan: hasil.bisa_simpan && alasanTolak === null,
+    perlu: cocok.perlu, ringkas_kk: cocok.ringkas, kk_baru: cocok.baru.length, _baru: cocok.baru,
+  };
 }
 
-export async function pratinjauTag(db: Db, kegiatanId: number, mentah: unknown, mode: ModeTag): Promise<PratinjauTag> {
-  const p = await siapkanTag(db, kegiatanId, mentah, mode);
-  return { ...p, galat: p.galat.slice(0, 200), peringatan: p.peringatan.slice(0, 200), baris: [] };
+export async function pratinjauTag(db: Db, kegiatanId: number, mentah: unknown, mode: ModeTag, keputusan: Readonly<Record<string, unknown>> = {}): Promise<PratinjauTag> {
+  const { _baru, ...p } = await siapkanTag(db, kegiatanId, mentah, mode, keputusan);
+  void _baru;
+  return { ...p, galat: p.galat.slice(0, 200), peringatan: p.peringatan.slice(0, 200), perlu: p.perlu.slice(0, 500), baris: [] };
 }
 
-export type HasilImporTag = { ditambah: number; diganti: number; dilepas: number; sama: number };
+export type HasilImporTag = { ditambah: number; diganti: number; dilepas: number; sama: number; /** (11 Nov 2026) KK yang ditambahkan ke master dari berkas */ kk_baru: number };
 
-export async function imporTag(db: Db, akun: AkunPortal, kegiatanId: number, namaBerkas: string, mentah: unknown, mode: ModeTag): Promise<HasilImporTag> {
-  const p = await siapkanTag(db, kegiatanId, mentah, mode);
+/** Tambahkan KK baru ke master_kk (sumber "unggahan"); mengembalikan peta ID sementara -> ID master. Gagal di tengah -> yang sudah masuk dihapus lagi. */
+async function tambahKkMaster(db: Db, baru: readonly KkBaru[]): Promise<Map<number, number>> {
+  const peta = new Map<number, number>();
+  try {
+    for (const b of baru) {
+      const { data, error } = await db
+        .from("master_kk")
+        .insert({ idsubsls: b.idsubsls, nama_kk: b.nama_kk, nama_kk_norm: normSimpan(b.nama_kk), anggota_lain: b.anggota_lain, patokan: b.patokan, sumber: "unggahan", aktif: true })
+        .select("id")
+        .single();
+      if (error || !data) throw new GalatSampel(`Baris ${b.baris}: KK "${b.nama_kk}" gagal ditambahkan ke master (${error?.message ?? "tanpa keterangan"}).`, 409);
+      peta.set(b.sintetis, Number((data as { id: number }).id));
+    }
+    return peta;
+  } catch (e) {
+    const ids = Array.from(peta.values());
+    if (ids.length > 0) await db.from("master_kk").delete().in("id", ids);
+    throw e;
+  }
+}
+
+export async function imporTag(db: Db, akun: AkunPortal, kegiatanId: number, namaBerkas: string, mentah: unknown, mode: ModeTag, keputusan: Readonly<Record<string, unknown>> = {}): Promise<HasilImporTag> {
+  const p = await siapkanTag(db, kegiatanId, mentah, mode, keputusan);
   if (p.alasan_tolak) throw new GalatSampel(p.alasan_tolak, 409);
   if (p.galat.length > 0) throw new GalatSampel(`Berkas masih memuat ${p.galat.length} masalah. Perbaiki lalu pratinjau lagi.`, 400, "BERKAS_BERMASALAH");
   if (p.baris.length === 0) throw new GalatSampel("Tidak ada KK yang diberi peran sampel pada berkas.");
-  const h = await panggil(db, "sigap_tag_impor", { p_kegiatan: kegiatanId, p_akun: akun.id, p_nama: akun.nama, p_berkas: namaBerkas.slice(0, 200) || null, p_baris: p.baris, p_mode: mode });
-  return { ditambah: Number(h.ditambah ?? 0), diganti: Number(h.diganti ?? 0), dilepas: Number(h.dilepas ?? 0), sama: Number(h.sama ?? 0) };
+  // KK baru masuk master lebih dulu (ID sementara -> ID master); bila penyimpanan tag ditolak, KK baru itu dihapus lagi
+  const peta = p._baru.length > 0 ? await tambahKkMaster(db, p._baru) : new Map<number, number>();
+  const barisFinal = p.baris.map((b) => ({ ...b, kk_id: peta.get(b.kk_id) ?? b.kk_id }));
+  try {
+    const h = await panggil(db, "sigap_tag_impor", { p_kegiatan: kegiatanId, p_akun: akun.id, p_nama: akun.nama, p_berkas: namaBerkas.slice(0, 200) || null, p_baris: barisFinal, p_mode: mode });
+    return { ditambah: Number(h.ditambah ?? 0), diganti: Number(h.diganti ?? 0), dilepas: Number(h.dilepas ?? 0), sama: Number(h.sama ?? 0), kk_baru: peta.size };
+  } catch (e) {
+    const ids = Array.from(peta.values());
+    if (ids.length > 0) await db.from("master_kk").delete().in("id", ids);
+    throw e;
+  }
 }

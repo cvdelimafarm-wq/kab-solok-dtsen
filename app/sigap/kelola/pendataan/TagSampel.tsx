@@ -167,6 +167,8 @@ export default function TagSampel({ kegiatanId, nama }: { kegiatanId: number; na
   const [mode, setMode] = useState<ModeTag>("tambah");
   const [berkas, setBerkas] = useState<Berkas | null>(null);
   const [pratinjau, setPratinjau] = useState<PratinjauTag | null>(null);
+  // (11 Nov 2026) keputusan per baris Excel untuk KK yang tidak cocok dengan master: "tambah" | "lewati" | "pakai:<id>"
+  const [keputusan, setKeputusan] = useState<Record<string, string>>({});
   const input = useRef<HTMLInputElement>(null);
 
   const muat = useCallback(async () => {
@@ -277,18 +279,33 @@ export default function TagSampel({ kegiatanId, nama }: { kegiatanId: number; na
     }
   }
 
-  const hitung = (b: Berkas, m: ModeTag) => kirim({ aksi: "pratinjau", baris: b.baris, mode: m }) as unknown as Promise<PratinjauTag>;
+  const hitung = (b: Berkas, m: ModeTag, kep: Record<string, string> = keputusan) => kirim({ aksi: "pratinjau", baris: b.baris, mode: m, keputusan: kep }) as unknown as Promise<PratinjauTag>;
+
+  async function putuskan(baris: number, nilai: string) {
+    if (!berkas) return;
+    const kep = { ...keputusan, [String(baris)]: nilai };
+    setKeputusan(kep);
+    setSibuk("baca");
+    try {
+      setPratinjau(await hitung(berkas, mode, kep));
+    } catch (e) {
+      setInfo({ jenis: "galat", teks: e instanceof Error ? e.message : "Pratinjau gagal dihitung ulang." });
+    } finally {
+      setSibuk("");
+    }
+  }
 
   async function pilihBerkas(file: File | undefined) {
     if (!file) return;
     setSibuk("baca");
     setInfo(null);
     setPratinjau(null);
+    setKeputusan({});
     try {
       const b = await bacaBerkas(file);
       if (b.baris.length > MAKS_BARIS_TAG) throw new Error(`Berkas memuat ${fmt(b.baris.length)} baris; batas satu unggahan ${fmt(MAKS_BARIS_TAG)}.`);
       setBerkas(b);
-      setPratinjau(await hitung(b, mode));
+      setPratinjau(await hitung(b, mode, {}));
     } catch (e) {
       setBerkas(null);
       setInfo({ jenis: "galat", teks: e instanceof Error ? e.message : "Berkas tidak terbaca." });
@@ -316,8 +333,8 @@ export default function TagSampel({ kegiatanId, nama }: { kegiatanId: number; na
     setSibuk("simpan");
     setInfo(null);
     try {
-      const r = (await kirim({ aksi: "impor", baris: berkas.baris, mode, nama_berkas: berkas.nama })) as unknown as HasilImporTag;
-      setInfo({ jenis: "ok", teks: `Tag tersimpan: ${fmt(r.ditambah)} baru, ${fmt(r.diganti)} diganti peran, ${fmt(r.dilepas)} dilepas, ${fmt(r.sama)} sudah sama.` });
+      const r = (await kirim({ aksi: "impor", baris: berkas.baris, mode, nama_berkas: berkas.nama, keputusan })) as unknown as HasilImporTag;
+      setInfo({ jenis: "ok", teks: `Tag tersimpan dan langsung terpasang ke PPL/PML: ${fmt(r.ditambah)} baru, ${fmt(r.diganti)} diganti peran, ${fmt(r.dilepas)} dilepas, ${fmt(r.sama)} sudah sama${r.kk_baru > 0 ? `; ${fmt(r.kk_baru)} KK baru ditambahkan ke master` : ""}.` });
       setBerkas(null);
       setPratinjau(null);
       await muat();
@@ -441,6 +458,40 @@ export default function TagSampel({ kegiatanId, nama }: { kegiatanId: number; na
           <p className="mt-2 text-[12.5px] text-[#55657D]">
             {fmt(pratinjau.ringkas.dibaca)} baris dibaca · {fmt(pratinjau.ringkas.sampel)} KK bertanda sampel di {fmt(pratinjau.ringkas.subsls)} sub SLS · {fmt(pratinjau.ringkas.baru)} baru · {fmt(pratinjau.ringkas.sama)} sudah sama · {fmt(pratinjau.ringkas.ganti_peran)} ganti peran · {fmt(pratinjau.ringkas.dilepas)} dilepas
           </p>
+          <p className="mt-1 text-[12.5px] text-[#55657D]">
+            Pencocokan master KK: {fmt(pratinjau.ringkas_kk.cocok_id)} cocok ID · {fmt(pratinjau.ringkas_kk.cocok_nama)} cocok nama · {fmt(pratinjau.kk_baru)} akan ditambahkan ke master · {fmt(pratinjau.ringkas_kk.dilewati)} dilewati
+          </p>
+          {pratinjau.perlu.length > 0 && (
+            <div className="mt-2 rounded-lg border border-[#F0D9A0] bg-[#FFF9E8] p-2.5">
+              <p className="text-[12.5px] font-semibold text-[#8A6200]">
+                {fmt(pratinjau.perlu.length)} baris tidak cocok dengan master KK. Putuskan tiap baris (bawaan: tambahkan sebagai KK baru).
+                {pratinjau.ringkas_kk.belum_diputuskan > 0 && ` ${fmt(pratinjau.ringkas_kk.belum_diputuskan)} wajib dipilih.`}
+              </p>
+              <ul className="mt-1.5 max-h-72 space-y-1.5 overflow-auto">
+                {pratinjau.perlu.map((x) => (
+                  <li key={x.baris} className="rounded-md bg-white p-2 text-[12.5px] text-[#1B2B4B]">
+                    <div>
+                      <b>Baris {x.baris}</b> · {x.nama || "(tanpa nama)"}{x.anggota ? ` · ${x.anggota}` : ""} · {x.idsubsls} · <span className="uppercase">{x.peran ?? "bukan sampel"}</span>
+                      <span className="block text-[#8A6200]">{x.alasan === "tidak_ada" ? "Tidak ada KK bernama sama di master sub SLS ini." : x.alasan === "kandidat_banyak" ? "Ada beberapa KK master yang mirip; pilih yang sesuai." : "KK master yang cocok sudah dipakai baris lain."}</span>
+                    </div>
+                    <select
+                      className="mt-1 w-full rounded-md border border-[#CBD6E6] bg-white px-2 py-1.5 text-[12.5px]"
+                      disabled={sibuk !== ""}
+                      value={x.keputusan ?? ""}
+                      onChange={(e) => e.target.value && void putuskan(x.baris, e.target.value)}
+                    >
+                      {x.alasan === "kandidat_banyak" && !x.eksplisit && <option value="">— pilih —</option>}
+                      <option value="tambah">Tambahkan sebagai KK baru di master (duplikat)</option>
+                      {x.kandidat.map((c) => (
+                        <option key={c.id} value={`pakai:${c.id}`}>Pakai KK master: {c.nama_kk}{c.anggota_lain ? ` (${c.anggota_lain})` : ""}</option>
+                      ))}
+                      <option value="lewati">Lewati (jangan jadikan sampel)</option>
+                    </select>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {pratinjau.alasan_tolak && <div className="mt-2"><Pesan jenis="peringatan">{pratinjau.alasan_tolak}</Pesan></div>}
           {pratinjau.galat.length > 0 && (
             <div className="mt-2">

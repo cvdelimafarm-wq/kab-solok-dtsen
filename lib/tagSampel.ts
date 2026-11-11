@@ -139,7 +139,8 @@ export function templatTag(baris: readonly BarisTemplatTag[]): string[][] {
 
 export const PETUNJUK_TEMPLAT_TAG = [
   "Isi kolom Peran Sampel dengan utama atau cadangan; kosongkan bila KK bukan sampel.",
-  "Jangan mengubah Kode Sub SLS dan ID KK; keduanya dipakai untuk mencocokkan.",
+  "Cukup unggah satu kali. ID KK boleh kosong atau tidak cocok: sistem mencocokkan ke master KK lewat ID, lalu nama (kolom Nama KK / Anggota Lain), dan Anda memutuskan tiap baris yang tidak cocok (tambahkan sebagai KK baru, pakai KK master lain, atau lewati).",
+  "Jangan mengubah Kode Sub SLS; kolom Nama KK, Anggota Lain, Patokan, dan PPL ikut dipakai untuk pencocokan.",
   "Jumlah utama per sub SLS tidak boleh melebihi target, dan cadangan tidak boleh melebihi jatah cadangan kegiatan.",
   "Unggahan hanya bisa selama jendela rilis belum pernah dibuka atau sedang terbuka.",
 ] as const;

@@ -85,10 +85,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, nilai });
     }
     const mode = body.mode === "ganti" ? "ganti" : "tambah";
-    if (body.aksi === "pratinjau") return NextResponse.json(await pratinjauTag(db, k, body.baris, mode));
+    // (11 Nov 2026) keputusan per baris Excel untuk KK yang tidak cocok dengan master: { "<no baris>": "tambah" | "lewati" | "pakai:<id KK master>" }
+    const keputusan = body.keputusan && typeof body.keputusan === "object" && !Array.isArray(body.keputusan) ? (body.keputusan as Record<string, unknown>) : {};
+    if (body.aksi === "pratinjau") return NextResponse.json(await pratinjauTag(db, k, body.baris, mode, keputusan));
     if (body.aksi === "impor") {
       const nama = typeof body.nama_berkas === "string" ? body.nama_berkas : "";
-      const hasil = await imporTag(db, akun, k, nama, body.baris, mode);
+      const hasil = await imporTag(db, akun, k, nama, body.baris, mode, keputusan);
       await catatAudit(db, akun.id, "sampel_tag_impor", { kegiatan_id: k, berkas: nama.slice(0, 200), mode, ...hasil });
       return NextResponse.json({ ok: true, ...hasil });
     }
