@@ -13,6 +13,7 @@ import { tautanLihatSampel, tautanPetaSampel } from "@/lib/sampelSls";
 import { KET_JENDELA, LABEL_HASIL, formatSisa, selisihJam, sisaDetik, statusEfektif, type DataTagSub, type HasilTag, type InfoJendela, type PeranTag, type TagKk } from "@/lib/tagSampel";
 import type { AksiTag, HasilMuatKk } from "./useAlokasi";
 import PetaSampel, { adaKoordinat } from "./PetaSampel";
+import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { kunciPetaSaya } from "@/lib/petaKegiatan";
 import {
   ALASAN_GANTI, LABEL_ALASAN, LABEL_STATUS_GANTI, MAKS_CATATAN, MIN_CATATAN_TOLAK, bisaMengajukanGanti, cadanganTersedia, menunggu as gantiMenunggu, periksaIsianGanti,
@@ -336,6 +337,7 @@ function KartuWilayah({
 
 
   const kkDipilih = dipilih !== null ? (kk ?? []).find((k) => k.id === dipilih) ?? null : null;
+  useTutupDenganBack(peta && !!kkDipilih, () => setDipilih(null)); // (11 Nov 2026) Back HP menutup kartu KK di atas peta
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase();
     return (kk ?? []).filter((k) => (lihat === "semua" && !ditetapkan ? true : tagPerKk.has(k.id)) && (!q || k.nama_kk.toLowerCase().includes(q) || (k.anggota_lain ?? "").toLowerCase().includes(q)));
