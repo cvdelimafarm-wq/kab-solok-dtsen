@@ -1,7 +1,7 @@
 // lib/sigapBerandaDaftar.ts
 //
 // (31 Okt 2026) Menyusun DAFTAR KARTU Beranda dari kegiatan yang sudah dihitung (Aktivitas per jenis + kegiatan lain), satu kartu per survei.
-// Pelatihan dan Pendataan satu survei tetap dua kartu. Aturan poin/peringatan/realisasi: lib/sigapBerandaKartu.ts. Murni (tanpa React/DB).
+// (11 Nov 2026: Pelatihan dan Pendataan satu survei bermenu rutin digabung jadi satu kartu.) Aturan poin/peringatan/realisasi: lib/sigapBerandaKartu.ts. Murni (tanpa React/DB).
 
 import type { Aktivitas } from "@/lib/sigapAktivitas";
 import type { RingkasKegiatan } from "@/lib/sigapKegiatan";
@@ -37,11 +37,27 @@ export function susunDaftarKartu(b: BahanDaftar): KartuBeranda[] {
   const kegTL = b.keg ?? [];
   let pelatihanTerpakai = false;
   const sasaranTugas = b.tugasPelatihanKegiatanId == null ? null : b.kegiatan.find((x): x is Aktivitas => adalahAktivitas(x) && x.jenis === "pelatihan" && x.pelatihanId === b.tugasPelatihanKegiatanId)?.id ?? null;
-  const kartu: KartuBeranda[] = b.kegiatan.map((x) => {
+  // (11 Nov 2026) Satu kartu per survei: Pelatihan + Pendataan satu induk bermenu rutin digabung ke kartu Pendataan (-> halaman tahap kegiatan: pilih Pelatihan/Pendataan).
+  // Poin Pelatihan (tes, presensi, ...) dibawa ke kartu gabungan supaya tugas pelatihan tetap terlihat di Beranda.
+  const gabung = new Map<string, Aktivitas>();
+  for (const x of b.kegiatan) {
+    if (!adalahAktivitas(x) || x.jenis !== "pelatihan") continue;
+    const ind = b.induk?.find((i) => i.kode === x.indukKode);
+    const adaData = b.kegiatan.some((y) => adalahAktivitas(y) && y.jenis === "pendataan" && y.indukKode === x.indukKode);
+    if (ind && adaData && pakaiTemplateMenu(ind.tahap) && !gabung.has(x.indukKode)) gabung.set(x.indukKode, x);
+  }
+  const poinGabung = new Map<string, Poin | null>();
+  for (const [kodeInduk, p] of gabung) {
+    const pakaiTugas = !pelatihanTerpakai && !!b.tugasPelatihan && (sasaranTugas === null || p.id === sasaranTugas);
+    if (pakaiTugas) pelatihanTerpakai = true;
+    poinGabung.set(kodeInduk, pakaiTugas ? poinDariTugas(b.tugasPelatihan) : p.info ? poinInfo(p.info.teks, p.info.href) : null);
+  }
+  const daftar = b.kegiatan.filter((x) => !(adalahAktivitas(x) && x.jenis === "pelatihan" && gabung.get(x.indukKode) === x));
+  const kartu: KartuBeranda[] = daftar.map((x) => {
     const href = x.href ?? "/";
     if (adalahAktivitas(x)) {
       const ind = b.induk?.find((i) => i.kode === x.indukKode);
-      const info = x.info ? poinInfo(x.info.teks, x.info.href) : null;
+      const info = poinGabung.get(x.indukKode) && x.jenis === "pendataan" ? (poinGabung.get(x.indukKode) ?? null) : x.info ? poinInfo(x.info.teks, x.info.href) : null;
       if (x.jenis === "pendataan" && ind && pakaiTemplateMenu(ind.tahap)) {
         return kartuTemplate({ id: x.id, judul: x.judul, href, nada: x.nada }, { induk: ind, keg: kegTL, idTranslok: idTranslokMenu(ind.tahap), nowMs: b.nowMs }, info);
       }

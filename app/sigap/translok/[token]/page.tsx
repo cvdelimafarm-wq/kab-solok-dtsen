@@ -586,21 +586,7 @@ export default function SigapPetugas({ params }: { params: Promise<{ token: stri
         sub={tglPanjang(data.hari_ini)}
         onKeluar={keluar}
       >
-        {data.penugasan.length > 1 && (
-          <div className="mt-3 flex gap-1.5 overflow-x-auto rounded-xl bg-white/10 p-1">
-            {data.penugasan.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPenId(p.id)}
-                className={`shrink-0 rounded-lg px-3 py-2 text-[12.5px] font-bold ${p.id === pen.id ? "bg-white text-[#0F3D7A]" : "text-blue-100"}`}
-              >
-                {p.kegiatan.nama}
-                {p.hari_kerja.includes(data.hari_ini) ? " •" : ""}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* (11 Nov 2026) Tab geser antarkegiatan di kepala dihapus (permintaan user); kegiatan dipilih dari Beranda. */}
         <p className="mt-2 text-[12.5px] text-blue-200">{pen.label_jabatan}</p>
       </Header>
 

@@ -10,7 +10,7 @@
 // Hari Ini milik Translok (replace, supaya Kembali pulang ke Beranda); bila tidak, halaman ini menampilkan Hari Ini sederhana berisi pintasan menu.
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
 import { Cincin } from "@/app/portal/CincinKegiatan";
@@ -111,17 +111,72 @@ function Tahap({ t, akhir, aktif }: { t: TahapHasil; akhir: boolean; aktif: bool
 export default function HalamanInduk({ kode }: { kode: string }) {
   const router = useRouter();
   const bar = useBarKegiatan(kode);
+  const { induk, tahap } = useInduk(kode);
+  // (11 Nov 2026) Survei yang punya tahap Pelatihan: halaman ini lebih dulu menampilkan PEMILIH TAHAP (Pelatihan | Pendataan); lembar masing-masing tetap yang sudah ada.
+  // "?tahap=pendataan" = langsung ke Pendataan (perilaku lama). Dibaca setelah mount (bukan useSearchParams) supaya halaman tetap statis.
+  const [pilih, setPilih] = useState<string | null | undefined>(undefined);
+  useEffect(() => setPilih(new URLSearchParams(window.location.search).get("tahap")), []);
+  const tahapPelatihan = tahap.find((t) => t.isi.includes("pelatihan")) ?? null;
+  const pemilih = !!tahapPelatihan && pilih === null;
   const hariIni = bar.items?.find((i) => i.kunci === "hari_ini") ?? null;
   const alihKeTranslok = !!hariIni && hariIni.href !== `/sigap/kegiatan/${kode}`;
   useEffect(() => {
-    if (alihKeTranslok && hariIni) router.replace(hariIni.href);
-  }, [alihKeTranslok, hariIni, router]);
+    if (alihKeTranslok && hariIni && pilih !== undefined && !pemilih) router.replace(hariIni.href);
+  }, [alihKeTranslok, hariIni, router, pilih, pemilih]);
   if (bar.items && bar.kode) {
+    if (pilih === undefined) return <KerangkaMuat />;
+    if (pemilih && tahapPelatihan) {
+      const hrefData = alihKeTranslok && hariIni ? hariIni.href : `/sigap/kegiatan/${kode}?tahap=pendataan`;
+      return <PemilihTahap nama={induk?.nama ?? "Kegiatan"} pelatihan={tahapPelatihan} hrefPendataan={hrefData} />;
+    }
     return alihKeTranslok ? <KerangkaMuat /> : <HariIniSederhana kode={bar.kode} items={bar.items} peran={bar.peran} langkah={bar.langkah} />;
   }
   // belum diketahui kegiatan ini bermenu rutin atau tidak: jangan kedip-kedip menampilkan garis waktu lalu berganti (galat -> halaman lama yang menampilkannya)
   if (!bar.siap && !bar.galat) return <KerangkaMuat />;
   return <HalamanTahap kode={kode} />;
+}
+
+/** Halaman tahap kegiatan: dua pilihan, Pelatihan dan Pendataan; ketukan membuka lembar yang sudah ada. */
+function PemilihTahap({ nama, pelatihan, hrefPendataan }: { nama: string; pelatihan: TahapHasil; hrefPendataan: string }) {
+  const kartu = [
+    { kunci: "pelatihan", judul: "Pelatihan", ket: pelatihan.terkunci ? (pelatihan.alasanKunci ?? "Belum dibuka") : pelatihan.ringkas, href: pelatihan.terkunci ? null : pelatihan.rute },
+    { kunci: "pendataan", judul: "Pendataan", ket: "Hari Ini, sampel, kamera, dan menu lapangan", href: hrefPendataan },
+  ];
+  return (
+    <main className="min-h-screen bg-[#F5F8FE] pb-10 text-[#1B2B4B]">
+      <header className="relative overflow-hidden bg-[linear-gradient(165deg,#1A4590_0%,#0F2A52_100%)] px-5 pb-[62px] pt-5 text-white">
+        <div className="relative mx-auto flex max-w-xl items-center gap-2">
+          <TombolKembali tema="gelap" />
+        </div>
+        <div className="relative mx-auto mt-3 max-w-xl">
+          <h1 className="text-[19px] font-extrabold leading-tight tracking-[-0.3px]">{nama}</h1>
+          <p className="mt-1.5 text-[12px] text-[#A9BCD8]">Pilih tahap kegiatan</p>
+        </div>
+      </header>
+      <div className="relative z-10 mx-auto -mt-[44px] max-w-xl space-y-3 px-3.5">
+        {kartu.map((k) => {
+          const isi = (
+            <>
+              <span className="min-w-0">
+                <span className="block text-[16px] font-extrabold text-[#0F2A52]">{k.judul}</span>
+                <span className="mt-0.5 block text-[12.5px] leading-snug text-[#55657D]">{k.ket}</span>
+              </span>
+              {k.href && <IkonMenu n="panah" className="h-4 w-4 shrink-0" />}
+            </>
+          );
+          return k.href ? (
+            <Link key={k.kunci} href={k.href} className="flex min-h-[72px] items-center justify-between gap-3 rounded-[20px] bg-white p-4 shadow-[0_10px_28px_rgba(15,42,82,.12)] active:bg-[#EAF1FC]">
+              {isi}
+            </Link>
+          ) : (
+            <div key={k.kunci} className="flex min-h-[72px] items-center justify-between gap-3 rounded-[20px] border border-dashed border-[#DCE5F2] bg-[#F8FAFE] p-4">
+              {isi}
+            </div>
+          );
+        })}
+      </div>
+    </main>
+  );
 }
 
 function KerangkaMuat() {
