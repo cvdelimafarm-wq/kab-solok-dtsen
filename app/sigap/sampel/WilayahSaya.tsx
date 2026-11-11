@@ -315,8 +315,12 @@ function KartuWilayah({
   const nCad = (td?.dt.tag ?? []).filter((t) => t.peran === "cadangan").length;
   const target = td?.dt.target ?? w.target;
   const jatahCad = td?.dt.cadangan ?? cadanganKonfig;
-  const status = td ? statusEfektif(td.dt.jendela, td.selisih, sekarang) : "belum";
-  const bisaTandai = peran === "ppl" && !salinan && !!aksiTag && status === "terbuka";
+  // (11 Nov 2026) SAMPEL DITETAPKAN DARI BERKAS: tag hasil unggah Excel pembagian (via "unggah") langsung menjadi daftar kerja PPL dan PML. Tanpa jendela penandaan,
+  // tanpa tombol Jadikan utama/cadangan/Lepas, dan daftar KK lengkap tidak ditampilkan (hanya sampel). Hasil pendataan dan penggantian lewat PML tetap bisa.
+  const ditetapkan = (td?.dt.tag ?? []).some((t) => t.via === "unggah");
+  const statusJendela = td ? statusEfektif(td.dt.jendela, td.selisih, sekarang) : "belum";
+  const status = ditetapkan ? "terkunci" : statusJendela;
+  const bisaTandai = peran === "ppl" && !salinan && !!aksiTag && status === "terbuka" && !ditetapkan;
   const bisaHasil = peran === "ppl" && !salinan && !!aksiTag;
   const gantiDaftar: GantiRow[] = td?.dt.ganti ?? [];
   const bolehGanti = td?.dt.boleh_ganti ?? true;
@@ -336,8 +340,8 @@ function KartuWilayah({
 
   const tampil = useMemo(() => {
     const q = cari.trim().toLowerCase();
-    return (kk ?? []).filter((k) => (lihat === "semua" || tagPerKk.has(k.id)) && (!q || k.nama_kk.toLowerCase().includes(q) || (k.anggota_lain ?? "").toLowerCase().includes(q)));
-  }, [kk, cari, lihat, tagPerKk]);
+    return (kk ?? []).filter((k) => (lihat === "semua" && !ditetapkan ? true : tagPerKk.has(k.id)) && (!q || k.nama_kk.toLowerCase().includes(q) || (k.anggota_lain ?? "").toLowerCase().includes(q)));
+  }, [kk, cari, lihat, tagPerKk, ditetapkan]);
 
   async function kirim(a: AksiTag) {
     if (!aksiTag || sibuk) return;
@@ -376,7 +380,7 @@ function KartuWilayah({
             {w.nagari} · {w.sls}
           </p>
           <p className="mt-0.5 text-[12px] font-semibold text-[#44546F]">
-            Target {w.target} sampel · {w.jumlah_kk > 0 ? `${w.jumlah_kk} KK di daftar` : "daftar KK belum ada"}
+            Target {w.target} sampel{ditetapkan ? "" : ` · ${w.jumlah_kk > 0 ? `${w.jumlah_kk} KK di daftar` : "daftar KK belum ada"}`}
           </p>
           {ringkasTag && <p className="mt-0.5 text-[12px] font-bold text-[#1F5FD1]">{ringkasTag}</p>}
         </div>
@@ -390,7 +394,8 @@ function KartuWilayah({
           {galat && <p className="px-3.5 py-3 text-[13px] text-[#7A1D22]">{galat}</p>}
           {!galat && kk === null && <p className="px-3.5 py-3 text-[13px] text-[#55657D]" aria-busy="true">Memuat daftar KK…</p>}
           {kk !== null && kk.length === 0 && <p className="px-3.5 py-3 text-[13px] text-[#55657D]">Daftar KK sub SLS ini belum ada di master. Hubungi admin kegiatan.</p>}
-          {td && <p className="px-3.5 pt-2 text-[11.5px] font-semibold text-[#55657D]">{status === "terbuka" ? `Penandaan dibuka · sisa ${formatSisa(sisaDetik(td.dt.jendela, td.selisih, sekarang))}` : KET_JENDELA[status]}</p>}
+          {td && ditetapkan && <p className="px-3.5 pt-2 text-[11.5px] font-semibold text-[#13794B]">Sampel sudah ditetapkan dari daftar pembagian. Langsung kerjakan dan isi hasilnya.</p>}
+          {td && !ditetapkan && <p className="px-3.5 pt-2 text-[11.5px] font-semibold text-[#55657D]">{status === "terbuka" ? `Penandaan dibuka · sisa ${formatSisa(sisaDetik(td.dt.jendela, td.selisih, sekarang))}` : KET_JENDELA[status]}</p>}
           {(gantiDaftar.length > 0 || formGanti) && (
             <div className="mt-2">
               <p className="px-3.5 text-[11.5px] font-extrabold uppercase tracking-[0.1em] text-[#6B7A90]">Penggantian sampel{gantiMenunggu(gantiDaftar).length > 0 ? ` · ${gantiMenunggu(gantiDaftar).length} menunggu` : ""}</p>
@@ -423,13 +428,13 @@ function KartuWilayah({
           {kk !== null && kk.length > 0 && (
             <>
               <div className="flex flex-wrap items-center gap-2 px-3 pt-2.5">
-                {kk.length > 12 && (
+                {kk.length > 12 && !ditetapkan && (
                   <input type="search" value={cari} onChange={(e) => setCari(e.target.value)} placeholder="Cari nama KK…" aria-label="Cari nama KK" className="min-h-[44px] min-w-0 flex-1 rounded-[12px] border border-[#DCE5F2] bg-[#F7FAFF] px-3 text-[14px] text-[#0F2A52] outline-none focus:border-[#1F5FD1]" />
                 )}
                 <button type="button" onClick={() => setPeta((v) => !v)} aria-pressed={peta} className={`min-h-[40px] rounded-[10px] px-3 text-[12.5px] font-bold ${peta ? "bg-[#1F5FD1] text-white" : "bg-[#EAF1FC] text-[#1F5FD1]"}`}>
                   {peta ? "Tutup peta" : "Lihat peta"}
                 </button>
-                {tagPerKk.size > 0 && (
+                {tagPerKk.size > 0 && !ditetapkan && (
                   <span className="flex gap-1" role="group" aria-label="Tampilan daftar">
                     {(["semua", "sampel"] as const).map((v) => (
                       <button key={v} type="button" onClick={() => setLihat(v)} aria-pressed={lihat === v} className={`min-h-[40px] rounded-[10px] px-3 text-[12.5px] font-bold ${lihat === v ? "bg-[#0F2A52] text-white" : "bg-[#EEF2F7] text-[#44546F]"}`}>
@@ -514,8 +519,8 @@ export default function WilayahSaya({
         <p className="text-[11.5px] font-semibold text-[#55657D]">
           {data.wilayah.length} sub SLS · target {totalTarget} sampel · {LABEL_MODEL[model].judul.toLowerCase()}
         </p>
-        <p className="mt-1 text-[12px] leading-snug text-[#55657D]">{model === "dengan" ? "Lakukan updating di FASIH lebih dulu; penandaan sampel dibuka setelah updating." : "Tanpa updating: sampel utama dan cadangan langsung ditandai dari daftar KK ini."}</p>
-        <BannerJendela jendela={data.jendela} selisihMs={selisihMs} />
+        <p className="mt-1 text-[12px] leading-snug text-[#55657D]">{data.wilayah.some((w) => (w.tag?.utama ?? 0) > 0) ? "Sampel utama dan cadangan sudah dibagikan ke tiap PPL. Buka sub SLS untuk melihat daftarnya." : model === "dengan" ? "Lakukan updating di FASIH lebih dulu; penandaan sampel dibuka setelah updating." : "Tanpa updating: sampel utama dan cadangan langsung ditandai dari daftar KK ini."}</p>
+        {!data.wilayah.some((w) => (w.tag?.utama ?? 0) > 0) && <BannerJendela jendela={data.jendela} selisihMs={selisihMs} />}
         {luring && <p className="mt-1 rounded-[10px] bg-[#FFF4D6] px-2.5 py-1.5 text-[12px] font-semibold text-[#8A6200]">Tidak tersambung. Menampilkan data terakhir yang tersimpan di HP.</p>}
       </div>
       {peran === "ppl" && data.wilayah.map((w, i) => <KartuWilayah key={w.id} w={w} tampilPpl={false} terbukaAwal={data.wilayah.length <= 2 && i === 0} peran="ppl" cadanganKonfig={cad} muatKk={muatKk} aksiTag={aksiTag} kunciDasar={kunciDasar} />)}

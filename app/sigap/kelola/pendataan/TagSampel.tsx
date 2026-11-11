@@ -333,7 +333,7 @@ export default function TagSampel({ kegiatanId, nama }: { kegiatanId: number; na
   return (
     <Kartu
       judul="Tag Sampel Stage 2 · Jendela Rilis"
-      ket={`Penandaan sampel utama dan cadangan ${nama}. Ketua/Wakil membuka jendela 24 jam; selama itu PPL menandai KK di HP. Sesudah tutup, daftar dikunci dan PPL hanya mengisi hasil pendataan. ${dengan ? "Dengan updating: buka jendela setelah updating riil selesai." : "Tanpa updating: jendela dapat langsung dibuka."}`}
+      ket={`Sampel utama dan cadangan ${nama}. CARA UTAMA: unggah Excel pembagian sampel (kolom Kode Sub SLS, ID KK, Peran Sampel); sampel langsung terpasang ke PPL pemilik sub SLS dan terlihat oleh PML-nya, tanpa jendela dan tanpa PPL menandai lagi. Jendela 24 jam hanya dipakai bila PPL perlu menandai sendiri di HP. ${dengan ? "Dengan updating: unggah setelah updating riil selesai." : ""}`}
       kanan={
         <div className="flex flex-wrap gap-2">
           <button type="button" className={BTN_O} disabled={!kelola || sibuk !== "" || !data || data.progres.length === 0} onClick={() => void unduh()}>
