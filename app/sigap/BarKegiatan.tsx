@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import IkonMenu from "@/app/portal/IkonMenu";
-import { useData } from "@/app/portal/dataBersama";
+import { muatData, useData } from "@/app/portal/dataBersama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { setelahLapisanTutup } from "@/app/portal/lapisan";
 import { susunTahap, type Induk } from "@/lib/sigapTahap";
@@ -129,7 +129,17 @@ export default function BarKegiatan({ kode, items, aktif, onKetuk, sinkron = tru
       const id = Number(/kegiatan=(\d+)/.exec(it.href)?.[1]);
       const m = (dMode.data?.kegiatan ?? []).filter((x) => x.kegiatan_id === id);
       const tanpaJadwal = m.length > 0 && m.every((x) => x.hari_kerja_hari_ini === false);
-      return tanpaJadwal ? setTanyaKamera(it.href) : router.push(it.href);
+      if (!tanpaJadwal) return router.push(it.href);
+      // (11 Nov 2026) Simpanan bisa basi: hari kerja yang baru dipilih belum terbaca (petugas baru menandai hari ini lalu menekan Kamera, tetap ditanya "tidak ada jadwal").
+      // Sebelum bertanya, baca ulang dari server; gagal membaca = ikuti simpanan.
+      void muatData<{ kegiatan: { kegiatan_id: number; hari_kerja_hari_ini?: boolean }[] }>("/api/sigap/foto/mode")
+        .then((d) => {
+          const baru = (d?.kegiatan ?? []).filter((x) => x.kegiatan_id === id);
+          return baru.length > 0 && baru.every((x) => x.hari_kerja_hari_ini === false);
+        })
+        .catch(() => true)
+        .then((masihTanpa) => (masihTanpa ? setTanyaKamera(it.href) : router.push(it.href)));
+      return;
     }
     const k = putuskanTab(bacaTumpuk(kode), aktif, it.kunci);
     if (k.aksi === "tetap") return window.scrollTo({ top: 0, behavior: "smooth" });
