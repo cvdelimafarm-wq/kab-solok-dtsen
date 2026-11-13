@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { persenLengkap, susunTransport, tglPendek, type BarisTransport, type DataKinerja, geser } from "@/lib/monitorKinerja";
 import { Catatan, Kartu, Kpi, Persen, fmt, label, sel, td, tdAngka, th, tombol } from "./monUi";
 import SelectCari from "@/app/components/SelectCari";
+import { BatangCapaian, KE_NOTIFIKASI, KE_VERIFIKASI_TRANSLOK, PapanMasalah, type BatangItem, type Masalah } from "./monMasalah";
 
 type Rekap = "ppl" | "pml" | "tim";
 type Urut = "bawaan" | "rendah" | "kosong";
@@ -91,8 +92,59 @@ export default function MonTransport({ data }: { data: DataKinerja }) {
     XLSX.writeFile(wb, `monitoring-transport-${rekap}-${data.hari_ini}.xlsx`);
   }
 
-  const tanggalTeks = (ts: string[]) => (ts.length ? ts.map(tglPendek).join(", ") : "");
   const peranTeks = (b: BarisTransport) => (b.peran === "korwil" ? "Korwil" : b.pml_nama ? `Tim ${b.pml_nama}` : "—");
+
+  // (12 Nov 2026) siapa bermasalah + apa + ke mana menyelesaikan; dihitung per orang (tidak ikut pilihan rekap)
+  const masalah = useMemo<Masalah[]>(() => {
+    const hasilM: Masalah[] = [];
+    for (const b of hasil.baris) {
+      if (!cocok(b) || b.hari_kerja === 0) continue;
+      const jenis: string[] = [];
+      const kal: string[] = [];
+      let berat: 1 | 2 | 3 = 1;
+      if (b.anomali > 0) {
+        jenis.push("Anomali translok");
+        kal.push(`Ada hasil/laporan/foto tetapi hari kerja tidak dipilih (${b.tanggal_anomali.map(tglPendek).slice(0, 3).join(", ")}${b.tanggal_anomali.length > 3 ? ` +${b.tanggal_anomali.length - 3}` : ""}).`);
+        berat = 3;
+      }
+      if (b.kosong > 0) {
+        jenis.push("Hari kerja kosong");
+        kal.push(`${b.kosong} hari kerja tanpa laporan dan foto (${b.tanggal_kosong.map(tglPendek).slice(0, 3).join(", ")}${b.tanggal_kosong.length > 3 ? ` +${b.tanggal_kosong.length - 3}` : ""}).`);
+        berat = b.kosong >= 3 ? 3 : (Math.max(berat, 2) as 1 | 2 | 3);
+      }
+      if (b.sebagian > 0 && !jenis.length) {
+        jenis.push("Translok sebagian");
+        kal.push(`${b.sebagian} hari baru sebagian (laporan atau foto belum lengkap).`);
+      }
+      if (!jenis.length) continue;
+      const tdkLengkap = b.hari_kerja - b.lengkap;
+      const tgl = [...b.tanggal_anomali, ...b.tanggal_kosong, ...b.tanggal_sebagian].sort();
+      hasilM.push({
+        kunci: `akun:${b.akun_id}`,
+        nama: b.nama,
+        sub: peranTeks(b),
+        berat,
+        jenis: jenis.join(" + "),
+        masalah: kal.join(" "),
+        tanda: `${jenis.join("+")}@${tgl[tgl.length - 1] ?? "-"}`,
+        dampak: `${tdkLengkap} dari ${b.hari_kerja} hari kerja belum lengkap (${100 - persenLengkap(b)}%); transport lokal hari itu belum bisa dibayar penuh.`,
+        pj: b.peran === "ppl" && b.pml_nama ? `PML ${b.pml_nama}` : "Admin (Ketua Tim)",
+        aksi: [
+          { teks: "Verifikasi translok", href: KE_VERIFIKASI_TRANSLOK },
+          { teks: "Kirim pengingat", href: KE_NOTIFIKASI },
+          { teks: "Lihat barisnya", klik: () => { setRekap("ppl"); setCari(b.nama); } },
+        ],
+      });
+    }
+    return hasilM;
+  }, [hasil, pml, q]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const batang = useMemo<BatangItem[]>(
+    () => tampil.filter((b) => b.hari_kerja > 0).map((b) => ({ kunci: String(b.akun_id), label: b.nama, sub: peranTeks(b), persen: persenLengkap(b), ket: `${b.lengkap} lengkap dari ${b.hari_kerja} hari kerja`, klik: () => { if (rekap !== "tim") setCari(b.nama); else setPml(b.akun_id); } })),
+    [tampil, rekap], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const tanggalTeks = (ts: string[]) => (ts.length ? ts.map(tglPendek).join(", ") : "");
 
   return (
     <section className="mt-4">
@@ -154,6 +206,9 @@ export default function MonTransport({ data }: { data: DataKinerja }) {
           </button>
         </div>
       </div>
+
+      <PapanMasalah judul="Perlu tindakan" sumber="transport" daftar={masalah} kosong="Tidak ada petugas dengan transport lokal bermasalah pada rentang ini." />
+      <BatangCapaian judul={`Kelengkapan transport lokal per ${rekap === "tim" ? "tim" : "petugas"}`} catatan="Persentase hari kerja yang lengkap (laporan + foto + hasil). Urut dari terendah; ketuk untuk menyaring." item={batang} />
 
       <div className="mt-4 rounded-[18px] bg-white p-3 shadow-[0_8px_22px_rgba(15,42,82,.08)] sm:p-4">
         <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Transport lokal — jumlah hari menurut kelengkapan ({rekap === "ppl" ? "PPL" : rekap === "pml" ? "PML" : "tim"})</h2>

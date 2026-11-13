@@ -3,7 +3,7 @@
 // Dipakai klien (papan "Perlu tindakan") dan API /api/portal/tindak-lanjut. Fungsi murni.
 
 export const API_TINDAK_LANJUT = "/api/portal/tindak-lanjut";
-export const SUMBER_TINDAK = ["lapangan", "progres"] as const;
+export const SUMBER_TINDAK = ["lapangan", "progres", "transport", "poin"] as const;
 export type SumberTindak = (typeof SUMBER_TINDAK)[number];
 export type StatusTindak = "belum" | "proses" | "selesai";
 export const LABEL_STATUS_TINDAK: Record<StatusTindak, string> = { belum: "Belum ditangani", proses: "Dalam proses", selesai: "Selesai" };

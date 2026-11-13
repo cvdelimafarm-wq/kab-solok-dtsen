@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { ATURAN, kelasPoin, matriksPoin, tglPendek, type BarisPoin, type DataKinerja, type KelasPoin, type SelPoin } from "@/lib/monitorKinerja";
 import { Catatan, Kpi, fmt, fmt2, label, sel, td, tdAngka, th, tombol } from "./monUi";
 import SelectCari from "@/app/components/SelectCari";
+import { BatangCapaian, KE_NOTIFIKASI, PapanMasalah, type BatangItem, type Masalah } from "./monMasalah";
 
 type Urut = "bawaan" | "rata_rendah" | "total" | "hutang";
 const GAYA: Record<KelasPoin, string> = {
@@ -53,6 +54,49 @@ export default function MonPoin({ data }: { data: DataKinerja }) {
   }, [baris, pml, q, urut]);
 
   const hariIni = ringkas.tanggal[ringkas.tanggal.length - 1];
+
+  // (12 Nov 2026) PPL dengan poin rendah / tanpa kegiatan; target = ATURAN.targetHarian per hari kegiatan
+  const masalah = useMemo<Masalah[]>(() => {
+    const out: Masalah[] = [];
+    for (const b of baris) {
+      if (b.peran !== "ppl" || !(pml == null || b.pml_id === pml) || !(!q || b.nama.toLowerCase().includes(q) || (b.pml_nama ?? "").toLowerCase().includes(q))) continue;
+      const pr = b.hari_aktif > 0 ? Math.round((b.rata / ATURAN.targetHarian) * 100) : 0;
+      let jenis = "";
+      let kal = "";
+      let berat: 1 | 2 | 3 = 1;
+      if (b.hari_aktif === 0) {
+        jenis = "Tidak ada kegiatan";
+        kal = "Belum ada hari dengan hasil pendataan pada periode ini.";
+        berat = 3;
+      } else if (pr < 60) {
+        jenis = "Poin rendah";
+        kal = `Rata-rata ${fmt2(b.rata)} poin per hari kegiatan (${pr}% dari target ${ATURAN.targetHarian}); hanya ${b.hari_penuh} dari ${b.hari_aktif} hari mencapai target.`;
+        berat = 2;
+      } else if (b.hutang > 0 && pr < 100) {
+        jenis = "Di bawah target";
+        kal = `Rata-rata ${fmt2(b.rata)} poin (${pr}% dari target); ${b.hari_penuh} dari ${b.hari_aktif} hari mencapai target.`;
+        berat = 1;
+      }
+      if (!jenis) continue;
+      out.push({
+        kunci: `akun:${b.akun_id}`,
+        nama: b.nama,
+        sub: b.pml_nama ? `PPL · Tim ${b.pml_nama}` : "PPL",
+        berat,
+        jenis,
+        masalah: kal,
+        tanda: `${jenis}@${pr >= 60 ? "ok" : "rendah"}`,
+        dampak: b.hutang > 0 ? `Kekurangan ${fmt(b.hutang)} poin pada hari kerja lengkap.` : "Belum ada poin yang terkumpul untuk dinilai.",
+        pj: b.pml_nama ? `PML ${b.pml_nama}` : "Admin (Ketua Tim)",
+        aksi: [{ teks: "Kirim pengingat", href: KE_NOTIFIKASI }, { teks: "Lihat barisnya", klik: () => setCari(b.nama) }],
+      });
+    }
+    return out;
+  }, [baris, pml, q]);
+  const batang = useMemo<BatangItem[]>(
+    () => tampil.filter((b) => b.peran === "ppl" && b.hari_aktif > 0).map((b) => ({ kunci: String(b.akun_id), label: b.nama, sub: b.pml_nama ? `Tim ${b.pml_nama}` : undefined, persen: Math.round((b.rata / ATURAN.targetHarian) * 100), ket: `rata-rata ${fmt2(b.rata)} poin/hari · ${b.hari_penuh} dari ${b.hari_aktif} hari mencapai target`, klik: () => setCari(b.nama) })),
+    [tampil],
+  );
   const adaPerkiraan = tampil.some((b) => b.perkiraan_jarak);
 
   async function unduh() {
@@ -108,6 +152,9 @@ export default function MonPoin({ data }: { data: DataKinerja }) {
         {data.tertunda > 0 && <p className="mt-2 rounded-[10px] bg-[#FFF4D6] px-3 py-2 text-[12px] text-[#6B4A0E]">Jarak jalan {fmt(data.tertunda)} rute sedang dihitung; sementara tampil perkiraan (≈). Halaman memuat ulang otomatis.</p>}
         {!data.osrm && <p className="mt-2 rounded-[10px] bg-[#FFF4D6] px-3 py-2 text-[12px] text-[#6B4A0E]">Layanan jarak jalan (OSRM) belum tersedia: seluruh jarak memakai perkiraan (garis lurus × 1,3).</p>}
       </div>
+
+      <PapanMasalah judul="Perlu tindakan" sumber="poin" daftar={masalah} kosong="Tidak ada PPL dengan poin bermasalah." />
+      <BatangCapaian judul="Rata-rata poin per PPL terhadap target harian" catatan={`100% = rata-rata ${ATURAN.targetHarian} poin per hari kegiatan. Urut dari terendah; ketuk untuk menyaring.`} item={batang} />
 
       <div className="mt-4 rounded-[18px] bg-white p-3 shadow-[0_8px_22px_rgba(15,42,82,.08)] sm:p-4">
         <h2 className="text-[15px] font-extrabold text-[#0F2A52]">Poin capaian kinerja per hari — target minimal {ATURAN.targetHarian} poin</h2>
