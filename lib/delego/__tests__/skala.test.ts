@@ -43,6 +43,7 @@ describe("fase D: skala 100 mulai 16 Nov 2026", () => {
     expect(labelSumberPoin("matriks:umum:manual")).toBe("Master · Umum · input manual");
     expect(labelSumberPoin("katalog×100/75")).toBe("katalog lama × 100/75");
     expect(labelSumberPoin("diisi")).toBe("diisi pemberi");
+    expect(labelSumberPoin("katalog skala 75")).toBe("katalog lama (skala 75)");
     expect(labelSumberPoin("")).toBe("");
   });
   it("katalog lama tetap skala 75 (1 poin = 6 menit); skala 100: 1 poin = 4,5 menit", () => {

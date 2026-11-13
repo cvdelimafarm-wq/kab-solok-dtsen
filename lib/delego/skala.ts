@@ -29,6 +29,7 @@ export function labelSumberPoin(sumber: string | null | undefined): string {
   const s = (sumber ?? "").trim();
   if (!s) return "";
   if (s === "diisi") return "diisi pemberi";
+  if (s === "katalog skala 75") return "katalog lama (skala 75)";
   if (s.startsWith("katalog")) return "katalog lama × 100/75";
   const [, survei, asal] = s.split(":");
   const nama: Record<string, string> = { riwayat: "riwayat", gabungan: "riwayat + usul", usul: "usul pegawai", manual: "input manual", awal: "data awal" };
