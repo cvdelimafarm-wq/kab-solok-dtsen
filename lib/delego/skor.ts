@@ -4,7 +4,8 @@
 // Berkas MURNI (tanpa jaringan). Yang memutuskan tetap basis data (20261101zb: keu_dlg_skor_ajukan, keu_dlg_usul); berkas ini membuat layar menampilkan
 // hal yang sama sebelum dikirim. 1 poin = MENIT_KERJA_HARIAN / KAPASITAS_HARIAN menit kerja (kini 450 / 75 = 6 menit).
 
-import { KAPASITAS_HARIAN, angka, bulat } from "./hitung";
+import { angka, bulat } from "./hitung";
+import { KAPASITAS_KATALOG } from "./skala";
 import { MENIT_KERJA_HARIAN, menitDariPoin } from "./teknis";
 import type { JenisSkor, Laporan } from "./tipe";
 
@@ -14,7 +15,7 @@ export const MINIMAL_ALASAN_SKOR = 10;
 /** Waktu nyata menyimpang lebih dari 25% dari perkiraan kertas kerja = skor ditandai untuk ditinjau (tidak berubah otomatis). */
 export const AMBANG_KALIBRASI = 0.25;
 
-export const poinDariMenit = (menit: number): number => (menit / MENIT_KERJA_HARIAN) * KAPASITAS_HARIAN;
+export const poinDariMenit = (menit: number): number => (menit / MENIT_KERJA_HARIAN) * KAPASITAS_KATALOG; // katalog lama tetap skala 75
 
 const fmtId = (n: number, desimal = 1) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: desimal }).format(n);
 
@@ -47,19 +48,20 @@ export type HasilBanding = {
 const samaSatuan = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /** Membandingkan skor yang sedang diketik dengan pekerjaan lain bersatuan sama (hanya yang disetujui dan aktif). */
-export function bandingSkor(katalog: Pembanding[], satuan: string, poin: number, kecualiId: number | null = null): HasilBanding {
-  const menit = menitDariPoin(Number.isFinite(poin) ? poin : 0);
+// (14 Nov 2026, fase D) `kapasitas` = skala poin yang dibandingkan (75 katalog lama; 100 bila katalog sudah diganti poin Master).
+export function bandingSkor(katalog: Pembanding[], satuan: string, poin: number, kecualiId: number | null = null, kapasitas: number = KAPASITAS_KATALOG): HasilBanding {
+  const menit = menitDariPoin(Number.isFinite(poin) ? poin : 0, kapasitas);
   const sejenis = katalog.filter((j) => j.aktif && j.skor_status === "disetujui" && j.id !== kecualiId && samaSatuan(j.satuan, satuan) && angka(j.poin_per_satuan) > 0);
   const med = median(sejenis.map((j) => angka(j.poin_per_satuan)));
   const setara: Setara[] = [...sejenis]
     .sort((a, b) => Math.abs(angka(a.poin_per_satuan) - poin) - Math.abs(angka(b.poin_per_satuan) - poin) || a.id - b.id)
     .slice(0, 3)
-    .map((j) => ({ id: j.id, nama: j.nama, satuan: j.satuan, poin: angka(j.poin_per_satuan), menit: menitDariPoin(angka(j.poin_per_satuan)) }));
+    .map((j) => ({ id: j.id, nama: j.nama, satuan: j.satuan, poin: angka(j.poin_per_satuan), menit: menitDariPoin(angka(j.poin_per_satuan), kapasitas) }));
   const lain = katalog.filter((j) => j.aktif && j.skor_status === "disetujui" && j.id !== kecualiId && !samaSatuan(j.satuan, satuan) && angka(j.poin_per_satuan) > 0);
   const setaraLain: Setara[] = [...lain]
     .sort((a, b) => Math.abs(angka(a.poin_per_satuan) - poin) - Math.abs(angka(b.poin_per_satuan) - poin) || a.id - b.id)
     .slice(0, 3)
-    .map((j) => ({ id: j.id, nama: j.nama, satuan: j.satuan, poin: angka(j.poin_per_satuan), menit: menitDariPoin(angka(j.poin_per_satuan)) }));
+    .map((j) => ({ id: j.id, nama: j.nama, satuan: j.satuan, poin: angka(j.poin_per_satuan), menit: menitDariPoin(angka(j.poin_per_satuan), kapasitas) }));
   if (med === null || med <= 0 || !(poin > 0)) {
     return {
       n: sejenis.length, median: med, rasio: null, setara, setaraLain, peringatan: null, perluAlasan: false, menit,

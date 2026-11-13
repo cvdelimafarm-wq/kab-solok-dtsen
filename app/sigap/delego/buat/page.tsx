@@ -11,10 +11,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { angka, bebanDelegasiMinggu, bebanPerOrang, KAPASITAS_HARIAN, kapasitasMinggu, SASARAN_BEBAN, tambahHari } from "@/lib/delego/hitung";
+import { bebanDelegasiMinggu, bebanPerOrang, KAPASITAS_HARIAN, kapasitasMinggu, kapasitasPada, SASARAN_BEBAN, tambahHari } from "@/lib/delego/hitung";
+import { ppsEfektif } from "@/lib/delego/skala";
 import { bacaBarisLangkah, hitungTargetJenis, teksDurasi } from "@/lib/delego/teknis";
 import { NAMA_KELAS, type Delegasi, type KelasPekerjaan } from "@/lib/delego/tipe";
-import { aksiKeu, useBahan, useKatalogSkor, useKirim } from "../data";
+import { aksiKeu, useBahan, useKatalogSkor, useKirim, usePoinUntuk } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import PemilihPenerima, { type Pilihan } from "../PemilihPenerima";
@@ -65,7 +66,14 @@ export default function Buat() {
   const katalog = useKatalogSkor();
 
   const jenis = daftarJenis.find((j) => String(j.id) === jenisId) ?? null;
-  const pps = jenis ? angka(jenis.poin_per_satuan) : 0;
+  // (14 Nov 2026, fase D) mulai 16 Nov poin per satuan dari Master > Poin beban kerja (survei dari nama identifikasi/kelompok + judul).
+  // Yang dikirim tetap jenis + jumlah; basis data mengganti salinan katalog dengan poin Master yang sama (pemicu keu_dlg_skala100).
+  // teks sama dengan yang dibaca pemicu saat delegasi disisipkan: nama identifikasi (bila asalnya identifikasi) + judul
+  const namaAsal = asal === "ident" ? hak.ident.find((i) => i.id === ident)?.nama ?? "" : "";
+  const poinMaster = usePoinUntuk(`${namaAsal} ${judul}`, daftarJenis.length > 0);
+  const efektif = ppsEfektif(jenis, poinMaster.data, mulai || hari);
+  const pps = efektif.pps;
+  const kapMulai = kapasitasPada(mulai || hari);
 
   useEffect(() => {
     const i = Number(q?.get("ident") ?? "");
@@ -235,10 +243,10 @@ export default function Buat() {
               </label>
 
               {daftarJenis.length > 0 && (
-                <Medan label="Jenis pekerjaan" bantu={jenis ? `${fmt(pps, 1)} poin per ${jenis.satuan} (sekitar ${teksDurasi(pps)}). ${jenis.uraian}` : "Pilih dari katalog supaya beban dihitung dengan ukuran tetap; atau kosongkan untuk mengisi poin langsung."}>
+                <Medan label="Jenis pekerjaan" bantu={jenis ? `${fmt(pps, 2)} poin per ${jenis.satuan} (sekitar ${teksDurasi(pps, efektif.kapasitas)}; ${efektif.sumber}). ${jenis.uraian}` : "Pilih dari katalog supaya beban dihitung dengan ukuran tetap; atau kosongkan untuk mengisi poin langsung."}>
                   <SelectCari className={KELAS.isian} value={jenisId} onChange={(e) => pilihJenis(e.target.value)}>
                     <option value="">Lainnya (isi poin langsung)</option>
-                    {daftarJenis.map((j) => <option key={j.id} value={j.id}>{j.nama} · {fmt(angka(j.poin_per_satuan), 1)} poin/{j.satuan}</option>)}
+                    {daftarJenis.map((j) => <option key={j.id} value={j.id}>{j.nama} · {fmt(ppsEfektif(j, poinMaster.data, mulai || hari).pps, 2)} poin/{j.satuan}</option>)}
                   </SelectCari>
                 </Medan>
               )}
@@ -252,14 +260,14 @@ export default function Buat() {
                   </Medan>
                   {hitung && (
                     <Info>
-                      {fmt(jumlahAngka, 2)} {jenis.satuan} × {fmt(pps, 1)} = <b>{fmt(hitung.total, 1)} poin</b> (sekitar {teksDurasi(hitung.total)}). Dibagi {hitung.hariKerja} hari kerja = <b>{fmt(hitung.harian, 1)} poin per hari</b>.
+                      {fmt(jumlahAngka, 2)} {jenis.satuan} × {fmt(pps, 1)} = <b>{fmt(hitung.total, 1)} poin</b> (sekitar {teksDurasi(hitung.total, efektif.kapasitas)}). Dibagi {hitung.hariKerja} hari kerja = <b>{fmt(hitung.harian, 1)} poin per hari</b>.
                     </Info>
                   )}
-                  {hitung && hitung.harian > KAPASITAS_HARIAN && <Peringatan>Melebihi kapasitas {KAPASITAS_HARIAN} poin per hari. Perpanjang tenggat, kurangi jumlah, atau bagi ke beberapa penerima.</Peringatan>}
+                  {hitung && hitung.harian > kapMulai && <Peringatan>Melebihi kapasitas {kapMulai} poin per hari. Perpanjang tenggat, kurangi jumlah, atau bagi ke beberapa penerima.</Peringatan>}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  <Medan label={mendadak ? "Beban (poin)" : "Target harian"} bantu={`Kapasitas ${KAPASITAS_HARIAN} poin per hari kerja`}><input type="number" min={0} max={1000} className={KELAS.isian} value={harian} onChange={(e) => setHarian(e.target.value)} /></Medan>
+                  <Medan label={mendadak ? "Beban (poin)" : "Target harian"} bantu={`Kapasitas ${kapMulai} poin per hari kerja`}><input type="number" min={0} max={1000} className={KELAS.isian} value={harian} onChange={(e) => setHarian(e.target.value)} /></Medan>
                   <Medan label="Satuan"><input className={KELAS.isian} maxLength={30} value={satuan} onChange={(e) => setSatuan(e.target.value)} /></Medan>
                   {!mendadak && <Medan label="Target total (opsional)" bantu="Kosong = target harian × hari kerja"><input type="number" min={0} className={KELAS.isian} value={total} onChange={(e) => setTotal(e.target.value)} /></Medan>}
                 </div>

@@ -13,12 +13,14 @@
 //  * BOBOT SKOR: `skorPenerima(..., bobot)` sudah menerima bobot; bobot bawaan 25/25/25/25 dan dapat diganti pemberi (keu_dlg_bobot).
 
 import type { Delegasi, Laporan, PeranDelegasi, Penilaian } from "./tipe";
+import { faktorSkala, MULAI_SKALA_100 } from "./skala";
 
 /** Riwayat kapasitas harian (poin per orang per hari kerja) menurut tanggal mulai. Tidak berlaku mundur: tanggal lama tetap memakai kapasitas yang berlaku saat itu. */
 export const RIWAYAT_KAPASITAS: readonly { mulai: string; poin: number }[] = [
   { mulai: "0000-01-01", poin: 60 }, // sebelum 26 Okt 2026
   { mulai: "2026-10-26", poin: 70 }, // 26-28 Okt 2026
-  { mulai: "2026-10-29", poin: 75 }, // mulai 29 Okt 2026
+  { mulai: "2026-10-29", poin: 75 }, // 29 Okt-15 Nov 2026
+  { mulai: MULAI_SKALA_100, poin: 100 }, // (14 Nov 2026, fase D) mulai 16 Nov 2026: skala 100, poin dari Master > Poin beban kerja
 ];
 /** Kapasitas harian yang berlaku pada suatu tanggal (YYYY-MM-DD). */
 export function kapasitasPada(tanggal: string): number {
@@ -26,13 +28,14 @@ export function kapasitasPada(tanggal: string): number {
   for (const r of RIWAYAT_KAPASITAS) if (tanggal >= r.mulai) poin = r.poin;
   return poin;
 }
-/** Kapasitas harian yang berlaku sekarang (aturan terbaru). Untuk tanggal tertentu pakai kapasitasPada. */
-export const KAPASITAS_HARIAN = RIWAYAT_KAPASITAS[RIWAYAT_KAPASITAS.length - 1].poin;
+/** Kapasitas harian yang berlaku hari ini (WIB) saat modul dimuat. Untuk tanggal tertentu pakai kapasitasPada. */
+export const KAPASITAS_HARIAN = kapasitasPada(new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10));
 export const HARI_KERJA_MINGGU = 5;
 export const JAM_PENGINGAT = 18;
 export const HUTANG_CATATAN_LISAN = 20;
 export const HARI_TANPA_LAPOR_LISAN = 2;
-export const SASARAN_BEBAN = { min: 80, max: 100 } as const;
+// (14 Nov 2026, fase D) Keputusan 13 Nov: minimal 60 poin dari 100, boleh lebih dari 100 (di atas 100 tetap ditandai berlebih). Sebelumnya 80-100.
+export const SASARAN_BEBAN = { min: 60, max: 100 } as const;
 export const BOBOT_SKOR = { ketepatan: 25, capaian: 25, kualitas: 25, kepatuhan: 25 } as const;
 
 export const angka = (x: string | number | null | undefined): number => {
@@ -218,7 +221,8 @@ export const kategoriBeban = (persen: number): KategoriBeban => (persen < SASARA
 /** Beban satu delegasi pada satu tanggal: target harian yang berlaku bila tanggal itu hari kerjanya (bukan libur) dan masih dalam masa delegasi. */
 export function bebanDelegasiHari(d: Delegasi, tanggal: string): number {
   if (d.status !== "baru" && d.status !== "berjalan") return 0;
-  return targetHariIni(d, tanggal);
+  // poin delegasi skala 75 yang jatuh pada hari skala 100 dikalikan 100/75 (lib/delego/skala.ts)
+  return targetHariIni(d, tanggal) * faktorSkala(d.mulai, tanggal);
 }
 
 /** Poin per minggu yang dibebankan sebuah delegasi pada minggu (Senin-Minggu) yang memuat `hari`. */
@@ -226,7 +230,10 @@ export function bebanDelegasiMinggu(d: Delegasi, hari: string): number {
   if (d.status !== "baru" && d.status !== "berjalan") return 0;
   const awal = awalMinggu(hari);
   let total = 0;
-  for (let i = 0; i < 7; i++) total += targetHariIni(d, tambahHari(awal, i));
+  for (let i = 0; i < 7; i++) {
+    const t = tambahHari(awal, i);
+    total += targetHariIni(d, t) * faktorSkala(d.mulai, t);
+  }
   return total;
 }
 

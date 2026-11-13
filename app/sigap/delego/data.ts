@@ -9,6 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { bacaCache, isiCache, basi } from "@/app/portal/dataBersama";
 import { aksiKeu } from "@/app/sigap/ro/useKeu";
 import { hariWib } from "@/lib/sigapCacheKerja";
+import type { PoinUntuk } from "@/lib/delego/skala";
 import type { BahanSaya, BahanTim, BahanTinjau, Calon, HakDelegasi, KalibrasiBahan, KatalogSkor, Monitor, Rekap } from "@/lib/delego/tipe";
 
 export { useKirim, aksiKeu } from "@/app/sigap/ro/useKeu";
@@ -127,4 +128,15 @@ export async function siapkanDelego(): Promise<void> {
     if (r.ok) isiCache(kunci, r.data, mulai);
     await new Promise((ok) => setTimeout(ok, 150));
   }
+}
+
+// (14 Nov 2026, fase D) Poin per satuan dari Master > Poin beban kerja untuk teks survei (nama identifikasi/kegiatan + judul).
+// Teks ditunda 600 ms supaya mengetik judul tidak memanggil server tiap huruf.
+export function usePoinUntuk(teks: string, aktif = true) {
+  const [t, setT] = useState(teks);
+  useEffect(() => {
+    const h = setTimeout(() => setT(teks), 600);
+    return () => clearTimeout(h);
+  }, [teks]);
+  return useBacaFungsi<PoinUntuk[]>("keu_poin_untuk_daftar", aktif ? { p_teks: t.trim().slice(0, 300) } : null);
 }

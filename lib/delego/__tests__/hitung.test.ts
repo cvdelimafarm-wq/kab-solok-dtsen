@@ -125,13 +125,15 @@ describe("beban dan pemerataan", () => {
     const orang2 = bebanPerOrang([p, b], "2026-10-28", [{ id: 77, nama: "Mitra X", jenis: "mitra" }]);
     expect(usulPemerataan(orang2, [p, b], "2026-10-28")[0].keAkun).toBe(77);
   });
-  it("kapasitas harian menurut tanggal: 60 sebelum 26 Okt, 70 pada 26-28 Okt, 75 mulai 29 Okt 2026 (tidak berlaku mundur)", () => {
-    expect(KAPASITAS_HARIAN).toBe(75);
+  it("kapasitas harian menurut tanggal: 60 sebelum 26 Okt, 70 pada 26-28 Okt, 75 pada 29 Okt-15 Nov, 100 mulai 16 Nov 2026 (tidak berlaku mundur)", () => {
+    expect([75, 100]).toContain(KAPASITAS_HARIAN);
+    expect(kapasitasPada("2026-11-15")).toBe(75);
+    expect(kapasitasPada("2026-11-16")).toBe(100);
     expect(kapasitasPada("2026-10-25")).toBe(60);
     expect(kapasitasPada("2026-10-26")).toBe(70);
     expect(kapasitasPada("2026-10-28")).toBe(70);
     expect(kapasitasPada("2026-10-29")).toBe(75);
-    expect(kapasitasPada("2026-12-31")).toBe(75);
+    expect(kapasitasPada("2026-12-31")).toBe(100);
     expect(kapasitasMinggu("2026-10-21")).toBe(300); // 19-23 Okt: 5 x 60
     expect(kapasitasMinggu("2026-10-28")).toBe(360); // 26-30 Okt: 70 x 3 + 75 x 2
     expect(kapasitasMinggu("2026-11-03")).toBe(375); // 2-6 Nov: 5 x 75

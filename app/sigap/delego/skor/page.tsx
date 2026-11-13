@@ -130,6 +130,7 @@ export default function Skor() {
         </button>
       }
     >
+      <Info>Mulai 16 Nov 2026 skor di katalog ini (skala 75 poin per hari) hanya menjadi data awal. Delegasi baru memakai poin per satuan dari <Link href="/sigap/kelola/master?tab=poin" className="font-semibold underline">Master &gt; Poin beban kerja</Link> (skala 100 poin per hari, berbeda per survei).</Info>
       {pemberi && (
         <p className="m-0 text-[13px] text-[#3B4A57]">
           Untuk mengatur langkah bawaan, kewajiban hasil kerja, dan tinjau per jenis pekerjaan, buka <Link href="/sigap/delego/jenis" className="font-semibold text-[#0F6B63] underline">Pengaturan jenis pekerjaan</Link>.

@@ -8,10 +8,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { angka, hariKe, tglPendek } from "@/lib/delego/hitung";
+import { hariKe, tglPendek } from "@/lib/delego/hitung";
 import { susunRekap } from "@/lib/delego/rekap";
 import { menitDariPoin } from "@/lib/delego/teknis";
-import { aksiKeu, useBahan, useKatalogSkor, useKirim, useRekap } from "../data";
+import { ppsEfektif } from "@/lib/delego/skala";
+import { aksiKeu, useBahan, useKatalogSkor, useKirim, usePoinUntuk, useRekap } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import PemilihPenerima, { type Pilihan } from "../PemilihPenerima";
@@ -48,7 +49,10 @@ export default function Perintah() {
   const ro = lokasi === "dalam" ? kegiatan?.ro_kode ?? "" : kelompokPakai;
   const jenis = jenisSiap.find((j) => String(j.id) === (jenisId || String(jenisRapat?.id ?? ""))) ?? null;
   const jumlahAngka = Number(jumlah.replace(",", "."));
-  const poin = jenis && jumlahAngka > 0 ? Math.round(angka(jenis.poin_per_satuan) * jumlahAngka * 100) / 100 : 0;
+  // (14 Nov 2026, fase D) mulai 16 Nov poin per satuan dari Master (survei dikenali dari isi perintah); dikirim tetap jenis + jumlah
+  const poinMaster = usePoinUntuk(judul, jenisSiap.length > 0);
+  const efektif = ppsEfektif(jenis, poinMaster.data, tanggal || hari);
+  const poin = jenis && jumlahAngka > 0 ? Math.round(efektif.pps * jumlahAngka * 100) / 100 : 0;
 
   // beban tiap penerima pada hari itu (delegasi + lapangan + pelatihan + ketersediaan), sebelum dan sesudah perintah ini
   const rekap = useRekap(tanggal, tanggal, manajer && !!tanggal);
@@ -61,7 +65,7 @@ export default function Perintah() {
     const h = susunRekap({ orang, delegasi: bahan.data.delegasi, lapangan: rekap.data.lapangan, ketersediaan: rekap.data.ketersediaan, dari: tanggal, sampai: tanggal, namaKegiatan: nama });
     const s = h.baris[0]?.sel[0];
     if (!s) return null;
-    const kap = s.kapasitas > 0 ? s.kapasitas : 75;
+    const kap = s.kapasitas > 0 ? s.kapasitas : efektif.kapasitas;
     return { sebelum: Math.round((s.poin / kap) * 100), sesudah: Math.round(((s.poin + poin) / kap) * 100), libur: s.libur, tidakTersedia: s.kategori === "tidak_tersedia", lembur: s.lembur };
   };
 
@@ -153,7 +157,7 @@ export default function Perintah() {
                   </SelectCari>
                 </Medan>
               ) : null}
-              <Medan label="Jenis perintah" bantu={jenis ? `${fmt(angka(jenis.poin_per_satuan), 1)} poin per ${jenis.satuan} (sekitar ${fmt(menitDariPoin(angka(jenis.poin_per_satuan)), 0)} menit). Skor diatur di Katalog skor.` : undefined}>
+              <Medan label="Jenis perintah" bantu={jenis ? `${fmt(efektif.pps, 2)} poin per ${jenis.satuan} (sekitar ${fmt(menitDariPoin(efektif.pps, efektif.kapasitas), 0)} menit; ${efektif.sumber}).` : undefined}>
                 <SelectCari className={KELAS.isian} value={jenisId || String(jenisRapat?.id ?? "")} onChange={(e) => setJenisId(e.target.value)}>
                   {jenisSiap.map((j) => <option key={j.id} value={j.id}>{j.nama}</option>)}
                 </SelectCari>
@@ -218,7 +222,7 @@ export default function Perintah() {
             <ul className="m-0 list-none space-y-1.5 p-0 text-[13.5px]">
               <li>Kelompok: <b>Perintah langsung</b>, {lokasi === "dalam" ? `di dalam ${kegiatan?.nama ?? "kegiatan survei"}` : "di luar kegiatan survei"}</li>
               <li>Tanggal: <b>{tanggal ? tglPendek(tanggal) : "-"}</b>{jam ? ` pukul ${jam}` : ""}</li>
-              <li>Skor: <b>{fmt(poin, 1)} poin</b> per penerima{poin > 0 ? ` (sekitar ${fmt(menitDariPoin(poin), 0)} menit)` : ""}</li>
+              <li>Skor: <b>{fmt(poin, 1)} poin</b> per penerima{poin > 0 ? ` (sekitar ${fmt(menitDariPoin(poin, efektif.kapasitas), 0)} menit)` : ""}</li>
               <li>Penutupan: <b>{tinjau ? "ditinjau Ketua Tim" : "ringan, tanpa tinjau"}</b></li>
             </ul>
           </Kartu>

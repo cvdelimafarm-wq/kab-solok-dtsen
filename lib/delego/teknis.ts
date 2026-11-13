@@ -6,7 +6,8 @@
 // Ukuran beban: poin (kapasitas 70 poin per hari kerja = 7,5 jam). Katalog jenis menetapkan poin tetap per satuan (dokumen, peta, laporan, ...).
 // Untuk delegasi berjenis, target_total dan target_harian berupa POIN; laporan harian diisi dalam jumlah satuan (poin = jumlah x poin_per_satuan).
 
-import { angka, bulat, hariKe, hariKerjaAntara, KAPASITAS_HARIAN, tambahHari } from "./hitung";
+import { angka, bulat, hariKe, hariKerjaAntara, tambahHari } from "./hitung";
+import { KAPASITAS_KATALOG } from "./skala";
 import type { Delegasi, HasilKerja, JenisPekerjaan, Langkah, Laporan, Rutin } from "./tipe";
 
 export const MENIT_KERJA_HARIAN = 450; // 7,5 jam
@@ -30,11 +31,12 @@ export function teksJumlah(d: Pick<Delegasi, "poin_per_satuan" | "satuan">, poin
 }
 
 /** Perkiraan lama pengerjaan dari poin, dalam menit (sebesar kapasitas harian: 75 poin = 450 menit, jadi 1 poin = 6 menit). */
-export const menitDariPoin = (poin: number): number => Math.round((poin / KAPASITAS_HARIAN) * MENIT_KERJA_HARIAN);
+// (14 Nov 2026, fase D) kapasitas bawaan = skala katalog lama (75). Untuk poin skala 100 (Master) kirim kapasitas 100.
+export const menitDariPoin = (poin: number, kapasitas: number = KAPASITAS_KATALOG): number => Math.round((poin / kapasitas) * MENIT_KERJA_HARIAN);
 
 /** "1,5 jam", "45 menit", "1 hari kerja" untuk membantu Ketua Tim menimbang poin. */
-export function teksDurasi(poin: number): string {
-  const m = menitDariPoin(poin);
+export function teksDurasi(poin: number, kapasitas: number = KAPASITAS_KATALOG): string {
+  const m = menitDariPoin(poin, kapasitas);
   if (m < 60) return `${m} menit`;
   if (m >= MENIT_KERJA_HARIAN - 10) return `${bulat(m / MENIT_KERJA_HARIAN, 1).toLocaleString("id-ID")} hari kerja`;
   return `${bulat(m / 60, 1).toLocaleString("id-ID")} jam`;

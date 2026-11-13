@@ -10,7 +10,8 @@ import { useEffect, useMemo, useState } from "react";
 import { angka, tglPendek } from "@/lib/delego/hitung";
 import { hitungTargetJenis, NAMA_HARI_PANJANG, periksaRutin, rutinBerikutnya, teksDurasi, teksJadwalRutin, type FormRutin } from "@/lib/delego/teknis";
 import type { Rutin } from "@/lib/delego/tipe";
-import { useBahan, useKirim } from "../data";
+import { useBahan, useKirim, usePoinUntuk } from "../data";
+import { ppsEfektif } from "@/lib/delego/skala";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import PemilihPenerima, { type Pilihan } from "../PemilihPenerima";
@@ -63,7 +64,10 @@ export default function RutinHalaman() {
   const form: FormRutin = { ...f, jumlahPenerima: pilih.length };
   const galat = useMemo(() => (edit ? periksaRutin(form) : []), [edit, form]);
   const jn = jenis.find((j) => String(j.id) === f.jenisId) ?? namaJenis(Number(f.jenisId)) ?? null;
-  const pps = jn ? angka(jn.poin_per_satuan) : 0;
+  // (14 Nov 2026, fase D) tiap periode dibuat sebagai delegasi baru; mulai 16 Nov poinnya dari Master (survei dikenali dari judul)
+  const poinMaster = usePoinUntuk(f.judul, jenis.length > 0);
+  const efektif = ppsEfektif(jn ? { id: jn.id, poin_per_satuan: jn.poin_per_satuan } : null, poinMaster.data, f.mulai || hari);
+  const pps = efektif.pps;
   const jml = Number(f.jumlah.replace(",", "."));
   const hitung = jn && jml > 0 && Number(f.durasi) >= 1 ? hitungTargetJenis(pps, jml, f.mulai || hari, tambahDurasi(f.mulai || hari, Number(f.durasi) - 1), f.hk) : null;
 
@@ -112,7 +116,7 @@ export default function RutinHalaman() {
               <Medan label="Jenis pekerjaan">
                 <SelectCari className={KELAS.isian} value={f.jenisId} onChange={(e) => setF({ ...f, jenisId: e.target.value })}>
                   <option value="">Pilih jenis</option>
-                  {jenis.map((j) => <option key={j.id} value={j.id}>{j.nama} · {fmt(angka(j.poin_per_satuan), 1)} poin/{j.satuan}</option>)}
+                  {jenis.map((j) => <option key={j.id} value={j.id}>{j.nama} · {fmt(ppsEfektif(j, poinMaster.data, f.mulai || hari).pps, 2)} poin/{j.satuan}</option>)}
                   {f.jenisId && !jenis.some((j) => String(j.id) === f.jenisId) && <option value={f.jenisId}>{namaJenis(Number(f.jenisId))?.nama ?? `Jenis ${f.jenisId}`} (nonaktif)</option>}
                 </SelectCari>
               </Medan>
@@ -156,7 +160,7 @@ export default function RutinHalaman() {
             </fieldset>
             {hitung && (
               <Info>
-                Tiap periode, setiap penerima mendapat {fmt(jml, 2)} {jn?.satuan} = <b>{fmt(hitung.total, 1)} poin</b> (sekitar {teksDurasi(hitung.total)}), kira-kira {fmt(hitung.harian, 1)} poin per hari kerja.
+                Tiap periode, setiap penerima mendapat {fmt(jml, 2)} {jn?.satuan} = <b>{fmt(hitung.total, 1)} poin</b> (sekitar {teksDurasi(hitung.total, efektif.kapasitas)}), kira-kira {fmt(hitung.harian, 1)} poin per hari kerja.
                 {jn && (jn.perlu_hasil ? " Penerima menyerahkan hasil kerja" : " Dicatat lewat laporan harian") }{jn?.perlu_tinjau ? " dan Anda yang meninjau." : "."}
               </Info>
             )}

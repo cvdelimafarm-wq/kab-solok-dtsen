@@ -7,6 +7,7 @@
 // delegasi BARU: delegasi yang sudah dibuat menyimpan salinan poin saat dibuat, sehingga skor dan hutang masa lalu tidak bergeser.
 // Angka poin pada seed awal adalah USULAN (kapasitas 70 poin = 7,5 jam), silakan disesuaikan oleh Ketua Tim.
 
+import Link from "next/link";
 import { useState } from "react";
 import { angka } from "@/lib/delego/hitung";
 import { bacaBarisLangkah, jenisKeForm, periksaJenis, teksDurasi, type FormJenis } from "@/lib/delego/teknis";
@@ -71,6 +72,7 @@ export default function Katalog() {
       sub="Jenis pekerjaan teknis kantor dan ukuran poinnya"
       kanan={bolehKelola && !edit ? <button type="button" className={KELAS.tombolUtama} onClick={baru}>Tambah jenis</button> : undefined}
     >
+      <Info>Mulai 16 Nov 2026 skor di katalog ini (skala 75 poin per hari) hanya menjadi data awal. Delegasi baru memakai poin per satuan dari <Link href="/sigap/kelola/master?tab=poin" className="font-semibold underline">Master &gt; Poin beban kerja</Link> (skala 100 poin per hari, berbeda per survei).</Info>
       <Info>
         Ukuran beban memakai <b>poin tetap per satuan</b>. Kapasitas satu orang 70 poin per hari kerja (7,5 jam), jadi 1 poin kira-kira 6 menit. Mengubah poin hanya
         berlaku untuk delegasi yang dibuat sesudahnya.
@@ -88,7 +90,7 @@ export default function Katalog() {
               )}
               <Medan label="Nama"><input className={KELAS.isian} maxLength={80} value={f.nama} onChange={(e) => setF({ ...f, nama: e.target.value })} placeholder="Memeriksa dokumen" /></Medan>
               <Medan label="Satuan"><input className={KELAS.isian} maxLength={30} value={f.satuan} onChange={(e) => setF({ ...f, satuan: e.target.value })} placeholder="dokumen" /></Medan>
-              <Medan label="Poin per satuan" bantu={Number(f.poin.replace(",", ".")) > 0 ? `Sekitar ${teksDurasi(Number(f.poin.replace(",", ".")))} per ${f.satuan || "satuan"}.` : "70 poin = 1 hari kerja."}>
+              <Medan label="Poin per satuan" bantu={Number(f.poin.replace(",", ".")) > 0 ? `Sekitar ${teksDurasi(Number(f.poin.replace(",", ".")))} per ${f.satuan || "satuan"}.` : "75 poin = 1 hari kerja (skala katalog lama)."}>
                 <input className={KELAS.isian} inputMode="decimal" value={f.poin} onChange={(e) => setF({ ...f, poin: e.target.value })} placeholder="9" />
               </Medan>
               <Medan label="Urutan tampil"><input className={KELAS.isian} inputMode="numeric" value={f.urut} onChange={(e) => setF({ ...f, urut: e.target.value })} /></Medan>

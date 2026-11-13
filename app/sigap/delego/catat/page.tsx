@@ -11,9 +11,10 @@ import { useMemo, useState } from "react";
 import { angka, bulat, hariKerjaAntara, kapasitasPada, tambahHari, tglPendek } from "@/lib/delego/hitung";
 import { bandingSkor, galatAlasanSkor } from "@/lib/delego/skor";
 import { menitDariPoin } from "@/lib/delego/teknis";
+import { ppsEfektif, skalaPada } from "@/lib/delego/skala";
 import { NAMA_KELAS, type KelasPekerjaan } from "@/lib/delego/tipe";
 import { rentangMinggu, susunRekap } from "@/lib/delego/rekap";
-import { aksiKeu, useKatalogSkor, useRekap, useSaya, useTinjauBahan } from "../data";
+import { aksiKeu, useKatalogSkor, usePoinUntuk, useRekap, useSaya, useTinjauBahan } from "../data";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Batang, Galat, Halaman, Info, Kartu, Medan, Memuat, Peringatan, fmt } from "../ui";
@@ -53,7 +54,16 @@ export default function Catat() {
   const [berhasil, setBerhasil] = useState<string | null>(null);
 
   const d = kat.data;
-  const jenisSiap = useMemo(() => (d ? d.jenis.filter((j) => j.aktif && j.skor_status === "disetujui") : []), [d]);
+  // (14 Nov 2026, fase D) mulai 16 Nov skor per satuan diambil dari Master > Poin beban kerja (survei dari nama kegiatan + judul);
+  // pembanding kesetaraan memakai skala yang sama. Sebelum 16 Nov tetap katalog lama (skala 75).
+  const namaKegiatan = d && tautan !== "kantor" ? d.kegiatan.find((k) => String(k.id) === tautan)?.nama ?? "" : "";
+  const poinMaster = usePoinUntuk(`${namaKegiatan} ${judul}`, !!d && d.jenis.length > 0);
+  const skala = skalaPada(mulai || hari);
+  const jenisSkala = useMemo(
+    () => (d ? d.jenis.map((j) => ({ ...j, poin_per_satuan: ppsEfektif(j, poinMaster.data, mulai || hari).pps })) : []),
+    [d, poinMaster.data, mulai, hari],
+  );
+  const jenisSiap = useMemo(() => jenisSkala.filter((j) => j.aktif && j.skor_status === "disetujui"), [jenisSkala]);
   const pilihJenis = (id: string) => {
     setJenisId(id);
     const j = jenisSiap.find((x) => String(x.id) === id);
@@ -71,7 +81,7 @@ export default function Catat() {
   const perHari = nhk > 0 ? total / nhk : 0;
   const kap = kapasitasPada(mulai || hari);
   const persenHari = kap > 0 ? (perHari / kap) * 100 : 0;
-  const banding = useMemo(() => (d ? bandingSkor(d.jenis, satuan, pps) : null), [d, satuan, pps]);
+  const banding = useMemo(() => (d ? bandingSkor(jenisSkala, satuan, pps, null, skala) : null), [d, jenisSkala, satuan, pps, skala]);
   const galatAlasan = banding ? galatAlasanSkor(banding, alasan) : null;
 
   // beban Anda pada rentang yang sama SEBELUM usulan ini (delegasi, lapangan, pelatihan, ketersediaan)
@@ -280,7 +290,7 @@ export default function Catat() {
                   </div>
                   <Batang persen={persenHari} nada={persenHari > 100 ? "merah" : persenHari > 80 ? "amber" : "hijau"} />
                   <div className="text-[12.5px] text-[#3B4A57]">
-                    {fmt(Math.round(persenHari), 0)}% dari kapasitas {kap} poin per hari. Setara sekitar {fmt(menitDariPoin(perHari), 0)} menit kerja per hari. Tidak termasuk pekerjaan lain Anda.
+                    {fmt(Math.round(persenHari), 0)}% dari kapasitas {kap} poin per hari. Setara sekitar {fmt(menitDariPoin(perHari, kap), 0)} menit kerja per hari. Tidak termasuk pekerjaan lain Anda.
                   </div>
                   {sebelum && persenSesudah !== null && (
                     <div className={`rounded-lg px-3 py-2 text-[13px] leading-snug ${persenSesudah > 100 ? "bg-[#FBE9E9] text-[#9B2C2C]" : "bg-[#F1F7F6] text-[#0B524C]"}`}>
