@@ -7,7 +7,7 @@ import type { AturanVanguard, HasilRuntutan, KelayakanRuntutan, Petak } from "@/
 export type KeadaanVanguardKelola = {
   kegiatan_id: number;
   menyala: boolean;
-  sumber: "centang" | "identifikasi" | "mati";
+  sumber: "aturan" | "centang" | "identifikasi" | "mati";
   /** true / false = centang manual; null = tidak ada centang (mengikuti Identifikasi survei). */
   centang: boolean | null;
   percobaan: number;
@@ -34,6 +34,8 @@ export const PILIHAN_VANGUARD: { kode: PilihanVanguard; nilai: boolean | null; l
 export const pilihanDari = (centang: boolean | null): PilihanVanguard => (centang === true ? "nyala" : centang === false ? "mati" : "ikut");
 
 export function teksSumberVanguard(sumber: KeadaanVanguardKelola["sumber"]): string {
+  // (13 Nov 2026, B) sumber tunggal: Persiapan > Belajar dan mutu
+  if (sumber === "aturan") return "Saat ini menyala menurut aturan Belajar dan mutu (Persiapan > Belajar dan mutu), sumber tunggal aturan Vanguard.";
   if (sumber === "centang") return "Saat ini menyala atau mati menurut pilihan manual di bawah.";
   if (sumber === "identifikasi") return "Saat ini menyala karena Identifikasi survei yang sah meminta Vanguard.";
   return "Saat ini tidak menyala.";

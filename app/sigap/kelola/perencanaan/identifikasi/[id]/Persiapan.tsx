@@ -23,6 +23,7 @@ import type { BarisLanjutan } from "./lanjutan/useLanjutan";
 import { useBacaKeu } from "@/app/sigap/ro/useKeu";
 import { urlBaca } from "@/lib/keu/ro";
 import { normalisasiLanjutan } from "@/lib/keu/lanjutan";
+import { keadaanButir, LABEL_BUTIR, WAKTU_BELAJAR, type BarisBelajar } from "@/lib/belajarAturan";
 
 const LINK = "font-semibold text-[#1F5FD1] underline";
 
@@ -99,6 +100,11 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
   const ljHilir = useMemo(() => (ljRow && ljRow.ver_hilir != null && ljRow.isi_hilir != null ? { ver: ljRow.ver_hilir, status: ljRow.status_hilir ?? ljRow.status, isi: ljRow.isi_hilir } : ljRow), [ljRow]);
   const lanjutanFinal = useMemo(() => (ljHilir && ljHilir.status === "final" ? normalisasiLanjutan(ljHilir.isi) : null), [ljHilir]);
   const sumberPeran = lanjutanFinal && ljHilir ? `identifikasi lanjutan versi ${ljHilir.ver} (Final)` : "identifikasi awal (lanjutan belum Final)";
+
+  // (13 Nov 2026, B) aturan belajar dan mutu dari sumber tunggal (kegiatan tertaut), hanya baca
+  const belajar = useBacaKeu<BarisBelajar & { ident_id: number; kegiatan_nama: string }>(id ? urlBaca("keu_v_ident_belajar", { ident_id: id }, { batas: 200 }) : null);
+  const waktuIni = jenis === "pelatihan" ? ["pra_pelatihan", "saat_pelatihan"] : ["saat_pendataan"];
+  const belajarIni = (belajar.baris ?? []).filter((b) => waktuIni.includes(b.waktu));
 
   const ringPel = useMemo(() => (formSah ? ringkasPelatihan(formSah, lanjutanFinal) : null), [formSah, lanjutanFinal]);
   const ringDat = useMemo(
@@ -219,6 +225,23 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
                 )}
               </>
             )}
+
+            <Bagian judul="Kegiatan belajar dan mutu" ket="Aturan per waktu dari kegiatan tertaut (sumber tunggal; diatur di Kelola Pelatihan > Persiapan > Belajar dan mutu, atau Kelola Pendataan > Persiapan).">
+              {belajarIni.length === 0 ? <p className="m-0 text-[13px] text-[#5B6B84]">Belum ada aturan untuk waktu ini.</p> : (
+                <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+                  {WAKTU_BELAJAR.filter((w) => waktuIni.includes(w.kode)).flatMap((w) => belajarIni.filter((b) => b.waktu === w.kode).map((b) => {
+                    const k = keadaanButir(b);
+                    return (
+                      <li key={`${b.kegiatan_id}-${b.waktu}-${b.butir}`} className="flex flex-wrap items-center gap-2 text-[13px]">
+                        <Chip warna={k.warna}>{k.teks}</Chip>
+                        <span className="min-w-0"><b className="text-[#0F2A52]">{w.label}:</b> {LABEL_BUTIR[b.butir]}{b.tenggat ? ` · tenggat ${tglIndo(b.tenggat)}` : ""}
+                          {b.batal_at && <span className="text-[#7A1D22]"> — {b.batal_alasan}</span>}</span>
+                      </li>
+                    );
+                  }))}
+                </ul>
+              )}
+            </Bagian>
 
             <Bagian judul={`Kegiatan SIGAP tertaut (${NAMA_FUNGSI[fungsi]})`} ket="Kegiatan di SIGAP yang menjalankan tahap ini; ditautkan di halaman Pelaksanaan.">
               {tertautFungsi.length === 0 ? (

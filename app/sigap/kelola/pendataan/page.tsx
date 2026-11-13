@@ -27,6 +27,7 @@ import { posisiAlur, urutanDariTab } from "@/lib/alurKelola";
 import { KEGIATAN_PENDATAAN, TAB_PENDATAAN, bacaKegiatanPendataan, bacaTabPendataan, labelTabPendataan, urlKegiatanPendataan, urlTabPendataan, type KodeTabPendataan } from "@/lib/sigapPendataanTab";
 import PemilihSurvei, { namaSurvei } from "./PemilihSurvei";
 import FiturKegiatan from "./FiturKegiatan";
+import BelajarAturan from "../../BelajarAturan";
 import { useFitur } from "./useFitur";
 import { tabAktifKelola, tabTampilKelola } from "@/lib/sigapFitur";
 import Monitoring from "./Monitoring";
@@ -160,6 +161,8 @@ export default function KelolaPendataan() {
             galatMuat={profil.galat}
             onSimpan={profil.simpan}
           />
+          {/* (13 Nov 2026, keputusan B) aturan belajar dan mutu saat pendataan (sumber tunggal) */}
+          <BelajarAturan key={`belajar-${kegId}`} kegiatanId={kegId} />
         </>
       )}
       {tabIni === "tim" && <Tim key={kegId} kegiatanId={kegId} fitur={f} />}

@@ -11,6 +11,7 @@ import type { Db } from "@/lib/sigap";
 import { PESAN_GERBANG } from "@/lib/gerbangUndangan";
 import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { normalisasi, vanguardUntuk } from "@/lib/keu/identifikasi";
+import { vanguardDariAturan, type ButirBelajar } from "@/lib/belajarAturan";
 
 export const KODE_FITUR_VANGUARD = "vanguard";
 type Fungsi = "pendataan" | "pelatihan" | "lain";
@@ -18,10 +19,18 @@ const FUNGSI_SAH: readonly string[] = ["pendataan", "pelatihan", "lain"];
 /** Sama dengan FILTER_BUKAN_ADMINISTRASI di lib/sigapTesDb.ts (sumber boleh kosong, bukan "administrasi"). */
 const BUKAN_ADMINISTRASI = "sumber.is.null,sumber.neq.administrasi";
 
-export type KeadaanVanguard = { menyala: boolean; sumber: "centang" | "identifikasi" | "mati"; fungsi: Fungsi | null };
+export type KeadaanVanguard = { menyala: boolean; sumber: "aturan" | "centang" | "identifikasi" | "mati"; fungsi: Fungsi | null };
 export const MATI: KeadaanVanguard = { menyala: false, sumber: "mati", fungsi: null };
 
 export async function keadaanVanguard(db: Db, kegiatanId: number): Promise<KeadaanVanguard> {
+  // (13 Nov 2026, keputusan B) sumber tunggal sigap_belajar_aturan menang bila kegiatan sudah punya aturan; galat (tabel belum ada) = cara lama
+  try {
+    const { data: aturan, error } = await db.from("sigap_belajar_aturan").select("butir, aktif, batal_at").eq("kegiatan_id", kegiatanId);
+    const v = error ? null : vanguardDariAturan((aturan ?? []) as { butir: ButirBelajar; aktif: boolean; batal_at: string | null }[]);
+    if (v !== null) return v ? { menyala: true, sumber: "aturan", fungsi: null } : MATI;
+  } catch {
+    /* tabel belum ada */
+  }
   const { data: centang } = await db.from("sigap_kegiatan_fitur").select("aktif").eq("kegiatan_id", kegiatanId).eq("fitur", KODE_FITUR_VANGUARD).maybeSingle();
   if (centang && typeof (centang as { aktif: unknown }).aktif === "boolean") {
     const aktif = (centang as { aktif: boolean }).aktif;
