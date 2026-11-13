@@ -4,7 +4,7 @@
 //
 // (13 Nov 2026, keputusan B, mockup A4b) Kartu "Kegiatan belajar dan mutu": satu sumber aturan per waktu (pra pelatihan, saat pelatihan, saat pendataan).
 // Tiap butir: centang dipakai, wajib, tenggat, memblokir tahap, catatan; pembatalan wajib beralasan (siapa dan kapan dicatat). Dipakai di Kelola Pelatihan
-// (Persiapan > Belajar dan mutu) dan Kelola Pendataan (tab 1 · Persiapan). API: /api/portal/kegiatan/belajar. Logika: lib/belajarAturan.ts.
+// (Materi & Penilaian > Belajar dan mutu) dan Kelola Pendataan (tab 1 · Persiapan). API: /api/portal/kegiatan/belajar. Logika: lib/belajarAturan.ts.
 
 import { useCallback, useEffect, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";

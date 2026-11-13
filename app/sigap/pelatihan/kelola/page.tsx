@@ -22,6 +22,7 @@ import { KartuHierarki } from "./hierarki";
 import OrangKelasKelola from "./orangKelas"; // (8 Nov 2026) Orang & kelas: libatkan orang, kelas, peserta per kelas, panitia, instruktur, pembanding rencana kelas
 import InstrumenKelola from "./instrumen";
 import VanguardKelola from "./vanguardKelola";
+import BelajarAturan from "../../BelajarAturan";
 import KartuSuratUndangan from "./suratUndangan"; // (9 Nov 2026) surat undangan per kelas (lampiran laporan)
 import PersiapanKelola, { KartuAturAbsen, KartuAturanNilai } from "./tampilan"; // PersiapanKelola = tampilan peserta + ketentuan undangan; absen -> Hari H; aturan nilai -> Penilaian
 import KendalaKelola from "./kendala"; // (3 Nov 2026) tab Kendala: petugas menolak / mundur -> ganti, kosongkan, atau alihkan
@@ -307,6 +308,8 @@ export default function KelolaPelatihan() {
             },
             { kode: "instrumen", label: "Instrumen", ket: "Kuesioner, buku pedoman, dan PPT materi yang diunduh peserta.", isi: () => <InstrumenKelola /> },
             { kode: "vanguard", label: "Vanguard", ket: "Nyalakan simulasi pengisian kuesioner untuk pelatihan ini dan buka dasbor serta pengaturannya.", isi: () => <VanguardKelola /> },
+            // (14 Nov 2026, B lanjutan) satu sumber aturan belajar dan mutu per waktu (pra pelatihan, saat pelatihan, saat pendataan)
+            { kode: "belajar", label: "Belajar dan mutu", ket: "Pretest, Vanguard, posttest, dan kuis per waktu: dipakai, wajib, tenggat, blokir, dan pembatalan beralasan.", isi: () => <BelajarAturan kegiatanId={kegId ?? null} /> },
             { kode: "kuispra", label: "🧠 Kuis Pra", ket: "Kuis sebelum pelatihan.", isi: () => <KuisPraKelola /> },
           ] as Bagian[]}
         />

@@ -74,7 +74,7 @@ export function GantiAdmin({ g, kelola, kirim, selesai, lapor }: { g: DataGantiA
       {g.tingkat >= 0.2 && <p className="mt-1.5 text-[12px] font-semibold text-[#8A6200]">Tingkat penggantian tinggi (≥ 20% dari target sampel utama). Periksa alasan dan sebaran per PPL di bawah.</p>}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px]">
         <label className="font-semibold text-[#12305E]" htmlFor={`sinkron-${g.siap}`}>Sinkron ke master KK</label>
-        <select id={`sinkron-${g.siap}`} value={g.sinkron_ke_master} disabled={!kelola || sibuk !== ""} onChange={(e) => void jalan("sinkron", { aksi: "sinkron", nilai: e.target.value as SinkronMaster }, "Setelan sinkron ke master disimpan.")} className="min-h-[36px] rounded-lg border border-[#C9D6EA] bg-white px-2 text-[12.5px]">
+        <select id={`sinkron-${g.siap}`} value={g.sinkron_ke_master} disabled={!kelola || sibuk !== ""} onChange={(e) => void jalan("sinkron", { aksi: "sinkron", nilai: e.target.value as SinkronMaster }, "Setelan sinkron ke master disimpan.")} className="min-h-[36px] w-full min-w-0 max-w-full rounded-lg border border-[#C9D6EA] bg-white px-2 text-[12.5px] sm:w-auto">
           {(Object.keys(LABEL_SINKRON) as SinkronMaster[]).map((k) => (
             <option key={k} value={k}>
               {LABEL_SINKRON[k]}

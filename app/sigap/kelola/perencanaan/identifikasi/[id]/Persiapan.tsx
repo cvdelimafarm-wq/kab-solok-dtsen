@@ -226,7 +226,7 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
               </>
             )}
 
-            <Bagian judul="Kegiatan belajar dan mutu" ket="Aturan per waktu dari kegiatan tertaut (sumber tunggal; diatur di Kelola Pelatihan > Persiapan > Belajar dan mutu, atau Kelola Pendataan > Persiapan).">
+            <Bagian judul="Kegiatan belajar dan mutu" ket="Aturan per waktu dari kegiatan tertaut (sumber tunggal; diatur di Kelola Pelatihan > Materi & Penilaian > Belajar dan mutu, atau Kelola Pendataan > Persiapan).">
               {belajarIni.length === 0 ? <p className="m-0 text-[13px] text-[#5B6B84]">Belum ada aturan untuk waktu ini.</p> : (
                 <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
                   {WAKTU_BELAJAR.filter((w) => waktuIni.includes(w.kode)).flatMap((w) => belajarIni.filter((b) => b.waktu === w.kode).map((b) => {
