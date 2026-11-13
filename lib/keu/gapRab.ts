@@ -50,7 +50,8 @@ export function uraiGapRab(rincian: BarisRincian[], rab: RabSurveiGap | null | u
     x.uraian.push(b.uraian);
     per.set(a, x);
   }
-  const akunTambahan = [...per.entries()].map(([akun, x]) => ({ akun, ...x })).sort((p, q) => p.akun.localeCompare(q.akun));
+  // akun yang rinciannya belum berangka (mis. konsumsi rapat tanpa jumlah peserta) tidak disebut: tidak menambah biaya Gap
+  const akunTambahan = [...per.entries()].map(([akun, x]) => ({ akun, ...x })).filter((x) => x.jumlah !== 0).sort((p, q) => p.akun.localeCompare(q.akun));
   const tambahan = akunTambahan.reduce((t, x) => t + x.jumlah, 0);
   return { sumber: "rab", rab: jumlahRab, tambahan, akunTambahan, total: jumlahRab + tambahan };
 }

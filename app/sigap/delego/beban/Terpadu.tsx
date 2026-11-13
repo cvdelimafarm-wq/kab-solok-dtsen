@@ -124,7 +124,7 @@ export default function Terpadu() {
             {/* (13 Nov 2026, Fase 0 butir 7) Di HP 360 kolom hari ini (Jumat/akhir pekan) terpotong karena lebar minimal 420px dan kolom nama 110px.
                 Kini pekan muat di 360 (nama 64px, hari 28px), grid diberi ruang 3px agar cincin hari ini tidak terpotong, dan kolom hari ini digulir ke tampilan. */}
             <div ref={wadah} className="overflow-x-auto">
-              <div className="grid items-center gap-[2px] p-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(64px,150px) repeat(${lebar}, minmax(28px, 1fr))`, minWidth: 70 + lebar * 30 }}>
+              <div className="grid items-center gap-[2px] p-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(64px,150px) repeat(${lebar}, minmax(28px, 1fr))`, minWidth: 64 + lebar * 30 }}>
                 <div className="text-left font-semibold text-[#3B4A57]">Nama</div>
                 {hasil.tanggal.map((t) => (
                   <div key={t} ref={t === hari ? kolomHariIni : undefined} title={tglPendek(t)} className={`rounded-md py-0.5 leading-tight ${t === hari ? "bg-[#0F6B63] font-bold text-white" : "font-semibold text-[#3B4A57]"}`}>

@@ -32,7 +32,7 @@ const rab = (status: "siap" | "draf"): RabSurveiGap => ({
 
 describe("uraiGapRab (butir 2)", () => {
   it("Seruti TW IV: RAB 45.315.000 + honor instruktur 888.000 = 46.203.000", () => {
-    const u = uraiGapRab([rinci("521213", 1), rinci("524113", 1), rinci("524114", 1), rinci("522151", 888_000, "honor instruktur")], rab("siap"));
+    const u = uraiGapRab([rinci("521213", 1), rinci("524113", 1), rinci("524114", 1), rinci("522151", 888_000, "honor instruktur"), { ...rinci("521211", 0), jumlah: null }], rab("siap"));
     expect(u.sumber).toBe("rab");
     expect(u.rab).toBe(45_315_000);
     expect(u.tambahan).toBe(888_000);
