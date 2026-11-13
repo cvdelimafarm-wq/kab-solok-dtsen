@@ -18,6 +18,8 @@ import { Kerangka, formatSisa, jamWib, useJamServer, useSaatLewat } from "../../
 import { useInfoPelatihan } from "../../infoPelatihan";
 import KartuTerkunci, { type KunciTes } from "../../KartuTerkunci"; // (2 Nov 2026) blokir antar tahapan + minta buka kunci
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
+import TesTanpaSinyal, { adaSesiLuringAktif } from "./TesTanpaSinyal"; // (14 Nov 2026) luring 3b-2: tes dikerjakan tanpa sinyal dengan sandi A
+import { simpanRingkasTes } from "@/lib/sesiLuring";
 import { baca as bacaLuring, gabungJawaban, galatJaringan, jamServerSekarang, kunciTesTerakhir, tandaPemilik, tulis as tulisLuring } from "@/lib/luringSimpan"; // (14 Nov 2026) luring L12
 
 type Keadaan = KeadaanTes & { terkunci?: KunciTes | null };
@@ -51,6 +53,14 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const [konfirmasiUlang, setKonfirmasiUlang] = useState(false);
   // (14 Nov 2026, luring L12) true = keadaan dipulihkan dari simpanan HP karena server tidak terjangkau
   const [dariHp, setDariHp] = useState(false);
+  // (14 Nov 2026, luring 3b-2) server tidak terjangkau dan tidak ada sesi daring tersimpan -> tawarkan tes tanpa sinyal (paket tersandi)
+  const [tanpaSinyal, setTanpaSinyal] = useState(false);
+  // sesi tanpa sinyal yang sedang berjalan / belum terkirim menggantikan isi halaman sampai diterima server (dibaca dari HP sesudah tiap render;
+  // tidak dibaca saat render pertama supaya tidak berbeda dengan HTML dari server)
+  const [luringAktif, setLuringAktif] = useState(false);
+  useEffect(() => {
+    setLuringAktif(adaSesiLuringAktif(jenis));
+  });
   const simpanHp = useCallback((d: Keadaan, jw: Record<string, string>, kotorHp: boolean) => {
     if (typeof window === "undefined" || d.status !== "mengerjakan") return;
     tulisLuring(localStorage, kunciTesTerakhir(jenis), { pemilik: tandaPemilik(bacaSesi()), jamServer: d.sekarang, keadaan: d, jawaban: jw, kotor: kotorHp });
@@ -78,7 +88,10 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       } else if (d.jawaban) setJawaban((lama) => (Object.keys(lama).length === 0 ? d.jawaban! : lama));
       simpanHp(d, g.kotor ? g.jawaban : jawabRef.current && Object.keys(jawabRef.current).length ? jawabRef.current : d.jawaban ?? {}, g.kotor);
       setDariHp(false);
+      setTanpaSinyal(false);
       setGalat(null);
+      // (14 Nov 2026, luring 3b-4) ringkasan untuk aturan mengulang saat nanti tanpa sinyal
+      simpanRingkasTes(localStorage, jenis, { pemilik: tandaPemilik(bacaSesi()), status: d.status, percobaan: d.percobaan, wajib_100: !!d.wajib_100, tuntas: !!d.tuntas, bisa_ulang: !!d.bisa_ulang, disimpan_at: d.sekarang });
     },
     [setujukan, jenis, simpanHp]
   );
@@ -98,7 +111,8 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
         kotor.current = lokal.kotor;
         setDariHp(true);
         setGalat(null);
-      } else setGalat(pesanGalat(e));
+      } else if (galatJaringan(e)) setTanpaSinyal(true);
+      else setGalat(pesanGalat(e));
     }
   }, [url, terapkan, jenis, setujukan]);
   useEffect(() => {
@@ -275,6 +289,20 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const judul = `${label} ${judulPelatihan(info)}`;
 
   // ------------------------------------------------ tampilan
+  // (14 Nov 2026, luring 3b-2) tes tanpa sinyal: sedang/selesai dikerjakan di HP, atau server tidak terjangkau
+  const tawarLuring = tanpaSinyal && (!k || k.status === "belum_buka" || k.status === "buka" || (k.status === "selesai" && !!k.wajib_100 && !k.tuntas && k.bisa_ulang));
+  if (luringAktif || tawarLuring)
+    return (
+      <Kerangka aktif="pelatihan" judul={judul} langkah={jenis}>
+        <TesTanpaSinyal<Keadaan>
+          jenis={jenis}
+          label={label}
+          mode={tanpaSinyal ? "tanpa_sinyal" : "aktif"}
+          onDiterima={(d) => terapkan(d)}
+          onMulai={() => setLuringAktif(true)}
+        />
+      </Kerangka>
+    );
   if (!k)
     return (
       <Kerangka aktif="pelatihan" judul={judul} langkah={jenis}>

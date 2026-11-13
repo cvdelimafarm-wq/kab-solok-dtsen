@@ -43,7 +43,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     const versi = await versiSoal(soal.map((s) => ({ nomor: s.nomor, teks: s.teks, opsi: s.opsi.map((o) => ({ kode: o.kode, teks: o.teks })) })));
     if (versiHp && versiHp === versi) {
       await catatPaketDipegang(db, tes.id, akun.id, versi);
-      return NextResponse.json({ boleh: true, sama: true, versi });
+      return NextResponse.json({ boleh: true, sama: true, versi, sekarang: new Date().toISOString() });
     }
     const efektif = await terapkanAgendaPeserta(db, tes, peserta.kelas);
     const paket = await susunPaketTes(db, tes, soal, !!efektif.agenda);

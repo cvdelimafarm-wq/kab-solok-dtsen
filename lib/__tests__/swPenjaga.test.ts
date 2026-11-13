@@ -85,4 +85,16 @@ describe("penjaga luring (docs/luring-aturan.md)", () => {
     const lib = readFileSync(join(akar, "lib", "luringSimpan.ts"), "utf8");
     expect(lib).toMatch(/if \(!x \|\| !x\.kotor\) buang\.push\(k\)/);
   });
+  it("L13: paket tes tersandi tanpa kunci, halaman tes disimpan lebih dulu, sesi tanpa sinyal tidak dibuang saat keluar", () => {
+    const sw = readFileSync(join(akar, "public", "sw.js"), "utf8");
+    expect(sw).toMatch(/tipe === "simpan-halaman"/);
+    expect(sw).toMatch(/startsWith\("\/sigap\/"\)/);
+    const db = readFileSync(join(akar, "lib", "sigapTesLuringDb.ts"), "utf8");
+    expect(db).not.toMatch(/kunci:/); // isi paket hanya nomor, teks, opsi (kode+teks)
+    const sesi = readFileSync(join(akar, "lib", "sesiLuring.ts"), "utf8");
+    expect(sesi).toMatch(/kotor: true/);
+    expect(sesi).toMatch(/AWALAN_LURING/);
+    const tes = readFileSync(join(akar, "app", "sigap", "pelatihan", "tes", "[jenis]", "page.tsx"), "utf8");
+    expect(tes).toMatch(/<TesTanpaSinyal/);
+  });
 });

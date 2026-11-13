@@ -1269,27 +1269,34 @@ function KalenderHariKerja({ token, pen, hariIni, onTersimpan, data }: { token: 
               </li>
             ))}
           </ul>
-          <dl className="mt-1.5 space-y-1 border-t border-[#E3E8F0] pt-1.5 text-[13px]">
-            <div className="flex justify-between">
-              <dt className="text-red-700">Jumlah terlewat (tidak dibayar)</dt>
-              <dd className="font-semibold text-red-700">{nTerlewat} hari</dd>
+          {/* (14 Nov 2026) Rincian nilai uang dirapikan: tiga kolom (keterangan · hari · rupiah) rata kanan, angka sejajar, tidak terlipat di HP 360 */}
+          <div className="mt-2 border-t border-[#E3E8F0] pt-2 text-[13px] tabular-nums">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-1.5">
+              <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#8592A8]">Rincian</span>
+              <span className="text-right text-[10.5px] font-bold uppercase tracking-wide text-[#8592A8]">Hari</span>
+              <span className="text-right text-[10.5px] font-bold uppercase tracking-wide text-[#8592A8]">Nilai</span>
+
+              <span className="min-w-0 text-[#1E7A4C]">Lengkap <span className="text-[11px] text-[#6B7890]">(realisasi)</span></span>
+              <span className="text-right font-semibold text-[#1E7A4C]">{nRealisasi}</span>
+              <span className="whitespace-nowrap text-right font-semibold text-[#1E7A4C]">{rupiah(nRealisasi * pen.tarif)}</span>
+
+              <span className="min-w-0 text-[#0F3D7A]">Belum lengkap <span className="text-[11px] text-[#6B7890]">(potensi)</span></span>
+              <span className="text-right font-semibold text-[#0F3D7A]">{nPotensi}</span>
+              <span className="whitespace-nowrap text-right font-semibold text-[#0F3D7A]">{rupiah(nPotensi * pen.tarif)}</span>
+
+              <span className="min-w-0 text-red-700">Terlewat <span className="text-[11px] text-[#6B7890]">(tidak dibayar)</span></span>
+              <span className="text-right font-semibold text-red-700">{nTerlewat}</span>
+              <span className="text-right text-[#A0AABB]">–</span>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-[#1E7A4C]">Jumlah realisasi (lengkap)</dt>
-              <dd className="font-semibold text-[#1E7A4C]">{nRealisasi} hari · {rupiah(nRealisasi * pen.tarif)}</dd>
+            <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 border-t border-[#E3E8F0] pt-2">
+              <span className="min-w-0 font-bold text-[#13213A]">
+                Total
+                <span className="block text-[11px] font-normal text-[#6B7890]">lengkap + belum lengkap, × {rupiah(pen.tarif)}/hari</span>
+              </span>
+              <span className="text-right font-bold text-[#13213A]">{nRealisasi + nPotensi}</span>
+              <span className="whitespace-nowrap text-right text-[15px] font-extrabold text-[#13213A]">{rupiah((nRealisasi + nPotensi) * pen.tarif)}</span>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-[#0F3D7A]">Jumlah potensi (belum lengkap)</dt>
-              <dd className="font-semibold text-[#0F3D7A]">{nPotensi} hari · {rupiah(nPotensi * pen.tarif)}</dd>
-            </div>
-            <div className="flex justify-between border-t border-[#E3E8F0] pt-1.5">
-              <dt className="font-bold text-[#13213A]">
-                Total (realisasi + potensi)
-                <span className="block text-[11px] font-normal text-[#6B7890]">{nRealisasi + nPotensi} hari × {rupiah(pen.tarif)}</span>
-              </dt>
-              <dd className="font-extrabold">{rupiah((nRealisasi + nPotensi) * pen.tarif)}</dd>
-            </div>
-          </dl>
+          </div>
           <p className="mt-1.5 text-[10.5px] text-[#8592A8]">Estimasi. Hanya hari dengan {wajibLaporan(pen) ? "laporan + " : ""}{nFoto(pen)} foto lengkap yang dibayar.</p>
         </div>
       )}

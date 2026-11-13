@@ -10,28 +10,37 @@ import type { PaketTes } from "./sigapTesLuring";
 
 export const kunciPaket = (jenis: string): string => `${AWALAN_LURING}paket:${jenis}`;
 
-type SimpananPaket = { v: 1; pemilik: string; paket: PaketTes };
+/** selisihMs = jam server - jam HP saat paket diterima (dipakai menerjemahkan cap waktu tanpa sinyal ke jam server). */
+type SimpananPaket = { v: 1; pemilik: string; paket: PaketTes; selisihMs?: number };
 
-export function simpanPaket(p: Penyimpan, jenis: string, pemilik: string, paket: PaketTes): boolean {
+/** Selisih jam server - jam HP dari paket yang baru diterima (diunduh_at = jam server saat paket disusun). */
+export const selisihDariPaket = (paket: PaketTes, hpMs: number): number => {
+  const s = Date.parse(paket.diunduh_at);
+  return Number.isFinite(s) ? s - hpMs : 0;
+};
+
+export function simpanPaket(p: Penyimpan, jenis: string, pemilik: string, paket: PaketTes, selisihMs = 0): boolean {
   try {
-    p.setItem(kunciPaket(jenis), JSON.stringify({ v: 1, pemilik, paket } satisfies SimpananPaket));
+    p.setItem(kunciPaket(jenis), JSON.stringify({ v: 1, pemilik, paket, selisihMs } satisfies SimpananPaket));
     return true;
   } catch {
     return false; // penyimpanan penuh: tanda "belum siap" tetap tampil
   }
 }
 
-export function bacaPaket(p: Penyimpan, jenis: string, pemilik: string): PaketTes | null {
+export function bacaPaketLengkap(p: Penyimpan, jenis: string, pemilik: string): { paket: PaketTes; selisihMs: number } | null {
   try {
     const t = p.getItem(kunciPaket(jenis));
     if (!t) return null;
     const x = JSON.parse(t) as SimpananPaket;
     if (!x || x.v !== 1 || x.pemilik !== pemilik || !x.paket?.tersandi) return null;
-    return x.paket;
+    return { paket: x.paket, selisihMs: Number.isFinite(x.selisihMs) ? (x.selisihMs as number) : 0 };
   } catch {
     return null;
   }
 }
+
+export const bacaPaket = (p: Penyimpan, jenis: string, pemilik: string): PaketTes | null => bacaPaketLengkap(p, jenis, pemilik)?.paket ?? null;
 
 export function buangPaket(p: Penyimpan, jenis: string): void {
   try {
@@ -51,4 +60,10 @@ export function statusPaket(paket: PaketTes | null, tutupAt: string, sekarangMs:
   const tp = Date.parse(paket.tutup_at);
   if (Number.isFinite(tp) && sekarangMs >= tp) return "belum";
   return "siap";
+}
+
+/** Perbarui selisih jam (jawaban `sama` dari server membawa jam server) tanpa mengubah paket. */
+export function perbaruiSelisih(p: Penyimpan, jenis: string, pemilik: string, selisihMs: number): void {
+  const x = bacaPaketLengkap(p, jenis, pemilik);
+  if (x) simpanPaket(p, jenis, pemilik, x.paket, selisihMs);
 }

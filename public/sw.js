@@ -19,7 +19,9 @@
 // (HTML-nya saja, cache "sigap-halaman-v1", kunci = alamat tanpa ?query, maksimal MAKS_HALAMAN). Tetap jaringan dulu (deploy baru langsung terlihat);
 // tanpa sinyal/lambat > 4 dtk -> salinan terakhir halaman itu, baru offline.html. Data (API) tetap tidak disimpan di sini. Salinan dihapus saat
 // pengguna keluar (pesan "hapus-halaman" dari halaman), karena HP bisa dipakai bergantian.
-const VERSI = "sigap-v6";
+// (14 Nov 2026) v7, luring 3b-2: pesan "simpan-halaman" {alamat} — halaman SIGAP tertentu (mis. halaman tes) disimpan LEBIH DULU beserta
+// berkas /_next/static yang disebutnya, supaya bisa dibuka tanpa sinyal walau belum pernah dibuka. HTML masuk CACHE_HALAMAN (dibuang saat keluar).
+const VERSI = "sigap-v7";
 const CACHE_PETA = "sigap-peta-v1";
 const CACHE_APP = "sigap-app-v1";
 const CACHE_HALAMAN = "sigap-halaman-v1";
@@ -115,6 +117,36 @@ async function simpanHalamanKamera() {
   await pangkas(c);
 }
 
+// (14 Nov 2026, luring 3b-2) Simpan lebih dulu satu halaman SIGAP (HTML -> CACHE_HALAMAN, berkas statis -> CACHE_APP).
+async function simpanHalaman(alamat) {
+  const asal = self.location.origin;
+  const u = new URL(alamat, asal);
+  if (u.origin !== asal || !u.pathname.startsWith("/sigap/")) return;
+  const res = await fetch(u.pathname, { cache: "no-store", credentials: "same-origin" });
+  if (!res.ok || res.redirected || (res.headers.get("content-type") || "").indexOf("text/html") < 0) return;
+  const teks = await res.clone().text();
+  const ch = await caches.open(CACHE_HALAMAN);
+  await ch.delete(asal + u.pathname);
+  await ch.put(asal + u.pathname, res);
+  await pangkasHalaman(ch);
+  const c = await caches.open(CACHE_APP);
+  const daftar = new Set();
+  (teks.match(/\/_next\/static\/[A-Za-z0-9_\-\/.%~]+/g) || []).forEach((x) => daftar.add(x));
+  (teks.match(/static\/(?:chunks|css|media)\/[A-Za-z0-9_\-\/.%~]+/g) || []).forEach((x) => daftar.add("/_next/" + x));
+  for (const x of daftar) {
+    if (!/\.(?:js|css|woff2?)$/.test(x)) continue;
+    const a = new URL(x, asal).href;
+    if (await c.match(a)) continue;
+    try {
+      const r = await fetch(a);
+      if (r.status === 200) await c.put(a, r);
+    } catch (_) {
+      /* sinyal putus: yang sudah tersimpan tetap ada */
+    }
+  }
+  await pangkas(c);
+}
+
 // (14 Nov 2026) Kerangka halaman umum (L10): jaringan dulu (dengan satu coba ulang), simpan HTML yang baik; gagal/lambat -> salinan -> offline.html.
 async function pangkasHalaman(c) {
   const ks = await c.keys();
@@ -146,6 +178,7 @@ function halamanUmum(e, req) {
 
 self.addEventListener("message", (e) => {
   if (e.data && e.data.tipe === "simpan-halaman-kamera") e.waitUntil(simpanHalamanKamera().catch(() => undefined));
+  if (e.data && e.data.tipe === "simpan-halaman" && typeof e.data.alamat === "string") e.waitUntil(simpanHalaman(e.data.alamat).catch(() => undefined));
   // (14 Nov 2026) keluar dari akun: kerangka halaman milik akun ini dibuang (antrean kirim dan peta TIDAK disentuh; L4)
   if (e.data && e.data.tipe === "hapus-halaman") e.waitUntil(caches.delete(CACHE_HALAMAN).catch(() => undefined));
 });

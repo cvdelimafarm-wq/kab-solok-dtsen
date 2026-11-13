@@ -8,10 +8,53 @@
 import { useEffect, useState } from "react";
 import { bacaSesi, fetchJson } from "../admin/api";
 import { tandaPemilik } from "@/lib/luringSimpan";
-import { bacaPaket, simpanPaket, statusPaket, type StatusPaket } from "@/lib/paketLuringSimpan";
+import { bacaPaket, perbaruiSelisih, selisihDariPaket, simpanPaket, statusPaket, type StatusPaket } from "@/lib/paketLuringSimpan";
 import type { PaketTes } from "@/lib/sigapTesLuring";
+import { bacaSesiLuring, ditolakServer, muatanKirim, selesaikan, simpanSesiLuring, tandaiTerkirim } from "@/lib/sesiLuring";
 
-type Jawab = { boleh: false; alasan?: string } | { boleh: true; sama: true; versi: string } | { boleh: true; paket: PaketTes };
+type Jawab = { boleh: false; alasan?: string } | { boleh: true; sama: true; versi: string; sekarang?: string } | { boleh: true; paket: PaketTes };
+
+// (luring 3b-2) halaman tes disimpan lebih dulu oleh service worker (sekali per jenis per pemuatan halaman)
+const halamanDisimpan = new Set<string>();
+function simpanHalamanTes(jenis: string) {
+  if (halamanDisimpan.has(jenis)) return;
+  halamanDisimpan.add(jenis);
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ tipe: "simpan-halaman", alamat: `/sigap/pelatihan/tes/${jenis}` });
+  } catch {
+    /* tanpa service worker: halaman tes hanya tersedia bila pernah dibuka */
+  }
+}
+
+/**
+ * (luring 3b-3) Kirim jawaban tes tanpa sinyal yang tertunda. Sesi yang waktunya sudah habis diselesaikan dulu. Mengembalikan keadaan tes dari
+ * server bila diterima; null bila tidak ada yang dikirim / masih tanpa sinyal; { ditolak } bila server menolak (tidak dicoba lagi otomatis).
+ */
+export async function kirimSesiLuringTertunda<T = unknown>(jenis: string): Promise<{ keadaan: T } | { ditolak: string } | null> {
+  if (typeof window === "undefined") return null;
+  const pemilik = tandaPemilik(bacaSesi());
+  let s = bacaSesiLuring(localStorage, jenis, pemilik);
+  if (!s || !s.kotor || s.galat_kirim) return null;
+  const now = Date.now();
+  if (s.selesai_hp_ms === null) {
+    if (now < s.batas_hp_ms) return null; // masih dikerjakan
+    s = selesaikan(s, now);
+    simpanSesiLuring(localStorage, s);
+  }
+  if (!navigator.onLine) return null;
+  try {
+    const keadaan = await fetchJson<T>(`/api/sigap/pelatihan/tes/${jenis}/luring`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(muatanKirim(s, Date.now())) });
+    simpanSesiLuring(localStorage, tandaiTerkirim(s, new Date().toISOString()));
+    return { keadaan };
+  } catch (e) {
+    const pesan = e instanceof Error ? e.message : String(e);
+    if (ditolakServer(pesan)) {
+      simpanSesiLuring(localStorage, { ...s, galat_kirim: pesan });
+      return { ditolak: pesan };
+    }
+    return null;
+  }
+}
 
 const ULANG_MS = 30 * 60_000;
 const sedangJalan = new Set<string>();
@@ -25,10 +68,17 @@ export async function segarkanPaket(jenis: string): Promise<PaketTes | null> {
   if (sedangJalan.has(jenis) || !navigator.onLine) return lama;
   sedangJalan.add(jenis);
   try {
+    await kirimSesiLuringTertunda(jenis);
     const j = await fetchJson<Jawab>(`/api/sigap/pelatihan/tes/${jenis}/paket${lama ? `?versi=${encodeURIComponent(lama.versi)}` : ""}`);
     if (j.boleh && "paket" in j) {
-      simpanPaket(localStorage, jenis, pemilik, j.paket);
+      simpanPaket(localStorage, jenis, pemilik, j.paket, selisihDariPaket(j.paket, Date.now()));
+      simpanHalamanTes(jenis);
       return j.paket;
+    }
+    if (j.boleh && "sama" in j) {
+      const t = j.sekarang ? Date.parse(j.sekarang) : NaN;
+      if (Number.isFinite(t)) perbaruiSelisih(localStorage, jenis, pemilik, t - Date.now());
+      simpanHalamanTes(jenis);
     }
     return lama;
   } catch {
