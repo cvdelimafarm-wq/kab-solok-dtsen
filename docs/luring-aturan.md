@@ -14,3 +14,5 @@ Tes penjaga TIDAK boleh dihapus atau dilonggarkan tanpa persetujuan Iqbal. Bila 
 | L7 | Berkas `/_next/static/*` disimpan cache-first (nama berkas memuat hash isi), dibatasi jumlahnya. |
 | L8 | Pesan `simpan-halaman-kamera` dari halaman tetap didukung (penyiapan Kamera luring tanpa tombol). |
 | L9 | `npm test` wajib lulus sebelum push (`push.ps1` berhenti bila gagal). |
+| L10 | Tingkat 1 (kerangka): setiap halaman SIGAP yang pernah dibuka bersinyal disimpan HTML-nya (cache `sigap-halaman-v1`, kunci tanpa `?query`, dibatasi jumlahnya), jaringan dulu; tanpa sinyal tampil salinan terakhir, baru `offline.html`. API tidak disimpan. Salinan dibuang saat keluar akun (pesan `hapus-halaman`). |
+| L11 | Tanpa sinyal tidak pernah membingungkan: pita "Tanpa sinyal · terakhir tersambung pukul ..." tampil di semua halaman (`app/components/PitaLuring.tsx`, dipasang di `app/layout.tsx`). |

@@ -4,6 +4,7 @@
 // sigap_token) supaya halaman SIGAP lama langsung ikut masuk. Kunci penyisiran SAMA dgn
 // app/seruti/penyisiran-usaha.tsx (TOKEN_KEY dst.) supaya /penyisiran langsung terbuka tanpa login ulang.
 
+import { buangKerangkaHalaman } from "./luring";
 import { alamatMasukDengan, bersihkanTujuan } from "@/lib/sigapTujuan";
 
 export const KUNCI = {
@@ -119,6 +120,8 @@ export function hapusSemuaSesi(opsi?: { simpanData?: boolean }) {
     // (10 Okt 2026) data simpanan antar-layer milik akun ini ikut dibuang (HP bisa dipakai bergantian)
     aman(() => localStorage.removeItem(KUNCI_SIMPAN_DATA), undefined);
     aman(() => sessionStorage.removeItem("sigap_cache_v1"), undefined);
+    // (14 Nov 2026, luring L10) kerangka halaman tersimpan di service worker ikut dibuang
+    aman(() => buangKerangkaHalaman(), undefined);
   }
 }
 

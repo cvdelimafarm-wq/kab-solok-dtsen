@@ -15,9 +15,15 @@
 // (11 Okt 2026) v4: offline.html baru (membedakan "tidak ada sinyal" dari "server tidak terjangkau", daftar peta tersimpan) & ikon yang benar
 // (offline.html memakai /icons/icon-192.png; dulu yang disimpan /ikon/ikon-192.png sehingga ikon hilang saat luring).
 // (23 Okt 2026) v5: cache aplikasi "sigap-app-v1" (lihat catatan di atas) + pesan "simpan-halaman-kamera" dari halaman.
-const VERSI = "sigap-v5";
+// (14 Nov 2026) v6, luring tingkat 1 (docs/luring-aturan.md L10): SETIAP halaman SIGAP yang pernah dibuka bersinyal ikut disimpan sebagai KERANGKA
+// (HTML-nya saja, cache "sigap-halaman-v1", kunci = alamat tanpa ?query, maksimal MAKS_HALAMAN). Tetap jaringan dulu (deploy baru langsung terlihat);
+// tanpa sinyal/lambat > 4 dtk -> salinan terakhir halaman itu, baru offline.html. Data (API) tetap tidak disimpan di sini. Salinan dihapus saat
+// pengguna keluar (pesan "hapus-halaman" dari halaman), karena HP bisa dipakai bergantian.
+const VERSI = "sigap-v6";
 const CACHE_PETA = "sigap-peta-v1";
 const CACHE_APP = "sigap-app-v1";
+const CACHE_HALAMAN = "sigap-halaman-v1";
+const MAKS_HALAMAN = 80;
 const MAKS_BERKAS_APP = 400; // batas jumlah berkas di CACHE_APP; yang tertua dibuang
 const HALAMAN_KAMERA = "/sigap/foto";
 const TUNGGU_JARINGAN_MS = 4000;
@@ -32,7 +38,7 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((kunci) => Promise.all(kunci.filter((k) => k !== VERSI && k !== CACHE_PETA && k !== CACHE_APP).map((k) => caches.delete(k))))
+      .then((kunci) => Promise.all(kunci.filter((k) => k !== VERSI && k !== CACHE_PETA && k !== CACHE_APP && k !== CACHE_HALAMAN).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -109,8 +115,39 @@ async function simpanHalamanKamera() {
   await pangkas(c);
 }
 
+// (14 Nov 2026) Kerangka halaman umum (L10): jaringan dulu (dengan satu coba ulang), simpan HTML yang baik; gagal/lambat -> salinan -> offline.html.
+async function pangkasHalaman(c) {
+  const ks = await c.keys();
+  for (let i = 0; i < ks.length - MAKS_HALAMAN; i++) await c.delete(ks[i]);
+}
+function halamanUmum(e, req) {
+  const u = new URL(req.url);
+  const kunci = u.origin + u.pathname;
+  const jaringan = fetch(req)
+    .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => fetch(req)))
+    .then((res) => {
+      if (res && res.status === 200 && !res.redirected && (res.headers.get("content-type") || "").indexOf("text/html") >= 0) {
+        const salinan = res.clone();
+        caches.open(CACHE_HALAMAN).then((c) => c.delete(kunci).then(() => c.put(kunci, salinan)).then(() => pangkasHalaman(c))).catch(() => undefined);
+      }
+      return res;
+    });
+  e.waitUntil(jaringan.catch(() => undefined));
+  const tunggu = new Promise((r) => setTimeout(() => r(null), TUNGGU_JARINGAN_MS));
+  return Promise.race([jaringan.catch(() => null), tunggu]).then((res) => {
+    if (res && res.status < 500) return res;
+    return caches
+      .open(CACHE_HALAMAN)
+      .then((c) => c.match(kunci))
+      .then((ada) => ada || res || jaringan.catch(() => null))
+      .then((hasil) => hasil || caches.match("/offline.html"));
+  });
+}
+
 self.addEventListener("message", (e) => {
   if (e.data && e.data.tipe === "simpan-halaman-kamera") e.waitUntil(simpanHalamanKamera().catch(() => undefined));
+  // (14 Nov 2026) keluar dari akun: kerangka halaman milik akun ini dibuang (antrean kirim dan peta TIDAK disentuh; L4)
+  if (e.data && e.data.tipe === "hapus-halaman") e.waitUntil(caches.delete(CACHE_HALAMAN).catch(() => undefined));
 });
 
 self.addEventListener("fetch", (e) => {
@@ -147,6 +184,12 @@ self.addEventListener("fetch", (e) => {
   // (11 Okt 2026) Temuan audit: satu kegagalan sesaat (server restart saat deploy, koneksi putus di tengah) langsung menampilkan
   // "Tidak ada sinyal" walau internet ada. Kini dicoba ULANG sekali setelah 1,5 dtk; baru bila tetap gagal tampil offline.html
   // (yang membedakan sendiri "tidak ada sinyal" dan "server tidak terjangkau").
+  // (14 Nov 2026, L10) halaman SIGAP sendiri: jaringan dulu + kerangka tersimpan; asal lain tidak ditangani di sini
+  const un = new URL(req.url);
+  if (un.origin === self.location.origin) {
+    e.respondWith(halamanUmum(e, req));
+    return;
+  }
   e.respondWith(
     fetch(req)
       .catch(() => new Promise((r) => setTimeout(r, 1500)).then(() => fetch(req)))

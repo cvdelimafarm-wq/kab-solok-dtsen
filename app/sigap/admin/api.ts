@@ -54,6 +54,12 @@ export async function keluar() {
     /* abaikan: keluar tetap jalan */
   }
   hapusSesi();
+  // (14 Nov 2026, luring L10) kerangka halaman tersimpan milik akun ini dibuang
+  try {
+    (await import("../../portal/luring")).buangKerangkaHalaman();
+  } catch {
+    /* abaikan */
+  }
   window.location.replace("/");
 }
 

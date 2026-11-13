@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { AKHIRAN_JUDUL, ALAMAT_DASAR, DESKRIPSI_PORTAL, NAMA_PORTAL } from "@/lib/halaman";
 import DaftarSW from "@/app/components/DaftarSW";
+import PitaLuring from "@/app/components/PitaLuring"; // (14 Nov 2026) pita tanpa sinyal (luring L11)
 import GerbangAplikasi from "@/app/components/GerbangAplikasi";
 import PenjagaKembali from "@/app/components/PenjagaKembali";
 import PingAplikasi from "@/app/components/PingAplikasi";
@@ -67,6 +68,7 @@ export default function RootLayout({
         {/* (8 Okt 2026) di HP, beranda portal & /sigap/* wajib dibuka lewat aplikasi terpasang (permintaan user) */}
         <GerbangAplikasi>{children}</GerbangAplikasi>
         <DaftarSW />
+        <PitaLuring />
         {/* (8 Okt 2026) tombol Back bertingkat & Back dua kali untuk keluar di Beranda (aplikasi terpasang) */}
         <PenjagaKembali />
         {/* (8 Okt 2026) pemantauan pemasangan aplikasi: lapor mode "aplikasi"/"browser" saat dibuka */}

@@ -29,6 +29,7 @@ describe("penjaga luring (docs/luring-aturan.md)", () => {
     expect(aktif).toContain("k !== CACHE_PETA");
     expect(aktif).toContain("k !== CACHE_APP");
     expect(aktif).toContain("k !== VERSI");
+    expect(aktif).toContain("k !== CACHE_HALAMAN");
   });
   it("L4: service worker tidak menghapus antrean (IndexedDB/localStorage)", () => {
     expect(sw).not.toMatch(/indexedDB\.deleteDatabase/);
@@ -58,5 +59,20 @@ describe("penjaga luring (docs/luring-aturan.md)", () => {
     expect(ps).toMatch(/npm test/);
     expect(ps).toMatch(/\$LASTEXITCODE -ne 0/);
     expect(ps.indexOf("npm test")).toBeLessThan(ps.indexOf("git push"));
+  });
+  it("L10: kerangka halaman tersimpan (jaringan dulu), tanpa query, dibatasi, dibuang saat keluar", () => {
+    expect(konst("CACHE_HALAMAN")).toBe("sigap-halaman-v1");
+    expect(sw).toMatch(/const MAKS_HALAMAN = \d+;/);
+    expect(sw).toMatch(/function halamanUmum\(/);
+    expect(sw).toMatch(/const kunci = u\.origin \+ u\.pathname;/);
+    expect(sw).toContain('"hapus-halaman"');
+    const sesi = readFileSync(join(akar, "app", "portal", "sesi.ts"), "utf8");
+    expect(sesi).toMatch(/buangKerangkaHalaman\(\)/);
+    const admin = readFileSync(join(akar, "app", "sigap", "admin", "api.ts"), "utf8");
+    expect(admin).toMatch(/buangKerangkaHalaman\(\)/);
+  });
+  it("L11: pita tanpa sinyal terpasang di layout", () => {
+    expect(existsSync(join(akar, "app", "components", "PitaLuring.tsx"))).toBe(true);
+    expect(readFileSync(join(akar, "app", "layout.tsx"), "utf8")).toMatch(/<PitaLuring \/>/);
   });
 });
