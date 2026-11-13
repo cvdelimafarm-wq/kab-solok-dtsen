@@ -18,6 +18,7 @@ import { Kerangka, formatSisa, jamWib, useJamServer, useSaatLewat } from "../../
 import { useInfoPelatihan } from "../../infoPelatihan";
 import KartuTerkunci, { type KunciTes } from "../../KartuTerkunci"; // (2 Nov 2026) blokir antar tahapan + minta buka kunci
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
+import { baca as bacaLuring, gabungJawaban, galatJaringan, jamServerSekarang, kunciTesTerakhir, tandaPemilik, tulis as tulisLuring } from "@/lib/luringSimpan"; // (14 Nov 2026) luring L12
 
 type Keadaan = KeadaanTes & { terkunci?: KunciTes | null };
 
@@ -39,6 +40,8 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const jam = useJamServer();
   const { setujukan, sekarang } = jam;
   const [k, setK] = useState<Keadaan | null>(null);
+  const kRef = useRef<Keadaan | null>(null);
+  kRef.current = k;
   const [galat, setGalat] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [jawaban, setJawaban] = useState<Record<string, string>>({});
@@ -46,35 +49,65 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
   const [simpan, setSimpan] = useState<"tersimpan" | "menyimpan" | "gagal">("tersimpan");
   const [konfirmasi, setKonfirmasi] = useState(false);
   const [konfirmasiUlang, setKonfirmasiUlang] = useState(false);
+  // (14 Nov 2026, luring L12) true = keadaan dipulihkan dari simpanan HP karena server tidak terjangkau
+  const [dariHp, setDariHp] = useState(false);
+  const simpanHp = useCallback((d: Keadaan, jw: Record<string, string>, kotorHp: boolean) => {
+    if (typeof window === "undefined" || d.status !== "mengerjakan") return;
+    tulisLuring(localStorage, kunciTesTerakhir(jenis), { pemilik: tandaPemilik(bacaSesi()), jamServer: d.sekarang, keadaan: d, jawaban: jw, kotor: kotorHp });
+  }, [jenis]);
   useTutupDenganBack(konfirmasi, () => setKonfirmasi(false)); // (31 Okt 2026) Back HP = Batal pada konfirmasi kirim
   useTutupDenganBack(konfirmasiUlang, () => setKonfirmasiUlang(false)); // (31 Okt 2026) Back HP = Batal pada konfirmasi ulangi
+
+  // (14 Nov 2026) referensi autosave dideklarasikan lebih awal karena dipakai saat menerapkan keadaan (luring L12)
+  const jawabRef = useRef(jawaban);
+  const kotor = useRef(false);
 
   // ------------------------------------------------ muat keadaan
   const terapkan = useCallback(
     (d: Keadaan) => {
       setujukan(d.sekarang);
       setK(d);
-      if (d.jawaban) setJawaban((lama) => (Object.keys(lama).length === 0 ? d.jawaban! : lama));
+      // (14 Nov 2026, luring L12) jawaban di HP yang belum diterima server (kotor) menang atas jawaban server untuk percobaan yang sama
+      const lokal = d.status === "mengerjakan" ? bacaLuring<Keadaan, Record<string, string>>(localStorage, kunciTesTerakhir(jenis), tandaPemilik(bacaSesi())) : null;
+      const sama = !!lokal && lokal.keadaan.percobaan === d.percobaan && lokal.keadaan.sesi?.mulai_at === d.sesi?.mulai_at;
+      const g = gabungJawaban(d.jawaban, sama ? lokal : null);
+      if (g.kotor) {
+        jawabRef.current = g.jawaban;
+        setJawaban(g.jawaban);
+        kotor.current = true;
+      } else if (d.jawaban) setJawaban((lama) => (Object.keys(lama).length === 0 ? d.jawaban! : lama));
+      simpanHp(d, g.kotor ? g.jawaban : jawabRef.current && Object.keys(jawabRef.current).length ? jawabRef.current : d.jawaban ?? {}, g.kotor);
+      setDariHp(false);
       setGalat(null);
     },
-    [setujukan]
+    [setujukan, jenis, simpanHp]
   );
   const muat = useCallback(async () => {
     try {
       terapkan(await fetchJson<Keadaan>(url));
     } catch (e) {
-      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+      if (e instanceof SesiBerakhir) return;
+      // (14 Nov 2026, luring L12) tanpa sinyal: pulihkan soal, jawaban, dan jam dari simpanan HP; dikirim otomatis saat tersambung
+      const lokal = galatJaringan(e) ? bacaLuring<Keadaan, Record<string, string>>(localStorage, kunciTesTerakhir(jenis), tandaPemilik(bacaSesi())) : null;
+      if (lokal) {
+        const jam = jamServerSekarang(lokal);
+        if (jam) setujukan(jam);
+        setK(lokal.keadaan);
+        jawabRef.current = lokal.jawaban;
+        setJawaban(lokal.jawaban);
+        kotor.current = lokal.kotor;
+        setDariHp(true);
+        setGalat(null);
+      } else setGalat(pesanGalat(e));
     }
-  }, [url, terapkan]);
+  }, [url, terapkan, jenis, setujukan]);
   useEffect(() => {
     if (!bacaSesi()) return keMasuk();
     muat();
   }, [muat]);
 
   // ------------------------------------------------ autosave berantai (satu permintaan sekaligus)
-  const jawabRef = useRef(jawaban);
   jawabRef.current = jawaban;
-  const kotor = useRef(false);
   const terbang = useRef(false);
   const habis = useRef(false);
 
@@ -88,6 +121,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
         await fetchJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "simpan", jawaban: jawabRef.current }) });
       }
       setSimpan("tersimpan");
+      if (kRef.current) simpanHp(kRef.current, jawabRef.current, false); // (14 Nov 2026) diterima server: tanda kotor di HP dilepas
     } catch (e) {
       if (e instanceof SesiBerakhir) return;
       kotor.current = true;
@@ -101,7 +135,17 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
     } finally {
       terbang.current = false;
     }
-  }, [url, muat]);
+  }, [url, muat, simpanHp]);
+
+  // (14 Nov 2026, luring L12) begitu tersambung lagi: kirim yang tertunda lalu muat keadaan terbaru dari server
+  useEffect(() => {
+    const f = () => {
+      if (kotor.current && !terbang.current && !habis.current) void siram();
+      void muat();
+    };
+    window.addEventListener("online", f);
+    return () => window.removeEventListener("online", f);
+  }, [siram, muat]);
 
   // coba lagi tiap 5 detik bila ada perubahan belum tersimpan
   useEffect(() => {
@@ -117,6 +161,7 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       if (baru[String(nomor)] === kode) delete baru[String(nomor)]; // klik lagi = batalkan
       else baru[String(nomor)] = kode;
       jawabRef.current = baru;
+      if (kRef.current) simpanHp(kRef.current, baru, true); // (14 Nov 2026, luring L12) tiap ketukan langsung ditulis ke HP
       return baru;
     });
     kotor.current = true;
@@ -332,10 +377,15 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       {/* ------------------------------------------------ mengerjakan */}
       {mengerjakan && sekarangSoal && (
         <>
+          {dariHp && (
+            <p role="status" className="m-0 rounded-xl border border-[#F0D48A] bg-[#FFF6DD] px-3.5 py-2 text-[12.5px] leading-snug text-[#5C3D00]">
+              Tanpa sinyal: soal dan jawaban dipulihkan dari HP, waktu tetap berjalan. Lanjutkan mengerjakan; jawaban dikirim otomatis saat tersambung.
+            </p>
+          )}
           <div className="sticky top-[49px] z-10 flex items-center justify-between gap-2 rounded-xl border border-[#DDE6F3] bg-white px-3.5 py-2 shadow-sm">
             <div className="text-[12.5px] text-[#5B6B84]">
               Soal <b className="text-[#1B2B4B]">{idx + 1}</b> dari {soal.length}
-              <span className="ml-2">{simpan === "menyimpan" ? "Menyimpan…" : simpan === "gagal" ? <b className="text-[#B42329]">Gagal menyimpan, mencoba lagi…</b> : <span className="text-[#13794B]">✓ tersimpan</span>}</span>
+              <span className="ml-2">{simpan === "menyimpan" ? "Menyimpan…" : simpan === "gagal" ? <b className="text-[#B42329]">Tersimpan di HP; dikirim otomatis saat tersambung…</b> : <span className="text-[#13794B]">✓ tersimpan</span>}</span>
             </div>
             <div className={`text-[20px] font-extrabold tabular-nums ${sisaBatas < 60 ? "text-[#B42329]" : "text-[#0F2A52]"}`} aria-label="Sisa waktu">
               ⏱ {formatSisa(sisaBatas)}

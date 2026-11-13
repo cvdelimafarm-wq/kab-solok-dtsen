@@ -222,6 +222,7 @@ export const BUKAN_RESPONS: readonly { tabel: string; alasan: string }[] = [
   { tabel: "sigap_seleksi_wilayah", alasan: "Wilayah seleksi yang diatur pengelola." },
   { tabel: "sigap_surat_tugas", alasan: "Surat tugas yang diunggah admin." },
   { tabel: "sigap_tes", alasan: "Definisi tes yang dibuat pengelola." },
+  { tabel: "sigap_tes_paket_unduh", alasan: "Catatan otomatis sistem: versi paket soal luring yang dipegang HP peserta (bukan isian; dipantau di kartu Agenda sesi instruktur)." },
   { tabel: "sigap_tes_soal", alasan: "Soal tes yang diunggah pengelola." },
 ];
 

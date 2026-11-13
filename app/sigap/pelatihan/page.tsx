@@ -32,6 +32,7 @@ import { ringkasAbsenSaya, useAbsenSaya } from "./absenSaya"; // (3 Nov 2026) la
 import { useVanguardSaya } from "../vanguardSaya"; // (3 Nov 2026) langkah Vanguard di lajur ikon
 import { useRoleplaySaya } from "../roleplaySaya"; // (8 Nov 2026) langkah 8 Roleplaying by Vanguard
 import KartuTerkunci from "./KartuTerkunci"; // (2 Nov 2026) blokir antar tahapan + minta buka kunci
+import { usePaketLuring } from "./paketLuring"; // (14 Nov 2026, luring 3b-1) paket soal tersandi diunduh di belakang sejak H-1
 import { ModalPengumuman } from "./pengumumanUi";
 import KartuTranslokPelatihan from "./translok";
 import KartuKuisPra from "./kartuKuisPra"; // (31 Okt 2026) kuis pra pelatihan (tampil bila diaktifkan panitia)
@@ -140,6 +141,8 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
   useSaatLewat(t.status === "buka" ? t.tutup_at : null, sekarangMs, segarkan, `${t.jenis}-tutup`);
   useSaatLewat(t.status === "mengerjakan" && t.sesi ? t.sesi.batas_at : null, sekarangMs, segarkan, `${t.jenis}-batas`);
   useSaatLewat(t.status === "selesai" && t.hasil_tertunda ? t.tutup_at : null, sekarangMs, segarkan, `${t.jenis}-hasil`);
+  const perluPaket = t.status === "belum_buka" || t.status === "buka" || t.status === "mengerjakan" || (t.status === "selesai" && t.bisa_ulang);
+  const paketHp = usePaketLuring(t.jenis, t.tutup_at, perluPaket);
 
   const judul = LABEL_JENIS_TES[t.jenis];
   const href = `/sigap/pelatihan/tes/${t.jenis}`;
@@ -252,6 +255,11 @@ function IsiTes({ t, sekarangMs, segarkan }: { t: TesHub; sekarangMs: () => numb
     <>
       {tgl}
       {isi}
+      {perluPaket && paketHp !== "tidak_perlu" && (
+        <p className={`mt-2 text-[12px] font-semibold ${paketHp === "siap" ? "text-[#13794B]" : "text-[#6B7A90]"}`}>
+          {paketHp === "siap" ? "✓ Siap dikerjakan tanpa sinyal (soal tersimpan terkunci di HP)" : "Soal untuk dikerjakan tanpa sinyal diunduh otomatis mulai H-1 saat HP bersinyal."}
+        </p>
+      )}
     </>
   );
 }

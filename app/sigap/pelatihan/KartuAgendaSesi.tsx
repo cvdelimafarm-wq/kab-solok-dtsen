@@ -13,6 +13,8 @@ import { jamWib } from "./komponen";
 import { LABEL_STATUS_AGENDA, aksiTersedia, peringatanMulai, type AksiAgenda, type StatusAgenda } from "@/lib/sigapAgenda";
 
 type Sesi = {
+  sandi_luring?: string | null;
+  siap_luring?: { siap: number; total: number; belum: string[] } | null;
   id: number;
   tes_id: number;
   jenis: string;
@@ -105,6 +107,28 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
                 </p>
               )}
               {s.jumlah_soal === 0 && <p className="mt-1 text-[12.5px] text-[#8A6200]">Soal belum diunggah; peserta belum bisa mengerjakan.</p>}
+              {/* (14 Nov 2026, luring 3b-1) berapa HP peserta kelas ini yang sudah memegang soal terkunci (unduh otomatis sejak H-1) */}
+              {s.siap_luring && s.siap_luring.total > 0 && s.status !== "selesai" && (
+                <div className="mt-1.5 text-[12.5px] text-[#3A4A63]">
+                  <span className={s.siap_luring.siap === s.siap_luring.total ? "font-bold text-[#13794B]" : "font-semibold"}>
+                    Siap tanpa sinyal: {s.siap_luring.siap} dari {s.siap_luring.total} peserta
+                  </span>
+                  {s.siap_luring.belum.length > 0 && (
+                    <details className="mt-0.5">
+                      <summary className="cursor-pointer text-[12px] text-[#1F5FD1]">Belum siap ({s.siap_luring.belum.length}) — minta buka SIGAP Pelatihan saat ada sinyal</summary>
+                      <p className="mt-0.5 break-words text-[12px] leading-snug text-[#55657D]">{s.siap_luring.belum.join(", ")}</p>
+                    </details>
+                  )}
+                </div>
+              )}
+              {/* (14 Nov 2026, luring 3b) sandi A: dibacakan setelah Mulai bila ada peserta tanpa sinyal; membuka soal yang sudah terunduh di HP-nya */}
+              {s.sandi_luring && s.status === "berjalan" && (
+                <div className="mt-2 rounded-[12px] border border-[#CFE0F5] bg-[#F3F8FF] px-3 py-2">
+                  <p className="text-[11.5px] font-bold uppercase tracking-wide text-[#3A5A8C]">Sandi untuk peserta tanpa sinyal</p>
+                  <p className="mt-0.5 font-mono text-[20px] font-extrabold tracking-wider text-[#0F2A52]">{s.sandi_luring}</p>
+                  <p className="mt-0.5 text-[11.5px] leading-snug text-[#55657D]">Bacakan hanya bila ada peserta yang tidak bisa memuat tes. Soalnya sudah terunduh di HP sejak H-1; jawaban dikirim otomatis saat ada sinyal (paling lambat 24 jam).</p>
+                </div>
+              )}
               {aksi && (
                 <div className="mt-2.5">
                   {yakin === kunci ? (

@@ -9,10 +9,12 @@
 // Mulai juga mengirim notifikasi push ke peserta kelas itu (tanpa ditunggu; gagal/tanpa VAPID = diabaikan).
 // Peserta yang sudah memulai tetap menyelesaikan waktunya; Selesai hanya menutup jendela bagi yang BELUM mulai.
 
+import { sandiTes, siapLuringKelas, type SiapLuring } from "@/lib/sigapTesLuringDb"; // (14 Nov 2026) luring 3b
+import { versiSoal } from "@/lib/sigapTesLuring";
 import { NextRequest, NextResponse } from "next/server";
 import type { Db } from "@/lib/sigap";
 import { catatAudit } from "@/lib/sigapAkses";
-import { akunDariRequest, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatTesDaftar } from "@/lib/sigapTesDb";
+import { FILTER_BUKAN_ADMINISTRASI, akunDariRequest, dbAdmin, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTesDaftar } from "@/lib/sigapTesDb";
 import { muatInstruktur } from "@/lib/sigapInstrukturDb";
 import { KOLOM_AGENDA, aksiAgendaSah, statusAgenda, tutupJendela, type BarisAgenda, type StatusAgenda } from "@/lib/sigapAgenda";
 import { alamatTes, pesanSesiDibuka } from "@/lib/sigapSesiTerbuka";
@@ -25,6 +27,10 @@ export const dynamic = "force-dynamic";
 const galat = (pesan: string, status = 400) => NextResponse.json({ error: pesan }, { status });
 
 type SesiAgenda = {
+  /** (14 Nov 2026, luring 3b) sandi A pembuka soal di HP peserta tanpa sinyal; hanya untuk instruktur kelas ini */
+  sandi_luring?: string | null;
+  /** (luring 3b-1) peserta kelas ini yang HP-nya sudah memegang soal versi terbaru */
+  siap_luring?: SiapLuring | null;
   id: number;
   tes_id: number;
   jenis: string;
@@ -92,6 +98,20 @@ async function susun(db: Db, kegiatanId: number, kelasSaya: number[], sekarang: 
       };
     })
     .sort((a, b) => a.kelas - b.kelas || urutan(a.jenis) - urutan(b.jenis));
+  // (14 Nov 2026, luring 3b) sandi A per tes (dibuat sekali bila belum ada)
+  const sandi = new Map<number, string | null>();
+  for (const id of [...new Set(daftar.map((d) => d.tes_id))]) sandi.set(id, await sandiTes(db, id));
+  for (const d of daftar) d.sandi_luring = sandi.get(d.tes_id) ?? null;
+  // (luring 3b-1) kesiapan tanpa sinyal per kelas, hanya untuk sesi yang belum selesai
+  const versi = new Map<number, string>();
+  for (const d of daftar) {
+    if (d.status === "selesai" || d.jumlah_soal === 0) continue;
+    if (!versi.has(d.tes_id)) {
+      const s = await muatSoal(db, d.tes_id);
+      versi.set(d.tes_id, await versiSoal(s.map((x) => ({ nomor: x.nomor, teks: x.teks, opsi: x.opsi.map((o) => ({ kode: o.kode, teks: o.teks })) }))));
+    }
+    d.siap_luring = await siapLuringKelas(db, kegiatanId, d.tes_id, d.kelas, versi.get(d.tes_id)!, FILTER_BUKAN_ADMINISTRASI);
+  }
   return { ada: daftar.length > 0, sekarang: sekarang.toISOString(), sesi: daftar };
 }
 

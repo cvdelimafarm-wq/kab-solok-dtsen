@@ -75,4 +75,14 @@ describe("penjaga luring (docs/luring-aturan.md)", () => {
     expect(existsSync(join(akar, "app", "components", "PitaLuring.tsx"))).toBe(true);
     expect(readFileSync(join(akar, "app", "layout.tsx"), "utf8")).toMatch(/<PitaLuring \/>/);
   });
+  it("L12: tes memakai simpanan HP; keluar akun tidak membuang yang belum terkirim", () => {
+    const tes = readFileSync(join(akar, "app", "sigap", "pelatihan", "tes", "[jenis]", "page.tsx"), "utf8");
+    expect(tes).toMatch(/from "@\/lib\/luringSimpan"/);
+    expect(tes).toMatch(/simpanHp\(kRef\.current, baru, true\)/); // tiap ketukan ditulis
+    expect(tes).toMatch(/addEventListener\("online"/);
+    const sesi = readFileSync(join(akar, "app", "portal", "sesi.ts"), "utf8");
+    expect(sesi).toMatch(/bersihkanSaatKeluar\(localStorage\)/);
+    const lib = readFileSync(join(akar, "lib", "luringSimpan.ts"), "utf8");
+    expect(lib).toMatch(/if \(!x \|\| !x\.kotor\) buang\.push\(k\)/);
+  });
 });

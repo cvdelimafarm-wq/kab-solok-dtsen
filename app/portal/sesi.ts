@@ -5,6 +5,7 @@
 // app/seruti/penyisiran-usaha.tsx (TOKEN_KEY dst.) supaya /penyisiran langsung terbuka tanpa login ulang.
 
 import { buangKerangkaHalaman } from "./luring";
+import { bersihkanSaatKeluar } from "@/lib/luringSimpan";
 import { alamatMasukDengan, bersihkanTujuan } from "@/lib/sigapTujuan";
 
 export const KUNCI = {
@@ -122,6 +123,8 @@ export function hapusSemuaSesi(opsi?: { simpanData?: boolean }) {
     aman(() => sessionStorage.removeItem("sigap_cache_v1"), undefined);
     // (14 Nov 2026, luring L10) kerangka halaman tersimpan di service worker ikut dibuang
     aman(() => buangKerangkaHalaman(), undefined);
+    // (14 Nov 2026, luring L12) simpanan kerja yang sudah terkirim dibuang; yang belum terkirim DITAHAN sampai pemiliknya masuk lagi
+    aman(() => bersihkanSaatKeluar(localStorage), undefined);
   }
 }
 
