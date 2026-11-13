@@ -14,17 +14,20 @@ import Bingkai from "../../kontrak/Bingkai";
 import BatasShapefile from "./BatasShapefile";
 import KkMaster from "./KkMaster";
 import OrangMaster from "./OrangMaster";
+import PoinBeban from "./PoinBeban";
 import WilayahPeta from "./WilayahPeta";
 
-type TabMaster = "wilayah" | "batas" | "kk" | "orang";
+// (13 Nov 2026, keputusan C) tab "Poin beban kerja": sumber utama poin per satuan jenis pekerjaan × survei (PoinBeban.tsx, SQL 20261113c).
+type TabMaster = "wilayah" | "batas" | "kk" | "orang" | "poin";
 const TAB: ItemTab<TabMaster>[] = [
   { kode: "wilayah", label: "Wilayah dan peta" },
   { kode: "batas", label: "Batas wilayah" },
   { kode: "kk", label: "KK master" },
   { kode: "orang", label: "Mitra dan Pegawai" },
+  { kode: "poin", label: "Poin beban kerja" },
 ];
-const JUDUL: Record<TabMaster, string> = { wilayah: "Wilayah dan peta", batas: "Batas wilayah", kk: "KK master", orang: "Mitra dan Pegawai" };
-const sahTab = (t: string | null): t is TabMaster => t === "wilayah" || t === "batas" || t === "kk" || t === "orang";
+const JUDUL: Record<TabMaster, string> = { wilayah: "Wilayah dan peta", batas: "Batas wilayah", kk: "KK master", orang: "Mitra dan Pegawai", poin: "Poin beban kerja" };
+const sahTab = (t: string | null): t is TabMaster => t === "wilayah" || t === "batas" || t === "kk" || t === "orang" || t === "poin";
 
 export default function MasterWilayahHalaman() {
   const [tab, setTab] = useState<TabMaster>("wilayah");
@@ -56,7 +59,7 @@ export default function MasterWilayahHalaman() {
       kecil="SIGAP · Master"
       jejak={["Pengelolaan", "Master", JUDUL[tab]]}
       judul="Master"
-      sub="Satu sumber wilayah, peta, batas wilayah, keluarga (KK), serta mitra dan pegawai untuk semua kegiatan · khusus admin Master"
+      sub="Satu sumber wilayah, peta, batas wilayah, keluarga (KK), mitra dan pegawai, serta poin beban kerja untuk semua kegiatan"
     >
       <div className="flex flex-col gap-3.5">
         <BarisTab tab={TAB} aktif={tab} onPilih={pilih} />
@@ -64,6 +67,7 @@ export default function MasterWilayahHalaman() {
         {tab === "batas" && <BatasShapefile />}
         {tab === "kk" && <KkMaster />}
         {tab === "orang" && <OrangMaster />}
+        {tab === "poin" && <PoinBeban />}
       </div>
     </Bingkai>
   );

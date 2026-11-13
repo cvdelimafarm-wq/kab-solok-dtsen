@@ -85,6 +85,13 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_keluaran_tanda: ["keluaran_id", "bagian", "status", "catatan", "at", "oleh_nama"],
   keu_v_ident_acuan: ["ident_id", "tahun", "ro_kode", "nama", "ident_ver", "form_sah", "upd", "lanjutan_ada", "lanjutan_ver", "lanjutan_status", "pasca_h15", "lanjutan_isi", "kebijakan_id", "kebijakan_ver", "sumber", "lanjutan_ver_terbaru"],
   keu_v_ident_kegiatan: ["id", "ident_id", "kegiatan_id", "fungsi", "disarankan", "catatan", "ditautkan_at", "ditautkan_oleh_nama", "kode", "nama", "kode_anggaran", "jenis", "aktif", "mulai", "selesai", "n_penugasan", "sumber", "periode", "ident_ver"],
+  // (13 Nov 2026, C) Master > Poin beban kerja (SQL 20261113c/c2/d)
+  keu_v_poin_sel: ["id", "jenis_id", "jenis_kode", "jenis_nama", "satuan", "jenis_urut", "jenis_aktif", "survei_id", "survei_kode", "survei_nama", "survei_urut", "awal", "awal_ket", "manual", "manual_timpa", "manual_alasan", "manual_oleh_nama", "manual_at", "poin_berlaku", "sumber_berlaku", "berlaku_at", "standar_per_hari", "usul_poin", "usul_n", "usul_pencilan", "riwayat_poin", "riwayat_n", "riwayat_orang", "kandidat", "sumber_kandidat", "menunggu_id", "menunggu_poin", "menunggu_sumber", "menunggu_oleh", "menunggu_oleh_nama"],
+  keu_v_poin_perubahan: ["id", "sel_id", "jenis_id", "survei_id", "poin_lama", "poin_baru", "sumber", "alasan", "status", "diajukan_at", "diajukan_oleh_nama", "diputus_at", "diputus_oleh_nama", "catatan_putus"],
+  keu_v_poin_berlaku: ["jenis_id", "survei_id", "survei_kode", "poin_berlaku", "sumber_berlaku", "berlaku_at"],
+  keu_v_poin_survei: ["id", "kode", "nama", "pola", "urut", "aktif"],
+  keu_v_poin_atur: ["kunci", "nilai", "ket", "diubah_at", "diubah_oleh_nama"],
+  keu_v_poin_jenis: ["id", "kode", "nama", "satuan", "urut", "aktif", "poin_katalog_skala75"],
   // (13 Nov 2026, A) usulan tanggal kegiatan dari versi identifikasi baru (SQL 20261113b)
   keu_v_ident_kegiatan_tanggal: ["id", "ident_id", "kegiatan_id", "ident_ver", "fungsi", "periode", "mulai_lama", "selesai_lama", "mulai_baru", "selesai_baru", "status", "catatan", "dibuat_at", "diputus_at", "diputus_oleh_nama", "kegiatan_nama", "kegiatan_kode"],
   keu_v_kegiatan_calon: ["ident_id", "kegiatan_id", "kode", "nama", "kode_anggaran", "jenis", "aktif", "mulai", "selesai", "disarankan", "tertaut"],

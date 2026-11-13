@@ -17,6 +17,7 @@ import { bacaDaftar, muatDiBatas, untukSimpan } from "@/lib/delego/bukti";
 import { NAMA_PERAN, type Delegasi } from "@/lib/delego/tipe";
 import { aksiKeu, useKirim, useSaya } from "../data";
 import { PenyuntingBukti, type ButirForm } from "../BuktiFoto";
+import UsulPoin from "../UsulPoin";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
 import { Galat, Halaman, Info, Kartu, Kosong, Medan, Memuat, Peringatan, fmt } from "../ui";
@@ -165,6 +166,8 @@ export default function Lapor() {
                   Laporan tersimpan{hasil.terlambat ? " (ditandai terlambat)" : ""}{hasil.mewakili ? " (diwakili)" : ""}. <Link href="/sigap/delego/saya" className="font-semibold underline">Kembali ke Delegasi saya</Link>.
                 </Info>
               )}
+              {/* (13 Nov 2026, C) usul poin sekali per jenis × survei per triwulan, hanya untuk delegasi berjenis milik sendiri */}
+              {hasil && jenis && !mewakili && <UsulPoin delegasi={terpilih.id} />}
               <button type="button" className={`${KELAS.tombolUtama} w-full`} disabled={!sah || kirim.mengirim} onClick={() => void kirimLaporan()}>
                 {kirim.mengirim ? "Mengirim..." : ada ? "Perbarui laporan" : "Kirim laporan"}
               </button>
