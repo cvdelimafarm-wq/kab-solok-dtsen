@@ -24,6 +24,7 @@ import { useBacaKeu } from "@/app/sigap/ro/useKeu";
 import { urlBaca } from "@/lib/keu/ro";
 import { normalisasiLanjutan } from "@/lib/keu/lanjutan";
 import { keadaanButir, LABEL_BUTIR, WAKTU_BELAJAR, type BarisBelajar } from "@/lib/belajarAturan";
+import LembarKomponen from "./LembarKomponen";
 
 const LINK = "font-semibold text-[#1F5FD1] underline";
 
@@ -242,6 +243,9 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
                 </ul>
               )}
             </Bagian>
+
+            {/* (14 Nov 2026, Fase 2d) lembar komponen teknis, dibaca dari pengaturan Kelola yang sama */}
+            {id !== null && <LembarKomponen identId={id} fungsi={fungsi} belajar={belajar.baris ?? []} />}
 
             <Bagian judul={`Kegiatan SIGAP tertaut (${NAMA_FUNGSI[fungsi]})`} ket="Kegiatan di SIGAP yang menjalankan tahap ini; ditautkan di halaman Pelaksanaan.">
               {tertautFungsi.length === 0 ? (
