@@ -35,7 +35,7 @@ export default function LembarKomponen({ identId, fungsi, belajar }: { identId: 
         </p>
       </div>
       {data.galat && <p className="m-0 text-[12.5px] text-[#7A1D22]">{data.galat}</p>}
-      <div className="max-w-full overflow-x-auto">
+      <div className="relative w-full min-w-0 max-w-full overflow-x-auto">
         <table className="w-full min-w-[620px] border-collapse text-left text-[12.5px]">
           <thead>
             <tr className="bg-[#F7F9FC] text-[11px] uppercase tracking-wide text-[#5B6B84]">

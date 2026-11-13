@@ -89,7 +89,7 @@ export default function DrafDelegasi({ identId }: { identId: number }) {
       {draf.data?.siap && butir.length === 0 && <p className="m-0 mt-2 text-[12.5px] text-[#5B6B84]">Tidak ada pegawai organik dengan penugasan pada kegiatan tertaut yang belum selesai.</p>}
       {butir.length > 0 && (
         <>
-          <div className="mt-2.5 max-w-full overflow-x-auto">
+          <div className="relative mt-2.5 max-w-full overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
               <thead>
                 <tr className="bg-[#F7F9FC] text-[11px] uppercase tracking-wide text-[#5B6B84]">
