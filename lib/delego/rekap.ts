@@ -118,8 +118,16 @@ export function susunRekap(m: MasukanRekap): HasilRekap {
         }
       }
       const unik = new Set<number>();
+      // (14 Nov 2026, Fase 2b; keputusan Iqbal 13 Nov) butir kerja menggantikan blok hari lapangan: bila pegawai punya delegasi BERJENIS
+      // (poin per satuan) pada kegiatan yang sama dan hari itu masuk rentangnya, hari lapangan kegiatan itu tidak lagi dihitung penuh.
+      const diganti = new Set<number>();
+      for (const d of punyaDelegasi) {
+        if (d.kegiatan_id == null || d.status === "usulan" || d.status === "batal" || d.status === "ditunda") continue;
+        if (!(d.poin_per_satuan !== null && d.poin_per_satuan !== undefined && ambil(d.poin_per_satuan) > 0)) continue;
+        if (d.mulai <= t && t <= d.tenggat) diganti.add(d.kegiatan_id);
+      }
       for (const l of punyaLapangan) {
-        if (l.tanggal !== t || unik.has(l.kegiatan_id) || !cocok(l.kegiatan_id)) continue;
+        if (l.tanggal !== t || unik.has(l.kegiatan_id) || !cocok(l.kegiatan_id) || diganti.has(l.kegiatan_id)) continue;
         unik.add(l.kegiatan_id);
         rincian.push({ sumber: l.jenis === "pelatihan" ? "pelatihan" : "lapangan", kegiatanId: l.kegiatan_id, kegiatan: nama(l.kegiatan_id, l.kegiatan), poin: kapasitasPada(t), judul: l.peran ? `Peran ${l.peran.toUpperCase()}` : undefined });
         catat(l.kegiatan_id, nama(l.kegiatan_id, l.kegiatan));

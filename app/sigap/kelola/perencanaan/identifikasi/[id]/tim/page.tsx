@@ -24,6 +24,7 @@ import LencanaNotif from "../../../notifikasi/LencanaNotif";
 import { hariIniWib, useIdent } from "../../useIdent";
 import { SusunanTim } from "./TabelTim";
 import StatusKursi from "./StatusKursi";
+import DrafDelegasi from "./DrafDelegasi";
 import { ModalKeluar, ModalTerapkan, type PilihanSimpan } from "../lanjutan/ModalTerapkan";
 import { useLanjutan } from "../lanjutan/useLanjutan";
 
@@ -155,6 +156,8 @@ function Isi() {
           <>
             {/* (14 Nov 2026, Fase 2a) status kursi dari versi hilir dan penugasan kegiatan tertaut */}
             {id !== null && <StatusKursi identId={id} isiHilir={hilirIsi} verHilir={rowHilir?.ver ?? null} statusHilir={rowHilir?.status ?? null} />}
+            {/* (14 Nov 2026, Fase 2b) draf delegasi per kursi organik */}
+            {id !== null && <DrafDelegasi identId={id} />}
             <SusunanTim isi={isi} lembar={lembar} lembarSiap={lj.lembarSiap} versi={tersimpan.ver} verHilir={pinAda && rowHilir ? rowHilir.ver : null} mati={matiForm} setJabatan={setJabatan} hrefLanjutan={`${dasar}/lanjutan`} />
           </>
         )}

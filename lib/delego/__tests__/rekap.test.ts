@@ -126,3 +126,24 @@ describe("susunRekap", () => {
     expect(h.kegiatan[0].nama).toBe("Kegiatan 99");
   });
 });
+
+describe("Fase 2b: butir berjenis menggantikan blok hari lapangan", () => {
+  it("delegasi berjenis pada kegiatan yang sama dan dalam rentangnya menghapus blok lapangan hari itu saja", () => {
+    const h = susunRekap({
+      ...dasar,
+      delegasi: [dg({ judul: "Memeriksa dokumen Seruti", kegiatan_id: 6, target_harian: "15.00", poin_per_satuan: "9.00", mulai: "2026-11-11", tenggat: "2026-11-13" })],
+      lapangan: [lap({ tanggal: "2026-11-10" }), lap({ tanggal: "2026-11-11" }), lap({ tanggal: "2026-11-11", kegiatan_id: 7, kegiatan: "Pelatihan", jenis: "pelatihan" })],
+    });
+    const a = h.baris.find((b) => b.akun === 4)!;
+    const s10 = a.sel.find((s) => s.tanggal === "2026-11-10")!;
+    const s11 = a.sel.find((s) => s.tanggal === "2026-11-11")!;
+    expect(s10.poin).toBe(kapasitasPada("2026-11-10")); // sebelum delegasi: blok penuh
+    expect(s11.rincian.map((r) => r.sumber).sort()).toEqual(["delegasi", "pelatihan"]); // blok pendataan kegiatan 6 diganti; kegiatan lain tetap
+    expect(s11.poin).toBe(15 + kapasitasPada("2026-11-11"));
+  });
+  it("delegasi tanpa jenis (poin langsung) tidak menggantikan blok", () => {
+    const h = susunRekap({ ...dasar, delegasi: [dg({ kegiatan_id: 6, target_harian: "20.00" })], lapangan: [lap({ tanggal: "2026-11-10" })] });
+    const s = h.baris.find((b) => b.akun === 4)!.sel.find((x) => x.tanggal === "2026-11-10")!;
+    expect(s.poin).toBe(20 + kapasitasPada("2026-11-10"));
+  });
+});

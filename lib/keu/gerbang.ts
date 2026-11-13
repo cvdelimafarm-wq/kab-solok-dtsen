@@ -33,6 +33,8 @@ export const FUNGSI_BACA: readonly string[] = [
   "keu_poin_usul_perlu",
   // (14 Nov 2026, D) Pratinjau poin per satuan dari Master untuk Buat delegasi, Perintah, Catat, Berulang (hanya membaca).
   "keu_poin_untuk_daftar",
+  // (14 Nov 2026, Fase 2b) Draf delegasi per kursi di Susunan tim kerja (hanya membaca).
+  "keu_dlg_draf_kursi",
 ];
 
 const RE_FUNGSI = /^keu_[a-z0-9_]{1,60}$/;
