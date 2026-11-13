@@ -90,6 +90,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   // (13 Nov 2026, C) Master > Poin beban kerja (SQL 20261113c/c2/d)
   keu_v_poin_sel: ["id", "jenis_id", "jenis_kode", "jenis_nama", "satuan", "jenis_urut", "jenis_aktif", "survei_id", "survei_kode", "survei_nama", "survei_urut", "awal", "awal_ket", "manual", "manual_timpa", "manual_alasan", "manual_oleh_nama", "manual_at", "poin_berlaku", "sumber_berlaku", "berlaku_at", "standar_per_hari", "usul_poin", "usul_n", "usul_pencilan", "riwayat_poin", "riwayat_n", "riwayat_orang", "kandidat", "sumber_kandidat", "menunggu_id", "menunggu_poin", "menunggu_sumber", "menunggu_oleh", "menunggu_oleh_nama"],
   keu_v_poin_perubahan: ["id", "sel_id", "jenis_id", "survei_id", "poin_lama", "poin_baru", "sumber", "alasan", "status", "diajukan_at", "diajukan_oleh_nama", "diputus_at", "diputus_oleh_nama", "catatan_putus"],
+  keu_v_ident_kursi_tugas: ["ident_id", "fungsi", "kegiatan_id", "kegiatan_nama", "penugasan_id", "akun_id", "peran", "atasan_akun_id", "ada_st", "dikunci_at"],
   keu_v_poin_berlaku: ["jenis_id", "survei_id", "survei_kode", "poin_berlaku", "sumber_berlaku", "berlaku_at"],
   keu_v_poin_survei: ["id", "kode", "nama", "pola", "urut", "aktif"],
   keu_v_poin_atur: ["kunci", "nilai", "ket", "diubah_at", "diubah_oleh_nama"],
