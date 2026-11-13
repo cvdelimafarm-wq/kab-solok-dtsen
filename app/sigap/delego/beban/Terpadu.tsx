@@ -6,7 +6,7 @@
 // pelatihan, dan ketersediaan) dalam satu matriks per hari. Usulan yang belum disetujui hanya muncul sebagai bayangan (tidak membebani). Saringan kegiatan
 // menyempitkan matriks ke satu kegiatan atau pekerjaan kantor; ringkasan per kegiatan menunjukkan ke mana waktu seseorang tersedot.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { awalBulan, awalMinggu, tambahHari, tglPendek } from "@/lib/delego/hitung";
 import { NAMA_KANTOR, rentangMinggu, susunRekap, type BarisRekap, type SaringanKegiatan, type SelRekap } from "@/lib/delego/rekap";
 import { gradienLegenda, warnaBeban } from "@/lib/delego/warna";
@@ -64,6 +64,16 @@ export default function Terpadu() {
     return susunRekap({ orang: rekap.data.orang, delegasi: bahan.data.delegasi, lapangan: rekap.data.lapangan, ketersediaan: rekap.data.ketersediaan, dari, sampai, namaKegiatan: nama, kegiatan: null }).kegiatan;
   }, [rekap.data, bahan.data, dari, sampai, nama]);
 
+  // (13 Nov 2026, Fase 0) gulir kolom hari ini ke tampilan bila matriks lebih lebar dari layar (HP, tampilan bulan)
+  const wadah = useRef<HTMLDivElement | null>(null);
+  const kolomHariIni = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const w = wadah.current; const k = kolomHariIni.current;
+    if (!w || !k || w.scrollWidth <= w.clientWidth) return;
+    const kiri = k.getBoundingClientRect().left - w.getBoundingClientRect().left + w.scrollLeft - w.clientWidth / 2 + k.offsetWidth / 2;
+    w.scrollLeft = Math.max(0, kiri);
+  }, [hasil, rentang]);
+
   const terpilih: { baris: BarisRekap; sel: SelRekap } | null = useMemo(() => {
     if (!pilih || !hasil) return null;
     const baris = hasil.baris.find((b) => b.akun === pilih.akun);
@@ -111,11 +121,13 @@ export default function Terpadu() {
           </div>
 
           <Kartu judul="Beban per hari" kanan={<span className="text-[12px] text-[#3B4A57]">% dari kapasitas hari itu. Garis putus-putus: usulan belum disetujui.</span>}>
-            <div className="overflow-x-auto">
-              <div className="grid items-center gap-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(110px,150px) repeat(${lebar}, minmax(${rentang === "bulan" ? 28 : 40}px, 1fr))`, minWidth: rentang === "bulan" ? 110 + lebar * 30 : 420 }}>
+            {/* (13 Nov 2026, Fase 0 butir 7) Di HP 360 kolom hari ini (Jumat/akhir pekan) terpotong karena lebar minimal 420px dan kolom nama 110px.
+                Kini pekan muat di 360 (nama 64px, hari 28px), grid diberi ruang 3px agar cincin hari ini tidak terpotong, dan kolom hari ini digulir ke tampilan. */}
+            <div ref={wadah} className="overflow-x-auto">
+              <div className="grid items-center gap-[2px] p-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(64px,150px) repeat(${lebar}, minmax(28px, 1fr))`, minWidth: 70 + lebar * 30 }}>
                 <div className="text-left font-semibold text-[#3B4A57]">Nama</div>
                 {hasil.tanggal.map((t) => (
-                  <div key={t} title={tglPendek(t)} className={`rounded-md py-0.5 leading-tight ${t === hari ? "bg-[#0F6B63] font-bold text-white" : "font-semibold text-[#3B4A57]"}`}>
+                  <div key={t} ref={t === hari ? kolomHariIni : undefined} title={tglPendek(t)} className={`rounded-md py-0.5 leading-tight ${t === hari ? "bg-[#0F6B63] font-bold text-white" : "font-semibold text-[#3B4A57]"}`}>
                     {rentang === "pekan" ? tglPendek(t).split(" ")[0] : ""}
                     <span className="block text-[11px] font-normal">{Number(t.slice(8, 10))}</span>
                   </div>

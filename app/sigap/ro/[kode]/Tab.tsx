@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
-import { angka, persen, ringkasRo, rupiah, urlBaca } from "@/lib/keu/ro";
+import { angka, persen, ringkasRo, rupiah, urlBaca, type RealisasiLepas } from "@/lib/keu/ro";
 import { arahGap, susunPohon, teksVolume, type NodeAkun, type SelItem, type Struktur, type Total } from "@/lib/keu/pokTata";
 import type { WarnaChip } from "@/lib/keu/revisi";
 import { golonganItem, kebutuhan, LABEL_GOLONGAN, ringkasGapRo, semuaItem, WARNA_GOLONGAN } from "@/lib/keu/kebutuhan";
@@ -22,6 +22,25 @@ type KekRo = { n_terbuka: number | string; jumlah_terbuka: number | string };
 type AdmRo = { persen_terverifikasi: number | string | null; n_dok: number | string; n_belum: number | string };
 const WARNA_KATEGORI_CHIP: Record<string, WarnaChip> = { Baik: "hijau", Cukup: "kuning", "Perlu pembinaan": "merah", Kurang: "merah" };
 const tautTab = (kode: string, t: string) => `/sigap/ro/${encodeURIComponent(kode)}?tab=${t}`;
+
+/** (13 Nov 2026, Fase 0) Realisasi yang belum terpetakan ke item POK: ikut total, ditampilkan terpisah (sumber sama dengan daftar RO). */
+function KartuRealisasiLepas({ lepas }: { lepas: RealisasiLepas | null }) {
+  if (!lepas || lepas.n === 0) return null;
+  return (
+    <section className={`${kartu} flex flex-col gap-1.5 border-[#F0C36D] bg-[#FFF8E6]`} aria-label="Realisasi belum terpetakan ke item POK">
+      <h2 className={`${judulKartu} m-0`}>Realisasi belum terpetakan ke item POK: {rupiah(lepas.jumlah)} ({angka(lepas.n)} baris)</h2>
+      <p className="m-0 text-[12.5px] text-[#5B6B84]">Sudah ikut total realisasi RO (sama dengan daftar RO), tetapi belum masuk baris item di bawah karena nomor itemnya belum dikenali pada POK berlaku.</p>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0 text-[12.5px]">
+        {lepas.baris.map((b, i) => (
+          <li key={`${b.nomor_item ?? "x"}-${i}`} className="flex flex-wrap justify-between gap-2 border-t border-[#F3E2B8] pt-1">
+            <span className="min-w-0"><span className="font-mono">{b.komponen_kode}/{b.akun_kode}{b.nomor_item ? ` · ${b.nomor_item}` : ""}</span> {b.uraian}</span>
+            <b className="whitespace-nowrap">{rupiah(b.real_sd)}</b>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 export function TabRingkasan({ kode }: { kode: string }) {
   const ang = useAnggaranRo(kode);
@@ -40,7 +59,7 @@ export function TabRingkasan({ kode }: { kode: string }) {
       </div>
       <div className={kisi}>
         <Kpi label="Pagu POK berlaku" nilai={rupiah(r.pok)} sub={`${angka(r.nItem)} baris POK`} />
-        <Kpi label="Realisasi" nilai={rupiah(r.realisasi)} sub={`${persen(r.realisasi, r.pok)} dari pagu${ang.sampaiTanggal ? ` · s.d. ${ang.sampaiTanggal}` : ""}`} />
+        <Kpi label="Realisasi" nilai={rupiah(r.realisasi + (ang.lepas?.jumlah ?? 0))} sub={`${persen(r.realisasi + (ang.lepas?.jumlah ?? 0), r.pok)} dari pagu${ang.sampaiTanggal ? ` · s.d. ${ang.sampaiTanggal}` : ""}${ang.lepas?.n ? ` · ${rupiah(ang.lepas.jumlah)} belum terpetakan` : ""}`} />
         <Kpi label="Jumlah RAB" nilai={rupiah(r.rabJumlah)} sub={ang.rab ? `RAB ${ang.rab.status.replace(/_/g, " ")}` : "Belum ada RAB"} />
         <Kpi label="Item sudah ber-RAB" nilai={`${angka(r.nItemBerRab)} / ${angka(r.nItem)}`} sub="dari seluruh baris POK" />
       </div>
@@ -175,13 +194,14 @@ export function TabAnggaran({ kode }: { kode: string }) {
       </div>
       <div className={kisi}>
         <Kpi label="Pagu POK" nilai={rupiah(t.pok)} sub={`${angka(t.nItem)} butir`} />
-        <Kpi label="Realisasi" nilai={rupiah(t.realisasi)} sub={`${persen(t.realisasi, t.pok)} dari pagu`} />
+        <Kpi label="Realisasi" nilai={rupiah(t.realisasi + (ang.lepas?.jumlah ?? 0))} sub={`${persen(t.realisasi + (ang.lepas?.jumlah ?? 0), t.pok)} dari pagu${ang.lepas?.n ? ` · ${rupiah(ang.lepas.jumlah)} belum terpetakan` : ""}`} />
         <Kpi label="Kebutuhan" nilai={rupiah(rg.kebutuhanDikaji)} sub={`realisasi + catatan belum tercermin + RAB belum dibayar${rg.nBaru > 0 ? " + item baru" : ""}${belumRab > 0 ? ` · ${angka(belumRab)} butir belum ber-RAB tidak ikut` : ""}`} />
         <Kpi
           label="Gap" nilai={rg.bersih === null ? "-" : `${rg.bersih > 0 ? "+" : ""}${rupiah(rg.bersih)}`}
           sub={rg.bersih === null ? "terhitung bila ada butir yang ber-RAB" : `${belumRab > 0 ? `butir yang sudah ber-RAB · ` : ""}${rg.bersih < 0 ? "kebutuhan melebihi pagu" : "pagu mencukupi"}`} warna={rg.bersih === null ? undefined : rg.bersih < 0 ? "mr" : "hj"}
         />
       </div>
+      <KartuRealisasiLepas lepas={ang.lepas} />
       <KartuGap r={rg} tunggak={{ n: ang.antrean.length, jumlah: ang.antrean.reduce((s, x) => s + x.tunggak, 0), tersedia: ang.bayarTersedia, kode }} />
       <RencanaTindakan kode={kode} item={semuaItem(pohon)} baru={rg.baru} />
       {ang.terpotong && <Potong />}

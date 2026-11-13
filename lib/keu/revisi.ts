@@ -159,6 +159,20 @@ export function statusTenggat(sisaHari: number | string | null | undefined): { w
   return { warna: n <= 7 ? "merah" : n <= 30 ? "kuning" : "abu", teks: `${n} hari lagi` };
 }
 
+/**
+ * (13 Nov 2026, Fase 0 butir 4) Sisa hari menuju tanggal tutup menurut TANGGAL kalender WIB (bukan selisih jam). Dulu dihitung
+ * Math.ceil((tutup 23:59:59 - sekarang) / 1 hari): sehari sesudah tutup hasilnya -0 sehingga tertulis "hari ini". Negatif = sudah lewat.
+ */
+export function sisaHariTutup(tutup: string | null | undefined, hariIni: string): number | null {
+  if (!tutup || !/^\d{4}-\d{2}-\d{2}/.test(tutup) || !/^\d{4}-\d{2}-\d{2}$/.test(hariIni)) return null;
+  return Math.round((Date.parse(`${tutup.slice(0, 10)}T00:00:00Z`) - Date.parse(`${hariIni}T00:00:00Z`)) / 86400000);
+}
+/** Jadwal masih berstatus dibuka di basis data tetapi tanggal tutupnya sudah lewat (tampil "Lewat tutup", bukan "Dibuka"). */
+export const lewatTutup = (status: string, tutup: string | null | undefined, hariIni: string): boolean => {
+  const n = sisaHariTutup(tutup, hariIni);
+  return status === "dibuka" && n !== null && n < 0;
+};
+
 /** Usulan RO tidak ikut paket bila jadwal sudah ditutup (terkumpul/diterapkan/sah) dan usulan itu belum disetujui. */
 export const tidakIkutPaket = (statusJadwal: string, statusUsulan: string): boolean =>
   ["terkumpul", "diterapkan", "sah"].includes(statusJadwal) && statusUsulan !== "disetujui";

@@ -64,7 +64,7 @@ export function pilihRab(daftar: BarisRabRingkas[], ro: string): BarisRabRingkas
 
 // ---------- Anggaran ----------
 export type BarisLembar = { detail_id: number; ro_kode: string; komponen_kode: string; akun_kode: string; kunci_stabil: string; nomor_item: string | null; uraian: string; volume: number | string; satuan: string; jumlah: number | string };
-export type BarisRealisasi = { detail_id: number | null; real_sd: number | string; pagu: number | string };
+export type BarisRealisasi = { detail_id: number | null; real_sd: number | string; pagu: number | string; nomor_item?: string | null; uraian?: string | null; akun_kode?: string | null; komponen_kode?: string | null };
 export type BarisRabItem = { pok_kunci: string | null; baru: boolean; status: string; jumlah_rab: number | string; selesai: boolean; uraian?: string; akun_kode?: string; item_id?: number | string };
 
 export type ItemAnggaran = { detail_id: number; kunci: string; komponen: string; akun: string; nomor_item: string | null; uraian: string; volume: number; satuan: string; pok: number; realisasi: number; rab: number | null; statusRab: string | null; selesai: boolean;
@@ -109,6 +109,21 @@ export function susunAnggaran(lembar: BarisLembar[], realisasi: BarisRealisasi[]
   return hasil;
 }
 const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
+
+/**
+ * (13 Nov 2026, Fase 0 butir 1) Realisasi yang tidak terpetakan ke item POK berlaku RO ini (detail_id kosong atau di luar lembar). Sebelumnya baris ini
+ * dibuang diam-diam oleh susunAnggaran sehingga ruang RO (57,7%) berbeda dengan daftar RO (84,4%, keu_v_realisasi_ro). Kini ikut total realisasi
+ * ruang RO dan ditampilkan terpisah supaya angka kedua layar berasal dari sumber yang sama.
+ */
+export type RealisasiLepas = { n: number; jumlah: number; baris: { nomor_item: string | null; uraian: string; akun_kode: string; komponen_kode: string; real_sd: number }[] };
+export function realisasiLepas(lembar: readonly Pick<BarisLembar, "detail_id">[], realisasi: readonly BarisRealisasi[]): RealisasiLepas {
+  const ada = new Set(lembar.map((b) => b.detail_id));
+  const baris = realisasi
+    .filter((r) => (r.detail_id == null || !ada.has(r.detail_id)) && num(r.real_sd) !== 0)
+    .map((r) => ({ nomor_item: r.nomor_item ?? null, uraian: r.uraian ?? "", akun_kode: r.akun_kode ?? "", komponen_kode: r.komponen_kode ?? "", real_sd: num(r.real_sd) }))
+    .sort((a, b) => (a.nomor_item ?? "~").localeCompare(b.nomor_item ?? "~"));
+  return { n: baris.length, jumlah: sum(baris.map((b) => b.real_sd)), baris };
+}
 
 // ---------- Penugasan ----------
 export type BarisPenugasan = { sumber: string; peran_kode: string; ro_kode: string | null; akun_id: number; akun_nama: string; berlaku_mulai: string; berlaku_sampai: string | null; aktif_hari_ini: boolean };

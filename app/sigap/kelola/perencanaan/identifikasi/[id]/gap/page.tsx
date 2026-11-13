@@ -18,6 +18,7 @@ import { Catatan, Chip, Galat, Kosong, Memuat } from "@/app/sigap/keu-ui";
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import { jadwalPendataan, normalisasiLanjutan, rincianBiaya } from "@/lib/keu/lanjutan";
+import { kalimatUraiGap, uraiGapRab } from "@/lib/keu/gapRab";
 import { hitungGap, layakLaporanAkhir, ringkasGap, sidikTemuan, type JenisGap, type MasukanGap } from "@/lib/keu/gap";
 import { jamWib } from "@/lib/delego/hitung";
 import LencanaNotif from "../../../notifikasi/LencanaNotif";
@@ -65,6 +66,7 @@ function Isi() {
   const siap = !!masukan && !!pl.bahan && !pl.memuat && !lj.memuat && !rabGap.memuat;
   const temuan = useMemo(() => (masukan && siap ? hitungGap(masukan) : []), [masukan, siap]);
   const ringkas = useMemo(() => (masukan ? ringkasGap(masukan) : null), [masukan]);
+  const uraiBiaya = useMemo(() => (masukan && rabGap.rabSurvei ? kalimatUraiGap(uraiGapRab(masukan.rincian, rabGap.rabSurvei)) : null), [masukan, rabGap.rabSurvei]);
   const layakAkhir = useMemo(() => layakLaporanAkhir(pl.bahan, hariIni), [pl.bahan, hariIni]);
 
   const terbaru = gap.versi[0] ?? null;
@@ -128,7 +130,7 @@ function Isi() {
                 <Chip warna="biru">{pl.tertaut.length} kegiatan tertaut</Chip>
                 {terbaru ? <Chip warna={terbaru.n_keras > 0 ? "merah" : "hijau"}>Terakhir disimpan: v{terbaru.ver}</Chip> : <Chip warna="abu">Belum ada versi tersimpan</Chip>}
               </div>
-              <KartuBanding r={ringkas} />
+              <KartuBanding r={ringkas} urai={uraiBiaya} />
               <KartuDelego identId={row.id} jam={jam} />
               <KartuSimpanGap bisa={bisa} mengirim={kirim.mengirim} galat={kirim.galat} sama={sama} layakAkhir={layakAkhir} onSimpan={simpan} pesan={pesan} />
             </div>

@@ -47,7 +47,8 @@ export function KartuTemuanSaatIni({ identId, temuan }: { identId: number; temua
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-export function KartuBanding({ r }: { r: RingkasGap }) {
+/** `urai` (13 Nov 2026, Fase 0): uraian biaya Gap yang sama dengan tab RAB per survei (lib/keu/gapRab.ts kalimatUraiGap). */
+export function KartuBanding({ r, urai }: { r: RingkasGap; urai?: string | null }) {
   return (
     <Bagian huruf="B" judul="Rencana dibanding kenyataan" id="gap-banding">
       {r.peran.length === 0 ? <p className="m-0 text-[13px] text-[#5B6B84]">Belum ada peran lapangan yang dibandingkan.</p> : (
@@ -72,6 +73,7 @@ export function KartuBanding({ r }: { r: RingkasGap }) {
         `${r.kegiatan} kegiatan tertaut, ${r.kegiatanBerakhir} di antaranya sudah berakhir.`,
         `Hari kerja dipilih ${r.hariKerja}, laporan harian masuk ${r.laporan}.`,
         `Kebutuhan biaya terhitung ${rp(r.kebutuhan)}${r.sisaPagu !== null ? `; sisa pagu pada akun terkait ${rp(r.sisaPagu)}` : "; laporan realisasi belum ada"}.`,
+        ...(urai ? [urai] : []),
         `${r.rapatEvaluasi} rapat evaluasi tercatat.`,
       ]} />
     </Bagian>

@@ -27,6 +27,42 @@ export function rincianUntukGap(rincian: BarisRincian[], rab: RabSurveiGap | nul
   return { rincian: [...dariRab, ...sisa.map((b) => ({ ...b, akun: akun6(b.akun) }))], sumber: "rab", dariIdentifikasi: sisa.length };
 }
 
+/**
+ * (13 Nov 2026, Fase 0 butir 2) Uraian biaya Gap yang SAMA dipakai halaman Gap dan tab RAB per survei, supaya kedua layar menulis angka dari satu
+ * sumber. Contoh Seruti TW IV: RAB per survei Rp45.315.000 + Rp888.000 dari identifikasi (honor instruktur akun 522151 belum punya baris RAB)
+ * = Rp46.203.000 pada Gap. Bila RAB belum Siap: seluruh biaya dari identifikasi (rab = 0).
+ */
+export type UraiGapRab = { sumber: "rab" | "identifikasi"; rab: number; tambahan: number; akunTambahan: { akun: string; jumlah: number; uraian: string[] }[]; total: number };
+export function uraiGapRab(rincian: BarisRincian[], rab: RabSurveiGap | null | undefined): UraiGapRab {
+  const g = rincianUntukGap(rincian, rab);
+  if (g.sumber === "identifikasi") {
+    const total = jumlahIdent(rincian);
+    return { sumber: "identifikasi", rab: 0, tambahan: total, akunTambahan: [], total };
+  }
+  const jumlahRab = (rab?.baris ?? []).reduce((t, b) => t + b.jumlah, 0);
+  const akunRab = new Set((rab?.baris ?? []).map((b) => akun6(b.akun)));
+  const per = new Map<string, { jumlah: number; uraian: string[] }>();
+  for (const b of rincian) {
+    const a = akun6(b.akun);
+    if (akunRab.has(a)) continue;
+    const x = per.get(a) ?? { jumlah: 0, uraian: [] };
+    x.jumlah += b.jumlah ?? 0;
+    x.uraian.push(b.uraian);
+    per.set(a, x);
+  }
+  const akunTambahan = [...per.entries()].map(([akun, x]) => ({ akun, ...x })).sort((p, q) => p.akun.localeCompare(q.akun));
+  const tambahan = akunTambahan.reduce((t, x) => t + x.jumlah, 0);
+  return { sumber: "rab", rab: jumlahRab, tambahan, akunTambahan, total: jumlahRab + tambahan };
+}
+
+/** Kalimat uraian untuk kedua layar. */
+export function kalimatUraiGap(u: UraiGapRab): string {
+  if (u.sumber === "identifikasi") return `Biaya pada Gap ${rupiah(u.total)}, seluruhnya dihitung dari identifikasi (RAB per survei belum ditandai Siap).`;
+  if (u.tambahan === 0 || u.akunTambahan.length === 0) return `Biaya pada Gap = RAB per survei ${rupiah(u.rab)}.`;
+  const akun = u.akunTambahan.map((a) => `akun ${a.akun} ${rupiah(a.jumlah)}`).join(", ");
+  return `Biaya pada Gap ${rupiah(u.total)} = RAB per survei ${rupiah(u.rab)} + ${rupiah(u.tambahan)} dari identifikasi untuk akun yang belum punya baris RAB (${akun}).`;
+}
+
 export function temuanRabSurvei(rab: RabSurveiGap | null | undefined, rincian: BarisRincian[]): TemuanRab[] {
   if (!rab) return [];
   const t: TemuanRab[] = [];
@@ -41,12 +77,13 @@ export function temuanRabSurvei(rab: RabSurveiGap | null | undefined, rincian: B
     return t;
   }
   const g = rincianUntukGap(rincian, rab);
-  const total = jumlahIdent(g.rincian);
-  const selisih = total - ident;
+  const u = uraiGapRab(rincian, rab);
+  const selisih = u.total - ident;
+  // (13 Nov 2026, Fase 0) dulu total (RAB + tambahan identifikasi) disebut "RAB per survei", sehingga berbeda dengan tab RAB; kini diuraikan.
   if (Math.abs(selisih) > 0.5) {
-    t.push({ kunci: "biaya:rab_selisih", tingkat: "info", pesan: `Biaya pada Gap memakai RAB per survei (${rupiah(total)}); identifikasi menghitung ${rupiah(ident)} (${selisih > 0 ? "lebih" : "kurang"} ${rupiah(Math.abs(selisih))}).` });
+    t.push({ kunci: "biaya:rab_selisih", tingkat: "info", pesan: `${kalimatUraiGap(u)} Identifikasi menghitung ${rupiah(ident)} (${selisih > 0 ? "lebih" : "kurang"} ${rupiah(Math.abs(selisih))}).` });
   }
-  if (g.dariIdentifikasi > 0) t.push({ kunci: "biaya:rab_sebagian", tingkat: "info", pesan: `${g.dariIdentifikasi} rincian pada akun yang belum punya baris RAB per survei dihitung dari identifikasi.` });
+  if (g.dariIdentifikasi > 0) t.push({ kunci: "biaya:rab_sebagian", tingkat: "info", pesan: `${g.dariIdentifikasi} rincian pada akun yang belum punya baris RAB per survei dihitung dari identifikasi: ${u.akunTambahan.map((a) => `akun ${a.akun} ${rupiah(a.jumlah)}`).join(", ") || "-"}. Tambahkan barisnya di tab RAB bila memang dibayar.` });
   return t;
 }
 

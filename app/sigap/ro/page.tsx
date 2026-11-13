@@ -111,7 +111,7 @@ export default function DaftarRo() {
                   </div>
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[12.5px]">
                     <div><dt className="text-[#5B6B84]">Pagu POK</dt><dd className="font-bold text-[#0F2A52]">{rupiah(a?.jumlah_item)}</dd></div>
-                    <div><dt className="text-[#5B6B84]">Realisasi</dt><dd className="font-bold text-[#0F2A52]">{p ? persen(Number(p.real_sd), Number(p.pagu)) : "-"}</dd></div>
+                    <div><dt className="text-[#5B6B84]">Realisasi</dt><dd className="font-bold text-[#0F2A52]">{p ? persen(Number(p.real_sd), Number(a?.jumlah_item ?? p.pagu)) : "-"}</dd></div>
                     <div><dt className="text-[#5B6B84]">Ketua tim</dt><dd className="break-words font-semibold text-[#0F2A52]">{ketua?.length ? ketua.join(", ") : <span className="text-[#8A6200]">Belum ditugaskan</span>}</dd></div>
                     <div><dt className="text-[#5B6B84]">Kekurangan RAB</dt><dd className="font-semibold text-[#0F2A52]">{nKek > 0 ? `${angka(nKek)} catatan · ${rupiah(k?.jumlah_terbuka)}` : "Tidak ada"}</dd></div>
                   </dl>

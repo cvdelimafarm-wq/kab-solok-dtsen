@@ -12,7 +12,7 @@ import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { FUNGSI_BACA } from "@/lib/keu/gerbang";
 import type { BarisRabRow, ItemRabRow } from "@/lib/keu/rab";
 import { antreanJatuhTempo, aktif as bayarAktif, hariIniWib, hitungPengaruh, type BarisBayar, type BarisRabLepas, type JadwalRabLepas } from "@/lib/keu/pembayaran";
-import { pilihRab, susunAnggaran, urlBaca, type BarisLembar, type BarisPenugasan, type BarisRabItem, type BarisRabRingkas, type BarisRealisasi } from "@/lib/keu/ro";
+import { pilihRab, realisasiLepas, susunAnggaran, urlBaca, type BarisLembar, type BarisPenugasan, type BarisRabItem, type BarisRabRingkas, type BarisRealisasi } from "@/lib/keu/ro";
 
 type Balasan<T> = { data: T[]; jumlah: number; terpotong: boolean };
 export type HasilBaca<T> = { baris: T[] | null; memuat: boolean; galat: string | null; terpotong: boolean; muat: () => Promise<void> };
@@ -43,7 +43,7 @@ export function usePenugasan() {
 /** POK berlaku satu RO + realisasi terbaru + RAB yang ditampilkan, sudah disusun Komponen -> Akun -> Item. */
 export function useAnggaranRo(kode: string) {
   const lembar = useBacaKeu<BarisLembar>(urlBaca("keu_v_adm_lembar", { ro_kode: kode }, { batas: 5000 }));
-  const real = useBacaKeu<BarisRealisasi & { sampai_tanggal: string }>(urlBaca("keu_v_realisasi_terbaru", { ro_kode: kode }, { batas: 5000, kolom: ["detail_id", "real_sd", "pagu", "sampai_tanggal"] }));
+  const real = useBacaKeu<BarisRealisasi & { sampai_tanggal: string }>(urlBaca("keu_v_realisasi_terbaru", { ro_kode: kode }, { batas: 5000, kolom: ["detail_id", "real_sd", "pagu", "sampai_tanggal", "nomor_item", "uraian", "akun_kode", "komponen_kode"] }));
   const rabR = useBacaKeu<BarisRabRingkas>(urlBaca("keu_v_rab_ringkas", { ro_kode: kode }, { batas: 200 }));
   const rabPilih = useMemo(() => (rabR.baris ? pilihRab(rabR.baris, kode) : null), [rabR.baris, kode]);
   const rabItem = useBacaKeu<BarisRabItem>(rabPilih ? urlBaca("keu_v_rab_item", { rab_id: rabPilih.rab_id }, { batas: 5000 }) : null);
@@ -63,6 +63,8 @@ export function useAnggaranRo(kode: string) {
     () => (lembar.baris && real.baris && rabSiap ? susunAnggaran(lembar.baris, real.baris, rabItem.baris ?? [], pengaruh) : null),
     [lembar.baris, real.baris, rabItem.baris, rabSiap, pengaruh],
   );
+  // (13 Nov 2026, Fase 0) realisasi yang belum terpetakan ke item POK: ikut total supaya sama dengan daftar RO (keu_v_realisasi_ro)
+  const lepas = useMemo(() => (lembar.baris && real.baris ? realisasiLepas(lembar.baris, real.baris) : null), [lembar.baris, real.baris]);
   const sampaiTanggal = real.baris?.[0]?.sampai_tanggal ?? null;
   const hariIni = hariIniWib();
   const antrean = useMemo(() => {
@@ -72,6 +74,8 @@ export function useAnggaranRo(kode: string) {
   const galat = lembar.galat ?? real.galat ?? rabR.galat ?? rabItem.galat;
   return {
     anggaran,
+    /** Realisasi yang tidak terpetakan ke item POK berlaku (ikut total realisasi RO). */
+    lepas,
     /** Item RAB yang belum ada di POK (bahan revisi); kebutuhannya tidak punya pagu. */
     itemBaru: (rabItem.baris ?? []).filter((x) => x.baru && !x.selesai && Number(x.jumlah_rab) > 0),
     rab: rabPilih,

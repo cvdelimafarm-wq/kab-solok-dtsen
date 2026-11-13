@@ -19,6 +19,10 @@ import { peringatanDariPeriksa, periksaPelatihan, periksaPendataan, ringkasPelat
 import LencanaNotif from "../../notifikasi/LencanaNotif";
 import { useIdent } from "../useIdent";
 import { usePelaksanaan } from "./pelaksanaan/usePelaksanaan";
+import type { BarisLanjutan } from "./lanjutan/useLanjutan";
+import { useBacaKeu } from "@/app/sigap/ro/useKeu";
+import { urlBaca } from "@/lib/keu/ro";
+import { normalisasiLanjutan } from "@/lib/keu/lanjutan";
 
 const LINK = "font-semibold text-[#1F5FD1] underline";
 
@@ -88,11 +92,18 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
   const row = ident.row;
   const formSah = useMemo(() => (row && row.ver >= 1 && row.form_sah ? normalisasi(row.form_sah) : null), [row]);
   const pelatihan = jenis === "pelatihan";
+  // (13 Nov 2026, Fase 0 butir 3) jumlah petugas dari identifikasi lanjutan versi Final (versi yang dipakai hilir); formulir awal hanya cadangan.
+  // Hanya satu bacaan ringan (bukan useLanjutan yang ikut memuat daftar mitra); aturan versi hilir sama dengan useLanjutan.rowHilir.
+  const ljBaca = useBacaKeu<BarisLanjutan>(id ? urlBaca("keu_v_ident_lanjutan", { ident_id: id }, { batas: 1 }) : null);
+  const ljRow = ljBaca.baris?.[0] ?? null;
+  const ljHilir = useMemo(() => (ljRow && ljRow.ver_hilir != null && ljRow.isi_hilir != null ? { ver: ljRow.ver_hilir, status: ljRow.status_hilir ?? ljRow.status, isi: ljRow.isi_hilir } : ljRow), [ljRow]);
+  const lanjutanFinal = useMemo(() => (ljHilir && ljHilir.status === "final" ? normalisasiLanjutan(ljHilir.isi) : null), [ljHilir]);
+  const sumberPeran = lanjutanFinal && ljHilir ? `identifikasi lanjutan versi ${ljHilir.ver} (Final)` : "identifikasi awal (lanjutan belum Final)";
 
-  const ringPel = useMemo(() => (formSah ? ringkasPelatihan(formSah) : null), [formSah]);
+  const ringPel = useMemo(() => (formSah ? ringkasPelatihan(formSah, lanjutanFinal) : null), [formSah, lanjutanFinal]);
   const ringDat = useMemo(
-    () => (formSah && row ? ringkasPendataan(formSah, row.tahun, (row.upd ?? null) as Record<string, { mulai: string; selesai: string }> | null) : null),
-    [formSah, row],
+    () => (formSah && row ? ringkasPendataan(formSah, row.tahun, (row.upd ?? null) as Record<string, { mulai: string; selesai: string }> | null, lanjutanFinal) : null),
+    [formSah, row, lanjutanFinal],
   );
   const fungsi = pelatihan ? "pelatihan" : "pendataan";
   const tertautFungsi = useMemo(() => pl.tertaut.filter((t) => t.fungsi === fungsi), [pl.tertaut, fungsi]);
@@ -102,7 +113,7 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
   }, [pelatihan, ringPel, ringDat, pl.tertaut]);
 
   const posisi = id === null ? null : posisiAlur(alurIdentifikasi(id), jenis);
-  const siap = !!row && !!formSah && !pl.memuat;
+  const siap = !!row && !!formSah && !pl.memuat && (ljBaca.baris !== null || ljBaca.galat !== null || id === null);
   const dasar = id === null ? "/sigap/kelola/perencanaan/identifikasi" : `/sigap/kelola/perencanaan/identifikasi/${id}`;
   const menu = pelatihan ? { href: "/sigap/kelola/pelatihan", nama: "Pelatihan" } : { href: "/sigap/kelola/pendataan", nama: "Pendataan" };
   const judulHalaman = pelatihan ? "Persiapan pelatihan" : "Persiapan pendataan";
@@ -158,7 +169,7 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
                     ))}
                   </div>
                 </Bagian>
-                <Bagian judul="Peserta menurut peran" ket={`Total ${ringPel.totalPeserta} petugas. Jumlah pasti dan nama diisi pada identifikasi lanjutan.`}>
+                <Bagian judul="Peserta menurut peran" ket={`Total ${ringPel.totalPeserta} petugas, menurut ${sumberPeran}.`}>
                   <TabelPeran peran={ringPel.peran} kosong="Belum ada peran yang dinyalakan pada identifikasi." />
                 </Bagian>
               </>
@@ -202,7 +213,7 @@ export default function Persiapan({ jenis }: { jenis: "pelatihan" | "pendataan" 
                   )}
                 </Bagian>
                 {ringDat.ada && (
-                  <Bagian judul="Petugas lapangan menurut peran" ket={`Total ${ringDat.totalLapangan} petugas. Nama dan penugasan diisi pada identifikasi lanjutan dan halaman Pelaksanaan.`}>
+                  <Bagian judul="Petugas lapangan menurut peran" ket={`Total ${ringDat.totalLapangan} petugas, menurut ${sumberPeran}. Penugasan diisi di halaman Pelaksanaan.`}>
                     <TabelPeran peran={ringDat.lapangan} kosong="Belum ada peran lapangan yang dinyalakan pada identifikasi." />
                   </Bagian>
                 )}

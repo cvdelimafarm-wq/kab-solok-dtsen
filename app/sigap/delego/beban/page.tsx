@@ -56,7 +56,7 @@ function BebanPerRo() {
       {b.data && orang.length > 0 && (
         <Kartu judul="Beban per hari" kanan={<span className="text-[12px] text-[#3B4A57]">% dari kapasitas hari itu ({kapasitasHariMinggu(hari).join(" / ")} poin)</span>}>
           <div className="overflow-x-auto" role="table" aria-label="Beban per orang per hari minggu ini">
-            <div className="grid min-w-[250px] items-center gap-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(72px,1fr) repeat(${kolom}, minmax(30px,46px))` }} role="row">
+            <div className="grid min-w-[250px] items-center gap-[3px] p-[3px] text-center text-[12px]" style={{ gridTemplateColumns: `minmax(72px,1fr) repeat(${kolom}, minmax(30px,46px))` }} role="row">
               <div className="text-left text-[12px] font-semibold text-[#3B4A57]" role="columnheader">Nama</div>
               {tabel.tanggal.slice(0, kolom).map((t) => (
                 <div key={t} role="columnheader" className={`rounded-md py-0.5 leading-tight ${t === hari ? "bg-[#0F6B63] font-bold text-white" : "font-semibold text-[#3B4A57]"}`} title={tglPendek(t)}>

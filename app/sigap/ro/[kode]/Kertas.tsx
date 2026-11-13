@@ -8,19 +8,20 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL } from "@/lib/keu/revisi";
+import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, lewatTutup } from "@/lib/keu/revisi";
+import { hariIniWib } from "@/lib/keu/pembayaran";
 import { rupiah, urlBaca } from "@/lib/keu/ro";
 import { n } from "@/lib/keu/kk";
 import { kroDariRo } from "@/lib/keu/matriks";
 import { Chip, Galat, judulKartu, kartu, kisi, Kosong, Kpi, Memuat, tombolUtama } from "../../keu-ui";
 import { useBacaKeu } from "../useKeu";
 
-type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string };
+type Jadwal = { id: number; tahun: number; jenis: string; judul: string; status: string; tutup: string | null };
 type Ringkas = { jadwal_id: number; ro_kode: string; total_semula: number | string; total_menjadi: number | string; selisih: number | string; n_berubah: number | string; n_baru: number | string; n_penggenap: number | string };
 type PeriksaR = { merah: number | string; kuning: number | string; info: number | string; hijau: number | string };
 
 export function TabKertas({ kode }: { kode: string }) {
-  const jadwal = useBacaKeu<Jadwal>(urlBaca("keu_revisi_jadwal", {}, { urut: "-id", batas: 100, kolom: ["id", "tahun", "jenis", "judul", "status"] }));
+  const jadwal = useBacaKeu<Jadwal>(urlBaca("keu_revisi_jadwal", {}, { urut: "-id", batas: 100, kolom: ["id", "tahun", "jenis", "judul", "status", "tutup"] }));
   const terbuka = useMemo(() => (jadwal.baris ?? []).filter((j) => j.status === "dibuka" || j.status === "terkumpul"), [jadwal.baris]);
   const j = terbuka[0] ?? null;
   const ringkas = useBacaKeu<Ringkas>(j ? urlBaca("keu_v_kk_ringkas", { jadwal_id: j.id, ro_kode: kode }, { batas: 1 }) : null);
@@ -48,7 +49,8 @@ export function TabKertas({ kode }: { kode: string }) {
         <div className="flex flex-wrap items-center gap-2 text-[13px]">
           <span className="font-semibold text-[#0F2A52]">{j.judul}</span>
           <Chip warna="biru">{LABEL_JENIS_JADWAL[j.jenis] ?? j.jenis}</Chip>
-          <Chip warna={j.status === "dibuka" ? "hijau" : "kuning"}>{LABEL_STATUS_JADWAL[j.status] ?? j.status}</Chip>
+          {/* (13 Nov 2026, Fase 0) jadwal yang tanggal tutupnya lewat tidak lagi tampil "Dibuka" */}
+          <Chip warna={lewatTutup(j.status, j.tutup, hariIniWib()) ? "merah" : j.status === "dibuka" ? "hijau" : "kuning"}>{lewatTutup(j.status, j.tutup, hariIniWib()) ? "Lewat tutup" : LABEL_STATUS_JADWAL[j.status] ?? j.status}</Chip>
         </div>
         <p className="text-[12.5px] text-[#5B6B84]">Pekerjaan kertas kerja dilakukan di halaman matriks KRO{kro ? ` ${kro}` : ""}: seluruh RO dalam satu KRO tampil bersama dengan kolom Semula, Menjadi, Booked, dan Realisasi, lengkap dengan pemeriksaan, kecukupan RAB, dan geseran.</p>
         <Link href={tautan} className={`${tombolUtama} inline-flex items-center self-start no-underline`}>Buka matriks KRO{kro ? ` ${kro}` : ""}</Link>

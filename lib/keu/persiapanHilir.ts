@@ -6,7 +6,7 @@
 // periksa yang menyarankan (tidak memblokir apa pun).
 
 import { PERAN_DEF, adaPendataan, instrDari, instrLengkap, type Form, type PeranId, type StatusPetugas } from "./identifikasi";
-import { jadwalPendataan } from "./lanjutan";
+import { jadwalPendataan, KODE_PERAN, type IsiLanjutan } from "./lanjutan";
 import type { FungsiKegiatan } from "./pelaksanaan";
 
 export type PeriksaButir = { kode: string; teks: string; beres: boolean; catatan?: string };
@@ -26,11 +26,28 @@ export function ringkasPeran(f: Form): RingkasPeran[] {
   });
 }
 
+/**
+ * (13 Nov 2026, Fase 0 butir 3) Tahap 5 dan 6 dulu membaca jumlah petugas dari identifikasi AWAL (Seruti TW IV: PML 6 organik + 2 mitra), padahal
+ * identifikasi lanjutan Final sudah menetapkan 7 + 1. Bila ada isi lanjutan berstatus Final, jumlah per peran diambil dari sana; honor tetap dari
+ * formulir awal (lanjutan tidak menyimpannya). Peran yang dimatikan di lanjutan tidak ditampilkan.
+ */
+export function peranDariLanjutan(dasar: readonly RingkasPeran[], isi: Pick<IsiLanjutan, "peran">): RingkasPeran[] {
+  const nama = new Map(PERAN_DEF.map((p) => [p.id, p.nama] as const));
+  const honor = new Map(dasar.map((p) => [p.id, p.honor] as const));
+  return KODE_PERAN.filter((k) => isi.peran[k]?.on).map((k) => {
+    const x = isi.peran[k];
+    const organik = Math.max(0, Math.round(Number(x.nOrg) || 0));
+    const mitra = Math.max(0, Math.round(Number(x.nMit) || 0));
+    const status: StatusPetugas = organik > 0 && mitra > 0 ? "Organik dan mitra" : mitra > 0 ? "Mitra" : "Organik";
+    return { id: k, nama: nama.get(k) ?? k, jumlah: organik + mitra, organik, mitra, status, translok: !!x.translok, honor: honor.get(k) ?? false };
+  });
+}
+
 export const jumlahPetugas = (peran: readonly RingkasPeran[]): number => peran.reduce((s, p) => s + p.jumlah, 0);
 
 export type RingkasPelatihan = { sesi: RingkasSesi[]; peran: RingkasPeran[]; totalPeserta: number; adaSesi: boolean };
 
-export function ringkasPelatihan(f: Form): RingkasPelatihan {
+export function ringkasPelatihan(f: Form, lanjutanFinal?: Pick<IsiLanjutan, "peran"> | null): RingkasPelatihan {
   const sesi: RingkasSesi[] = (["briefing", "pelatihan"] as const).map((k) => {
     const s = f.sesi[k];
     const i = instrDari(s);
@@ -39,7 +56,7 @@ export function ringkasPelatihan(f: Form): RingkasPelatihan {
       instruktur: { jumlah: i.jumlah, level: i.level, jam: i.jam, lengkap: instrLengkap(i) },
     };
   });
-  const peran = ringkasPeran(f);
+  const peran = lanjutanFinal ? peranDariLanjutan(ringkasPeran(f), lanjutanFinal) : ringkasPeran(f);
   return { sesi, peran, totalPeserta: jumlahPetugas(peran), adaSesi: sesi.some((s) => s.aktif) };
 }
 
@@ -51,9 +68,9 @@ export type RingkasPendataan = {
 /** Peran lapangan untuk pendataan: PML dan PPL, ditambah Kortim/Supervisor yang mengawasi. Petugas entri (pengolahan) tidak dihitung. */
 const PERAN_LAPANGAN: readonly PeranId[] = ["supervisor", "kortim", "pml", "ppl"];
 
-export function ringkasPendataan(f: Form, tahun: number, upd: Record<string, { mulai: string; selesai: string }> | null | undefined): RingkasPendataan {
+export function ringkasPendataan(f: Form, tahun: number, upd: Record<string, { mulai: string; selesai: string }> | null | undefined, lanjutanFinal?: Pick<IsiLanjutan, "peran"> | null): RingkasPendataan {
   const ada = adaPendataan(f);
-  const lapangan = ringkasPeran(f).filter((p) => PERAN_LAPANGAN.includes(p.id));
+  const lapangan = (lanjutanFinal ? peranDariLanjutan(ringkasPeran(f), lanjutanFinal) : ringkasPeran(f)).filter((p) => PERAN_LAPANGAN.includes(p.id));
   return {
     ada, instrumen: f.instrumen, cetakPapi: !!f.cetakPapi,
     jadwal: ada ? jadwalPendataan(f, tahun, upd) : [],

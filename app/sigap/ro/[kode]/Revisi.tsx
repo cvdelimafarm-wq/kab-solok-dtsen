@@ -12,7 +12,8 @@ import { useCallback, useMemo, useState } from "react";
 import { n } from "@/lib/keu/kk";
 import { kroDariRo } from "@/lib/keu/matriks";
 import { rupiah, urlBaca } from "@/lib/keu/ro";
-import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, LABEL_STATUS_USULAN, statusTenggat, tglPanjang, WARNA_CHIP_STATUS_USULAN } from "@/lib/keu/revisi";
+import { LABEL_JENIS_JADWAL, LABEL_STATUS_JADWAL, LABEL_STATUS_USULAN, lewatTutup, sisaHariTutup, statusTenggat, tglPanjang, WARNA_CHIP_STATUS_USULAN } from "@/lib/keu/revisi";
+import { hariIniWib } from "@/lib/keu/pembayaran";
 import {
   aksiUsulan, bolehBuatUsulan, jadwalTampil, jejakUsulan, keadaanLangkah, LABEL_AKSI_USULAN, LABEL_JEJAK_USULAN, LANGKAH_USULAN, periksaAlasanUsulan,
   teksGiliran, usulanJadwal, type AksiUsulan, type BarisJejakUsulan, type HakUsulan,
@@ -90,7 +91,10 @@ function KartuJadwal({ j, u, hak, jejak, ringkas, kode, muat }: { j: Jadwal; u: 
   const aksi = u ? aksiUsulan(u.status, j.status, hak) : [];
   const kro = kroDariRo(kode);
   const tautMatriks = `/sigap/revisi/kertas?jadwal=${j.id}${kro ? `&kro=${encodeURIComponent(kro)}` : ""}&ro=${encodeURIComponent(kode)}&dari=${encodeURIComponent(`/sigap/ro/${encodeURIComponent(kode)}?tab=revisi`)}`;
-  const tenggat = j.tutup ? statusTenggat(Math.ceil((new Date(`${j.tutup}T23:59:59+07:00`).getTime() - Date.now()) / 86400000)) : null;
+  // (13 Nov 2026, Fase 0) selisih tanggal WIB; sesudah tanggal tutup tertulis "lewat N hari" dan chip "Lewat tutup".
+  const hariIni = hariIniWib();
+  const tenggat = j.tutup ? statusTenggat(sisaHariTutup(j.tutup, hariIni)) : null;
+  const lewat = lewatTutup(j.status, j.tutup, hariIni);
 
   const jalan = async (a: AksiUsulan) => {
     if (!u) return;
@@ -110,7 +114,7 @@ function KartuJadwal({ j, u, hak, jejak, ringkas, kode, muat }: { j: Jadwal; u: 
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <h2 className={`${judulKartu} min-w-0`}>{j.judul}</h2>
           <Chip warna="biru">{LABEL_JENIS_JADWAL[j.jenis] ?? j.jenis}</Chip>
-          <Chip warna={j.status === "dibuka" ? "hijau" : "kuning"}>{LABEL_STATUS_JADWAL[j.status] ?? j.status}</Chip>
+          <Chip warna={lewat ? "merah" : j.status === "dibuka" ? "hijau" : "kuning"}>{lewat ? "Lewat tutup" : LABEL_STATUS_JADWAL[j.status] ?? j.status}</Chip>
         </div>
         {u && <Chip warna={WARNA_CHIP_STATUS_USULAN[u.status] ?? "abu"}>{LABEL_STATUS_USULAN[u.status] ?? u.status}</Chip>}
       </div>

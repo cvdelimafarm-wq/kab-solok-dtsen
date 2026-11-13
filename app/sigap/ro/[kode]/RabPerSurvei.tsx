@@ -18,6 +18,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import BatangItem from "@/app/sigap/kelola/perencanaan/identifikasi/BatangItem";
+import { kalimatUraiGap, susunRabSurveiGap, uraiGapRab } from "@/lib/keu/gapRab";
 import { bangunLibur, type Libur } from "@/lib/keu/hariKerja";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import type { IsiKebijakan } from "@/lib/keu/kebijakan";
@@ -737,6 +738,12 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
 
   // ---- status tersimpan per survei
   const status = statusDari(statusRows, b.ident_id);
+  // (13 Nov 2026, Fase 0 butir 2) uraian biaya Gap dari fungsi yang sama dengan halaman Gap: RAB survei ini + rincian identifikasi pada akun tanpa baris RAB.
+  const uraiGap = useMemo(() => {
+    const akun = props.itemRab.flatMap((i) => (i.akun_kode ? [{ id: i.id, akun_kode: i.akun_kode }] : []));
+    const rg = susunRabSurveiGap(true, props.barisRab, akun, statusRows, b.ident_id, b.ident_ver);
+    return rg ? kalimatUraiGap(uraiGapRab(rincian, rg)) : null;
+  }, [props.itemRab, props.barisRab, statusRows, b.ident_id, b.ident_ver, rincian]);
   const nTerpasang = terpasang.size;
   const cekSiap = periksaSiapLengkap(nTerpasang, ringkas);
   const ubahStatus = async (baru: "draf" | "siap") => {
@@ -1062,6 +1069,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
               ? "Gap memakai RAB survei ini. Mengubah rincian mengembalikan ke Draf."
               : "Selama Draf, Gap memakai kebutuhan dari identifikasi."}
             {!props.editable && " RAB sedang dikunci (diajukan atau disahkan)."}
+            {uraiGap && <span className="mt-0.5 block font-semibold text-[#0F2A52]">{uraiGap}</span>}
           </p>
           {props.editable && (status === "siap"
             ? <button type="button" disabled={mengirim} onClick={() => void ubahStatus("draf")} className={`${tombol} bg-white text-[#1B2B4B] ring-1 ring-[#C5D0E2]`}>Kembalikan ke Draf</button>
