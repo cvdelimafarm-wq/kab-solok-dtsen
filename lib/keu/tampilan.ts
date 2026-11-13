@@ -84,7 +84,9 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_keluaran_spek: ["ident_id", "butir", "jenis", "spek", "diubah_at", "diubah_oleh_nama"],
   keu_v_keluaran_tanda: ["keluaran_id", "bagian", "status", "catatan", "at", "oleh_nama"],
   keu_v_ident_acuan: ["ident_id", "tahun", "ro_kode", "nama", "ident_ver", "form_sah", "upd", "lanjutan_ada", "lanjutan_ver", "lanjutan_status", "pasca_h15", "lanjutan_isi", "kebijakan_id", "kebijakan_ver", "sumber", "lanjutan_ver_terbaru"],
-  keu_v_ident_kegiatan: ["id", "ident_id", "kegiatan_id", "fungsi", "disarankan", "catatan", "ditautkan_at", "ditautkan_oleh_nama", "kode", "nama", "kode_anggaran", "jenis", "aktif", "mulai", "selesai", "n_penugasan"],
+  keu_v_ident_kegiatan: ["id", "ident_id", "kegiatan_id", "fungsi", "disarankan", "catatan", "ditautkan_at", "ditautkan_oleh_nama", "kode", "nama", "kode_anggaran", "jenis", "aktif", "mulai", "selesai", "n_penugasan", "sumber", "periode", "ident_ver"],
+  // (13 Nov 2026, A) usulan tanggal kegiatan dari versi identifikasi baru (SQL 20261113b)
+  keu_v_ident_kegiatan_tanggal: ["id", "ident_id", "kegiatan_id", "ident_ver", "fungsi", "periode", "mulai_lama", "selesai_lama", "mulai_baru", "selesai_baru", "status", "catatan", "dibuat_at", "diputus_at", "diputus_oleh_nama", "kegiatan_nama", "kegiatan_kode"],
   keu_v_kegiatan_calon: ["ident_id", "kegiatan_id", "kode", "nama", "kode_anggaran", "jenis", "aktif", "mulai", "selesai", "disarankan", "tertaut"],
   keu_v_ident_pengadaan: ["id", "ident_id", "item", "uraian", "status", "rujukan", "catatan", "diubah_at", "diubah_oleh_nama"],
   keu_v_ident_pengadaan_jejak: ["id", "ident_id", "item", "uraian", "dari", "ke", "rujukan", "catatan", "waktu", "oleh_nama"],

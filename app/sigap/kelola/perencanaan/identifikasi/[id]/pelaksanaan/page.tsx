@@ -15,7 +15,7 @@ import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import { normalisasi } from "@/lib/keu/identifikasi";
 import { jadwalPendataan, normalisasiLanjutan, rincianBiaya } from "@/lib/keu/lanjutan";
 import { kunciInstrukturDokumen } from "@/lib/keu/lanjutanDokumen";
-import { kesiapanBiaya, kesiapanPencairan, normalisasiHasilTerap, type FungsiKegiatan, type HasilTerap } from "@/lib/keu/pelaksanaan";
+import { kalimatPicu, kesiapanBiaya, kesiapanPencairan, normalisasiHasilTerap, type FungsiKegiatan, type HasilTerap } from "@/lib/keu/pelaksanaan";
 import LencanaNotif from "../../../notifikasi/LencanaNotif";
 import { hariIniWib, useIdent } from "../../useIdent";
 import { loncat } from "../../Kontrol";
@@ -59,6 +59,18 @@ function Isi() {
     p_ident: id, p_kegiatan: kegiatanId, p_fungsi: fungsi, ...(catatan ? { p_catatan: catatan } : {}),
   })), [id, kirim]);
   const lepas = useCallback((kegiatanId: number) => kirim.jalankan(() => aksiKeu("keu_ident_kegiatan_lepas", { p_ident: id, p_kegiatan: kegiatanId })), [id, kirim]);
+  // (13 Nov 2026, A) pemicu kegiatan untuk identifikasi yang sudah sah, dan konfirmasi usulan tanggal dari versi identifikasi baru
+  const [pesanPicu, setPesanPicu] = useState<string | null>(null);
+  const picu = useCallback(async () => {
+    setPesanPicu(null);
+    let pesan: string | null = null;
+    const ok = await kirim.jalankan(async () => { const r = await aksiKeu<unknown>("keu_ident_picu_kegiatan_manual", { p_ident: id }); if (r.ok) pesan = kalimatPicu(r.data); return r; });
+    if (ok) setPesanPicu(pesan);
+    return ok;
+  }, [id, kirim]);
+  const putusTanggal = useCallback((usulanId: number, terapkan: boolean, catatan: string) => kirim.jalankan(() => aksiKeu("keu_ident_kegiatan_tanggal_putus", {
+    p_id: usulanId, p_terapkan: terapkan, ...(catatan ? { p_catatan: catatan } : {}),
+  })), [kirim]);
   const terapkan = useCallback(async (kegiatanId: number, kode: string[]) => {
     setHasil(null);
     let h: HasilTerap | null = null;
@@ -105,7 +117,8 @@ function Isi() {
         {row && formSah && !pl.memuat && (
           <div className="grid min-w-0 items-start gap-3.5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
             <div className="flex min-w-0 flex-col gap-3.5">
-              <KartuTautan tertaut={pl.tertaut} calon={pl.calon} bisa={bisa} mengirim={kirim.mengirim} galat={kirim.galat} onTautkan={tautkan} onLepas={lepas} />
+              <KartuTautan tertaut={pl.tertaut} calon={pl.calon} bisa={bisa} mengirim={kirim.mengirim} galat={kirim.galat} onTautkan={tautkan} onLepas={lepas}
+                usulanTanggal={pl.usulanTanggal} onPutusTanggal={putusTanggal} onPicu={row.status === "sah" ? picu : undefined} pesanPicu={pesanPicu} />
               <KartuUsulan
                 identId={row.id} tertaut={pl.tertaut} bisa={bisa} final={tersimpan?.status === "final"} ada={!!tersimpan} versi={versi}
                 mengirim={kirim.mengirim} galat={null} hasil={hasil} onTerapkan={terapkan} onBerubah={muatSemua}

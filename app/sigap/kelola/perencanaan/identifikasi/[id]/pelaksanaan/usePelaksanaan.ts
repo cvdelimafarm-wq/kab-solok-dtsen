@@ -8,11 +8,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { urlBaca } from "@/lib/keu/ro";
 import { aksiKeu, useBacaKeu } from "@/app/sigap/ro/useKeu";
-import { normalisasiBahan, normalisasiUsulan, type BahanPelaksanaan, type ButirUsulan, type CalonKegiatan, type KegiatanTertaut } from "@/lib/keu/pelaksanaan";
+import { normalisasiBahan, normalisasiUsulan, type BahanPelaksanaan, type ButirUsulan, type CalonKegiatan, type KegiatanTertaut, type UsulanTanggal } from "@/lib/keu/pelaksanaan";
 
 export function usePelaksanaan(identId: number | null) {
   const tertaut = useBacaKeu<KegiatanTertaut>(identId ? urlBaca("keu_v_ident_kegiatan", { ident_id: identId }, { urut: "mulai", batas: 200 }) : null);
   const calon = useBacaKeu<CalonKegiatan>(identId ? urlBaca("keu_v_kegiatan_calon", { ident_id: identId }, { batas: 500 }) : null);
+  // (13 Nov 2026, A) usulan tanggal yang menunggu konfirmasi; galat (SQL 20261113b belum ada) = daftar kosong, halaman tetap jalan
+  const tanggal = useBacaKeu<UsulanTanggal>(identId ? urlBaca("keu_v_ident_kegiatan_tanggal", { ident_id: identId, status: "menunggu" }, { urut: "-id", batas: 50 }) : null);
   const [bahan, setBahan] = useState<BahanPelaksanaan | null>(null);
   const [galatBahan, setGalatBahan] = useState<string | null>(null);
   const [bahanSiap, setBahanSiap] = useState(false);
@@ -25,9 +27,9 @@ export function usePelaksanaan(identId: number | null) {
   }, [identId]);
   useEffect(() => { void muatBahan(); }, [muatBahan]);
 
-  const muatSemua = useCallback(async () => { await Promise.all([tertaut.muat(), calon.muat(), muatBahan()]); }, [tertaut, calon, muatBahan]);
+  const muatSemua = useCallback(async () => { await Promise.all([tertaut.muat(), calon.muat(), tanggal.muat(), muatBahan()]); }, [tertaut, calon, tanggal, muatBahan]);
   return {
-    tertaut: tertaut.baris ?? [], calon: calon.baris ?? [], bahan,
+    tertaut: tertaut.baris ?? [], calon: calon.baris ?? [], bahan, usulanTanggal: tanggal.baris ?? [],
     memuat: identId !== null && (!tertaut.baris || !calon.baris || !bahanSiap) && !tertaut.galat && !calon.galat && !galatBahan,
     galat: tertaut.galat ?? calon.galat ?? galatBahan, muatSemua,
   };

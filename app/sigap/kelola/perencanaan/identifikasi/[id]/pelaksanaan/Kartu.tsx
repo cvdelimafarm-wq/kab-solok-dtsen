@@ -10,7 +10,7 @@ import { Catatan, Chip, kolom, label, tombolKecil, tombolUtama } from "@/app/sig
 import { tglIndo } from "@/lib/keu/identifikasi";
 import {
   adalahDataUji, agendaEvaluasi, calonBelumTertaut, catatanKembarDisarankan, fungsiBawaan, FUNGSI_KEGIATAN, ID_PL, kalimatHasilTerap, kelompokkanCalon, kodeSiap, labelCalon, labelPilihan, LABEL_USULAN, NAMA_FUNGSI, peringatanFungsi, ringkasLaporan, ringkasUsulan,
-  selarasJadwal, urutkanUsulan, type BarisBiaya, type ButirPencairan, type CalonKegiatan, type FungsiKegiatan, type HasilTerap, type KegiatanBahan, type KegiatanTertaut,
+  selarasJadwal, urutkanUsulan, type UsulanTanggal, type BarisBiaya, type ButirPencairan, type CalonKegiatan, type FungsiKegiatan, type HasilTerap, type KegiatanBahan, type KegiatanTertaut,
 } from "@/lib/keu/pelaksanaan";
 import type { Form } from "@/lib/keu/identifikasi";
 import { Bagian, Centang, Poin } from "../../Kontrol";
@@ -23,9 +23,46 @@ const periode = (a: string | null, b: string | null): string => (a && b ? `${tgl
 const galatKotak = (g: string | null) => (g ? <p role="alert" className="m-0 rounded-lg border-l-4 border-[#B42329] bg-[#FDE8E8] px-3 py-2 text-[13px] text-[#7A1D22]">{g}</p> : null);
 
 // ---------------------------------------------------------------------------------------------------------------------
+/**
+ * (13 Nov 2026, keputusan A) Identifikasi yang disahkan otomatis membuat atau menautkan kegiatan pelatihan dan pendataan (pemicu basis data
+ * keu_t8_picu_kegiatan). Kartu ini menampilkan asal tautan (Otomatis/Manual), usulan tanggal dari versi identifikasi baru yang menunggu konfirmasi,
+ * dan tombol menjalankan pemicu untuk identifikasi yang sudah sah sebelum fitur ini ada.
+ */
+function UsulanTanggalBaris({ u, bisa, mengirim, onPutus }: { u: UsulanTanggal; bisa: boolean; mengirim: boolean; onPutus: (id: number, terapkan: boolean, catatan: string) => Promise<boolean> }) {
+  const [tolak, setTolak] = useState(false);
+  const [alasan, setAlasan] = useState("");
+  return (
+    <li className="flex flex-col gap-2 rounded-lg border border-[#F0C36D] bg-[#FFF8E6] px-3 py-2">
+      <p className="m-0 text-[13.5px] font-semibold text-[#0F2A52]">{u.kegiatan_nama}</p>
+      <p className="m-0 text-[12.5px] text-[#44546F]">
+        Identifikasi v{u.ident_ver} mengubah tanggal {NAMA_FUNGSI[u.fungsi].toLowerCase()}{u.periode ? ` ${u.periode}` : ""}: {periode(u.mulai_lama, u.selesai_lama)} → <b>{periode(u.mulai_baru, u.selesai_baru)}</b>. Tanggal kegiatan belum diubah.
+      </p>
+      {bisa && !tolak && (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={tombolUtama} disabled={mengirim} onClick={() => void onPutus(u.id, true, "")}>Terapkan tanggal baru</button>
+          <button type="button" className={tombolKecil} disabled={mengirim} onClick={() => setTolak(true)}>Tolak</button>
+        </div>
+      )}
+      {bisa && tolak && (
+        <div className="flex flex-col gap-2">
+          <label className="block min-w-0"><span className={label}>Alasan menolak (wajib, min. 5 huruf)</span>
+            <input className={kolom} maxLength={300} value={alasan} onChange={(e) => setAlasan(e.target.value)} disabled={mengirim} />
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={tombolUtama} disabled={mengirim || alasan.trim().length < 5} onClick={() => void onPutus(u.id, false, alasan.trim()).then((ok) => { if (ok) setTolak(false); })}>Simpan penolakan</button>
+            <button type="button" className={tombolKecil} disabled={mengirim} onClick={() => setTolak(false)}>Batal</button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
 export function KartuTautan(p: {
   tertaut: KegiatanTertaut[]; calon: CalonKegiatan[]; bisa: boolean; mengirim: boolean; galat: string | null;
   onTautkan: (kegiatanId: number, fungsi: FungsiKegiatan, catatan: string) => Promise<boolean>; onLepas: (kegiatanId: number) => Promise<boolean>;
+  usulanTanggal?: UsulanTanggal[]; onPutusTanggal?: (id: number, terapkan: boolean, catatan: string) => Promise<boolean>;
+  onPicu?: () => Promise<boolean>; pesanPicu?: string | null;
 }) {
   const belum = useMemo(() => calonBelumTertaut(p.calon), [p.calon]);
   const kelompok = useMemo(() => kelompokkanCalon(p.calon), [p.calon]);
@@ -45,8 +82,13 @@ export function KartuTautan(p: {
       <Catatan>
         Tautkan identifikasi ini ke kegiatan di SIGAP (Kelola translok) agar penugasan, laporan harian, dan evaluasi dapat dipantau. Satu identifikasi boleh ditautkan ke beberapa kegiatan,
         misalnya satu kegiatan <strong>Pelatihan</strong> dan satu kegiatan <strong>Pendataan</strong>; pilih satu per satu. Tanda ★ berarti kode anggaran kegiatan memuat kode RO identifikasi ini.
-        Tautan tidak mengubah kegiatan itu sendiri.
+        Tautan tidak mengubah kegiatan itu sendiri. Saat identifikasi disahkan, kegiatan pelatihan dan pendataan dibuat atau ditautkan otomatis; melepas tautan tidak menghapus kegiatan.
       </Catatan>
+      {(p.usulanTanggal ?? []).length > 0 && (
+        <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Usulan tanggal kegiatan menunggu konfirmasi">
+          {(p.usulanTanggal ?? []).map((u) => <UsulanTanggalBaris key={u.id} u={u} bisa={p.bisa} mengirim={p.mengirim} onPutus={p.onPutusTanggal ?? (async () => false)} />)}
+        </ul>
+      )}
       {p.tertaut.length === 0 ? <p className="m-0 text-[13px] text-[#5B6B84]">Belum ada kegiatan tertaut.</p> : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {p.tertaut.map((k) => (
@@ -56,6 +98,7 @@ export function KartuTautan(p: {
                 <p className="m-0 text-[12px] text-[#5B6B84]">{k.kode} · {periode(k.mulai, k.selesai)} · {k.n_penugasan} penugasan aktif</p>
               </div>
               <Chip warna="biru">{NAMA_FUNGSI[k.fungsi]}</Chip>
+              {k.sumber === "otomatis" && <Chip warna="hijau">Otomatis</Chip>}
               {!k.aktif && <Chip warna="abu">Nonaktif</Chip>}
               {k.disarankan && <Chip warna="hijau">Kode RO sama</Chip>}
               {p.bisa && <button type="button" className={tombolKecil} disabled={p.mengirim} onClick={() => void p.onLepas(k.kegiatan_id)}>Lepas tautan</button>}
@@ -103,6 +146,13 @@ export function KartuTautan(p: {
           </div>
         </div>
       ) : <p className="m-0 text-[12.5px] text-[#5B6B84]">Menautkan hanya untuk ketua tim, admin RO, atau penyusun lain RO ini.</p>}
+      {p.bisa && p.onPicu && (
+        <div className="flex flex-col gap-1.5 border-t border-[#E6ECF5] pt-2.5">
+          <p className="m-0 text-[12.5px] text-[#5B6B84]">Identifikasi yang disahkan sebelum fitur otomatis ada dapat diproses dengan tombol ini: kegiatan pelatihan dan pendataan yang belum ada dibuat atau ditautkan; yang sudah tertaut tidak berubah.</p>
+          <div><button type="button" className={tombolKecil} disabled={p.mengirim} onClick={() => void p.onPicu?.()}>Buat atau tautkan kegiatan dari identifikasi</button></div>
+          {p.pesanPicu && <p className="m-0 text-[12.5px] font-semibold text-[#14653A]" role="status">{p.pesanPicu}</p>}
+        </div>
+      )}
       {galatKotak(p.galat)}
     </Bagian>
   );

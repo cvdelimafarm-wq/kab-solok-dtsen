@@ -26,7 +26,28 @@ const rp = (n: number): string => `Rp ${Math.round(n).toLocaleString("id-ID")}`;
 export type KegiatanTertaut = {
   id: number; ident_id: number; kegiatan_id: number; fungsi: FungsiKegiatan; disarankan: boolean; catatan: string; ditautkan_at: string; ditautkan_oleh_nama: string | null;
   kode: string; nama: string; kode_anggaran: string | null; jenis: string | null; aktif: boolean; mulai: string | null; selesai: string | null; n_penugasan: number;
+  /** (13 Nov 2026, A) 'otomatis' = dibuat/ditautkan pemicu pengesahan identifikasi; boleh tidak ada sebelum SQL 20261113b. */
+  sumber?: "manual" | "otomatis"; periode?: string | null; ident_ver?: number | null;
 };
+
+/** (13 Nov 2026, A) Baris keu_v_ident_kegiatan_tanggal: usulan tanggal kegiatan dari versi identifikasi baru, menunggu konfirmasi. */
+export type UsulanTanggal = {
+  id: number; ident_id: number; kegiatan_id: number; ident_ver: number; fungsi: "pendataan" | "pelatihan"; periode: string | null;
+  mulai_lama: string | null; selesai_lama: string | null; mulai_baru: string | null; selesai_baru: string | null;
+  status: "menunggu" | "diterapkan" | "ditolak" | "usang"; catatan: string; dibuat_at: string; kegiatan_nama: string; kegiatan_kode: string;
+};
+
+/** (13 Nov 2026, A) Hasil keu_ident_picu_kegiatan(_manual) menjadi kalimat untuk pengguna. */
+export type AksiPicu = { fungsi: string; periode: string | null; aksi: "dibuat" | "ditautkan" | "sudah_tertaut" | "usul_tanggal" | "dilewati_pernah_dilepas"; kegiatan?: number };
+const NAMA_AKSI_PICU: Record<AksiPicu["aksi"], string> = {
+  dibuat: "kegiatan baru dibuat", ditautkan: "kegiatan yang ada ditautkan", sudah_tertaut: "sudah tertaut, tidak ada perubahan",
+  usul_tanggal: "tanggal berbeda, menunggu konfirmasi", dilewati_pernah_dilepas: "dilewati karena tautannya pernah dilepas",
+};
+export function kalimatPicu(data: unknown): string {
+  const aksi = (data && typeof data === "object" && Array.isArray((data as { aksi?: unknown }).aksi) ? (data as { aksi: AksiPicu[] }).aksi : []);
+  if (aksi.length === 0) return "Identifikasi tidak memuat pelatihan maupun pendataan; tidak ada kegiatan yang dibuat.";
+  return aksi.map((a) => `${a.fungsi === "pelatihan" ? "Pelatihan" : "Pendataan"}${a.periode ? ` ${a.periode}` : ""}: ${NAMA_AKSI_PICU[a.aksi] ?? a.aksi}`).join("; ") + ".";
+}
 /** Baris tampilan keu_v_kegiatan_calon. */
 export type CalonKegiatan = {
   ident_id: number; kegiatan_id: number; kode: string; nama: string; kode_anggaran: string | null; jenis: string | null; aktif: boolean;
