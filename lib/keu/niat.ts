@@ -151,3 +151,31 @@ export function bacaJumlah(teks: string): number | null {
   const n = Number(angka);
   return Number.isSafeInteger(n) ? n : null;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// (14 Nov 2026, Fase 3) Usulan revisi dari Gap: butir kurang dengan niat "Minta tambahan pagu" dibawa ke Kekurangan RAB (keu_kekurangan_catat),
+// yang lalu masuk siklus revisi (keputusan ketua tim -> tambahan pagu resmi). Uraian diberi awalan tetap supaya dikenali tanpa kolom baru.
+// ---------------------------------------------------------------------------------------------------------------------
+export const AWALAN_GAP = "Dari Gap: ";
+export const uraianDariGap = (uraian: string): string => `${AWALAN_GAP}${uraian.trim()}`.slice(0, 200);
+
+export type KekuranganAda = { id: number; akun_kode: string; uraian: string; status: string; jumlah: number | string };
+
+/** Kekurangan yang sudah dicatat dari butir ini (akun sama, uraian berawalan "Dari Gap: " + uraian butir), bila ada. */
+export function kekuranganDariButir(r: Pick<BarisRencana, "akun" | "uraian">, ada: readonly KekuranganAda[]): KekuranganAda | null {
+  const u = uraianDariGap(r.uraian);
+  return ada.find((k) => k.akun_kode.slice(0, 6) === r.akun.slice(0, 6) && k.uraian.trim() === u) ?? null;
+}
+
+export function argsKekuranganDariGap(ro: string, r: Pick<BarisRencana, "akun" | "uraian" | "jumlah" | "besar">, prioritas: string): Record<string, unknown> {
+  const jumlah = r.jumlah > 0 ? r.jumlah : r.besar;
+  return {
+    p_ro: ro,
+    p_akun_kode: r.akun.slice(0, 6),
+    p_uraian: uraianDariGap(r.uraian),
+    p_jumlah: Math.round(jumlah),
+    p_prioritas: prioritas,
+    p_alasan: "Rencana tindakan Gap: kekurangan butir ditutup dengan permintaan tambahan pagu (dari luar RO).",
+    p_komponen: null,
+  };
+}

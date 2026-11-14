@@ -41,7 +41,7 @@ export function hariDibayarPerPeran(hari: Record<string, string | number | null 
   return [...m.values()].sort((a, b) => a.periode.localeCompare(b.periode) || a.peran.localeCompare(b.peran));
 }
 
-export type BarisPenugasanRujukan = { ident_id: number; kegiatan_id: number; kegiatan_nama: string; fungsi: string; periode: string | null; peran: string; n: number; maks_min: number | null; maks_max: number | null; n_kosong: number };
+export type BarisPenugasanRujukan = { ident_id: number; kegiatan_id: number; kegiatan_nama: string; fungsi: string; periode: string | null; peran: string; n: number; maks_min: number | null; maks_max: number | null; n_kosong: number; dipilih?: number[] | null };
 
 export type SelisihHari = {
   periode: string;
@@ -54,6 +54,8 @@ export type SelisihHari = {
   /** batas penugasan sekarang: angka tunggal bila semua sama, null bila kosong semua, "campur" bila berbeda-beda */
   penugasan: number | null | "campur";
   sama: boolean;
+  /** petugas yang SUDAH memilih hari kerja lebih banyak dari hari dibayar RAB (hari tidak dihapus; kelebihan perlu diputuskan) */
+  lebih: { orang: number; maksDipilih: number };
 };
 
 /**
@@ -67,7 +69,9 @@ export function bandingHariPenugasan(hari: HariPeran[], penugasan: readonly Bari
       if (p.fungsi !== "pendataan" || p.peran !== h.peran) continue;
       if (p.periode && p.periode !== h.periode) continue;
       const nilai: number | null | "campur" = p.n_kosong === p.n ? null : p.n_kosong > 0 || p.maks_min !== p.maks_max ? "campur" : p.maks_min;
-      hasil.push({ periode: h.periode, peran: h.peran, hariRab: h.hari, kunci: h.kunci, kegiatan_id: p.kegiatan_id, kegiatan_nama: p.kegiatan_nama, n: p.n, penugasan: nilai, sama: nilai === h.hari || (h.hari === 0 && nilai === null) });
+      const dipilih = Array.isArray(p.dipilih) ? p.dipilih.filter((x) => typeof x === "number") : [];
+      const over = h.hari > 0 ? dipilih.filter((x) => x > h.hari) : [];
+      hasil.push({ periode: h.periode, peran: h.peran, hariRab: h.hari, kunci: h.kunci, kegiatan_id: p.kegiatan_id, kegiatan_nama: p.kegiatan_nama, n: p.n, penugasan: nilai, sama: nilai === h.hari || (h.hari === 0 && nilai === null), lebih: { orang: over.length, maksDipilih: over.length ? Math.max(...over) : 0 } });
     }
   }
   return hasil;

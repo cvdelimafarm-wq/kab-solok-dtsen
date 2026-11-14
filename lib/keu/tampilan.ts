@@ -73,7 +73,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_ident_riwayat: ["id", "ident_id", "nama", "ro_kode", "aksi", "dari", "ke", "ver", "oleh_nama", "catatan", "waktu"],
   keu_v_ident_paket: ["tahun", "ro_kode", "kunci_stabil", "paket", "oleh_nama", "diubah_at"],
   keu_v_ident_lanjutan: ["id", "ident_id", "tahun", "ro_kode", "ver", "ident_ver", "ident_ver_sekarang", "kebijakan_id", "kebijakan_ver", "isi", "status", "pasca_h15", "dibuat_oleh", "diubah_oleh", "diubah_oleh_nama", "dibuat_at", "diubah_at", "ver_hilir", "status_hilir", "isi_hilir"],
-  keu_v_ident_lanjutan_versi: ["id", "ident_id", "ver", "status", "ident_ver", "kebijakan_id", "pasca_h15", "alasan", "oleh_nama", "waktu"],
+  keu_v_ident_lanjutan_versi: ["id", "ident_id", "ver", "status", "ident_ver", "kebijakan_id", "pasca_h15", "alasan", "oleh_nama", "waktu", "isi"],
   keu_v_ident_petugas: ["ident_id", "tahun", "ro_kode", "status_lanjutan", "lanjutan_ver", "urut", "kode", "nama", "menyusul", "peran", "status", "sumber", "baru", "jabatan"],
   keu_v_ident_dokumen: ["id", "ident_id", "jenis", "kunci", "nomor", "tanggal", "ttd_akun", "ttd_nama", "ttd_jabatan", "status", "lanjutan_ver", "catatan", "dibuat_at", "diubah_at", "terbit_at"],
   keu_v_ident_ttd: ["akun_id", "akun_nama", "peran_kode", "ro_kode"],
@@ -92,7 +92,7 @@ export const TAMPILAN_BACA: Readonly<Record<string, readonly string[]>> = {
   keu_v_poin_perubahan: ["id", "sel_id", "jenis_id", "survei_id", "poin_lama", "poin_baru", "sumber", "alasan", "status", "diajukan_at", "diajukan_oleh_nama", "diputus_at", "diputus_oleh_nama", "catatan_putus"],
   keu_v_ident_kursi_tugas: ["ident_id", "fungsi", "kegiatan_id", "kegiatan_nama", "penugasan_id", "akun_id", "peran", "atasan_akun_id", "ada_st", "dikunci_at"],
   // (14 Nov 2026, Fase 3) angka rujukan: batas hari kerja penugasan per peran pada kegiatan tertaut + riwayat modal pembaruan
-  keu_v_rujukan_penugasan: ["ident_id", "kegiatan_id", "kegiatan_nama", "fungsi", "periode", "peran", "n", "maks_min", "maks_max", "n_kosong"],
+  keu_v_rujukan_penugasan: ["ident_id", "kegiatan_id", "kegiatan_nama", "fungsi", "periode", "peran", "n", "maks_min", "maks_max", "n_kosong", "dipilih"],
   keu_v_rujukan_pembaruan: ["id", "ident_id", "kunci", "asal", "tujuan", "kegiatan_id", "baru", "jumlah_terdampak", "oleh_nama", "at"],
   keu_v_ident_komponen_data: ["ident_id", "fungsi", "kegiatan_id", "kegiatan_nama", "strategi", "fitur", "n_pretest", "n_posttest", "n_materi", "n_berkas", "n_kuis_pra", "n_kuis_live", "n_kelas", "n_titik_presensi", "n_presensi", "n_nilai_skema", "n_foto_pelatihan", "n_surat_undangan", "n_laporan_pelatihan", "n_alokasi", "n_penugasan", "n_st", "n_qc_atur", "n_qc_soal", "n_anomali", "n_realisasi", "n_360"],
   keu_v_poin_berlaku: ["jenis_id", "survei_id", "survei_kode", "poin_berlaku", "sumber_berlaku", "berlaku_at"],

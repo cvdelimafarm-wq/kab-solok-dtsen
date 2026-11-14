@@ -28,5 +28,6 @@ describe("angka rujukan: hari dibayar", () => {
     expect(s[0]).toMatchObject({ kegiatan_id: 6, hariRab: 4, penugasan: null, sama: false });
     expect(bandingHariPenugasan(h, [{ ...p[0], maks_min: 4, maks_max: 4, n_kosong: 0 }])[0].sama).toBe(true);
     expect(bandingHariPenugasan(h, [{ ...p[0], maks_min: 3, maks_max: 4, n_kosong: 0 }])[0].penugasan).toBe("campur");
+    expect(bandingHariPenugasan(h, [{ ...p[0], dipilih: [10, 5, 4, 2] }])[0].lebih).toEqual({ orang: 2, maksDipilih: 10 });
   });
 });

@@ -70,7 +70,10 @@ export default function HariPenugasan({ identId, hariTeks, editable }: { identId
                 <td className="px-2 py-1.5"><b>{NAMA_PERAN[s.peran]}</b> <span className="text-[#5B6B84]">· {s.kegiatan_nama} · {s.n} orang</span></td>
                 <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{s.hariRab} hari</td>
                 <td className="px-2 py-1.5 text-right tabular-nums">{teksBatas(s.penugasan)}</td>
-                <td className="px-2 py-1.5"><Chip warna={s.sama ? "hijau" : "kuning"}>{s.sama ? "Sama" : "Berbeda"}</Chip></td>
+                <td className="px-2 py-1.5">
+                  <Chip warna={s.sama ? "hijau" : "kuning"}>{s.sama ? "Sama" : "Berbeda"}</Chip>
+                  {s.lebih.orang > 0 && <span className="mt-0.5 block text-[11.5px] font-semibold text-[#9B1C23]">{s.lebih.orang} orang sudah memilih lebih dari {s.hariRab} hari (sampai {s.lebih.maksDipilih})</span>}
+                </td>
                 <td className="px-2 py-1.5 text-right">
                   {!s.sama && editable && (
                     <button type="button" className={tombolKecil} onClick={() => setBuka(s)}>
@@ -93,6 +96,11 @@ export default function HariPenugasan({ identId, hariTeks, editable }: { identId
             </p>
             <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[12.5px] text-[#44546F]">
               <li>Transport lokal: kuota hari kerja {buka.n} orang menjadi {buka.hariRab} hari (hari yang sudah dipilih tidak dihapus).</li>
+              {buka.lebih.orang > 0 && (
+                <li className="font-semibold text-[#9B1C23]">
+                  {buka.lebih.orang} orang sudah memilih lebih dari {buka.hariRab} hari (sampai {buka.lebih.maksDipilih}). Hari mereka tetap ada dan bisa melebihi RAB; putuskan: naikkan hari dibayar di RAB, atau minta mereka melepas hari di menu Hari kerja.
+                </li>
+              )}
               <li>Kartu Angka rujukan identifikasi ikut menampilkan angka ini.</li>
               <li>RAB tidak berubah (sumbernya di sini).</li>
             </ul>

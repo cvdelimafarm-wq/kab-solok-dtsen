@@ -14,7 +14,9 @@ import {
 } from "@/lib/keu/niat";
 import type { SelItem } from "@/lib/keu/pokTata";
 import { Chip, judulKartu, kartu, kisi, Kpi, tombolAktif, tombolKecil } from "../../keu-ui";
-import { tulisKeuKlien, useBacaKeu, useBoleh } from "../useKeu";
+import { aksiKeu, tulisKeuKlien, useBacaKeu, useBoleh } from "../useKeu";
+import { PRIORITAS } from "@/lib/keu/kekurangan";
+import { argsKekuranganDariGap, kekuranganDariButir, type KekuranganAda } from "@/lib/keu/niat";
 
 const KOLOM = ["ro_kode", "pok_kunci", "niat", "jumlah", "catatan"];
 
@@ -60,6 +62,57 @@ function BarisTindakan({ r, bisa, sibuk, onPilih, onJumlah }: { r: BarisRencana;
         {PENJELAS_NIAT[r.niat]}{r.bawaan ? " (pilihan bawaan)" : ""}{r.disesuaikan ? ` Jumlah disesuaikan karena ${lebih ? "kelebihan" : "kekurangan"} butir ini berubah.` : ""}
       </p>
     </li>
+  );
+}
+
+/**
+ * (14 Nov 2026, Fase 3) Usulan revisi dari Gap: butir kurang dengan niat "Minta tambahan pagu" dicatat ke Kekurangan RAB (keu_kekurangan_catat; hak kek_catat),
+ * lalu ikut siklus revisi (keputusan ketua tim, tambahan pagu resmi). Butir yang sudah dicatat ditandai dengan statusnya.
+ */
+function BawaKeRevisi({ kode, butir, bisa }: { kode: string; butir: BarisRencana[]; bisa: boolean }) {
+  const kek = useBacaKeu<KekuranganAda>(urlBaca("keu_v_kekurangan", { ro_kode: kode }, { batas: 2000, kolom: ["id", "akun_kode", "uraian", "status", "jumlah"] }));
+  const [prioritas, setPrioritas] = useState<string>("penting");
+  const [sibuk, setSibuk] = useState<string | null>(null);
+  const [pesan, setPesan] = useState<{ ok: boolean; teks: string } | null>(null);
+  if (butir.length === 0) return null;
+  async function catat(r: BarisRencana) {
+    setSibuk(r.kunci);
+    setPesan(null);
+    const h = await aksiKeu("keu_kekurangan_catat", argsKekuranganDariGap(kode, r, prioritas));
+    setSibuk(null);
+    setPesan(h.ok ? { ok: true, teks: `"${r.uraian}" dicatat di Kekurangan RAB; diputuskan ketua tim pada siklus revisi.` } : { ok: false, teks: h.pesan });
+    await kek.muat();
+  }
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-[#C5D1E6] bg-[#F7FAFF] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="m-0 text-[13px] font-bold text-[#0F2A52]">Bawa ke usulan revisi ({angka(butir.length)} butir minta tambahan pagu)</h3>
+        <label className="flex items-center gap-1.5 text-[12px] text-[#44546F]">
+          Prioritas
+          <select className="min-h-[34px] rounded-md border border-[#C5D0E2] bg-white px-2 text-[12.5px]" value={prioritas} onChange={(e) => setPrioritas(e.target.value)} disabled={!bisa}>
+            {PRIORITAS.map((p) => <option key={p.kode} value={p.kode}>{p.nama}</option>)}
+          </select>
+        </label>
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+        {butir.map((r) => {
+          const ada = kekuranganDariButir(r, kek.baris ?? []);
+          return (
+            <li key={r.kunci} className="flex flex-wrap items-center justify-between gap-2 border-t border-[#E3E9F3] pt-1.5 text-[12.5px]">
+              <span className="min-w-0 flex-1"><b>{r.uraian}</b> <span className="text-[#5B6B84]">· akun {r.akun.slice(0, 6)} · {rupiah(r.jumlah > 0 ? r.jumlah : r.besar)}</span></span>
+              {ada ? (
+                <Chip warna="hijau">Sudah di Kekurangan RAB ({ada.status})</Chip>
+              ) : (
+                <button type="button" className={tombolKecil} disabled={!bisa || sibuk !== null || kek.memuat} onClick={() => void catat(r)}>
+                  {sibuk === r.kunci ? "Mencatat…" : "Catat ke Kekurangan RAB"}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {pesan && <p className={`m-0 text-[12.5px] font-semibold ${pesan.ok ? "text-[#13794B]" : "text-[#9B1C23]"}`}>{pesan.teks}</p>}
+    </div>
   );
 }
 
@@ -148,6 +201,7 @@ export function RencanaTindakan({ kode, item, baru }: { kode: string; item: SelI
           </ul>
         </div>
       )}
+      <BawaKeRevisi kode={kode} butir={kurang.filter((r) => r.niat === "tambahan" && !r.bawaan)} bisa={bisa} />
       {lebih.length > 0 && (
         <div className="flex flex-col gap-2">
           <h3 className="m-0 text-[13px] font-bold text-[#0F2A52]">Butir berlebih ({angka(lebih.length)})</h3>
