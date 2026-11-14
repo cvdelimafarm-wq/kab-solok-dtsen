@@ -145,6 +145,8 @@ export default function KameraSigap({
   const videoRef = useRef<HTMLVideoElement>(null);
   const aliranRef = useRef<MediaStream | null>(null);
   const gpsRef = useRef<number | null>(null);
+  const cadanganRef = useRef<number | null>(null); // (14 Nov 2026) watch lokasi jaringan cadangan
+  const cadanganTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tokenRef = useRef<{ token: string; mono: number; wall: number } | null>(null);
   const [posisi, setPosisi] = useState<Pos | null>(null);
   const [galatKamera, setGalatKamera] = useState<string | null>(null);
@@ -431,14 +433,44 @@ export default function KameraSigap({
   useEffect(() => {
     if (!navigator.geolocation) setGalatGps("Peramban ini tidak mendukung lokasi.");
     else {
+      // (14 Nov 2026) Laporan lapangan (Yola): di dalam ruangan GPS akurasi tinggi tidak pernah dapat sinyal, kamera berhenti di "Lokasi belum terbaca".
+      // Cadangan: lokasi jaringan (Wi-Fi/seluler, enableHighAccuracy:false) dijalankan bila GPS belum terbaca dalam 8 detik atau galat.
+      // Bacaan GPS yang masih baru (<= 30 detik) didahulukan; bacaan jaringan dipakai bila belum ada GPS atau lebih akurat.
+      // Akurasi tetap disaring aturan yang sama (<= 300 m langsung; 300-5000 m menunggu lalu ditandai diperiksa; > 5000 m ditolak).
+      let gpsTerakhir = 0;
+      const terima = (p: GeolocationPosition, dariGps: boolean) => {
+        const baru = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy, mono: performance.now() };
+        if (dariGps) gpsTerakhir = baru.mono;
+        setGalatGps(null);
+        setPosisi((lama) => {
+          if (!lama || dariGps) return baru;
+          const gpsMasihBaru = gpsTerakhir > 0 && baru.mono - gpsTerakhir <= 30_000;
+          return gpsMasihBaru && lama.akurasi <= baru.akurasi ? lama : baru;
+        });
+      };
+      const mulaiCadangan = () => {
+        if (cadanganRef.current !== null) return;
+        cadanganRef.current = navigator.geolocation.watchPosition(
+          (p) => terima(p, false),
+          () => {},
+          { enableHighAccuracy: false, maximumAge: 60_000, timeout: 30_000 }
+        );
+      };
       gpsRef.current = navigator.geolocation.watchPosition(
-        (p) => {
-          setGalatGps(null);
-          setPosisi({ lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy, mono: performance.now() });
+        (p) => terima(p, true),
+        (e) => {
+          if (e.code === 1) {
+            setGalatGps("Izin lokasi ditolak. Izinkan lokasi agar foto bisa diambil.");
+            return;
+          }
+          setGalatGps("Lokasi belum terbaca. Mencoba lokasi jaringan…");
+          mulaiCadangan();
         },
-        (e) => setGalatGps(e.code === 1 ? "Izin lokasi ditolak. Izinkan lokasi agar foto bisa diambil." : "Lokasi belum terbaca."),
         { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 }
       );
+      cadanganTimerRef.current = setTimeout(() => {
+        if (gpsTerakhir === 0) mulaiCadangan();
+      }, 8_000);
     }
     void muatToken();
     void hitungAntre();
@@ -454,6 +486,9 @@ export default function KameraSigap({
       clearInterval(timer);
       window.removeEventListener("online", online);
       if (gpsRef.current !== null) navigator.geolocation.clearWatch(gpsRef.current);
+      if (cadanganRef.current !== null) navigator.geolocation.clearWatch(cadanganRef.current);
+      cadanganRef.current = null;
+      if (cadanganTimerRef.current) clearTimeout(cadanganTimerRef.current);
     };
   }, [muatToken, hitungAntre, muatTerisi, kirimAntrean]);
 
