@@ -44,8 +44,23 @@ function nilaiPerPercobaan(akunId: number, rincian: RincianQc | undefined, kolom
 }
 
 /** Urutan baris mengikuti tim: PML dahulu, lalu PPL-nya (urutan dari server). */
+/**
+ * (14 Nov 2026) Satu orang satu baris: PPL yang KK-nya di dua PML (tercatat di dua tim) dan PML yang juga tercatat sebagai PPL hanya muncul sekali;
+ * nama PML-nya digabung ("A / B"). Dengan begitu infografis, tabel, dan KPI menghitung jumlah orang yang sama.
+ */
 export function susunBarisQc(rekap: QcRekapTim[], rincian: RincianQc | undefined, kolom: number): BarisQc[] {
   const out: BarisQc[] = [];
+  const indeks = new Map<number, number>();
+  const tambah = (b: BarisQc) => {
+    const i = indeks.get(b.akun_id);
+    if (i === undefined) {
+      indeks.set(b.akun_id, out.length);
+      out.push(b);
+      return;
+    }
+    const lama = out[i];
+    if (lama.peran === "PPL" && b.peran === "PPL" && b.pml && !(lama.pml ?? "").split(" / ").includes(b.pml)) lama.pml = lama.pml ? `${lama.pml} / ${b.pml}` : b.pml;
+  };
   for (const t of rekap) {
     if (t.pml_akun_id != null) {
       const ps = bacaPmlSendiri(t.pml_sendiri);
@@ -53,13 +68,13 @@ export function susunBarisQc(rekap: QcRekapTim[], rincian: RincianQc | undefined
       const percobaan = Math.max(ps?.percobaan ?? 0, r.jumlah);
       const nilai = r.nilai;
       if (r.jumlah === 0 && ps && ps.skor_terbaik != null && kolom > 0) nilai[0] = ps.skor_terbaik; // API lama: hanya nilai terbaik yang diketahui
-      out.push({ akun_id: t.pml_akun_id, nama: t.pml_nama, peran: "PML", pml: null, percobaan, nilai, terbaik: ps?.skor_terbaik ?? null, lulus: !!ps?.lulus, terlambat: r.terlambat });
+      tambah({ akun_id: t.pml_akun_id, nama: t.pml_nama, peran: "PML", pml: null, percobaan, nilai, terbaik: ps?.skor_terbaik ?? null, lulus: !!ps?.lulus, terlambat: r.terlambat });
     }
     for (const x of t.ppl) {
       const r = nilaiPerPercobaan(x.akun_id, rincian, kolom);
       const nilai = r.nilai;
       if (r.jumlah === 0 && x.skor_awal != null && kolom > 0) nilai[0] = x.skor_awal; // API lama: hanya nilai awal
-      out.push({ akun_id: x.akun_id, nama: x.nama, peran: "PPL", pml: t.pml_nama || null, percobaan: Math.max(x.percobaan, r.jumlah), nilai, terbaik: x.skor_terbaik, lulus: x.lulus, terlambat: x.terlambat || r.terlambat });
+      tambah({ akun_id: x.akun_id, nama: x.nama, peran: "PPL", pml: t.pml_nama || null, percobaan: Math.max(x.percobaan, r.jumlah), nilai, terbaik: x.skor_terbaik, lulus: x.lulus, terlambat: x.terlambat || r.terlambat });
     }
   }
   return out;

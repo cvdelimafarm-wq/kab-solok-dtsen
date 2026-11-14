@@ -95,7 +95,7 @@ export default function RekapSemuaQc({ kegiatanId, onBukaHari, api }: { kegiatan
         <>
           <Kartu
             judul="Rekap semua periode"
-            ket={d.hari.length === 0 ? "Belum ada hari ber-soal." : `${d.hari.length} hari ber-soal · ${tglPendekQc(d.dari ?? "")} – ${tglPendekQc(d.sampai ?? "")} · nilai lulus ${d.nilai_lulus >= 100 ? "100" : `${d.nilai_lulus} ke atas`}`}
+            ket={d.hari.length === 0 ? "Belum ada hari ber-soal." : `${d.hari.length} hari ber-soal yang diisi${d.hari_tanpa_pengisi?.length ? ` (${d.hari_tanpa_pengisi.length} hari tanpa pengisi tidak dihitung)` : ""} · ${tglPendekQc(d.dari ?? "")} – ${tglPendekQc(d.sampai ?? "")} · nilai lulus ${d.nilai_lulus >= 100 ? "100" : `${d.nilai_lulus} ke atas`}`}
             kanan={<button type="button" className={BTN_O} disabled={memuat} onClick={() => void muat()}>{memuat ? "Memuat…" : "Segarkan"}</button>}
           >
             {d.hari.length === 0 ? (

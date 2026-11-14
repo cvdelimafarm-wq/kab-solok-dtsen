@@ -230,6 +230,18 @@ export function menitKeJam(m: number): string {
   return `${dua(Math.floor(x / 60))}:${dua(x % 60)}`;
 }
 
+/**
+ * (14 Nov 2026) Definisi "Terlambat" yang ditulis di layar monitoring QC: percobaan selesai sesudah jam batas pada hari soal.
+ * Soal yang ditandai susulan tidak menghasilkan label terlambat. Jam batas tidak sah = definisi tanpa jam.
+ */
+export function teksDefinisiTerlambat(batasJam: string | null | undefined): string {
+  const m = jamKeMenit(batasJam);
+  const jam = m === null ? null : menitKeJam(m).replace(":", ".");
+  return jam
+    ? `Terlambat = mengisi sesudah batas pukul ${jam} WIB pada hari soal. Hari susulan tidak dihitung terlambat.`
+    : "Terlambat = mengisi sesudah jam batas pada hari soal. Hari susulan tidak dihitung terlambat.";
+}
+
 /** Menggeser tanggal "YYYY-MM-DD" sebanyak n hari. */
 export function geserHari(tanggal: string, n: number): string {
   const [y, m, d] = tanggal.split("-").map(Number);

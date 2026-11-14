@@ -64,6 +64,14 @@ describe("jumlahKolomNilai", () => {
 
 describe("susunBarisQc", () => {
   const baris = susunBarisQc(REKAP, RINCIAN, 4);
+  it("(14 Nov 2026) penjaga: PPL di dua PML dihitung sekali; jumlah baris = jumlah orang", () => {
+    const dua: QcRekapTim[] = [REKAP[0], { ...REKAP[1], ppl: [...REKAP[1].ppl, REKAP[0].ppl[0]] }];
+    const b = susunBarisQc(dua, RINCIAN, 4);
+    expect(b.filter((x) => x.akun_id === 1)).toHaveLength(1);
+    expect(b.find((x) => x.akun_id === 1)!.pml).toBe("Aprila / Ayu");
+    expect(b.length).toBe(new Set(b.map((x) => x.akun_id)).size);
+    expect(hitungStatusQc(b).semua).toBe(6);
+  });
   it("urutan: PML dulu lalu PPL-nya, tim demi tim", () => {
     expect(baris.map((b) => `${b.peran}:${b.nama}`)).toEqual(["PML:Aprila", "PPL:Ega Andini", "PPL:Norlizah", "PPL:Mirvan", "PML:Ayu", "PPL:Budi"]);
   });

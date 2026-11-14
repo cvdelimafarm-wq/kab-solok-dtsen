@@ -150,3 +150,13 @@ describe("undanganUntuk", () => {
     expect(u.pdf).toBe("");
   });
 });
+
+describe("(14 Nov 2026) penjaga sub judul Hari ini", () => {
+  it("menulis tanggal hari ini, bukan tanggal mulai pelatihan", async () => {
+    const { subJudulHariIni } = await import("@/lib/sigapTes");
+    expect(subJudulHariIni("2026-11-14", { mulai: "2026-11-09", selesai: "2026-11-11" }, "Aula")).toBe("Sabtu, 14 November 2026 · pelatihan selesai Rabu, 11 November 2026 · Aula");
+    expect(subJudulHariIni("2026-11-10", { mulai: "2026-11-09", selesai: "2026-11-11" })).toBe("Selasa, 10 November 2026 · hari ke-2 dari 3");
+    expect(subJudulHariIni("2026-11-08", { mulai: "2026-11-09", selesai: null })).toContain("pelatihan mulai Senin, 9 November 2026");
+    expect(subJudulHariIni("2026-11-14", null)).toBe("Sabtu, 14 November 2026");
+  });
+});

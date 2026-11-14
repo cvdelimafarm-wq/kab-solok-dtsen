@@ -25,6 +25,13 @@ describe("urutan dan blokir", () => {
     expect(pt.pesan).toBe("Selesaikan Pretest dulu.");
   });
 
+  it("(14 Nov 2026) penjaga Monitoring: tes yang sudah dikerjakan tidak tertulis terkunci", async () => {
+    const { kunciMonitoring } = await import("@/lib/sigapTahapan");
+    const h = hitungTahapan(masuk({ pretest: { ada: true, tuntas: false }, posttest: { ada: true, tuntas: false } }), true, [], NOW);
+    expect(kunciMonitoring(h, "posttest", true)).toBeNull();
+    expect(kunciMonitoring(h, "posttest", false)?.pesan).toBe("Selesaikan Pretest dulu.");
+  });
+
   it("pretest tuntas tetapi kuis ada dan belum ikut: posttest terkunci oleh kuis", () => {
     const h = hitungTahapan(masuk({ pretest: { ada: true, tuntas: true }, kuis: { ada: true, tuntas: false }, posttest: { ada: true, tuntas: false } }), true, [], NOW);
     expect(cariTahap(h, "posttest")!.kunci_oleh).toBe("kuis");

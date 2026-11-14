@@ -103,7 +103,7 @@ export default function RekapRentangQc({ kegiatanId, rentang, onBukaHari, api }:
         <>
           <Kartu
             judul={`Rekap ${tglPendekQc(d.dari)} – ${tglPendekQc(d.sampai)}`}
-            ket={d.hari.length === 0 ? "Tidak ada hari ber-soal pada rentang ini." : `${d.hari.length} hari ber-soal · nilai lulus ${d.nilai_lulus >= 100 ? "100" : `${d.nilai_lulus} ke atas`}`}
+            ket={d.hari.length === 0 ? "Tidak ada hari ber-soal pada rentang ini." : `${d.hari.length} hari ber-soal yang diisi${d.hari_tanpa_pengisi?.length ? ` (${d.hari_tanpa_pengisi.length} hari ber-soal tanpa pengisi tidak dihitung)` : ""} · nilai lulus ${d.nilai_lulus >= 100 ? "100" : `${d.nilai_lulus} ke atas`}`}
             kanan={<button type="button" className={BTN_O} disabled={memuat} onClick={() => void muat()}>{memuat ? "Memuat…" : "Segarkan"}</button>}
           >
             {d.hari.length === 0 ? (

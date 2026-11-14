@@ -120,3 +120,14 @@ describe("periksaItemSikap", () => {
   });
 });
 void kuis;
+describe("(14 Nov 2026) penjaga penjelasan nilai akhir di Monitoring", () => {
+  it("menulis tiap komponen, bobot, dan komponen yang belum ada dihitung 0; hasilnya sama dengan hitungAkhir", async () => {
+    const m = await import("@/lib/sigapNilaiHitung");
+    const skema = { ...m.SKEMA_BAWAAN, pakai: { pretest: true, posttest: true, kuis: true }, bobot: { pretest: 40, posttest: 30, kuis: 30 } };
+    const h = m.hitungAkhir(skema, { pretest: 70.7, posttest: 100, kuis: null });
+    const t = m.jelaskanAkhir(skema, h);
+    expect(t).toBe("Pretest 70,7 × 40% + Posttest 100 × 30% + Kuis (Adu Sigap) belum ada × 30% (dihitung 0) = 58,28");
+    expect(t.endsWith(String(h.akhir).replace(".", ","))).toBe(true);
+    expect(m.jelaskanAkhir({ ...skema, pakai: { pretest: false, posttest: false, kuis: false } }, h)).toContain("belum diatur");
+  });
+});

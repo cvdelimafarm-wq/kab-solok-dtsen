@@ -406,6 +406,7 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
     sekarang: new Date().toISOString(),
     aktif: !!peng?.aktif,
     nilai_lulus: nilaiLulus,
+    batas_jam: (peng?.batas_jam as string | null | undefined) ?? null,
     maks_percobaan: peng ? maksPercobaanDari(peng) : 4,
     hari,
     hari_ada: daftar,

@@ -10,7 +10,7 @@
 
 import { useMemo, useState } from "react";
 import { petugasPalingSalah, ringkasStatus, ringkasTim, sebaranNilaiAwal, sebaranPercobaan, soalPalingSalah, type TempatSebaran } from "@/lib/sigapQcInfo";
-import type { QcRekapTim } from "@/lib/sigapQc";
+import { teksDefinisiTerlambat, type QcRekapTim } from "@/lib/sigapQc";
 import type { RincianQc } from "@/lib/sigapQcMonitor";
 import type { BarisQc, FokusQc } from "@/lib/sigapQcTabel";
 import SelectCari from "@/app/components/SelectCari";
@@ -88,7 +88,7 @@ function Kolom({ data, onFokus, judulFokus }: { data: TempatSebaran[]; onFokus: 
   );
 }
 
-export default function InfografisQc({ baris, rekap, rincian, nilaiLulus, kolom, onFokus }: { baris: BarisQc[]; rekap: QcRekapTim[]; rincian: RincianQc | undefined; nilaiLulus: number; kolom: number; onFokus: (f: FokusQc) => void }) {
+export default function InfografisQc({ baris, rekap, rincian, nilaiLulus, kolom, onFokus, batasJam }: { baris: BarisQc[]; rekap: QcRekapTim[]; rincian: RincianQc | undefined; nilaiLulus: number; kolom: number; onFokus: (f: FokusQc) => void; batasJam?: string | null }) {
   const [tab, setTab] = useState<Tab>("ringkasan");
   const [soalBuka, setSoalBuka] = useState<string | null>(null);
   const [semuaSoal, setSemuaSoal] = useState(false);
@@ -168,6 +168,7 @@ export default function InfografisQc({ baris, rekap, rincian, nilaiLulus, kolom,
                       </button>
                     )}
                   </div>
+                  {status.terlambat.length > 0 && <p className="mt-1 text-[11.5px] text-[#6B7A90]">{teksDefinisiTerlambat(batasJam)}</p>}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">

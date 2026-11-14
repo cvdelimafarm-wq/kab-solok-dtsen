@@ -290,6 +290,8 @@ export type HasilQcSpdt = {
   sekarang: string;
   aktif: boolean;
   nilai_lulus: number;
+  /** (14 Nov 2026) jam batas pengisian "HH:MM" dari pengaturan QC; dipakai untuk definisi "Terlambat" di layar. */
+  batas_jam?: string | null;
   maks_percobaan: number;
   /** tanggal yang ditampilkan (null = QC belum pernah berjalan) */
   hari: string | null;

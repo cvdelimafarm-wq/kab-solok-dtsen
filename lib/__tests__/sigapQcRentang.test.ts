@@ -163,3 +163,12 @@ describe("saringan dan urutan", () => {
     expect(r.baris.map((b) => b.nama)).toEqual(asal);
   });
 });
+
+describe("(14 Nov 2026) penjaga rentang: hari tanpa pengisi", () => {
+  it("tidak menjadi kolom dan tidak masuk penyebut", () => {
+    const d = susunRentang({ dari: "2026-10-26", sampai: "2026-10-30", hari: [...HARI, "2026-10-30"], peserta, percobaan, nilaiLulus: 100 });
+    expect(d.hari).not.toContain("2026-10-30");
+    expect(d.hari_tanpa_pengisi).toContain("2026-10-30");
+    expect(d.per_hari.every((h) => h.sudah > 0)).toBe(true);
+  });
+});

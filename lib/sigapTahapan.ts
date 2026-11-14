@@ -112,6 +112,14 @@ export function kunciUntuk(h: readonly HasilTahap[], kode: KodeTahap): { oleh: K
 }
 
 /**
+ * (14 Nov 2026) Kunci untuk layar Monitoring: tes yang SUDAH dikerjakan tidak pernah tertulis terkunci (sebelumnya peserta dengan posttest 100
+ * tetap tertulis "Posttest terkunci · Selesaikan Pretest dulu", dan semua 22 orang terhitung terkunci).
+ */
+export function kunciMonitoring(h: readonly HasilTahap[], kode: KodeTahap, sudahDikerjakan: boolean): { oleh: KodeTahap; oleh_label: string; pesan: string } | null {
+  return sudahDikerjakan ? null : kunciUntuk(h, kode);
+}
+
+/**
  * Status permintaan / izin terbaru untuk satu tahapan, sebagai yang dilihat petugas pada kartu terkunci:
  * izin berlaku (disetujui) > menunggu > ditolak. Baris yang sudah kedaluwarsa (disetujui lalu lewat) dianggap tidak ada.
  */

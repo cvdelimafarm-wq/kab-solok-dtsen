@@ -648,3 +648,11 @@ describe("validasiSoal: soal 2 pilihan (Benar/Salah)", () => {
     expect(validasiSoal({ ...bs, opsi: { A: "Benar", B: "benar" } })).toMatchObject({ ok: false });
   });
 });
+
+describe("(14 Nov 2026) definisi Terlambat di layar", () => {
+  it("menyebut jam batas dari pengaturan", async () => {
+    const { teksDefinisiTerlambat } = await import("@/lib/sigapQc");
+    expect(teksDefinisiTerlambat("12:00:00")).toContain("pukul 12.00 WIB");
+    expect(teksDefinisiTerlambat(null)).toContain("jam batas");
+  });
+});

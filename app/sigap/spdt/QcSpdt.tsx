@@ -372,7 +372,7 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                 <p className="rounded-[16px] bg-white px-4 py-6 text-center text-[13.5px] text-[#55657D]">Belum ada soal yang dirilis pada hari ini.</p>
               ) : (
                 <>
-                  <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={d.nilai_lulus} kolom={kolomQc} onFokus={setFokus} />
+                  <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={d.nilai_lulus} kolom={kolomQc} onFokus={setFokus} batasJam={d.batas_jam} />
                   <TabelQc baris={barisTabel} kolom={kolomQc} rincian={d.rincian} nilaiLulus={d.nilai_lulus} fokus={fokus} onHapusFokus={() => setFokusState(null)} />
                 </>
               )}

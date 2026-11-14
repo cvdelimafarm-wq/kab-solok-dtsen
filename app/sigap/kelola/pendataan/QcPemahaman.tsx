@@ -223,9 +223,6 @@ function HariIni({
 function HariAktif({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kirim; muat: () => Promise<void>; memuat: boolean; diperbarui: Date | null }) {
   const p = d.pengaturan;
   const hariBerlaku = !d.hari_berlaku || d.hari === d.hari_berlaku; // melihat hari ini (bukan tanggal lain)
-  const sudah = d.rekap.reduce((a, t) => a + t.sudah, 0);
-  const total = d.rekap.reduce((a, t) => a + t.jumlah_ppl, 0);
-  const lulus = d.rekap.reduce((a, t) => a + t.lulus, 0);
   // PML dihitung terpisah dari PPL (hasil PML sendiri ada di tiap baris rekap)
   const pmlTotal = d.peserta.pml;
   const pmlSudah = d.rekap.filter((t) => (bacaPmlSendiri(t.pml_sendiri)?.percobaan ?? 0) > 0).length;
@@ -237,6 +234,11 @@ function HariAktif({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kir
   const nilaiLulusP = nilaiLulusDari(p);
   const kolomQc = useMemo(() => jumlahKolomNilai(maksP, d.rincian), [maksP, d.rincian]);
   const barisQc = useMemo(() => susunBarisQc(d.rekap, d.rincian, kolomQc), [d.rekap, d.rincian, kolomQc]);
+  // (14 Nov 2026) KPI PPL dari baris yang sama dengan infografis dan tabel: PPL yang tercatat di dua PML dihitung sekali.
+  const pplUnik = barisQc.filter((b) => b.peran === "PPL");
+  const sudah = pplUnik.filter((b) => b.percobaan > 0).length;
+  const total = pplUnik.length;
+  const lulus = pplUnik.filter((b) => b.lulus).length;
   const setFokus = (f: FokusQc | null) => {
     setFokusState(f);
     if (f) setTimeout(() => document.getElementById("tabel-qc")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
@@ -300,7 +302,7 @@ function HariAktif({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kir
         </Kartu>
       ) : (
         <>
-          <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={nilaiLulusP} kolom={kolomQc} onFokus={setFokus} />
+          <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={nilaiLulusP} kolom={kolomQc} onFokus={setFokus} batasJam={p?.batas_jam} />
           <TabelQc baris={barisQc} kolom={kolomQc} rincian={d.rincian} nilaiLulus={nilaiLulusP} fokus={fokus} onHapusFokus={() => setFokusState(null)} />
         </>
       )}

@@ -60,13 +60,15 @@ export type DataSemua = {
   per_hari: HariSemua[];
   kepatuhan_persen: number | null;
   tidak_pernah: number;
+  /** (14 Nov 2026) Hari ber-soal tanpa satu pun pengisi: tidak dihitung dalam `hari` maupun penyebut tingkat mengisi. */
+  hari_tanpa_pengisi?: string[];
 };
 
 /** Menyusun rekap. Percobaan di luar `hari` atau milik akun yang bukan peserta diabaikan. */
 export function susunSemua(input: { hari: string[]; peserta: PesertaMentah[]; percobaan: PercobaanRentang[]; nilaiLulus: number }): DataSemua {
   const { peserta, percobaan, nilaiLulus } = input;
-  const hari = [...new Set(input.hari)].sort();
-  const adaHari = new Set(hari);
+  const hariSoal = [...new Set(input.hari)].sort();
+  const adaHari = new Set(hariSoal);
   const pesertaSah = peserta.filter((p) => p.peran === "pml" || p.peran === "ppl");
   const dikenal = new Set(pesertaSah.map((p) => p.akun_id));
 
@@ -80,6 +82,11 @@ export function susunSemua(input: { hari: string[]; peserta: PesertaMentah[]; pe
     if (a) a.push(c);
     else tumpuk.set(k, [c]);
   }
+
+  // (14 Nov 2026) Hari ber-soal yang tidak diisi siapa pun tidak masuk penyebut (tingkat mengisi, hari terisi, pergerakan per hari).
+  const terisi = new Set(Array.from(tumpuk.keys(), (k) => k.slice(k.indexOf("|") + 1)));
+  const hari = hariSoal.filter((t) => terisi.has(t));
+  const hari_tanpa_pengisi = hariSoal.filter((t) => !terisi.has(t));
 
   const semuaP: number[][] = Array.from({ length: kolom }, () => []);
   const awalHari = new Map<string, number[]>();
@@ -163,6 +170,7 @@ export function susunSemua(input: { hari: string[]; peserta: PesertaMentah[]; pe
     per_hari,
     kepatuhan_persen: selTotal > 0 ? Math.round((selIsi / selTotal) * 100) : null,
     tidak_pernah: hari.length > 0 ? baris.filter((b) => b.hari_terisi === 0).length : 0,
+    hari_tanpa_pengisi,
   };
 }
 

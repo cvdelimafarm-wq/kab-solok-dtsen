@@ -138,3 +138,24 @@ describe("rincianPetugas", () => {
     expect(rincianPetugas(99, [], soalR).soal).toEqual([]);
   });
 });
+
+describe("penjaga kepala baris matriks", () => {
+  it("(14 Nov 2026) penjaga: angka salah di kepala baris = jumlah sel ✕ di baris itu (orang, bukan jawaban)", () => {
+    const d = [
+      P(2, 1, { "LAT-9": "B" }, ["LAT-9"], "2026-10-27"),
+      P(2, 1, { "LAT-9": "B" }, ["LAT-9"], "2026-10-28"),
+      P(3, 1, { "LAT-9": "A" }, [], "2026-10-27"),
+      P(5, 1, { "LAT-9": "B" }, ["LAT-9"], "2026-10-27"),
+    ];
+    const h = susunHasil(A, d, []);
+    for (const b of h.matriks.baris) {
+      const silang = Object.values(b.sel).filter((c) => c?.status === "salah").length;
+      const terisi = Object.values(b.sel).filter(Boolean).length;
+      expect(b.jumlahSalah).toBe(silang);
+      expect(b.jumlahJawab).toBe(terisi);
+    }
+    expect(h.matriks.baris.find((b) => b.soal.id === "LAT-9")).toMatchObject({ jumlahSalah: 2, jumlahJawab: 3, kaliSalah: 3 });
+    const sari = h.tim.find((t) => t.nama === "Sari")!;
+    expect(sari.soalSalah[0]).toMatchObject({ jumlahSalah: 1, kaliSalah: 2 });
+  });
+});

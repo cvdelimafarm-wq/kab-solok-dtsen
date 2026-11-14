@@ -103,6 +103,8 @@ export type DataRentang = {
   kepatuhan_persen: number | null;
   /** Petugas yang tidak mengisi satu hari pun di rentang. */
   tidak_pernah: number;
+  /** (14 Nov 2026) Hari ber-soal tanpa satu pun pengisi: tidak menjadi kolom dan tidak masuk penyebut. */
+  hari_tanpa_pengisi?: string[];
 };
 
 const bulat1 = (x: number) => Math.round(x * 10) / 10;
@@ -113,18 +115,22 @@ const bulat1 = (x: number) => Math.round(x * 10) / 10;
  */
 export function susunRentang(input: { dari: string; sampai: string; hari: string[]; peserta: PesertaMentah[]; percobaan: PercobaanRentang[]; nilaiLulus: number }): DataRentang {
   const { dari, sampai, peserta, percobaan, nilaiLulus } = input;
-  const hari = [...new Set(input.hari)].filter((t) => t >= dari && t <= sampai).sort();
-  const indeksHari = new Map(hari.map((t, i) => [t, i]));
+  const hariSoal = [...new Set(input.hari)].filter((t) => t >= dari && t <= sampai).sort();
+  const indeksSoal = new Set(hariSoal);
 
   const pesertaPetaNama = new Map(peserta.map((p) => [p.akun_id, p.nama]));
   const tumpuk = new Map<string, PercobaanRentang[]>(); // "akun|tanggal"
   for (const c of percobaan) {
-    if (!indeksHari.has(c.tanggal) || !pesertaPetaNama.has(c.akun_id)) continue;
+    if (!indeksSoal.has(c.tanggal) || !pesertaPetaNama.has(c.akun_id)) continue;
     const kunci = `${c.akun_id}|${c.tanggal}`;
     const a = tumpuk.get(kunci);
     if (a) a.push(c);
     else tumpuk.set(kunci, [c]);
   }
+  // (14 Nov 2026) Hari ber-soal yang tidak diisi siapa pun tidak masuk kolom maupun penyebut tingkat mengisi.
+  const terisiHari = new Set(Array.from(tumpuk.keys(), (k) => k.slice(k.indexOf("|") + 1)));
+  const hari = hariSoal.filter((t) => terisiHari.has(t));
+  const hari_tanpa_pengisi = hariSoal.filter((t) => !terisiHari.has(t));
 
   const baris: BarisRentang[] = peserta
     .filter((p) => p.peran === "pml" || p.peran === "ppl")
@@ -172,6 +178,7 @@ export function susunRentang(input: { dari: string; sampai: string; hari: string
     per_hari,
     kepatuhan_persen: sel_total > 0 ? Math.round((sel_isi / sel_total) * 100) : null,
     tidak_pernah: hari.length > 0 ? baris.filter((b) => b.hari_terisi === 0).length : 0,
+    hari_tanpa_pengisi,
   };
 }
 

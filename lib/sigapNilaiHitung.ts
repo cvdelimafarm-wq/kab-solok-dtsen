@@ -104,6 +104,23 @@ export function hitungAkhir(skema: SkemaNilai, n: NilaiPeserta, versi: 1 | 2 = 1
   return hasil;
 }
 
+/**
+ * (14 Nov 2026) Penjelasan nilai akhir satu peserta, untuk layar Monitoring: tiap komponen yang dipakai dengan nilai dan bobotnya,
+ * dan komponen yang belum ada ditulis "belum ada, dihitung 0" (penyebab umum nilai akhir lebih rendah dari pretest/posttest).
+ * Contoh: "Pretest 70,7 × 40% + Posttest 100 × 30% + Kuis (Adu Sigap) belum ada × 30% (dihitung 0) = 58,28".
+ */
+export function jelaskanAkhir(skema: SkemaNilai, h: Pick<HasilAkhir, "akhir" | "komponen" | "tambahan">): string {
+  const angka = (n: number) => String(bulat2(n)).replace(".", ",");
+  const tam = tambahanDari(skema);
+  const bagian = [
+    ...KOMPONEN.filter((k) => skema.pakai[k]).map((k) => ({ label: LABEL_KOMPONEN[k], nilai: h.komponen[k], bobot: skema.bobot[k] })),
+    ...KOMPONEN_TAMBAHAN.filter((k) => tam[k].pakai).map((k) => ({ label: LABEL_TAMBAHAN[k], nilai: h.tambahan?.[k] ?? null, bobot: tam[k].bobot })),
+  ];
+  if (bagian.length === 0) return "Rumus nilai akhir belum diatur di Kelola pelatihan.";
+  const teks = bagian.map((b) => (b.nilai == null ? `${b.label} belum ada × ${b.bobot}% (dihitung 0)` : `${b.label} ${angka(b.nilai)} × ${b.bobot}%`)).join(" + ");
+  return h.akhir == null ? `${teks}: belum dapat dihitung` : `${teks} = ${angka(h.akhir)}`;
+}
+
 export function ringkasSkema(s: SkemaNilai): string {
   const tam = tambahanDari(s);
   const bagian = [

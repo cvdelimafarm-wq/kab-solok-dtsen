@@ -36,6 +36,10 @@ import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { lupakanBenderaTab } from "../TabPelatihan";
 import { MAKS_ALASAN } from "@/lib/ketentuanPelatihan";
+import { subJudulHariIni } from "@/lib/sigapTes";
+import { tanggalWib } from "@/lib/sigapPresensi";
+
+const tanggalWibKini = () => tanggalWib(Date.now());
 import type { StatusUndangan, TeksKartuUndangan } from "@/lib/ketentuanPelatihan";
 
 type Data = {
@@ -240,7 +244,7 @@ export default function HalamanHariIni() {
   const info = useInfoPelatihan();
   const vg = useVanguardSaya(sebagaiPeserta && !terkunciUndangan && d ? d.kegiatan_id : null); // terkunci: Vanguard belum dimuat
   return (
-    <Kerangka aktif="hari-ini" geser judul="Hari ini" sub={d ? `${d.undangan.hari_tanggal}${d.undangan.tempat ? ` · ${d.undangan.tempat}` : ""}` : undefined}>
+    <Kerangka aktif="hari-ini" geser judul="Hari ini" sub={d ? subJudulHariIni(tanggalWibKini(), d.jadwal_pelatihan ?? (d.undangan.tanggal_iso ? { mulai: d.undangan.tanggal_iso, selesai: null } : null), d.undangan.tempat) : undefined}>
       {galat && <Pesan jenis="galat">{galat}</Pesan>}
       {!d && !galat && <Memuat />}
       {d && !d.peserta && d.ditolak && (

@@ -101,3 +101,14 @@ describe("selisihNilai", () => {
     expect(selisihNilai([null, 50, 70])).toBe(20);
   });
 });
+
+describe("(14 Nov 2026) penjaga: hari tanpa pengisi tidak masuk penyebut", () => {
+  it("hari ber-soal tanpa satu pun pengisi keluar dari hari dan tingkat mengisi", () => {
+    const dgnKosong = susunSemua({ hari: [...hari, "2026-10-26"], peserta, percobaan, nilaiLulus: 100 });
+    const tanpa = susunSemua({ hari, peserta, percobaan, nilaiLulus: 100 });
+    expect(dgnKosong.hari_tanpa_pengisi).toEqual(["2026-10-26"]);
+    expect(dgnKosong.hari).toEqual(tanpa.hari);
+    expect(dgnKosong.kepatuhan_persen).toBe(tanpa.kepatuhan_persen);
+    expect(dgnKosong.per_hari.every((h) => h.sudah > 0)).toBe(true);
+  });
+});

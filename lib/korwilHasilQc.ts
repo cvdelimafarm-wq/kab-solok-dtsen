@@ -28,9 +28,13 @@ export type PetugasHasil = {
   persen: number | null; // % benar; null bila belum menjawab
 };
 export type Penjawab = { akun_id: number; nama: string; peran: "pml" | "ppl"; pilih: string | null; tanggal: string };
-export type SoalSalah = { soal: SoalMentah; jumlahSalah: number; jumlahJawab: number; penjawab: Penjawab[] };
+/**
+ * (14 Nov 2026) `jumlahSalah` dan `jumlahJawab` = banyak ORANG (sama dengan jumlah sel ✕ / sel terisi di baris matriks dan dengan "n salah · n benar"
+ * di rincian soal). `kaliSalah` = banyak jawaban salah (seorang petugas yang salah di dua hari terhitung dua kali).
+ */
+export type SoalSalah = { soal: SoalMentah; jumlahSalah: number; jumlahJawab: number; kaliSalah: number; penjawab: Penjawab[] };
 export type TimHasil = { nama: string; petugas: PetugasHasil[]; terjawab: number; salah: number; persen: number | null; soalSalah: SoalSalah[] };
-export type BarisMatriks = { soal: SoalMentah; jumlahSalah: number; jumlahJawab: number; sel: Record<number, Sel | undefined> };
+export type BarisMatriks = { soal: SoalMentah; jumlahSalah: number; jumlahJawab: number; kaliSalah: number; sel: Record<number, Sel | undefined> };
 export type HasilQc = {
   tim: TimHasil[];
   matriks: { kolom: PetugasHasil[]; baris: BarisMatriks[] };
@@ -141,16 +145,18 @@ export function susunHasil(anggotaSemua: readonly AnggotaHasil[], percobaanSemua
     const s: Record<number, Sel | undefined> = {};
     let jumlahSalah = 0;
     let jumlahJawab = 0;
+    let kaliSalah = 0;
     for (const p of petugas) {
       const c = sel.get(`${id}|${p.akun_id}`);
       if (!c) continue;
       s[p.akun_id] = c;
-      jumlahJawab += c.kali;
-      jumlahSalah += c.salahKali;
+      jumlahJawab += 1;
+      if (c.salahKali > 0) jumlahSalah += 1;
+      kaliSalah += c.salahKali;
     }
-    return { soal: soalAda(peta, id), jumlahSalah, jumlahJawab, sel: s };
+    return { soal: soalAda(peta, id), jumlahSalah, jumlahJawab, kaliSalah, sel: s };
   });
-  baris.sort((a, b) => b.jumlahSalah - a.jumlahSalah || bandingId(a.soal.id, b.soal.id));
+  baris.sort((a, b) => b.jumlahSalah - a.jumlahSalah || b.kaliSalah - a.kaliSalah || bandingId(a.soal.id, b.soal.id));
 
   // tim
   const namaTimUrut = Array.from(new Set(petugas.map((p) => p.tim))).sort((a, b) => a.localeCompare(b, "id"));
@@ -163,14 +169,18 @@ export function susunHasil(anggotaSemua: readonly AnggotaHasil[], percobaanSemua
       const penjawab: Penjawab[] = [];
       let jumlahJawab = 0;
       let jumlahSalah = 0;
+      let kaliSalah = 0;
       for (const p of anggotaTim) {
         const c = b.sel[p.akun_id];
         if (!c) continue;
-        jumlahJawab += c.kali;
-        jumlahSalah += c.salahKali;
-        if (c.salahKali > 0) penjawab.push({ akun_id: p.akun_id, nama: p.nama, peran: p.peran, pilih: c.pilih, tanggal: c.tanggal });
+        jumlahJawab += 1;
+        kaliSalah += c.salahKali;
+        if (c.salahKali > 0) {
+          jumlahSalah += 1;
+          penjawab.push({ akun_id: p.akun_id, nama: p.nama, peran: p.peran, pilih: c.pilih, tanggal: c.tanggal });
+        }
       }
-      if (jumlahSalah > 0) soalSalah.push({ soal: b.soal, jumlahSalah, jumlahJawab, penjawab });
+      if (jumlahSalah > 0) soalSalah.push({ soal: b.soal, jumlahSalah, jumlahJawab, kaliSalah, penjawab });
     }
     soalSalah.sort((a, b) => b.jumlahSalah - a.jumlahSalah || bandingId(a.soal.id, b.soal.id));
     return { nama: nm, petugas: anggotaTim, terjawab, salah, persen: persen(terjawab - salah, terjawab), soalSalah };

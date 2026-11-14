@@ -25,7 +25,7 @@ type Tes = { status: "belum" | "mengerjakan" | "selesai"; skor: number | null };
 type Kunci = { tahap: "pretest" | "posttest"; oleh_label: string; pesan: string };
 type Baris = {
   akun_id: number; nama: string; peran: PeranPelatihan; kedalaman: number; diri: boolean; kelas: number | null; undangan: "belum" | "terima" | "tolak"; pretest: Tes; posttest: Tes; hadir: boolean;
-  nilai_akhir?: number | null; kelulusan?: StatusKelulusan;
+  nilai_akhir?: number | null; kelulusan?: StatusKelulusan; nilai_rincian?: string;
   kunci: Kunci[];
   izin: { pretest: StatusIzin | null; posttest: StatusIzin | null };
   /** Materi wajib (video / tautan): null = tidak ada materi wajib atau SQL belum dijalankan. `manual` = peserta menekan "Saya sudah menonton" (bukan hasil pelacakan). */
@@ -41,6 +41,8 @@ type Data = {
   aturan_versi?: 1 | 2;
   blokir_tahap?: boolean;
   boleh_buka_kunci?: boolean;
+  /** (14 Nov 2026) rumus nilai akhir dan ambang lulus dari Kelola pelatihan */
+  nilai_rumus?: { teks: string; lulus_di_atas: number; versi: number };
   baris: Baris[];
   ringkasan: { total: number; undangan_terima: number; undangan_tolak: number; pretest_selesai: number; posttest_selesai: number; hadir: number; terkunci?: number; izin_menunggu?: number; materi_wajib?: number; materi_belum?: number; kelulusan?: Record<StatusKelulusan, number> };
 };
@@ -243,6 +245,11 @@ export default function HalamanMonitoring() {
                   <Chip teks={`${r.kelulusan.belum_lengkap} belum lengkap`} nada="wait" />
                   <Chip teks={`${r.kelulusan.belum_dinilai} belum dinilai`} nada="mut" />
                 </div>
+                {d.nilai_rumus && (
+                  <p className="m-0 mt-1.5 text-[11.5px] leading-snug text-[#55657D]">
+                    Nilai akhir = {d.nilai_rumus.teks}. Lulus bila nilai akhir {d.nilai_rumus.versi === 2 ? "lebih dari" : "sekurang-kurangnya"} {String(d.nilai_rumus.lulus_di_atas).replace(".", ",")} dan semua komponen sudah ada; komponen yang belum ada dihitung 0 sehingga status &quot;belum lengkap&quot;. Rumus dan ambang diatur di Kelola pelatihan.
+                  </p>
+                )}
               </div>
             )}
           </Kartu>
@@ -347,6 +354,7 @@ export default function HalamanMonitoring() {
                             {b.kelulusan && <Mini label="Kelulusan" teks={LABEL_KELULUSAN[b.kelulusan]} nada={NADA_LULUS[b.kelulusan]} />}
                           </div>
                         )}
+                        {b.kelulusan && b.nilai_rincian && <p className="m-0 mt-1 text-[11px] leading-snug text-[#6B7A90]">Nilai akhir: {b.nilai_rincian}</p>}
                         {b.materi?.manual && b.materi.belum === 0 && <p className="m-0 mt-1 text-[11px] text-[#6B7A90]">* ditandai manual oleh peserta, bukan hasil pelacakan.</p>}
                         {(b.kunci.length > 0 || b.izin.pretest || b.izin.posttest) && (
                           <div className="mt-2 flex flex-wrap gap-1.5">

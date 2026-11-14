@@ -484,6 +484,24 @@ export function tanggalPanjangId(iso: string): string {
   return `${NAMA_HARI_ID[dt.getUTCDay()]}, ${d} ${NAMA_BULAN_ID[mo - 1]} ${y}`;
 }
 
+/**
+ * (14 Nov 2026) Sub judul halaman "Hari ini": selalu tanggal HARI INI (WIB), lalu letaknya terhadap jadwal pelatihan
+ * (belum mulai / hari ke-n dari m / sudah selesai). Sebelumnya halaman menulis tanggal mulai pelatihan seolah-olah hari ini.
+ */
+export function subJudulHariIni(hariIni: string, jadwal: { mulai: string; selesai: string | null } | null | undefined, tempat?: string | null): string {
+  const kini = tanggalPanjangId(hariIni) || hariIni;
+  const mulai = jadwal?.mulai && tanggalPanjangId(jadwal.mulai) ? jadwal.mulai : null;
+  const selesai = jadwal?.selesai && tanggalPanjangId(jadwal.selesai) && mulai && jadwal.selesai >= mulai ? jadwal.selesai : mulai;
+  let letak = "";
+  if (mulai && selesai) {
+    const hari = (a: string) => Date.UTC(Number(a.slice(0, 4)), Number(a.slice(5, 7)) - 1, Number(a.slice(8, 10))) / 86_400_000;
+    if (hariIni < mulai) letak = `pelatihan mulai ${tanggalPanjangId(mulai)}`;
+    else if (hariIni > selesai) letak = `pelatihan selesai ${tanggalPanjangId(selesai)}`;
+    else letak = `hari ke-${hari(hariIni) - hari(mulai) + 1} dari ${hari(selesai) - hari(mulai) + 1}`;
+  }
+  return [kini, letak, (tempat ?? "").trim()].filter(Boolean).join(" · ");
+}
+
 const jamWib = (iso: string | null | undefined): string => {
   const t = iso ? Date.parse(iso) : NaN;
   if (!Number.isFinite(t)) return "";

@@ -17,9 +17,10 @@ import { cakupanLihat, ringkasCakupan } from "@/lib/hierarkiPelatihan";
 import { muatAturan } from "@/lib/sigapAturanDb";
 import { hitungKelulusan, type StatusKelulusan } from "@/lib/sigapAturanTes";
 import { muatNilaiAkhir } from "@/lib/sigapNilai";
+import { jelaskanAkhir, lulusAkhirDari, ringkasSkema } from "@/lib/sigapNilaiHitung";
 import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
 import { muatDaftarPenolak, periksaGerbang, muatProgres, muatSimpulHierarki, tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
-import { hitungTahapan, kunciUntuk, ringkasIzin, type KodeTahap } from "@/lib/sigapTahapan";
+import { hitungTahapan, kunciMonitoring, ringkasIzin, type KodeTahap } from "@/lib/sigapTahapan";
 import { muatStatusMateriBatch, type StatusMateriBatch } from "@/lib/sigapMateriDb";
 import { muatIzin, muatTahapanBatch, type KeadaanTahapanBatch } from "@/lib/sigapTahapanDb";
 import { muatRuntutanBatch, tanggalBukaPretest, type RuntutanBatch } from "@/lib/vanguardRuntutanDb";
@@ -116,7 +117,8 @@ export async function GET(req: NextRequest) {
       const hasil = masukan ? hitungTahapan(masukan, true, barisIzin, sekarangMs) : [];
       const kunci = (["pretest", "posttest"] as const)
         .map((jenis) => {
-          const k = kunciUntuk(hasil, jenis);
+          const tesSaya = progres.get(akunId)?.[jenis];
+          const k = kunciMonitoring(hasil, jenis, tesSaya?.status === "selesai" || (tesSaya as { skor?: number | null } | undefined)?.skor != null);
           const tes = tahapBatch?.tes.find((t) => t.jenis === jenis);
           // relevan hanya bila tesnya sudah dibuka (atau sudah lewat): sebelum itu semua orang "terkunci" dan itu bukan masalah
           if (!k || !tes || new Date(tes.buka_at).getTime() > sekarangMs) return null;
@@ -131,7 +133,7 @@ export async function GET(req: NextRequest) {
       const n = nilai?.per.get(b.simpul.akun_id);
       const pre = n && p.pretest.status === "selesai" ? { ...p.pretest, skor: n.pretest } : p.pretest;
       const post = n && p.posttest.status === "selesai" ? { ...p.posttest, skor: n.posttest } : p.posttest;
-      const tambahan = n ? { nilai_akhir: n.akhir, kelulusan: (n.status_lulus ?? "belum_dinilai") as StatusKelulusan } : {};
+      const tambahan = n ? { nilai_akhir: n.akhir, kelulusan: (n.status_lulus ?? "belum_dinilai") as StatusKelulusan, ...(nilai?.skema ? { nilai_rincian: jelaskanAkhir(nilai.skema, n) } : {}) } : {};
       return { akun_id: b.simpul.akun_id, nama: b.simpul.nama, peran: b.simpul.peran, kedalaman: b.kedalaman, diri: b.diri, kelas: b.simpul.kelas, undangan: p.undangan, pretest: pre, posttest: post, hadir: p.hadir, materi: materiBatch ? { belum: materiBatch.belum.get(b.simpul.akun_id) ?? materiBatch.wajib_total, manual: materiBatch.manual.has(b.simpul.akun_id) } : null, vanguard: vgBaris(b.simpul.akun_id), bank: bankPeta.get(b.simpul.akun_id) ?? null, ...kunciBaris(b.simpul.akun_id), ...tambahan };
     });
     const hitung = (f: (r: (typeof baris)[number]) => boolean) => baris.filter(f).length;
@@ -147,6 +149,8 @@ export async function GET(req: NextRequest) {
       boleh_buka_kunci: pengguna.jenis !== "peserta",
       penolak,
       baris,
+      // (14 Nov 2026) rumus nilai akhir dan ambang lulus dari Kelola pelatihan, ditulis di layar (templat hanya menampilkan)
+      ...(nilai?.skema ? { nilai_rumus: { teks: ringkasSkema(nilai.skema), lulus_di_atas: lulusAkhirDari(nilai.skema).nilai, versi: nilai.aturan.versi } } : {}),
       ringkasan: {
         total: baris.length,
         undangan_terima: hitung((r) => r.undangan === "terima"),
