@@ -8,8 +8,12 @@ type Nada = "hijau" | "abu" | "biru" | "amber" | "merah";
 export type ButirMeja = { kode: string; modul: string; judul: string; jumlah: number; isi: string; tautan: string; nada: Nada; urut: number };
 export type BahanMeja = { hari_ini: string; butir: ButirMeja[]; total: number };
 
-export type IsiSinyal = { teks: string; sub: string; tautan?: string };
-export type Sinyal = { kode: string; judul: string; nada: Nada; tautan: string; jumlah: number; isi: IsiSinyal[] };
+import type { RingkasKeputusan } from "./keputusan";
+
+/** (14 Nov 2026) `kunci` menautkan butir sinyal ke keputusan tercatat (keu_keputusan); `keputusan` = keputusan terakhir, bila ada. */
+export type IsiSinyal = { teks: string; sub: string; tautan?: string; kunci?: string; ident_id?: number; keputusan?: RingkasKeputusan | null };
+/** `kunci` di tingkat sinyal hanya untuk sinyal yang diputuskan sekaligus (pegawai tanpa catatan pekan ini). */
+export type Sinyal = { kode: string; judul: string; nada: Nada; tautan: string; jumlah: number; isi: IsiSinyal[]; kunci?: string | null; keputusan?: RingkasKeputusan | null };
 export type BahanKeputusan = { hari_ini: string; pemutus: boolean; sinyal: Sinyal[] };
 
 /** Butir yang menuntut tindakan (tanpa pemberitahuan) dipisah dari pemberitahuan. */

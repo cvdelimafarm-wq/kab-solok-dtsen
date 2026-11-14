@@ -37,6 +37,8 @@ export const FUNGSI_BACA: readonly string[] = [
   "keu_meja_kerja", "keu_ruang_keputusan",
   // (14 Nov 2026) Satu sumber pejabat penandatangan (hanya membaca).
   "keu_pejabat_bahan", "keu_pejabat_pada",
+  // (14 Nov 2026) Keputusan tercatat: daftar, ringkasan, calon penerima (hanya membaca).
+  "keu_keputusan_bahan",
   // (7 Nov 2026) Siklus revisi: tanggapan RO milik akun ini (hanya membaca; modal memanggilnya berkala).
   "keu_tanggapan_saya",
   // (13 Nov 2026, C) Poin beban kerja: apakah pegawai perlu diminta usul poin sesudah melapor (hanya membaca).
