@@ -126,5 +126,7 @@ export function alurIdentifikasi(id: string | number): TahapAlur[] {
     { kode: "pelatihan", label: "5 · Persiapan pelatihan", ket: "Sesi, instruktur, dan peserta dari identifikasi; rinciannya dikerjakan di menu Pelatihan.", href: `${dasar}/pelatihan` },
     { kode: "pendataan", label: "6 · Persiapan pendataan", ket: "Instrumen, jadwal, dan petugas lapangan dari identifikasi; rinciannya dikerjakan di menu Pendataan.", href: `${dasar}/pendataan` },
     { kode: "gap", label: "7 · Gap pelaksanaan", ket: "Rencana identifikasi lanjutan dibanding kenyataan di SIGAP; temuan ditanggapi.", href: `${dasar}/gap` },
+    // (14 Nov 2026, Fase 6) tahap 8 ruang survei: daftar bayar dari hari kerja yang sah, pembayaran tercermin, rapor, pelajaran, salin survei.
+    { kode: "evaluasi", label: "8 · Bayar dan evaluasi", ket: "Daftar bayar dari hari kerja yang sah, pembayaran tercermin, rapor survei, pelajaran, dan salinan untuk survei berikutnya.", href: `${dasar}/evaluasi` },
   ];
 }

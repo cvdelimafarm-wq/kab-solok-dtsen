@@ -23,6 +23,7 @@ import { hariIniWib, useIdent } from "../../useIdent";
 import { loncat } from "../../Kontrol";
 import { useLanjutan } from "../lanjutan/useLanjutan";
 import { ID_KB, KartuPengadaan, KartuRekrutmen } from "./Kartu";
+import SpkSekaligus from "./SpkSekaligus";
 import KartuHasilSeleksi from "./KartuHasilSeleksi"; // (1 Nov 2026) hasil seleksi dibaca balik (hanya baca)
 import { useStatusPengadaan } from "./useStatusPengadaan";
 
@@ -95,6 +96,9 @@ function Isi() {
                 <KartuRekrutmen identId={row.id} r={rekrutmen} dariAwal={dariAwal} />
                 <KartuPengadaan identId={row.id} ro={ro} judul={row.nama} daftar={pengadaan} hariIni={hariIni} dariAwal={dariAwal} halamanIni={halamanIni} pelacakan={{ tersedia: sp.tersedia, peta: sp.peta, mengirim: sp.mengirim, galat: sp.galat, hapusGalat: sp.hapusGalat, catat: sp.catat }} />
               </div>
+            )}
+            {rekrutmen && isi && rekrutmen.total > 0 && (
+              <SpkSekaligus identId={row.id} calon={lj.calon} final={tersimpan?.status === "final"} hariIni={hariIni} sesudah={lj.muatSemua} />
             )}
             {rekrutmen && isi && <KartuHasilSeleksi identId={row.id} r={rekrutmen} />}
           </>

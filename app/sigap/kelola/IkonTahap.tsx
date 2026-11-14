@@ -203,6 +203,7 @@ const PETA: Record<string, NamaIkon> = {
   pelatihan: "latih",
   pendataan: "lokasi",
   gap: "selisih",
+  evaluasi: "uang", // (14 Nov 2026, Fase 6) tahap 8 bayar dan evaluasi
   // Langkah pelatihan peserta (HP)
   undangan: "surat",
   instrumen: "buku",

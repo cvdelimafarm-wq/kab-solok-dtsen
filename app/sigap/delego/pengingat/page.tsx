@@ -133,6 +133,8 @@ export default function PengingatEskalasi() {
             <ul className="m-0 list-none divide-y divide-[#EEF2F5] p-0">
               {d.jadwal.map((j) => {
                 const a = ARTI_JADWAL[j.nama];
+                // jadwal tetap berjalan, tetapi fungsi tidak mengirim apa pun bila setelannya mati
+                const matiSetelan = (j.nama === "delego-ringkasan-0715" && !d.eskalasi?.ringkasan_pagi) || (["delego-eskalasi-15m", "delego-usulan-0900"].includes(j.nama) && d.eskalasi?.aktif === false);
                 return (
                   <li key={j.nama} className="flex flex-wrap items-start justify-between gap-2 py-2">
                     <div className="min-w-0">
@@ -140,7 +142,7 @@ export default function PengingatEskalasi() {
                       <div className="text-[12.5px] text-[#3B4A57]">{a?.arti ?? ""}</div>
                       <div className="text-[12.5px] text-[#3B4A57]">{jadwalWib(j.jadwal)} · terakhir jalan {waktu(j.terakhir)}</div>
                     </div>
-                    <Lencana nada={!j.aktif ? "abu" : j.gagal_terakhir ? "merah" : "hijau"}>{!j.aktif ? "Mati" : j.gagal_terakhir ? "Gagal terakhir" : "Aktif"}</Lencana>
+                    <Lencana nada={!j.aktif || matiSetelan ? "abu" : j.gagal_terakhir ? "merah" : "hijau"}>{!j.aktif ? "Mati" : matiSetelan ? "Mati di setelan" : j.gagal_terakhir ? "Gagal terakhir" : "Aktif"}</Lencana>
                   </li>
                 );
               })}
