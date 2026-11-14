@@ -6,6 +6,7 @@
 // seolah didelegasikan dari atas. Usulan berstatus "Usulan" (tidak membebani matriks, hanya bayangan) sampai Ketua Tim menyetujui. Satuan, volume, dan skor wajib;
 // skor yang berbeda jauh dari pekerjaan sejenis (satuan sama) menampilkan peringatan kesetaraan dan wajib beralasan.
 
+import { JENIS_INISIATIF, MIN_INISIATIF, dataInisiatif, galatInisiatif, type IsianInisiatif } from "@/lib/delego/inisiatif";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { angka, bulat, hariKerjaAntara, kapasitasPada, tambahHari, tglPendek } from "@/lib/delego/hitung";
@@ -49,6 +50,10 @@ export default function Catat() {
   const [tenggat, setTenggat] = useState(tambahHari(hari, 4));
   const [hk, setHk] = useState<number[]>([1, 2, 3, 4, 5]);
   const [kelas, setKelas] = useState<KelasPekerjaan | "">("");
+  // (14 Nov 2026, Fase 4c) inisiatif pegawai
+  const [ini, setIni] = useState(false);
+  const [isiIni, setIsiIni] = useState<IsianInisiatif>({ jenis: "", alasan: "", manfaat: "" });
+  const galatIni = ini ? galatInisiatif(isiIni) : null;
   const [mengirim, setMengirim] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [berhasil, setBerhasil] = useState<string | null>(null);
@@ -97,9 +102,9 @@ export default function Catat() {
     return b && b.kapasitas > 0 ? { persen: Math.round((b.total / b.kapasitas) * 100), kapasitas: b.kapasitas } : null;
   }, [saya.data, rekapSaya.data, mulai, tenggat, hari]);
   const persenSesudah = sebelum && total > 0 ? Math.round(sebelum.persen + (total / sebelum.kapasitas) * 100) : null;
-  const kurang = [judul.trim().length < 3 ? "nama pekerjaan (min. 3 huruf)" : null, satuan.trim() === "" ? "satuan" : null, !(vol > 0) ? "volume" : null, !(pps > 0) ? "skor per satuan" : null, nhk <= 0 ? "jadwal (tenggat dan hari kerja)" : null, galatAlasan ? "alasan skor" : null].filter(Boolean);
+  const kurang = [judul.trim().length < 3 ? "nama pekerjaan (min. 3 huruf)" : null, satuan.trim() === "" ? "satuan" : null, !(vol > 0) ? "volume" : null, !(pps > 0) ? "skor per satuan" : null, nhk <= 0 ? "jadwal (tenggat dan hari kerja)" : null, galatAlasan ? "alasan skor" : null, galatIni ? "isian inisiatif" : null].filter(Boolean);
 
-  const lengkap = judul.trim().length >= 3 && satuan.trim() !== "" && vol > 0 && pps > 0 && nhk > 0 && !galatAlasan && (tautan !== "kantor" || kelompok !== "" || (d?.kelompok.length ?? 0) > 0);
+  const lengkap = judul.trim().length >= 3 && satuan.trim() !== "" && vol > 0 && pps > 0 && nhk > 0 && !galatAlasan && !galatIni && (tautan !== "kantor" || kelompok !== "" || (d?.kelompok.length ?? 0) > 0);
 
   async function kirim() {
     setMengirim(true);
@@ -119,6 +124,7 @@ export default function Catat() {
     if (tautan === "kantor") data.kelompok = kelompok || d?.kelompok[0]?.kode;
     else data.kegiatan_id = Number(tautan);
     if (jenisId) data.jenis_id = Number(jenisId);
+    if (ini) data.inisiatif = dataInisiatif(isiIni);
     data.kelas = kelas || "langsung"; // usulan pegawai adalah pekerjaan kerja, bukan kehadiran lapangan (itu dari penugasan)
     const r = await aksiKeu<{ poin_total: number; hari_kerja: number }>("keu_dlg_usul", { p_data: data });
     setMengirim(false);
@@ -135,6 +141,8 @@ export default function Catat() {
     setVolume("");
     setSkor("");
     setAlasan("");
+    setIni(false);
+    setIsiIni({ jenis: "", alasan: "", manfaat: "" });
     await bahan.muat();
   }
 
@@ -230,6 +238,39 @@ export default function Catat() {
                     ))}
                   </SelectCari>
                 </Medan>
+              </div>
+            </Kartu>
+
+            <Kartu judul="Inisiatif">
+              <div className="space-y-3">
+                <label className="flex items-start gap-2 text-[13.5px]">
+                  <input type="checkbox" className="mt-1 h-4 w-4" checked={ini} onChange={(e) => setIni(e.target.checked)} />
+                  <span>
+                    <b>Ini inisiatif saya</b>
+                    <span className="block text-[12.5px] text-[#3B4A57]">Pekerjaan yang Anda prakarsai sendiri. Inisiatif yang disetujui Ketua Tim dihitung sebagai nilai tambah.</span>
+                  </span>
+                </label>
+                {ini && (
+                  <>
+                    <Medan label="Jenis inisiatif">
+                      <SelectCari className={KELAS.isian} value={isiIni.jenis} onChange={(e) => setIsiIni({ ...isiIni, jenis: e.target.value as IsianInisiatif["jenis"] })}>
+                        <option value="">Pilih jenis</option>
+                        {JENIS_INISIATIF.map((j) => (
+                          <option key={j.k} value={j.k}>
+                            {j.teks}
+                          </option>
+                        ))}
+                      </SelectCari>
+                    </Medan>
+                    <Medan label="Mengapa perlu dikerjakan?" bantu={`Minimal ${MIN_INISIATIF} huruf.`}>
+                      <textarea className={KELAS.isian} rows={2} value={isiIni.alasan} onChange={(e) => setIsiIni({ ...isiIni, alasan: e.target.value })} maxLength={500} />
+                    </Medan>
+                    <Medan label="Manfaat yang diharapkan" bantu={`Minimal ${MIN_INISIATIF} huruf. Mis. waktu kerja berkurang, data lebih rapi.`}>
+                      <textarea className={KELAS.isian} rows={2} value={isiIni.manfaat} onChange={(e) => setIsiIni({ ...isiIni, manfaat: e.target.value })} maxLength={500} />
+                    </Medan>
+                    {galatIni && (isiIni.jenis || isiIni.alasan || isiIni.manfaat) && <div className="text-[12.5px] text-[#8A4605]">{galatIni}</div>}
+                  </>
+                )}
               </div>
             </Kartu>
 

@@ -12,8 +12,9 @@ import { MIN_HURUF, TEKS_KETERANGAN, angkaCapaian, galatPutusan, keteranganCapai
 import type { PutusanSanggah, SanggahMonitor } from "@/lib/delego/tipe";
 import { useKonteksDelego } from "../konteks";
 import { KELAS } from "../merek";
-import { useKirim, useMonitor } from "../data";
-import { Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan, Memuat, Statistik, fmt } from "../ui";
+import TabelInisiatif from "../TabelInisiatif";
+import { useEskalasiBahan, useInisiatifRekap, useKirim, useMonitor } from "../data";
+import { Galat, Halaman, Info, Kartu, Kosong, Lencana, Medan, Memuat, Peringatan, Statistik, fmt } from "../ui";
 
 function PutusSanggah({ s, hari, pemutus, kirim }: { s: SanggahMonitor; hari: string; pemutus: boolean; kirim: ReturnType<typeof useKirim> }) {
   const [putusan, setPutusan] = useState<PutusanSanggah>("benar");
@@ -98,6 +99,10 @@ export default function Monitor() {
   const capaian = useMemo(() => (d ? d.capaian.map(angkaCapaian).sort((a, b) => b.selisih - a.selisih) : []), [d]);
   const terbuka = d?.sanggah.filter((s) => s.status !== "diputus") ?? [];
   const selesai = d?.sanggah.filter((s) => s.status === "diputus") ?? [];
+  // (14 Nov 2026, Fase 4b) butir lewat tenggat: ukuran selesai Fase 4 = tidak ada yang lewat batas jawab
+  const esk = useEskalasiBahan();
+  // (14 Nov 2026, Fase 4c) hitungan inisiatif bulan berjalan
+  const ini = useInisiatifRekap();
 
   return (
     <Halaman
@@ -118,17 +123,34 @@ export default function Monitor() {
       {kirim.galat && <Galat>{kirim.galat}</Galat>}
       {d && r && (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <Statistik label="Selesai tepat waktu" nilai={r.tepatPersen === null ? "-" : `${r.tepatPersen}%`} ket={`${d.tepat_waktu.tepat} dari ${d.tepat_waktu.selesai} butir`} nada={r.tepatPersen !== null && r.tepatPersen < 70 ? "amber" : "biasa"} />
             <Statistik label="Menunggu tinjau" nilai={r.menungguTinjau} ket={r.lewat3 > 0 ? `${r.lewat3} lewat 3 hari kerja` : "Tidak ada yang tertunda"} nada={r.lewat3 > 0 ? "amber" : "biasa"} />
             <Statistik label="Sanggahan terbuka" nilai={r.sanggahTerbuka} ket={`${r.sanggahMenungguPutusan} menunggu putusan`} nada={r.sanggahMenungguPutusan > 0 ? "amber" : "biasa"} />
             <Statistik label="Usulan menunggu" nilai={r.usulanMenunggu} ket={r.usulanLewat3 > 0 ? `${r.usulanLewat3} lewat 3 hari kerja` : undefined} nada={r.usulanLewat3 > 0 ? "amber" : "biasa"} />
             <Statistik label="Terhalang" nilai={r.terhalang} ket="butir yang menunggu pihak lain" nada={r.terhalang > 0 ? "amber" : "biasa"} />
+            <Statistik
+              label="Lewat tenggat"
+              nilai={esk.data ? esk.data.ringkas.terbuka : "-"}
+              ket={esk.data ? (esk.data.ringkas.lewat_jawab > 0 ? `${esk.data.ringkas.lewat_jawab} lewat batas jawab · ${esk.data.ringkas.naik_kepala} naik ke Kepala` : "Semua sudah dijawab tepat waktu") : undefined}
+              nada={esk.data && (esk.data.ringkas.lewat_jawab > 0 || esk.data.ringkas.naik_kepala > 0) ? "amber" : "biasa"}
+            />
           </div>
+          {esk.data && esk.data.ringkas.naik_kepala > 0 && (
+            <Peringatan>
+              {esk.data.ringkas.naik_kepala} pekerjaan lewat tenggat naik ke Kepala karena belum dijawab Ketua Tim. Jawab di <Link href="/sigap/delego/tinjau" className="font-semibold underline">Tinjau, tab Belum selesai</Link>.
+            </Peringatan>
+          )}
 
           <Info>
             Hutang poin, keterlambatan lapor, dan saran tindak lanjut per pegawai ada di <Link href="/sigap/delego" className="font-semibold underline">Beranda tim</Link>; beban semua pekerjaan per hari ada di <Link href="/sigap/delego/beban" className="font-semibold underline">Beban kerja</Link>.
           </Info>
+
+          {ini.data && ini.data.pegawai.length > 0 && (
+            <Kartu judul={`Inisiatif pegawai ${tglPendek(ini.data.dari)} sampai ${tglPendek(ini.data.sampai)}`}>
+              <TabelInisiatif baris={ini.data.pegawai} />
+            </Kartu>
+          )}
 
           <Kartu judul="Capaian per pegawai">
             {capaian.length === 0 ? (

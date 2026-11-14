@@ -10,6 +10,9 @@ import { bacaCache, isiCache, basi } from "@/app/portal/dataBersama";
 import { aksiKeu } from "@/app/sigap/ro/useKeu";
 import { hariWib } from "@/lib/sigapCacheKerja";
 import type { PoinUntuk } from "@/lib/delego/skala";
+import type { BahanEskalasi } from "@/lib/delego/eskalasi";
+import type { RekapInisiatif } from "@/lib/delego/inisiatif";
+import type { BahanPengingat } from "@/lib/delego/pengingat";
 import type { BahanSaya, BahanTim, BahanTinjau, Calon, HakDelegasi, KalibrasiBahan, KatalogSkor, Monitor, Rekap } from "@/lib/delego/tipe";
 
 export { useKirim, aksiKeu } from "@/app/sigap/ro/useKeu";
@@ -98,6 +101,12 @@ export function useBahan(opsi: { ident?: number | null; ro?: string | null; akti
 
 /** Bahan tinjau (antrean laporan, usulan, sanggahan, dan bahan saya sebagai pegawai). */
 export const useTinjauBahan = (aktif = true) => useBacaFungsi<BahanTinjau>("keu_dlg_tinjau_bahan", aktif ? {} : null);
+/** (14 Nov 2026, Fase 4b) Butir lewat tenggat: milik saya (wajib jelaskan) dan yang harus saya jawab sebagai pimpinan. */
+/** (14 Nov 2026, Fase 4c) Hitungan inisiatif per pegawai (bulan berjalan bila rentang kosong). */
+export const useInisiatifRekap = (aktif = true) => useBacaFungsi<RekapInisiatif>("keu_dlg_inisiatif_rekap", aktif ? {} : null);
+/** (14 Nov 2026, Fase 4d) Jadwal pengingat Delego serta setelan eskalasi dan mutu. */
+export const usePengingatBahan = () => useBacaFungsi<BahanPengingat>("keu_dlg_pengingat_bahan", {});
+export const useEskalasiBahan = (aktif = true) => useBacaFungsi<BahanEskalasi>("keu_dlg_eskalasi_bahan", aktif ? {} : null);
 /** Katalog skor beban kerja beserta pilihan kegiatan dan kelompok untuk layar Catat pekerjaan. */
 export const useKatalogSkor = () => useBacaFungsi<KatalogSkor>("keu_dlg_katalog_skor", {});
 /** Rekap beban dari penugasan lapangan, pelatihan, dan ketersediaan untuk rentang tanggal (Senin sampai Minggu bila kosong). */

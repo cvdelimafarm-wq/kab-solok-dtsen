@@ -3,6 +3,8 @@
 // (26 Okt 2026) Delego -- bentuk data yang dikembalikan fungsi basis data keu_dlg_hak / keu_dlg_saya / keu_dlg_bahan / keu_dlg_calon
 // (berkas SQL 20261026c_keu_delego.sql, diperluas 20261026g). Angka numeric dari Postgres tiba sebagai string ("60.00"); gunakan `angka()` dari hitung.ts.
 
+import type { SetelanMutu } from "./mutu";
+
 export type PeranDelegasi = "wakil" | "pegawai" | "pml" | "ppl";
 export type StatusDelegasi = "usulan" | "baru" | "berjalan" | "selesai" | "ditunda" | "batal";
 export type JenisAkun = "organik" | "mitra";
@@ -267,6 +269,8 @@ export type LaporanTinjau = {
   tinjau_status: StatusTinjau;
   tinjau_alasan: string;
   mewakili: boolean;
+  /** (14 Nov 2026, Fase 4a) Laporan dikirim lewat batas hari; memengaruhi ketepatan waktu pada faktor pengakuan. */
+  terlambat?: boolean;
   judul: string;
   ro_kode: string;
   satuan: string;
@@ -302,6 +306,10 @@ export type UsulanMenunggu = {
   kelas: KelasPekerjaan;
   skor_alasan: string;
   hari_kerja: number[];
+  /** (14 Nov 2026, Fase 4c) Isian inisiatif pegawai (null = bukan inisiatif). */
+  inisiatif_jenis?: string | null;
+  inisiatif_alasan?: string | null;
+  inisiatif_manfaat?: string | null;
   penerima_nama: string;
   kegiatan_nama: string | null;
   hk_lewat: number;
@@ -367,9 +375,14 @@ export type BahanTinjau = {
   revisi: LaporanTinjau[];
   usulan: UsulanMenunggu[];
   sanggah: Sanggah[];
+  /** (14 Nov 2026, Fase 4a) Bobot faktor pengakuan dan ambang kewajaran (keu_dlg_mutu_setelan). */
+  mutu_setelan?: SetelanMutu | null;
   saya: {
     usulan: UsulanSaya[];
-    laporan: { id: number; delegasi_id: number; tanggal: string; poin: string | number; tinjau_status: StatusTinjau; tinjau_alasan: string; poin_diakui: string | number | null }[];
+    laporan: {
+      id: number; delegasi_id: number; tanggal: string; poin: string | number; tinjau_status: StatusTinjau; tinjau_alasan: string; poin_diakui: string | number | null;
+      faktor_akui?: string | number | null; mutu_kualitas?: number | null; mutu_disiplin?: number | null; mutu_tepat?: string | number | null;
+    }[];
     skor: SkorSaya[];
   };
 };

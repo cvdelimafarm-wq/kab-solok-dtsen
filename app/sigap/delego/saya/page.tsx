@@ -14,6 +14,7 @@ import { DaftarBukti } from "../BuktiFoto";
 import { KELAS } from "../merek";
 import { PanelHasil, PanelLangkah, Penanda } from "../KerjaTeknis";
 import PanelTinjauSaya, { TandaTerhalang } from "../PanelTinjauSaya";
+import { PanelEskalasiSaya } from "../Eskalasi";
 import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, NADA_STATUS, Peringatan, fmt } from "../ui";
 import { useKirim, useSaya } from "../data";
 
@@ -146,6 +147,7 @@ export default function Saya() {
               <Info>Hari ini bukan hari kerja untuk delegasi Anda, jadi tidak ada laporan yang perlu dikirim.</Info>
             )}
 
+            <PanelEskalasiSaya />
             <PanelTinjauSaya />
 
             {beban && beban.persen > 100 && (

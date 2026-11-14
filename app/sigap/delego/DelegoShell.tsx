@@ -16,8 +16,9 @@ import { KonteksDelegoRef, type KonteksDelego } from "./konteks";
 import Lonceng from "./Lonceng";
 import { Galat, Memuat } from "./ui";
 
-type Ikon = "ringkas" | "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang" | "jadwal" | "tinjau" | "monitor" | "skor" | "catat" | "perintah";
+type Ikon = "ringkas" | "beranda" | "papan" | "laporan" | "beban" | "pembinaan" | "tambah" | "tugas" | "lapor" | "riwayat" | "penilaian" | "libur" | "katalog" | "ulang" | "jadwal" | "tinjau" | "monitor" | "skor" | "catat" | "perintah" | "lonceng";
 const JALUR: Record<Ikon, string> = {
+  lonceng: "M6 9a6 6 0 0 1 12 0c0 6 2.5 8 2.5 8h-17S6 15 6 9M10.3 20a1.9 1.9 0 0 0 3.4 0",
   ringkas: "M5 4h14v16H5zM8 8h8M8 12h8M8 16h5",
   beranda: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
   papan: "M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v12h-4z",
@@ -71,6 +72,7 @@ const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego/pembinaan", label: "Pembinaan dan skor", ikon: "pembinaan" },
   { href: "/sigap/delego/rutin", label: "Pekerjaan berulang", ikon: "ulang" },
   { href: "/sigap/delego/libur", label: "Kalender libur", ikon: "libur" },
+  { href: "/sigap/delego/pengingat", label: "Pengingat dan eskalasi", ikon: "lonceng" },
 ];
 const BUTIR_RINGKAS: Butir = { href: "/sigap/delego/ringkasan", label: "Ringkasan bulanan", ikon: "ringkas" };
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };

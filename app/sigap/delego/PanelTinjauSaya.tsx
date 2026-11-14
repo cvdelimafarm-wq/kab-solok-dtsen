@@ -5,6 +5,7 @@
 // (1 Nov 2026) Panel di Delegasi saya untuk alur tinjau dari sisi pegawai: sanggahan yang menunggu jawaban (hak jawab 2 hari kerja), laporan yang perlu direvisi,
 // usulan pekerjaan dan usulan skor saya, serta penanda "terhalang" pada sebuah tugas.
 
+import { teksMutu } from "@/lib/delego/mutu";
 import Link from "next/link";
 import { useState } from "react";
 import { angka, tglPendek } from "@/lib/delego/hitung";
@@ -67,7 +68,9 @@ export default function PanelTinjauSaya() {
   const revisi = d.saya.laporan.filter((l) => l.tinjau_status === "ditolak");
   const usulan = d.saya.usulan.filter((u) => u.status === "usulan" || u.status === "batal");
   const skor = d.saya.skor.filter((x) => x.skor_status !== "disetujui");
-  if (sanggah.length + revisi.length + usulan.length + skor.length === 0) return null;
+  // (14 Nov 2026, Fase 4a) laporan yang poinnya diakui sebagian karena mutu (faktor < 1), paling baru dulu
+  const mutu = d.saya.laporan.filter((l) => l.tinjau_status === "disetujui" && l.faktor_akui !== null && l.faktor_akui !== undefined && angka(l.faktor_akui) < 1).slice(0, 5);
+  if (sanggah.length + revisi.length + usulan.length + skor.length + mutu.length === 0) return null;
   return (
     <div className="space-y-3">
       {kirim.galat && <Galat>{kirim.galat}</Galat>}
@@ -82,6 +85,21 @@ export default function PanelTinjauSaya() {
                   <div className="text-[13px] leading-snug text-[#6B3A04]">{l.tinjau_alasan}</div>
                 </div>
                 <Link href={`/sigap/delego/lapor?delegasi=${l.delegasi_id}`} className={KELAS.tombolKecilUtama}>Perbaiki</Link>
+              </li>
+            ))}
+          </ul>
+        </Kartu>
+      )}
+      {mutu.length > 0 && (
+        <Kartu judul="Poin diakui sebagian (nilai mutu)">
+          <ul className="m-0 list-none space-y-2 p-0 text-[13.5px]">
+            {mutu.map((l) => (
+              <li key={l.id} className="min-w-0">
+                <div className="font-semibold">
+                  Laporan {tglPendek(l.tanggal)} · {fmt(angka(l.poin_diakui), 2)} dari {fmt(angka(l.poin), 2)} poin
+                </div>
+                <div className="text-[12.5px] text-[#3B4A57]">{teksMutu(l)}</div>
+                {l.tinjau_alasan && <div className="text-[13px] leading-snug text-[#6B3A04]">{l.tinjau_alasan}</div>}
               </li>
             ))}
           </ul>
