@@ -441,8 +441,8 @@ function Evaluasi({
         <Angka label="Belum lulus" nilai={String(r.belum_lulus)} nada={r.belum_lulus ? "bad" : "mut"} aktif={saringStatus === "belum_lulus"} onKlik={() => ketuk("belum_lulus")} />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-[12px] border border-[#DDE6F3] p-2.5">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="min-w-0 rounded-[12px] border border-[#DDE6F3] p-2.5">
           <b className="text-[13.5px] text-[#0F2A52]">Sebaran nilai</b> <span className="text-[11.5px] text-[#6B7A90]">· ketuk batang untuk menyaring</span>
           <div className="mt-2 space-y-1.5">
             {p.sebaran.map((s) => (
@@ -456,7 +456,7 @@ function Evaluasi({
             ))}
           </div>
         </div>
-        <div className="rounded-[12px] border border-[#DDE6F3] p-2.5">
+        <div className="min-w-0 rounded-[12px] border border-[#DDE6F3] p-2.5">
           <b className="text-[13.5px] text-[#0F2A52]">Per tim</b>
           <Tabel
             label="Per tim"
@@ -475,7 +475,7 @@ function Evaluasi({
       </div>
 
       {p.ada_pembanding && (
-        <div className="rounded-[12px] border border-[#DDE6F3] p-2.5">
+        <div className="min-w-0 rounded-[12px] border border-[#DDE6F3] p-2.5">
           <b className="text-[13.5px] text-[#0F2A52]">Pergerakan dari pretest</b>{" "}
           <span className="text-[11.5px] text-[#6B7A90]">· {jumlahGerak > 30 && !semuaGerak ? "15 teratas dan 15 terbawah" : `${jumlahGerak} orang`} · ketuk baris untuk rincian</span>
           <Tabel
@@ -499,8 +499,8 @@ function Evaluasi({
         </div>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-[12px] border border-[#DDE6F3] p-2.5">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="min-w-0 rounded-[12px] border border-[#DDE6F3] p-2.5">
           <b className="text-[13.5px] text-[#0F2A52]">Soal paling banyak salah</b> <span className="text-[11.5px] text-[#6B7A90]">· ketuk baris untuk rincian</span>
           <Tabel
             label="Soal paling banyak salah (evaluasi)"
@@ -519,7 +519,7 @@ function Evaluasi({
           />
         </div>
         {p.topik.length > 0 && (
-          <div className="rounded-[12px] border border-[#DDE6F3] p-2.5">
+          <div className="min-w-0 rounded-[12px] border border-[#DDE6F3] p-2.5">
             <b className="text-[13.5px] text-[#0F2A52]">Topik terlemah</b>
             <Tabel
               label="Topik terlemah"
@@ -537,7 +537,7 @@ function Evaluasi({
       </div>
 
       {selesai.length > 0 && soalMatriks.length > 0 && (
-        <div className="rounded-[12px] border border-[#DDE6F3] p-2.5">
+        <div className="min-w-0 rounded-[12px] border border-[#DDE6F3] p-2.5">
           <b className="text-[13.5px] text-[#0F2A52]">Matriks soal × peserta</b>{" "}
           <span className="text-[11.5px] text-[#6B7A90]">· {banyakSoal ? "hanya soal yang ada salahnya, urut dari paling banyak salah" : "semua soal"} · huruf = pilihan keliru · ketuk sel untuk rincian soal</span>
           <div className="mt-1.5 max-h-[420px] overflow-auto" role="region" aria-label="Matriks soal x peserta" tabIndex={0}>

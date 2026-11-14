@@ -112,3 +112,13 @@ describe("pemasangan: layar monitoring pelatihan", () => {
     expect(komp).toMatch(/KepalaKolom/);
   });
 });
+
+describe("penjaga HP 360: grid tidak melebar karena tabel", () => {
+  it("setiap grid di PemahamanTes punya kolom eksplisit (minmax 0) dan kartu min-w-0", () => {
+    const komp = readFileSync("app/sigap/pelatihan/monitoring/PemahamanTes.tsx", "utf8");
+    const grid = komp.match(/className="grid [^"]*"/g) ?? [];
+    expect(grid.length).toBeGreaterThan(0);
+    for (const g of grid) expect(g).toMatch(/grid-cols-(1|2)\b/);
+    expect(komp).not.toMatch(/className="rounded-\[12px\] border border-\[#DDE6F3\] p-2\.5"/);
+  });
+});
