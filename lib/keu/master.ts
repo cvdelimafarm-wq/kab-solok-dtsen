@@ -246,6 +246,7 @@ export const BAGIAN_MASTER = [
   { kode: "skor", nama: "Skor RAB", grup: 2 },
   { kode: "kew", nama: "Kewenangan", grup: 2 },
   { kode: "pola", nama: "Dokumen kelengkapan", grup: 3 },
+  { kode: "pejabat", nama: "Pejabat penandatangan", grup: 3 },
   { kode: "lain", nama: "Tim, peran, status", grup: 3 },
 ] as const;
 export type KodeBagianMaster = (typeof BAGIAN_MASTER)[number]["kode"];

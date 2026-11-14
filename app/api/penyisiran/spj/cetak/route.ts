@@ -118,6 +118,8 @@ import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfVisum } from "@/lib/pdf/visum";
 import { buatPdfKwitansi } from "@/lib/pdf/kwitansi";
+import { GalatPejabat, hariIniWib, tanggalAtau, type PejabatSpj } from "@/lib/pejabat";
+import { ambilPejabatSpj } from "@/lib/pejabatServer";
 import { buatPdfLaporan, LaporanRekapSnapshot } from "@/lib/pdf/laporan";
 import { buatPdfDokumentasi, DokumentasiFotoInput } from "@/lib/pdf/dokumentasi";
 import { buatPdfSuratKeterangan } from "@/lib/pdf/suratKeterangan";
@@ -389,6 +391,22 @@ export async function POST(req: NextRequest) {
     hasilFiles.push({ nama, path: filePath });
   }
 
+  // (14 Nov 2026) Pejabat (Kepala, PPK, Bendahara) dari satu sumber keu_pejabat, per tanggal dokumen; disimpan sementara per tanggal.
+  const cachePejabat = new Map<string, Promise<PejabatSpj>>();
+  const pejabatPada = (tgl: string | null | undefined): Promise<PejabatSpj> => {
+    const t = tanggalAtau(tgl, hariIniWib());
+    let j = cachePejabat.get(t);
+    if (!j) { j = ambilPejabatSpj(supabase, t); cachePejabat.set(t, j); }
+    return j;
+  };
+  try {
+    // Periksa lebih dulu agar galat pejabat muncul sebagai pesan, bukan berkas setengah jadi.
+    await pejabatPada(tanggalMulai);
+  } catch (e) {
+    if (e instanceof GalatPejabat) return NextResponse.json({ error: e.message }, { status: 422 });
+    throw e;
+  }
+
   try {
     for (let idxP = 0; idxP < daftarPenugasan.length; idxP++) {
       const p = daftarPenugasan[idxP];
@@ -616,6 +634,7 @@ export async function POST(req: NextRequest) {
         if (dokumenDipilih.includes("kwitansi")) {
           for (const k of kList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
             const bytes = await buatPdfKwitansi({
+              pejabat: await pejabatPada(k.tanggal_kwitansi ?? tanggalTerbitSt ?? k.tanggal_spd),
               nomorSt: p.nomorSt,
               tanggalTerbitSt: tanggalTerbitSt ?? k.tanggal_spd,
               nominal: Number(k.nominal),
@@ -649,6 +668,7 @@ export async function POST(req: NextRequest) {
         if (dokumenDipilih.includes("visum")) {
           for (const v of vList.filter((r) => kelompokMemuat(kel, r.tanggal_mulai_set, r.tanggal_selesai_set))) {
             const bytes = await buatPdfVisum({
+              pejabat: await pejabatPada(v.tanggal_berangkat),
               nomorSt: p.nomorSt,
               namaPetugas: namaAkun,
               rencanaTujuan: v.rencana_tujuan,
@@ -875,6 +895,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     await bersihkanTmpDirIni();
+    if (err instanceof GalatPejabat) return NextResponse.json({ error: err.message }, { status: 422 });
     throw err;
   }
 }

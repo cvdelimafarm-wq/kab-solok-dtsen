@@ -29,6 +29,8 @@ import { catatanDianggap, laporanDianggap } from "@/lib/realisasiOtomatis";
 import { BUCKET_SIGAP, aturanDari, hariLengkap, hariIniWib, kelompokTanggal, type AturanIsian, type Db, HK_AKTIF } from "@/lib/sigap";
 import { buatPdfKwitansiSigap } from "@/lib/pdf/sigap/kwitansi";
 import { buatPdfVisumSigap } from "@/lib/pdf/sigap/visum";
+import { GalatPejabat, type PejabatSpj } from "@/lib/pejabat";
+import { ambilPejabatSpj } from "@/lib/pejabatServer";
 import { buatPdfSuratPernyataanSigap } from "@/lib/pdf/sigap/suratPernyataan";
 import { buatPdfLaporanSigap } from "@/lib/pdf/sigap/laporan";
 import { ambilIsiLaporan, type IsiLaporanSpj } from "@/lib/sigapLaporanData";
@@ -303,6 +305,24 @@ function teksLokasiDokumentasi(lok: LokasiRealisasi[]): string {
   return bagian.length <= 4 ? bagian.join("; ") : `${bagian.slice(0, 4).join("; ")}; dan ${bagian.length - 4} lokasi lainnya`;
 }
 
+/** (14 Nov 2026) Pemberi data pejabat per tanggal (bisa dipalsukan di tes). */
+export type PemuatPejabat = (tanggal: string) => Promise<PejabatSpj>;
+
+/** Pemuat pejabat dari basis data (keu_pejabat), disimpan sementara per tanggal; pejabat belum diatur = GalatSpj 422. */
+export function pemuatPejabatDb(db: Db): PemuatPejabat {
+  const cache = new Map<string, Promise<PejabatSpj>>();
+  return (tanggal) => {
+    let j = cache.get(tanggal);
+    if (!j) {
+      j = ambilPejabatSpj(db, tanggal).catch((e) => {
+        throw e instanceof GalatPejabat ? new GalatSpj(e.message, 422) : e;
+      });
+      cache.set(tanggal, j);
+    }
+    return j;
+  };
+}
+
 const rentangNama = (k: { mulai: string; selesai: string }) => (k.mulai === k.selesai ? k.mulai : `${k.mulai}_sd_${k.selesai}`);
 
 /**
@@ -313,7 +333,9 @@ const rentangNama = (k: { mulai: string; selesai: string }) => (k.mulai === k.se
 export async function rakitUnit(
   data: DataSpj,
   opsi: { jenis: JenisDok[]; kelompokMulai?: string; tanggal?: string },
-  muat: PemuatBerkas
+  muat: PemuatBerkas,
+  /** (14 Nov 2026) Kepala, PPK, Bendahara yang berlaku pada tanggal dokumen (satu sumber keu_pejabat). */
+  pejabatPada: PemuatPejabat
 ): Promise<{ unit: UnitSpj[]; dilewati: string[] }> {
   const pilih = new Set(opsi.jenis);
   // (20 Okt 2026) Unduh SATU TANGGAL: hanya dokumen per hari (Laporan, Dokumentasi). Surat Tugas, Kwitansi, Visum, dan Surat Pernyataan
@@ -349,6 +371,7 @@ export async function rakitUnit(
     const tujuan = teksTujuan(data, kel.tanggal);
     if (pilih.has("kwitansi")) {
       const bytes = await buatPdfKwitansiSigap({
+        pejabat: await pejabatPada(kel.selesai),
         nomorSt,
         tanggalSt: data.suratTugas?.tanggal_st ?? null,
         nominal: kel.nominal,
@@ -362,6 +385,7 @@ export async function rakitUnit(
     }
     if (pilih.has("visum")) {
       const bytes = await buatPdfVisumSigap({
+        pejabat: await pejabatPada(kel.mulai),
         nomorSt,
         namaPetugas: data.akun.nama,
         rencanaTujuan: tujuan,
@@ -550,7 +574,7 @@ export async function buatSpjPdf(
   }
 
   // ---- Rakit dari data ----
-  const { unit, dilewati } = await rakitUnit(data, { jenis, kelompokMulai: opsi.kelompokMulai, tanggal: opsi.tanggal }, muat);
+  const { unit, dilewati } = await rakitUnit(data, { jenis, kelompokMulai: opsi.kelompokMulai, tanggal: opsi.tanggal }, muat, pemuatPejabatDb(db));
   return keluaran(unit, dilewati);
 }
 
@@ -563,7 +587,7 @@ export async function buatSpjPdf(
 export async function bekukanSpj(db: Db, penugasanId: number, oleh: string) {
   const dasarData = await dataSpj(db, penugasanId);
   const data = await sertakanIsiLaporan(db, dasarData, [...URUTAN_JENIS], dasarData.kelompok.flatMap((k) => k.tanggal));
-  const { unit, dilewati } = await rakitUnit(data, { jenis: [...URUTAN_JENIS] }, pemuatStorage(db));
+  const { unit, dilewati } = await rakitUnit(data, { jenis: [...URUTAN_JENIS] }, pemuatStorage(db), pemuatPejabatDb(db));
   if (unit.length === 0) return { ok: false, pesan: "Tidak ada dokumen untuk dibekukan.", dilewati };
 
   const mulai = data.kelompok[0]?.mulai ?? null;

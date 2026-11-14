@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfKwitansi } from "@/lib/pdf/kwitansi";
+import { GalatPejabat, hariIniWib, tanggalAtau } from "@/lib/pejabat";
+import { ambilPejabatSpj } from "@/lib/pejabatServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +57,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   ]);
   const akun = akunRaw as { nama: string | null; nip: string | null; jabatan?: string | null } | null;
 
+  // (14 Nov 2026) Pejabat (Bendahara, PPK) dari satu sumber keu_pejabat menurut tanggal kwitansi.
+  let pejabat;
+  try {
+    pejabat = await ambilPejabatSpj(supabase, tanggalAtau(kwitansi.tanggal_kwitansi ?? st?.tanggal_terbit ?? kwitansi.tanggal_spd, hariIniWib()));
+  } catch (e) {
+    if (e instanceof GalatPejabat) return NextResponse.json({ error: e.message }, { status: 422 });
+    throw e;
+  }
+
   const pdfBytes = await buatPdfKwitansi({
+    pejabat,
     nomorSt: st?.nomor_st ?? "-",
     // Tanggal terbit ST (SATU nilai tetap per ST) -- BUKAN tanggal_spd
     // milik kwitansi ini (per-segmen, bisa beda2), lihat komentar di

@@ -439,7 +439,8 @@ export const UNDANGAN = {
     { waktu: "14.15–15.45", materi: ["Kuesioner Keluarga: Blok III - Dampak Bencana"], ket: "Inda" },
     { waktu: "15.45–16.00", materi: ["Penutupan dan administrasi"], ket: "Pimpinan" },
   ],
-  ttd: { jabatan: "Kepala BPS Kabupaten Solok", nama: "Bambang Suryanggono" },
+  // (14 Nov 2026) Nama penandatangan diisi server dari satu sumber pejabat (keu_pejabat, Kepala pada tanggal pelatihan): lib/sigapTesDb.ts undanganUntuk.
+  ttd: { jabatan: "Kepala BPS Kabupaten Solok", nama: "" },
 } as const;
 
 // ======================================================================

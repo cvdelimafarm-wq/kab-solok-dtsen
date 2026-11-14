@@ -14,6 +14,7 @@ import JSZip from "jszip";
 import { aksesKontrak } from "@/lib/kontrak/akses";
 import { DAFTAR_DOKUMEN, hitung, type Isian, type Penyedia } from "@/lib/kontrak/isi";
 import { docxLengkap, docxPerDokumen, isiTemplate } from "@/lib/kontrak/docx";
+import { masterKontrakDenganPejabat } from "@/lib/pejabatServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,7 +83,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     db.from("kontrak_master_tahun").select("data").eq("tahun", p.tahun).maybeSingle(),
     p.penyedia_id ? db.from("kontrak_penyedia").select("*").eq("id", p.penyedia_id).maybeSingle() : Promise.resolve({ data: null }),
   ]);
-  const h = hitung((m?.data ?? {}) as Record<string, string>, (pen as Penyedia | null) ?? null, { ...(p.isian as Isian), tahun: p.tahun }, (p.timpa ?? {}) as Record<string, string>);
+  // (14 Nov 2026) nama/NIP/SK PPK dan Pejabat Pengadaan dari satu sumber pejabat (keu_pejabat) pada tanggal mulai paket.
+  const isianP = (p.isian ?? {}) as Record<string, unknown>;
+  const masterP = await masterKontrakDenganPejabat(db, (m?.data ?? {}) as Record<string, string>, Number(p.tahun), typeof isianP.tanggal_mulai === "string" ? isianP.tanggal_mulai : null);
+  const h = hitung(masterP, (pen as Penyedia | null) ?? null, { ...(p.isian as Isian), tahun: p.tahun }, (p.timpa ?? {}) as Record<string, string>);
 
   const jenis = String(p.jenis_template || "paket_meeting").replace(/[^a-z0-9_]/gi, "");
   let template: Buffer;

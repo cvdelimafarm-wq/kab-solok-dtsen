@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabaseServer";
 import { extractBearer } from "@/lib/penyisiranAuth";
 import { verifySpjSession, pastikanPengelolaSpj, tabelAkun, SpjPetugasJenis } from "@/lib/spjAuth";
 import { buatPdfVisum } from "@/lib/pdf/visum";
+import { GalatPejabat, hariIniWib, tanggalAtau } from "@/lib/pejabat";
+import { ambilPejabatSpj } from "@/lib/pejabatServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +50,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .maybeSingle(),
   ]);
 
+  // (14 Nov 2026) Pejabat (Kepala, PPK) dari satu sumber keu_pejabat menurut tanggal berangkat.
+  let pejabat;
+  try {
+    pejabat = await ambilPejabatSpj(supabase, tanggalAtau(visum.tanggal_berangkat, hariIniWib()));
+  } catch (e) {
+    if (e instanceof GalatPejabat) return NextResponse.json({ error: e.message }, { status: 422 });
+    throw e;
+  }
+
   const pdfBytes = await buatPdfVisum({
+    pejabat,
     nomorSt: st?.nomor_st ?? "-",
     namaPetugas: akun?.nama ?? "-",
     rencanaTujuan: visum.rencana_tujuan,

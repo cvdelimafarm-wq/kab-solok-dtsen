@@ -11,10 +11,12 @@
 // Nama & NIP pejabat (Bendahara, PPK) tetap satu sumber: lib/spjPejabat.ts (tanpa dependensi).
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
-import { PEJABAT } from "../../spjPejabat";
+import type { PejabatSpj } from "../../pejabat";
 import { formatRupiah, formatTanggalIndo, teksAman, terbilangRupiah } from "./format";
 
 export interface SigapKwitansiData {
+  /** Kepala, PPK, dan Bendahara yang berlaku pada tanggal dokumen (satu sumber: keu_pejabat, lib/pejabatServer.ts). */
+  pejabat: PejabatSpj;
   nomorSt: string;
   /** Tanggal Surat Tugas (sigap_surat_tugas.tanggal_st); null -> "-" (tidak dikarang). */
   tanggalSt: string | null;
@@ -140,17 +142,17 @@ export async function buatPdfKwitansiSigap(data: SigapKwitansiData): Promise<Uin
   const xKol = [MARGIN_X, MARGIN_X + kolW, MARGIN_X + kolW * 2];
   const tengah = (i: number, txt: string, y: number, opts: { bold?: boolean; size?: number } = {}) => teks(txt, xKol[i], y, { ...opts, align: "center", maxWidth: kolW });
 
-  tengah(0, "Bendahara Pengeluaran", Y_SIG_1);
+  tengah(0, data.pejabat.bendaharaPengeluaran.jabatan, Y_SIG_1);
   tengah(1, "Setuju dibayar", Y_SIG_1);
   tengah(2, "Yang menerima,", Y_SIG_1);
   tengah(0, "BPS", Y_SIG_2);
   tengah(2, `Solok, ${formatTanggalIndo(data.tanggalKwitansi)}`, Y_SIG_3);
   tengah(0, "Lunas pada", Y_SIG_4);
-  tengah(1, "Pejabat Pembuat Komitmen", Y_SIG_4);
+  tengah(1, data.pejabat.ppk.jabatan, Y_SIG_4);
   tengah(0, "tanggal,", Y_SIG_5); // sengaja tanpa nilai -- diisi tangan oleh Bendahara
 
-  const namaKol = [PEJABAT.bendaharaPengeluaran.nama, PEJABAT.ppk.nama, data.namaPenerima || "-"];
-  const idKol = [`Nip. ${PEJABAT.bendaharaPengeluaran.nip}`, `Nip. ${PEJABAT.ppk.nip}`, data.idPenerima ? `${data.labelId} ${data.idPenerima}` : "-"];
+  const namaKol = [data.pejabat.bendaharaPengeluaran.nama, data.pejabat.ppk.nama, data.namaPenerima || "-"];
+  const idKol = [`Nip. ${data.pejabat.bendaharaPengeluaran.nip}`, `Nip. ${data.pejabat.ppk.nip}`, data.idPenerima ? `${data.labelId} ${data.idPenerima}` : "-"];
   namaKol.forEach((nama, i) => {
     let size = 12;
     while (size > 8 && fontBold.widthOfTextAtSize(teksAman(nama), size) > kolW - 6) size -= 0.5;

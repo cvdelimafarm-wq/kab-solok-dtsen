@@ -19,6 +19,7 @@ import { useBacaKeu, useBoleh } from "../ro/useKeu";
 import { BagianAkun, BagianSatuan, type PolaMaster } from "./Akun";
 import { BagianKelompok, BagianSkor, BagianStruktur, BagianWaktu, type KelompokBelanja, type LevelStruktur, type ParamRow, type Prioritas } from "./Anggaran";
 import { AturanMaster, BagianDokumen, BagianKewenangan, BagianLain, BagianRiwayat } from "./Lainnya";
+import { BagianPejabat } from "./Pejabat";
 
 type NodeMaster = { id: number; tingkat: string; kode: string; nama: string; ro_kode: string | null };
 type DetailMaster = { akun_node_id: number; jumlah: number | string; satuan: string | null };
@@ -129,6 +130,7 @@ function Isi() {
         : siap(skor, skorRo) ? <Galat pesan="Pengaturan skor RAB belum ada di basis data." /> : sedangMuat)}
       {bagian === "kew" && (siap(kew, kp, peran) ? <BagianKewenangan kew={kew.baris!} kp={kp.baris!} peran={peran.baris!} /> : sedangMuat)}
       {bagian === "pola" && (siap(dok, pola, akun) ? <BagianDokumen dok={dok.baris!} pola={pola.baris!} akun={akun.baris!} boleh={bolehMaster} sesudah={muatSemua} /> : sedangMuat)}
+      {bagian === "pejabat" && <BagianPejabat />}
       {bagian === "lain" && (siap(peran) ? <BagianLain peran={peran.baris!} /> : sedangMuat)}
 
       <BagianRiwayat riwayat={riwayat.baris} memuat={riwayat.baris === null && !riwayat.galat} />

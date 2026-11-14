@@ -1,11 +1,10 @@
 // lib/spjPejabat.ts
 //
-// Data pejabat & judul kegiatan yang SELALU SAMA di semua dokumen SPJ
+// Judul kegiatan & tempat kedudukan yang SELALU SAMA di semua dokumen SPJ
 // Translok (Kwitansi, Visum, dst) -- di-hardcode di sini (bukan diinput
 // ulang tiap kali/disimpan per baris di tabel spj_*) sesuai keputusan
-// user, supaya kalau suatu saat pejabatnya berganti cukup diubah di SATU
-// tempat ini lalu redeploy. Diambil persis dari contoh Kwitansi & Visum
-// yang diberikan user (Template_Kwitansi.pdf, Visum_Kosong.pdf).
+// user. Diambil persis dari contoh Kwitansi & Visum yang diberikan user
+// (Template_Kwitansi.pdf, Visum_Kosong.pdf).
 
 export const KEGIATAN_NAMA = "Sensus Ekonomi 2026 (SE2026)";
 
@@ -15,22 +14,8 @@ export const KEGIATAN_NAMA = "Sensus Ekonomi 2026 (SE2026)";
 // konsisten kalau nomor SPD/ST dirangkai otomatis.
 export const KODE_KEGIATAN = "2906";
 
-export const PEJABAT = {
-  kepalaBps: {
-    nama: "Bambang Suryanggono,SST., M.Ec.Dev",
-    nip: "198209282004121001",
-    jabatan: "Kepala BPS Kabupaten Solok",
-  },
-  ppk: {
-    nama: "Novriady,S.Ak",
-    nip: "198011132006041003",
-    jabatan: "Pejabat Pembuat Komitmen",
-  },
-  bendaharaPengeluaran: {
-    nama: "Alex Kandria",
-    nip: "198406062007011004",
-    jabatan: "Bendahara Pengeluaran",
-  },
-} as const;
+// (14 Nov 2026) Nama, NIP, dan jabatan pejabat (Kepala, PPK, Bendahara, Pejabat Pengadaan) TIDAK lagi ditulis di sini:
+// satu sumber di tabel keu_pejabat (SQL 20261114s), diatur di SIGAP Kelola > Master > Pejabat penandatangan, dibaca per tanggal dokumen
+// lewat lib/pejabatServer.ts.
 
 export const TEMPAT_KEDUDUKAN_DEFAULT = "Solok";

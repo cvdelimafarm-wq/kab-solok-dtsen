@@ -23,7 +23,7 @@ const TAB: ItemTab<Tab>[] = [
 ];
 type BarisPaket = { id: number; nomor_urut: number | null; nama: string; status: string; penyedia: string | null; tanggal_mulai: string | null; jumlah_item: number; nilai: string | null; diubah_at: string; diubah_oleh: string | null };
 type Daftar = { kelola: boolean; tahun: number; daftar_tahun: number[]; paket: BarisPaket[] };
-type Ref = { kelola: boolean; tahun: number; master: Record<string, string>; master_info: { diubah_at: string; diubah_oleh: string | null } | null; penyedia: (Penyedia & { id: number })[]; nomor_berikut: number; field_master: { k: string; label: string; contoh?: string }[] };
+type Ref = { kelola: boolean; tahun: number; master: Record<string, string>; master_info: { diubah_at: string; diubah_oleh: string | null } | null; penyedia: (Penyedia & { id: number })[]; nomor_berikut: number; field_master: { k: string; label: string; contoh?: string }[]; kunci_pejabat?: readonly string[] };
 
 export default function PortalKontrak({ tertanam = false }: { tertanam?: boolean }) {
   const [tab, setTab] = useState<Tab>("paket");
@@ -309,6 +309,8 @@ function TabMaster({ ref_, kelola, tahun, onGalat, onInfo, onMuat }: { ref_: Ref
   const [sibuk, setSibuk] = useState(false);
   useEffect(() => setData(ref_.master), [ref_.master]);
   const kosong = ref_.field_master.filter((f) => !String(data[f.k] ?? "").trim());
+  // (14 Nov 2026) nama/NIP/SK PPK dan Pejabat Pengadaan diambil dari satu sumber pejabat; diubah di SIGAP Master > Pejabat penandatangan.
+  const dariPejabat = new Set(ref_.kunci_pejabat ?? []);
 
   async function simpan() {
     setSibuk(true);
@@ -339,11 +341,17 @@ function TabMaster({ ref_, kelola, tahun, onGalat, onInfo, onMuat }: { ref_: Ref
           Belum diisi: {kosong.map((f) => f.label).join(", ")}. Isian kosong akan tampil kosong di dokumen.
         </Pesan>
       )}
+      {dariPejabat.size > 0 && (
+        <p className="mt-2 text-[12px] text-[#5B6B84]">
+          Nama, NIP, dan SK PPK serta Pejabat Pengadaan diambil dari{" "}
+          <a href="/sigap/master?bagian=pejabat" className="font-semibold text-[#1F4E8C] underline">Master &gt; Pejabat penandatangan</a> dan diubah di sana.
+        </p>
+      )}
       <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
         {ref_.field_master.map((f) => (
           <label key={f.k} className={`flex flex-col gap-1 ${f.k === "DIPA" || f.k === "Alamat" ? "sm:col-span-2" : ""}`}>
             <span className="text-[11.5px] font-bold text-[#4D5B6B]">{f.label}</span>
-            <input value={data[f.k] ?? ""} placeholder={f.contoh ?? ""} disabled={!kelola} onChange={(e) => setData((d) => ({ ...d, [f.k]: e.target.value }))} className={`${INPUT} ${!String(data[f.k] ?? "").trim() ? "border-amber-400 bg-amber-50" : ""}`} />
+            <input value={data[f.k] ?? ""} placeholder={f.contoh ?? ""} disabled={!kelola || dariPejabat.has(f.k)} title={dariPejabat.has(f.k) ? "Diatur di Master > Pejabat penandatangan" : undefined} onChange={(e) => setData((d) => ({ ...d, [f.k]: e.target.value }))} className={`${INPUT} ${!String(data[f.k] ?? "").trim() ? "border-amber-400 bg-amber-50" : ""}`} />
           </label>
         ))}
       </div>

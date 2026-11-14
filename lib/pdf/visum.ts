@@ -39,9 +39,12 @@
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { formatTanggalIndo } from "../spjFormat";
-import { PEJABAT, TEMPAT_KEDUDUKAN_DEFAULT } from "../spjPejabat";
+import { TEMPAT_KEDUDUKAN_DEFAULT } from "../spjPejabat";
+import type { PejabatSpj } from "../pejabat";
 
 export interface VisumPdfData {
+  /** Kepala, PPK, dan Bendahara yang berlaku pada tanggal dokumen (satu sumber: keu_pejabat, lib/pejabatServer.ts). */
+  pejabat: PejabatSpj;
   nomorSt: string;
   namaPetugas: string;
   rencanaTujuan: string; // kecamatan WILAYAH TUGAS
@@ -127,9 +130,9 @@ export async function buatPdfVisum(data: VisumPdfData): Promise<Uint8Array> {
   teks("(Tempat Kedudukan)", 406, 754.2);
   baris("kanan", "Pada Tanggal", formatTanggalIndo(data.tanggalBerangkat), 739.0);
   baris("kanan", "Ke", tujuan, 723.5);
-  teksTengah("Kepala BPS Kabupaten Solok", HALF_R_CENTER, 707.3);
-  teksTengah(PEJABAT.kepalaBps.nama, HALF_R_CENTER, 649.6, { bold: true, underline: true });
-  teksTengah(`Nip. ${PEJABAT.kepalaBps.nip}`, HALF_R_CENTER, 633.0);
+  teksTengah(data.pejabat.kepalaBps.jabatan, HALF_R_CENTER, 707.3);
+  teksTengah(data.pejabat.kepalaBps.nama, HALF_R_CENTER, 649.6, { bold: true, underline: true });
+  teksTengah(`Nip. ${data.pejabat.kepalaBps.nip}`, HALF_R_CENTER, 633.0);
 
   garisH(631.3);
 
@@ -157,9 +160,9 @@ export async function buatPdfVisum(data: VisumPdfData): Promise<Uint8Array> {
     data.tanggalTibaKembali ? formatTanggalIndo(data.tanggalTibaKembali) : "-",
     479.88
   );
-  teksTengah("Pejabat Pembuat Komitmen", HALF_L_CENTER, 449.52);
-  teksTengah(PEJABAT.ppk.nama, HALF_L_CENTER, 391.54, { bold: true, underline: true });
-  teksTengah(`Nip. ${PEJABAT.ppk.nip}`, HALF_L_CENTER, 375.22);
+  teksTengah(data.pejabat.ppk.jabatan, HALF_L_CENTER, 449.52);
+  teksTengah(data.pejabat.ppk.nama, HALF_L_CENTER, 391.54, { bold: true, underline: true });
+  teksTengah(`Nip. ${data.pejabat.ppk.nip}`, HALF_L_CENTER, 375.22);
 
   // Paragraf "Telah diperiksa..." -- PERSIS 4 baris spt formulir asli
   // (bukan hasil word-wrap otomatis, supaya potongan barisnya sama).
@@ -174,9 +177,9 @@ export async function buatPdfVisum(data: VisumPdfData): Promise<Uint8Array> {
     teks(baris1, KANAN_LABEL_X, yParagraf);
     yParagraf -= 14.16;
   }
-  teksTengah("Pejabat Pembuat Komitmen", HALF_R_CENTER, 450.12);
-  teksTengah(PEJABAT.ppk.nama, HALF_R_CENTER, 392.14, { bold: true, underline: true });
-  teksTengah(`Nip. ${PEJABAT.ppk.nip}`, HALF_R_CENTER, 375.82);
+  teksTengah(data.pejabat.ppk.jabatan, HALF_R_CENTER, 450.12);
+  teksTengah(data.pejabat.ppk.nama, HALF_R_CENTER, 392.14, { bold: true, underline: true });
+  teksTengah(`Nip. ${data.pejabat.ppk.nip}`, HALF_R_CENTER, 375.82);
 
   garisH(373.61);
 

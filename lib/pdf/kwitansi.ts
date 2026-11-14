@@ -40,10 +40,12 @@
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { formatRupiah, formatTanggalIndo } from "../spjFormat";
-import { PEJABAT } from "../spjPejabat";
+import type { PejabatSpj } from "../pejabat";
 import { labelIdentitas, bersihkanNip } from "../spjIdentitas";
 
 export interface KwitansiPdfData {
+  /** Kepala, PPK, dan Bendahara yang berlaku pada tanggal dokumen (satu sumber: keu_pejabat, lib/pejabatServer.ts). */
+  pejabat: PejabatSpj;
   nomorSt: string;
   // Tanggal Surat Tugas DITERBITKAN/ditandatangani (kolom
   // spj_surat_tugas.tanggal_terbit) -- BUKAN tanggal_spd milik kwitansi
@@ -186,21 +188,21 @@ export async function buatPdfKwitansi(data: KwitansiPdfData): Promise<Uint8Array
   const tengah = (i: number, txt: string, yAtas: number, opts: { bold?: boolean; size?: number } = {}) =>
     teks(txt, xKol[i], yAtas, { ...opts, align: "center", maxWidth: kolW });
 
-  tengah(0, "Bendahara Pengeluaran", Y_SIG_1);
+  tengah(0, data.pejabat.bendaharaPengeluaran.jabatan, Y_SIG_1);
   tengah(1, "Setuju dibayar", Y_SIG_1);
   tengah(2, "Yang menerima,", Y_SIG_1);
   tengah(0, "BPS", Y_SIG_2);
   tengah(2, `Solok, ${formatTanggalIndo(data.tanggalKwitansi)}`, Y_SIG_3);
   tengah(0, "Lunas pada", Y_SIG_4);
-  tengah(1, "Pejabat Pembuat Komitmen", Y_SIG_4);
+  tengah(1, data.pejabat.ppk.jabatan, Y_SIG_4);
   tengah(0, "tanggal,", Y_SIG_5); // sengaja TANPA nilai -- lihat komentar header (diisi tangan oleh Bendahara)
 
   const labelPenerima = labelIdentitas(data.jabatanPenerima);
   const idPenerimaBersih = bersihkanNip(data.idPenerima, data.jabatanPenerima);
-  const namaKol = [PEJABAT.bendaharaPengeluaran.nama, PEJABAT.ppk.nama, data.namaPenerima];
+  const namaKol = [data.pejabat.bendaharaPengeluaran.nama, data.pejabat.ppk.nama, data.namaPenerima];
   const idKol = [
-    `Nip. ${PEJABAT.bendaharaPengeluaran.nip}`,
-    `Nip. ${PEJABAT.ppk.nip}`,
+    `Nip. ${data.pejabat.bendaharaPengeluaran.nip}`,
+    `Nip. ${data.pejabat.ppk.nip}`,
     idPenerimaBersih ? `${labelPenerima} ${idPenerimaBersih}` : "-",
   ];
   namaKol.forEach((nama, i) => {

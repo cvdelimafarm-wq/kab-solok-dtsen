@@ -15,6 +15,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { catatAudit } from "@/lib/sigapAkses";
 import { aksesKontrak } from "@/lib/kontrak/akses";
 import { FIELD_MASTER, hitung, type Isian } from "@/lib/kontrak/isi";
+import { KUNCI_KONTRAK_PEJABAT } from "@/lib/pejabat";
+import { masterKontrakDenganPejabat } from "@/lib/pejabatServer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,7 +75,9 @@ export async function GET(req: NextRequest) {
       db.from("kontrak_penyedia").select("*").eq("aktif", true).order("nama"),
       nomorBerikut(db, tahun),
     ]);
-    return NextResponse.json({ kelola: s.kelola, tahun, master: m?.data ?? {}, master_info: m ?? null, penyedia: pen ?? [], nomor_berikut: n, field_master: FIELD_MASTER });
+    // (14 Nov 2026) nama/NIP/SK PPK dan Pejabat Pengadaan dari satu sumber pejabat (keu_pejabat); kolom itu dikunci di layar master.
+    const master = await masterKontrakDenganPejabat(db, (m?.data ?? {}) as Record<string, string>, tahun);
+    return NextResponse.json({ kelola: s.kelola, tahun, master, master_info: m ?? null, penyedia: pen ?? [], nomor_berikut: n, field_master: FIELD_MASTER, kunci_pejabat: KUNCI_KONTRAK_PEJABAT });
   }
 
   if (bagian === "paket") {
@@ -84,7 +88,9 @@ export async function GET(req: NextRequest) {
       db.from("kontrak_master_tahun").select("data").eq("tahun", p.tahun).maybeSingle(),
       db.from("kontrak_penyedia").select("*").eq("aktif", true).order("nama"),
     ]);
-    return NextResponse.json({ kelola: s.kelola, paket: p, master: m?.data ?? {}, penyedia: pen ?? [] });
+    const tglPaket = typeof (p.isian as Record<string, unknown> | null)?.tanggal_mulai === "string" ? String((p.isian as Record<string, unknown>).tanggal_mulai) : null;
+    const master = await masterKontrakDenganPejabat(db, (m?.data ?? {}) as Record<string, string>, Number(p.tahun), tglPaket);
+    return NextResponse.json({ kelola: s.kelola, paket: p, master, penyedia: pen ?? [] });
   }
 
   return galat("Bagian tidak dikenal.");
@@ -163,6 +169,9 @@ export async function POST(req: NextRequest) {
     if (!tahun) return galat("Tahun wajib.");
     const data: Record<string, string> = {};
     for (const f of FIELD_MASTER) data[f.k] = String((b.data as Record<string, unknown>)?.[f.k] ?? "").trim();
+    // (14 Nov 2026) kolom pejabat tidak diubah dari sini (satu sumber: SIGAP Master > Pejabat penandatangan); nilai lama tetap disimpan.
+    const { data: lamaMaster } = await db.from("kontrak_master_tahun").select("data").eq("tahun", tahun).maybeSingle();
+    for (const k of KUNCI_KONTRAK_PEJABAT) data[k] = String(((lamaMaster?.data ?? {}) as Record<string, unknown>)[k] ?? "");
     const { error } = await db.from("kontrak_master_tahun").upsert({ tahun, data, diubah_at: kini, diubah_oleh: nama });
     if (error) return galat(error.message, 500);
     await catatAudit(db, akunId, "kontrak.simpan_master", { tahun });

@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabaseServer";
 import type { NextRequest } from "next/server";
 import type { Db } from "@/lib/sigap";
 import { sesiDariHeader } from "@/lib/sigapAkses";
+import { ambilPejabat } from "@/lib/pejabatServer";
 import { SESI_BAWAAN, aturanDariJamLama, hariKegiatan, jadwalSesi, tanggalWib, validasiSesi, type AturanSesi, type PengaturanPresensi, type RekamPresensi } from "@/lib/sigapPresensi";
 import {
   KODE_KEGIATAN_PELATIHAN,
@@ -97,10 +98,20 @@ export async function idKegiatanPelatihan(db: Db, req?: { nextUrl?: { searchPara
   return pilih ?? bawaan;
 }
 
+/** (14 Nov 2026) Undangan resmi PSP dengan penandatangan (Kepala) dari satu sumber pejabat pada tanggal pelatihan. Gagal membaca = undangan apa adanya. */
+async function undanganDenganPejabat(db: Db): Promise<InfoUndangan> {
+  try {
+    const kpa = (await ambilPejabat(db, UNDANGAN.tanggal_iso)).KPA;
+    return kpa ? { ...UNDANGAN, ttd: { jabatan: kpa.jabatan || UNDANGAN.ttd.jabatan, nama: kpa.nama } } : UNDANGAN;
+  } catch {
+    return UNDANGAN;
+  }
+}
+
 /** (31 Okt 2026) Info undangan untuk kegiatan itu: UNDANGAN resmi untuk PSP, selain itu disusun dari data kegiatan. */
 export async function undanganUntuk(db: Db, kegiatanId: number): Promise<InfoUndangan> {
   const { data: k } = await db.from("sigap_kegiatan").select("kode, nama, tanggal_mulai").eq("id", kegiatanId).maybeSingle();
-  if (!k || k.kode === KODE_KEGIATAN_PELATIHAN) return UNDANGAN;
+  if (!k || k.kode === KODE_KEGIATAN_PELATIHAN) return undanganDenganPejabat(db);
   const { data: p } = await db.from("sigap_pelatihan_pengaturan").select("tempat, presensi_buka_at, presensi_tutup_at").eq("kegiatan_id", kegiatanId).maybeSingle();
   return undanganDariKegiatan({ nama: k.nama as string, tanggal_mulai: (k.tanggal_mulai as string | null) ?? null }, (p as { tempat?: string | null; presensi_buka_at?: string | null; presensi_tutup_at?: string | null } | null) ?? null, tanggalWib(new Date().getTime()));
 }
