@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
 import { labelStatusPpl, type QcRekapTim } from "@/lib/sigapQc";
-import { bacaPmlSendiri, saringPetugas, type HitunganPeran, type PetugasQc, type SaringPetugas } from "@/lib/sigapQcMonitor";
+import { bacaPmlSendiri, saringPetugas, type PetugasQc, type SaringPetugas } from "@/lib/sigapQcMonitor";
 import { API_SPDT_QC, jamWib, judulKata, type HasilQcSpdt } from "@/lib/spdtNtp";
 import { SARINGAN_AWAL, susunHasil, type HasilQc } from "@/lib/korwilHasilQc";
 import { LABEL_KARTU, ketukKartu, lolosKartuPetugas, type KartuQc } from "@/lib/sigapQcSaring";
@@ -27,7 +27,8 @@ import TabelQc from "@/app/sigap/kelola/pendataan/TabelQc";
 import RekapRentangQc from "@/app/sigap/kelola/pendataan/RekapRentangQc";
 import RekapSemuaQc from "@/app/sigap/kelola/pendataan/RekapSemuaQc";
 import PeriodeQc, { hariIniWib, type ModePeriode, type Rentang } from "@/app/sigap/kelola/pendataan/PeriodeQc";
-import { jumlahKolomNilai, susunBarisQc, type BarisQc, type FokusQc } from "@/lib/sigapQcTabel";
+import { jumlahKolomNilai, type BarisQc, type FokusQc } from "@/lib/sigapQcTabel";
+import { hitungPemahaman, type HitunganKelompok } from "@/lib/pemahamanHitung";
 import { Pergerakan } from "@/app/sigap/kelola/pendataan/BatangQc";
 import { rentangTerakhir } from "@/lib/sigapQcRentang";
 import { IsiRincianQc } from "@/app/portal/qc/RincianQc";
@@ -57,7 +58,7 @@ const STATUS_OPSI: [SaringPetugas["status"], string][] = [
 ];
 
 /** "PML 2/15 · PPL 0/40": angka dipisah per peran supaya tidak tercampur. */
-function Rinci({ pml, ppl, ambil }: { pml: HitunganPeran; ppl: HitunganPeran; ambil: (h: HitunganPeran) => number }) {
+function Rinci({ pml, ppl, ambil }: { pml: HitunganKelompok; ppl: HitunganKelompok; ambil: (h: HitunganKelompok) => number }) {
   return (
     <span className="tabular-nums">
       PML {ambil(pml)}/{pml.peserta} · PPL {ambil(ppl)}/{ppl.peserta}
@@ -97,8 +98,14 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
     if (aktif) void muat(tanggal);
   }, [aktif, tanggal, muat]);
 
-  const kolomQc = useMemo(() => jumlahKolomNilai(d?.maks_percobaan ?? 4, d?.rincian), [d]);
-  const barisQc = useMemo(() => (d ? susunBarisQc(d.rekap, d.rincian, kolomQc) : []), [d, kolomQc]);
+  // (14 Nov 2026) satu sumber hitung: hasil server `pemahaman`; respons lama dihitung dengan fungsi yang sama di sini
+  const pem = useMemo(() => {
+    if (!d) return null;
+    if (d.pemahaman) return d.pemahaman;
+    return hitungPemahaman({ rekap: d.rekap, rincian: d.rincian, peserta: d.petugas, nilaiLulus: d.nilai_lulus, kolom: jumlahKolomNilai(d.maks_percobaan ?? 4, d.rincian), jumlahSoal: d.jumlah_soal, batasJam: d.batas_jam });
+  }, [d]);
+  const kolomQc = pem?.kolom ?? 4;
+  const barisQc = useMemo(() => pem?.baris ?? [], [pem]);
   // kartu ringkasan (belum mengisi / belum lulus) juga menyaring tabel di tampilan Infografis; batang infografis tetap menghitung semua petugas
   const barisPeta = useMemo(() => new Map(barisQc.map((b) => [b.akun_id, b])), [barisQc]);
   const barisTabel = useMemo(() => barisQc.filter((b) => lolosKartuPetugas(kartu, b)), [barisQc, kartu]);
@@ -161,10 +168,10 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
     setTanggal(t);
     setMode("hari");
   };
-  const m = d.monitoring;
-  const belum = m.peserta - m.sudah_mengisi;
-  const pm = m.per_peran.pml;
-  const pp = m.per_peran.ppl;
+  const r = pem!.ringkas;
+  const belum = r.belum;
+  const pm = r.per_peran.pml;
+  const pp = r.per_peran.ppl;
   const adaSaringAtas = f.peran !== "semua" || f.status !== "semua" || f.pml !== "semua" || f.cari !== "";
   const jumlahTampil = lihat === "infografis" ? barisTabel.length : lihat === "petugas" ? petugas.length : lihat === "matriks" ? (hasilMat?.matriks.kolom.length ?? 0) : tim.reduce((a, t) => a + t.ppl.length + (t.pml_akun_id != null && t.pmlTampil ? 1 : 0), 0);
   const kolomLembar = barisSemua?.matriks.kolom ?? [];
@@ -202,9 +209,9 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
             <>
           <KartuSaring
             item={[
-              { kunci: "isi", angka: `${m.sudah_mengisi}/${m.peserta}`, label: "Sudah mengisi", sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.sudah_mengisi} />, aktif: kartu === "belum_mengisi", petunjuk: "Ketuk untuk menampilkan yang belum mengisi.", onKlik: () => ketuk("belum_mengisi") },
-              { kunci: "lulus", angka: String(m.lulus), label: d.nilai_lulus >= 100 ? "Lulus (nilai 100)" : `Lulus (≥ ${d.nilai_lulus})`, sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.lulus} />, aktif: kartu === "belum_lulus", petunjuk: "Ketuk untuk menampilkan yang belum lulus.", onKlik: () => ketuk("belum_lulus") },
-              { kunci: "belum", angka: String(belum), label: "Belum mengisi", peringatan: belum > 0, sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.peserta - h.sudah_mengisi} />, aktif: kartu === "belum_mengisi", petunjuk: "Ketuk untuk menampilkan yang belum mengisi.", onKlik: () => ketuk("belum_mengisi") },
+              { kunci: "isi", angka: `${r.mengisi}/${r.peserta}`, label: "Sudah mengisi", sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.mengisi} />, aktif: kartu === "belum_mengisi", petunjuk: "Ketuk untuk menampilkan yang belum mengisi.", onKlik: () => ketuk("belum_mengisi") },
+              { kunci: "lulus", angka: String(r.lulus), label: d.nilai_lulus >= 100 ? "Lulus (nilai 100)" : `Lulus (≥ ${d.nilai_lulus})`, sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.lulus} />, aktif: kartu === "belum_lulus", petunjuk: "Ketuk untuk menampilkan yang belum lulus.", onKlik: () => ketuk("belum_lulus") },
+              { kunci: "belum", angka: String(belum), label: "Belum mengisi", peringatan: belum > 0, sub: <Rinci pml={pm} ppl={pp} ambil={(h) => h.belum} />, aktif: kartu === "belum_mengisi", petunjuk: "Ketuk untuk menampilkan yang belum mengisi.", onKlik: () => ketuk("belum_mengisi") },
             ]}
           />
           {kartu && <BarisSaring teks={LABEL_KARTU[kartu]} jumlah={jumlahTampil} onLepas={() => setKartu(null)} />}
@@ -372,7 +379,7 @@ export default function QcSpdt({ aktif }: { aktif: boolean }) {
                 <p className="rounded-[16px] bg-white px-4 py-6 text-center text-[13.5px] text-[#55657D]">Belum ada soal yang dirilis pada hari ini.</p>
               ) : (
                 <>
-                  <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={d.nilai_lulus} kolom={kolomQc} onFokus={setFokus} batasJam={d.batas_jam} />
+                  <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={d.nilai_lulus} kolom={kolomQc} onFokus={setFokus} batasJam={d.batas_jam} hasil={pem ?? undefined} />
                   <TabelQc baris={barisTabel} kolom={kolomQc} rincian={d.rincian} nilaiLulus={d.nilai_lulus} fokus={fokus} onHapusFokus={() => setFokusState(null)} />
                 </>
               )}

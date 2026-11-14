@@ -312,6 +312,8 @@ export type HasilQcSpdt = {
   rincian: import("@/lib/sigapQcMonitor").RincianQc;
   /** (31 Okt 2026) jawaban mentah pada hari itu + teks soal, untuk matriks soal x petugas (sama bentuknya dengan Hasil QC Pasca Bencana) */
   mentah?: MentahQc;
+  /** (14 Nov 2026) satu sumber hitung (lib/pemahamanHitung.ts) untuk KPI, infografis, dan tabel */
+  pemahaman?: import("@/lib/pemahamanHitung").HasilPemahaman;
 };
 
 export type MentahQc = {

@@ -24,6 +24,8 @@ import type { HasilQcSpdt, MentahQc } from "@/lib/spdtNtp";
 import type { AnggotaHasil, PercobaanMentah as PercobaanMentahQc, SoalMentah as SoalMentahQc } from "@/lib/korwilHasilQc";
 import { periksaRentang, susunRentang, type DataRentang, type PercobaanRentang } from "@/lib/sigapQcRentang";
 import { susunSemua, type DataSemua } from "@/lib/sigapQcSemua";
+import { hitungPemahaman } from "@/lib/pemahamanHitung";
+import { jumlahKolomNilai } from "@/lib/sigapQcTabel";
 import { susunPetugasQc, susunRincianQc, type PercobaanRinci, type PesertaMentah, type RincianQc, type SoalRinci } from "@/lib/sigapQcMonitor";
 import {
   SLOT_TUNDA,
@@ -31,6 +33,7 @@ import {
   jamKeMenit,
   jendelaQc,
   maksPercobaanDari,
+  nilaiLulusDari,
   pushIngatPetugas,
   pushIngatPml,
   pushRekapPml,
@@ -260,6 +263,7 @@ export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
     susulanAt = (h?.susulan_at as string | null) ?? null;
     if (soalHari.length > 0) rekap = await rpc<QcRekapTim[]>(db, "sigap_qc_rekap", { p_kegiatan: keg, p_tanggal: hari, p_pml: null });
   }
+  const rincian = await rincianHari(db, keg, hari);
   return {
     kegiatan_id: keg,
     kegiatan_nama: (kg.nama as string | null) ?? `Kegiatan ${keg}`,
@@ -278,7 +282,16 @@ export async function dataAdmin(db: Db, keg: number, tanggal: string | null) {
     soal_hari: soalHari,
     susulan_at: susulanAt,
     rekap,
-    rincian: await rincianHari(db, keg, hari),
+    rincian,
+    pemahaman: hitungPemahaman({
+      rekap,
+      rincian,
+      peserta: peserta.map((x) => ({ akun_id: x.akun_id, nama: x.nama, peran: x.peran, pml_nama: null })),
+      nilaiLulus: nilaiLulusDari(pengaturan),
+      kolom: jumlahKolomNilai(pengaturan ? maksPercobaanDari(pengaturan) : 4, rincian),
+      jumlahSoal: soalHari.length,
+      batasJam: pengaturan?.batas_jam ?? null,
+    }),
   };
 }
 
@@ -399,6 +412,17 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
   const { petugas, monitoring } = susunPetugasQc({ peserta, percobaan, langganan, kirim, sesi, tundaAkun, nilaiLulus, rilisAt, now: new Date() });
   const berlaku = peng ? hariBerlaku(new Date(), peng) : null;
   const [rincian, mentah] = await Promise.all([rincianHari(db, keg, hari), mentahHari(db, keg, hari, peserta, soalHari)]);
+  const maks = peng ? maksPercobaanDari(peng) : 4;
+  // (14 Nov 2026) satu sumber hitung untuk KPI, infografis, dan tabel
+  const pemahaman = hitungPemahaman({
+    rekap,
+    rincian,
+    peserta: petugas.map((x) => ({ akun_id: x.akun_id, nama: x.nama, peran: x.peran, pml_nama: x.pml_nama, percobaan: x.percobaan, lulus: x.lulus, terlambat: x.terlambat, skor_terbaik: x.skor_terbaik })),
+    nilaiLulus,
+    kolom: jumlahKolomNilai(maks, rincian),
+    jumlahSoal: soalHari.length,
+    batasJam: (peng?.batas_jam as string | null | undefined) ?? null,
+  });
 
   return {
     kegiatan_id: keg,
@@ -407,7 +431,7 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
     aktif: !!peng?.aktif,
     nilai_lulus: nilaiLulus,
     batas_jam: (peng?.batas_jam as string | null | undefined) ?? null,
-    maks_percobaan: peng ? maksPercobaanDari(peng) : 4,
+    maks_percobaan: maks,
     hari,
     hari_ada: daftar,
     jumlah_soal: soalHari.length,
@@ -424,6 +448,7 @@ export async function hasilQcSupervisor(db: Db, keg: number, tanggal: string | n
     monitoring,
     rincian,
     mentah,
+    pemahaman,
   };
 }
 

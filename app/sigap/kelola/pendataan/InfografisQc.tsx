@@ -13,6 +13,7 @@ import { petugasPalingSalah, ringkasStatus, ringkasTim, sebaranNilaiAwal, sebara
 import { teksDefinisiTerlambat, type QcRekapTim } from "@/lib/sigapQc";
 import type { RincianQc } from "@/lib/sigapQcMonitor";
 import type { BarisQc, FokusQc } from "@/lib/sigapQcTabel";
+import type { HasilPemahaman } from "@/lib/pemahamanHitung";
 import SelectCari from "@/app/components/SelectCari";
 
 type Tab = "ringkasan" | "soal" | "tim" | "petugas";
@@ -88,27 +89,28 @@ function Kolom({ data, onFokus, judulFokus }: { data: TempatSebaran[]; onFokus: 
   );
 }
 
-export default function InfografisQc({ baris, rekap, rincian, nilaiLulus, kolom, onFokus, batasJam }: { baris: BarisQc[]; rekap: QcRekapTim[]; rincian: RincianQc | undefined; nilaiLulus: number; kolom: number; onFokus: (f: FokusQc) => void; batasJam?: string | null }) {
+// (14 Nov 2026) `hasil` = keluaran hitungPemahaman (satu sumber hitung). Bila ada, semua angka dibaca dari sana; tanpa itu dihitung dari baris (data lama).
+export default function InfografisQc({ baris, rekap, rincian, nilaiLulus, kolom, onFokus, batasJam, hasil }: { baris: BarisQc[]; rekap: QcRekapTim[]; rincian: RincianQc | undefined; nilaiLulus: number; kolom: number; onFokus: (f: FokusQc) => void; batasJam?: string | null; hasil?: HasilPemahaman }) {
   const [tab, setTab] = useState<Tab>("ringkasan");
   const [soalBuka, setSoalBuka] = useState<string | null>(null);
   const [semuaSoal, setSemuaSoal] = useState(false);
   const [semuaPetugas, setSemuaPetugas] = useState(false);
   const [urutTim, setUrutTim] = useState<"salah" | "nilai">("salah");
 
-  const status = useMemo(() => ringkasStatus(baris), [baris]);
+  const status = useMemo(() => hasil?.status ?? ringkasStatus(baris), [hasil, baris]);
   const sudahMengisi = status.total - status.belum.length;
-  const soal = useMemo(() => soalPalingSalah(baris, rekap, rincian), [baris, rekap, rincian]);
+  const soal = useMemo(() => hasil?.soal ?? soalPalingSalah(baris, rekap, rincian), [hasil, baris, rekap, rincian]);
   const tim = useMemo(() => {
-    const t = ringkasTim(rekap, rincian);
+    const t = hasil?.tim ?? ringkasTim(rekap, rincian);
     return [...t].sort((a, b) =>
       urutTim === "salah"
         ? (b.rataSalah ?? -1) - (a.rataSalah ?? -1) || (a.rataAwal ?? 101) - (b.rataAwal ?? 101)
         : (a.rataAwal ?? 101) - (b.rataAwal ?? 101) || (b.rataSalah ?? -1) - (a.rataSalah ?? -1),
     );
-  }, [rekap, rincian, urutTim]);
-  const petugas = useMemo(() => petugasPalingSalah(baris, rincian, 60), [baris, rincian]);
-  const nilaiAwal = useMemo(() => sebaranNilaiAwal(baris), [baris]);
-  const percobaan = useMemo(() => sebaranPercobaan(baris, kolom), [baris, kolom]);
+  }, [hasil, rekap, rincian, urutTim]);
+  const petugas = useMemo(() => hasil?.petugas_salah ?? petugasPalingSalah(baris, rincian, 60), [hasil, baris, rincian]);
+  const nilaiAwal = useMemo(() => hasil?.sebaran_pertama ?? sebaranNilaiAwal(baris), [hasil, baris]);
+  const percobaan = useMemo(() => hasil?.sebaran_percobaan ?? sebaranPercobaan(baris, kolom), [hasil, baris, kolom]);
 
   const soalTampil = semuaSoal ? soal : soal.slice(0, 8);
   const petugasTampil = semuaPetugas ? petugas : petugas.slice(0, 10);
@@ -128,6 +130,19 @@ export default function InfografisQc({ baris, rekap, rincian, nilaiLulus, kolom,
         <b className="text-[15px] text-[#0F2A52]">Infografis hasil QC</b>
         <span className="text-[12px] text-[#6B7A90]">Ketuk batang untuk menyaring tabel di bawah</span>
       </div>
+
+      {hasil && (
+        <details className="mt-2 rounded-lg bg-[#F5F8FC] px-3 py-1.5 text-[12px] text-[#3C4C68]">
+          <summary className="min-h-[32px] cursor-pointer font-bold text-[#0F2A52]">Definisi angka</summary>
+          <ul className="mb-1.5 list-disc space-y-0.5 pl-4">
+            <li>{hasil.definisi.lulus}</li>
+            <li>{hasil.definisi.pertama}</li>
+            <li>{hasil.definisi.terbaik}</li>
+            <li>{hasil.definisi.terlambat}</li>
+            <li>Satu orang dihitung sekali walau tercatat di dua tim.</li>
+          </ul>
+        </details>
+      )}
 
       <div className="mt-2.5 flex gap-1.5 overflow-x-auto" role="tablist" aria-label="Pilih tampilan infografis">
         {TAB.map((t) => (

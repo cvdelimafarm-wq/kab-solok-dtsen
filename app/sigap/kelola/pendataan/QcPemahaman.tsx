@@ -27,8 +27,9 @@ import PeriodeQc, { hariIniWib, type ModePeriode, type Rentang } from "./Periode
 import RekapRentangQc from "./RekapRentangQc";
 import RekapSemuaQc from "./RekapSemuaQc";
 import { rentangTerakhir } from "@/lib/sigapQcRentang";
-import { jumlahKolomNilai, susunBarisQc, type FokusQc } from "@/lib/sigapQcTabel";
-import { bacaPmlSendiri, type RincianQc } from "@/lib/sigapQcMonitor";
+import { jumlahKolomNilai, type FokusQc } from "@/lib/sigapQcTabel";
+import { hitungPemahaman, type HasilPemahaman } from "@/lib/pemahamanHitung";
+import type { RincianQc } from "@/lib/sigapQcMonitor";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
 type Peng = QcPengaturan & { diubah_oleh: string | null; diubah_at: string };
@@ -50,6 +51,8 @@ type Data = {
   rekap: QcRekapTim[];
   /** tiap percobaan petugas + soal yang salah (29 Okt 2026) */
   rincian?: RincianQc;
+  /** (14 Nov 2026) satu sumber hitung dari server (lib/pemahamanHitung.ts) */
+  pemahaman?: HasilPemahaman;
 };
 
 const API = "/api/portal/qc/admin";
@@ -224,21 +227,20 @@ function HariAktif({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kir
   const p = d.pengaturan;
   const hariBerlaku = !d.hari_berlaku || d.hari === d.hari_berlaku; // melihat hari ini (bukan tanggal lain)
   // PML dihitung terpisah dari PPL (hasil PML sendiri ada di tiap baris rekap)
-  const pmlTotal = d.peserta.pml;
-  const pmlSudah = d.rekap.filter((t) => (bacaPmlSendiri(t.pml_sendiri)?.percobaan ?? 0) > 0).length;
-  const pmlLulus = d.rekap.filter((t) => bacaPmlSendiri(t.pml_sendiri)?.lulus).length;
+
   const [sibuk, setSibuk] = useState(false);
   // (29 Okt 2026) Fokus tabel dari infografis / kartu "Tanpa notifikasi"; data baris dipakai bersama infografis dan tabel.
   const [fokus, setFokusState] = useState<FokusQc | null>(null);
   const maksP = p ? maksPercobaanDari(p) : 4;
   const nilaiLulusP = nilaiLulusDari(p);
   const kolomQc = useMemo(() => jumlahKolomNilai(maksP, d.rincian), [maksP, d.rincian]);
-  const barisQc = useMemo(() => susunBarisQc(d.rekap, d.rincian, kolomQc), [d.rekap, d.rincian, kolomQc]);
+  // (14 Nov 2026) satu sumber hitung: `pemahaman` dari server; respons lama dihitung dengan fungsi yang sama
+  const pem = useMemo(() => d.pemahaman ?? hitungPemahaman({ rekap: d.rekap, rincian: d.rincian, nilaiLulus: nilaiLulusP, kolom: kolomQc, jumlahSoal: d.soal_hari.length, batasJam: p?.batas_jam }), [d.pemahaman, d.rekap, d.rincian, nilaiLulusP, kolomQc, d.soal_hari.length, p?.batas_jam]);
+  const barisQc = pem.baris;
   // (14 Nov 2026) KPI PPL dari baris yang sama dengan infografis dan tabel: PPL yang tercatat di dua PML dihitung sekali.
-  const pplUnik = barisQc.filter((b) => b.peran === "PPL");
-  const sudah = pplUnik.filter((b) => b.percobaan > 0).length;
-  const total = pplUnik.length;
-  const lulus = pplUnik.filter((b) => b.lulus).length;
+  const sudah = pem.ringkas.per_peran.ppl.mengisi;
+  const total = pem.ringkas.per_peran.ppl.peserta;
+  const lulus = pem.ringkas.per_peran.ppl.lulus;
   const setFokus = (f: FokusQc | null) => {
     setFokusState(f);
     if (f) setTimeout(() => document.getElementById("tabel-qc")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
@@ -274,8 +276,8 @@ function HariAktif({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kir
       </Kartu>
       <div className="grid gap-3 sm:grid-cols-4">
         <KartuAngka label="PML / PPL peserta" nilai={`${d.peserta.pml} / ${d.peserta.ppl}`} ket={d.peserta.ppl_tanpa_pml ? `${d.peserta.ppl_tanpa_pml} PPL belum punya PML` : "tiap PPL punya PML"} warna={d.peserta.ppl_tanpa_pml ? "#8A6200" : undefined} />
-        <KartuAngka label="PPL sudah mengisi" nilai={total ? `${sudah}/${total}` : "-"} ket={`PML: ${pmlSudah}/${pmlTotal} sudah mengisi`} />
-        <KartuAngka label="PPL lulus" nilai={total ? String(lulus) : "-"} ket={`PML lulus: ${pmlLulus}/${pmlTotal} · ${nilaiLulusDari(p) >= 100 ? "nilai 100" : `nilai ${nilaiLulusDari(p)} ke atas`}`} warna="#13794B" />
+        <KartuAngka label="PPL sudah mengisi" nilai={total ? `${sudah}/${total}` : "-"} ket={`PML: ${pem.ringkas.per_peran.pml.mengisi}/${pem.ringkas.per_peran.pml.peserta} sudah mengisi`} />
+        <KartuAngka label="PPL lulus" nilai={total ? String(lulus) : "-"} ket={`PML lulus: ${pem.ringkas.per_peran.pml.lulus}/${pem.ringkas.per_peran.pml.peserta} · ${nilaiLulusDari(p) >= 100 ? "nilai 100" : `nilai ${nilaiLulusDari(p)} ke atas`}`} warna="#13794B" />
         {d.peserta.tanpa_notifikasi.length > 0 ? (
           <button
             type="button"
@@ -302,7 +304,7 @@ function HariAktif({ d, kirim, muat, memuat, diperbarui }: { d: Data; kirim: Kir
         </Kartu>
       ) : (
         <>
-          <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={nilaiLulusP} kolom={kolomQc} onFokus={setFokus} batasJam={p?.batas_jam} />
+          <InfografisQc baris={barisQc} rekap={d.rekap} rincian={d.rincian} nilaiLulus={nilaiLulusP} kolom={kolomQc} onFokus={setFokus} batasJam={p?.batas_jam} hasil={pem} />
           <TabelQc baris={barisQc} kolom={kolomQc} rincian={d.rincian} nilaiLulus={nilaiLulusP} fokus={fokus} onHapusFokus={() => setFokusState(null)} />
         </>
       )}
