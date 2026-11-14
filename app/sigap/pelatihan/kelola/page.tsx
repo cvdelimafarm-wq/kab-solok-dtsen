@@ -291,7 +291,7 @@ export default function KelolaPelatihan() {
               label: "📝 Tes",
               ket: "Soal, jadwal, dan saklar tampil Pretest dan Posttest.",
               isi: () => (
-                <div className="grid gap-3 lg:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                   {DAFTAR_JENIS_TES.map((j) => {
                     const t = ringkas.tes.find((x) => x.jenis === j);
                     return t ? <KartuSoal key={j} tes={t} bisaKelola={ringkas.boleh_kelola} setelahSimpan={muat} /> : null;
@@ -710,13 +710,13 @@ function TopikSoal({ jenis, soal, sesudah }: { jenis: JenisTes; soal: SoalLengka
     }
   }
   return (
-    <details className="mt-2 rounded-lg border border-[#E3E8EE] p-2">
+    <details className="mt-2 min-w-0 max-w-full overflow-hidden rounded-lg border border-[#E3E8EE] p-2">
       <summary className="min-h-[40px] cursor-pointer text-[12.5px] font-bold text-[#0F2A52]">Topik soal untuk monitoring ({soal.filter((s) => s.topik).length}/{soal.length} terisi)</summary>
       <p className="m-0 mb-2 text-[12px] text-[#55657D]">Isi topik atau blok materi tiap soal (misalnya &quot;Blok IV&quot; atau &quot;Konsep rumah tangga&quot;). Monitoring menampilkan topik terlemah dari sini. Tidak memengaruhi nilai.</p>
       <datalist id={`topik-${jenis}`}>{daftarTopik.map((t) => <option key={t} value={t} />)}</datalist>
       <div className="max-h-[320px] space-y-1.5 overflow-y-auto pr-1">
         {soal.map((s) => (
-          <label key={s.nomor} className="flex items-center gap-2 text-[12.5px]">
+          <label key={s.nomor} className="flex min-w-0 items-center gap-2 text-[12.5px]">
             <span className="w-8 flex-none text-right font-bold tabular-nums">{s.nomor}.</span>
             <span className="min-w-0 flex-1 truncate text-[#55657D]" title={s.teks}>{s.teks}</span>
             <input className={`${INPUT} !min-h-[36px] w-[44%] max-w-[220px] flex-none`} list={`topik-${jenis}`} maxLength={60} value={isi[s.nomor] ?? ""} onChange={(e) => setIsi((x) => ({ ...x, [s.nomor]: e.target.value }))} aria-label={`Topik soal ${s.nomor}`} />
