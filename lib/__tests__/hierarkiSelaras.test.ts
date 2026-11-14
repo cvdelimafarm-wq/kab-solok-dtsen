@@ -69,9 +69,11 @@ describe("pemasangan (pemindaian sumber)", () => {
     expect(b).toMatch(/terapkanPerubahan\(/);
     expect(b).toMatch(/catatAudit\(/);
   });
-  it("layar: tombol salin PSP hanya bila tidak ada Tim acuan; tombol samakan memanggil aksi samakan_tim", () => {
+  it("layar: tombol salin PSP hanya bila tidak ada Tim acuan dan hierarki masih kosong; tombol samakan memanggil aksi samakan_tim", () => {
     const src = baca("app/sigap/pelatihan/kelola/hierarki.tsx");
-    expect(src).toMatch(/!d\.tim && \(/);
+    expect(src).toMatch(/!d\.tim && simpul\.length === 0 && \(/);
+    // (14 Nov 2026) satu hierarki per survei: layar menyatakan perubahan berlaku di pendataan survei yang sama
+    expect(src).toMatch(/Satu hierarki untuk survei ini/);
     expect(src).toMatch(/aksi: "samakan_tim"/);
   });
 });

@@ -25,7 +25,7 @@ type Data = { tersedia: boolean; simpul: SimpulHierarki[]; boleh_kelola: boolean
 const URUT_PERAN: Record<PeranPelatihan, number> = { korwil: 0, pml: 1, ppl: 2 };
 const ASAL: Record<NonNullable<SimpulHierarki["asal"]>, { teks: string; w: "mut" | "ok" | "wait" }> = {
   bawaan: { teks: "Bawaan", w: "mut" },
-  salinan: { teks: "Salinan PSP", w: "ok" },
+  salinan: { teks: "Dari tim survei", w: "ok" },
   manual: { teks: "Diubah", w: "wait" },
 };
 
@@ -220,7 +220,7 @@ export function KartuHierarki() {
       kanan={
         <span className="flex flex-wrap gap-1.5">
           <ChipSetelan diubah={hitung.manual > 0} teksDiubah={`${hitung.manual} diubah`} teksBawaan="Semua bawaan" />
-          {hitung.salinan > 0 && <Chip w="ok">{hitung.salinan} salinan PSP</Chip>}
+          {hitung.salinan > 0 && <Chip w="ok">{hitung.salinan} dari tim survei</Chip>}
         </span>
       }
     >
@@ -254,7 +254,8 @@ export function KartuHierarki() {
           )}
         </div>
       )}
-      {d.tim && d.selisih_tim.length === 0 && simpul.length > 0 && <p className="mb-2 text-[12.5px] text-[#2E7D32]">Atasan sudah sama dengan Tim (alokasi Stage 1: {d.tim.nama}).</p>}
+      {/* (14 Nov 2026) Satu hierarki per survei (sigap_hierarki): perubahan di sini ikut mengubah tim pendataan survei yang sama, dan sebaliknya. */}
+      <p className="mb-2 text-[12.5px] text-[#2E5A88]">Satu hierarki untuk survei ini: mengubah atasan di sini juga mengubah tim pendataan survei yang sama, dan perubahan di tim pendataan ikut tampil di sini. Survei lain tidak terpengaruh.</p>
       {masalah.tanpa_atasan.length > 0 && <p className="mb-2 text-[12.5px] text-[#6B7A90]">{masalah.tanpa_atasan.length} PML/PPL belum punya atasan: hanya instruktur dan panitia yang melihat progres mereka.</p>}
 
       {bisa && (
@@ -274,13 +275,13 @@ export function KartuHierarki() {
               }}
             />
           </label>
-          {!d.tim && (
+          {!d.tim && simpul.length === 0 && (
             <button type="button" className={BTN_O} disabled={menyalin} onClick={salin}>
               {menyalin ? "Menyalin…" : "Salin atasan dari data PSP"}
             </button>
           )}
           <span className="text-[12px] text-[#6B7A90]">
-            {d.tim ? `Acuan atasan: Tim (alokasi Stage 1) ${d.tim.nama}; selisihnya ditandai di atas.` : "Salinan PSP hanya titik awal (untuk Seruti sering belum lengkap)."} Perubahan di tabel tersimpan otomatis.
+            Perubahan di tabel tersimpan otomatis dan langsung berlaku di pendataan survei yang sama.
           </span>
         </div>
       )}

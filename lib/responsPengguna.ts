@@ -189,6 +189,8 @@ export const BUKAN_RESPONS: readonly { tabel: string; alasan: string }[] = [
   { tabel: "sigap_anomali_batch", alasan: "Catatan impor anomali oleh pengelola." },
   { tabel: "sigap_anomali_temuan", alasan: "Temuan anomali hasil impor pengelola, bukan isian petugas." },
   { tabel: "sigap_aplikasi_pakai", alasan: "Telemetri pemakaian aplikasi (ping otomatis dari peramban), bukan isian yang dikerjakan petugas." },
+  { tabel: "sigap_hierarki", alasan: "(14 Nov 2026) Satu hierarki atasan per survei; diisi pengelola lewat tim pendataan/hierarki pelatihan, disebar pemicu basis data." },
+  { tabel: "sigap_hierarki_riwayat", alasan: "(14 Nov 2026) Log otomatis perubahan atasan di sigap_hierarki." },
   { tabel: "sigap_belajar_aturan", alasan: "(13 Nov 2026, B) Aturan kegiatan belajar dan mutu per waktu yang diatur pengelola (sumber tunggal Vanguard dll.)." },
   { tabel: "sigap_belajar_aturan_jejak", alasan: "(13 Nov 2026, B) Jejak perubahan aturan belajar (log sistem)." },
   { tabel: "sigap_audit",alasan: "Jejak audit sistem; itu sendiri alat monitoring." },

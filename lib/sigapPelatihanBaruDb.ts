@@ -193,7 +193,7 @@ export async function muatSimpulHierarki(db: Db, kegiatanId: number): Promise<Da
     peranPer.set(b.akun_id, peran);
     atasanPer.set(b.akun_id, b.atasan_akun_id ?? null);
     // baris "salin awal" tanpa atasan tercatat manual oleh fungsi salin, tetapi belum diubah siapa pun -> tetap bawaan
-    asalPer.set(b.akun_id, b.sumber === "salin_psp" || b.sumber === "salin_sampel" ? "salinan" : b.diubah_oleh === "salin awal" ? "bawaan" : "manual");
+    asalPer.set(b.akun_id, b.sumber === "salin_psp" || b.sumber === "salin_sampel" || b.sumber === "satu_sumber" ? "salinan" : b.diubah_oleh === "salin awal" ? "bawaan" : "manual");
   }
   for (const p of penugasan) {
     if (peranPer.has(p.akun_id)) continue;
