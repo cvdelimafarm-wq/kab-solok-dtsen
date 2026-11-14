@@ -180,6 +180,7 @@ function rapikanSoal(baris: Record<string, unknown>[]): (SoalLengkap & { aktif: 
     kunci: x.kunci as string,
     bobot: Number(x.bobot),
     aktif: x.aktif !== false,
+    topik: typeof x.topik === "string" && x.topik.trim() ? x.topik : null,
   }));
 }
 
@@ -189,6 +190,9 @@ function rapikanSoal(baris: Record<string, unknown>[]): (SoalLengkap & { aktif: 
  */
 export async function muatSemuaSoal(db: Db, tesId: number): Promise<(SoalLengkap & { aktif: boolean })[]> {
   const q = (kolom: string) => db.from("sigap_tes_soal").select(kolom).eq("tes_id", tesId).order("nomor");
+  // (14 Nov 2026) + topik (SQL 20261114w); bila kolom belum ada, bacaan jatuh ke tanpa topik
+  const t = await q(`${KOLOM_SOAL}, aktif, topik`);
+  if (!t.error) return rapikanSoal((t.data ?? []) as unknown as Record<string, unknown>[]);
   const { data, error } = await q(`${KOLOM_SOAL}, aktif`);
   if (!error) return rapikanSoal((data ?? []) as unknown as Record<string, unknown>[]);
   const { data: lama } = await q(KOLOM_SOAL);
@@ -412,6 +416,7 @@ export async function mulaiUlang(db: Db, tes: TesBaris, sesi: SesiBaris, soal: S
       batas_at: batas.toISOString(),
       selesai_at: null,
       jawaban: {},
+      jawaban_waktu: {}, // (14 Nov 2026) waktu per soal mulai baru tiap percobaan
       skor: null,
       benar: null,
       total: null,

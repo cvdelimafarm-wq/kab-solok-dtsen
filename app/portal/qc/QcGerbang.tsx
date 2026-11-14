@@ -13,6 +13,7 @@
 // Tidak tampil pada mode "masuk sebagai" (simulasi). Status diperiksa tiap 60 detik, saat aplikasi dibuka lagi, dan saat kembali online.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { catatPilih, type WaktuJawaban } from "@/lib/waktuJawaban";
 import { apiPortal, bacaSesi } from "@/app/portal/sesi";
 import { modeSimulasi } from "@/app/portal/simulasi";
 import { kalimatHasil, teksSisaWaktu, type QcButirTinjau, type QcRekapTim, type QcSetSoal, type QcTinjau } from "@/lib/sigapQc";
@@ -134,12 +135,22 @@ export default function QcGerbang() {
     }
   }, [tampil, layar, no]);
 
+  // (14 Nov 2026) waktu per soal (jam HP): jam mulai dan, tiap soal, jam pertama dipilih / terakhir diubah / kali diubah; dikirim bersama jawaban.
+  const mulaiAt = useRef<string | null>(null);
+  const waktuSoal = useRef<WaktuJawaban>({});
+  const pilih = useCallback((id: string, k: "A" | "B" | "C" | "D") => {
+    waktuSoal.current = { ...waktuSoal.current, [id]: catatPilih(waktuSoal.current[id], new Date().toISOString()) };
+    setJawaban((j) => ({ ...j, [id]: k }));
+  }, []);
+
   const mulai = useCallback(async () => {
     setSibuk(true);
     setGalat(null);
     try {
       const d = await apiPortal<QcSetSoal>("/api/portal/qc?soal=1");
       setSet(d);
+      mulaiAt.current = new Date().toISOString();
+      waktuSoal.current = {};
       setJawaban({});
       setNo(0);
       setHasil(null);
@@ -157,7 +168,7 @@ export default function QcGerbang() {
     setSibuk(true);
     setGalat(null);
     try {
-      const d = await apiPortal<QcTinjau>("/api/portal/qc", { method: "POST", body: JSON.stringify({ aksi: "jawab", jawaban }) });
+      const d = await apiPortal<QcTinjau>("/api/portal/qc", { method: "POST", body: JSON.stringify({ aksi: "jawab", jawaban, waktu: { mulai_at: mulaiAt.current, per_soal: waktuSoal.current } }) });
       setHasil(d);
       setSaring(d.lulus ? "semua" : "salah");
       setLayar("hasil");
@@ -232,7 +243,7 @@ export default function QcGerbang() {
           <Pengantar status={status} info={info} susulan={susulan} lewat={!!status?.lewat_batas} sibuk={sibuk} galat={galat} onMulai={mulai} menunda={menunda} onTunda={tunda} />
         )}
         {layar === "soal" && set && (
-          <Soal set={set} jawaban={jawaban} no={no} sibuk={sibuk} galat={galat} onMuatUlang={mulai} onPilih={(id, k) => setJawaban((j) => ({ ...j, [id]: k }))} onNo={setNo} onKirim={kirim} />
+          <Soal set={set} jawaban={jawaban} no={no} sibuk={sibuk} galat={galat} onMuatUlang={mulai} onPilih={pilih} onNo={setNo} onKirim={kirim} />
         )}
         {layar === "hasil" && hasil && (
           <Hasil hasil={hasil} status={status} saring={saring} onSaring={setSaring} sibuk={sibuk} galat={galat} onUlang={mulai} onSelesai={selesai} />

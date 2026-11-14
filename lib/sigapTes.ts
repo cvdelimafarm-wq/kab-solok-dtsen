@@ -22,7 +22,22 @@ export function jenisTesValid(x: unknown): x is JenisTes {
 
 export type Opsi = { kode: string; teks: string };
 /** Soal lengkap (hanya utk admin & pembahasan sesudah tes ditutup). */
-export type SoalLengkap = { nomor: number; teks: string; opsi: Opsi[]; kunci: string; bobot: number };
+/** (14 Nov 2026) `topik`: topik/blok soal untuk monitoring pemahaman (boleh kosong; tidak ikut dinilai). */
+export type SoalLengkap = { nomor: number; teks: string; opsi: Opsi[]; kunci: string; bobot: number; topik?: string | null };
+
+/** (14 Nov 2026) Kiriman { "<nomor>": "topik" } dari Kelola: hanya nomor soal yang ada; teks dirapikan, maks 60 huruf; kosong = hapus topik. */
+export function bersihkanTopikSoal(x: unknown, nomorSah: readonly number[]): { nomor: number; topik: string | null }[] | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const sah = new Set(nomorSah);
+  const out: { nomor: number; topik: string | null }[] = [];
+  for (const [k, v] of Object.entries(x as Record<string, unknown>)) {
+    const n = Number(k);
+    if (!Number.isInteger(n) || !sah.has(n)) continue;
+    const t = typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, 60) : "";
+    out.push({ nomor: n, topik: t || null });
+  }
+  return out.sort((a, b) => a.nomor - b.nomor);
+}
 /** Soal yang dikirim ke peserta saat mengerjakan: TANPA kunci & bobot. */
 export type SoalPeserta = { nomor: number; teks: string; opsi: Opsi[] };
 

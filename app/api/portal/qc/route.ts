@@ -9,6 +9,7 @@
 // Sesi "masuk sebagai" (simulasi) tidak boleh menjawab: jawaban akan tercatat atas nama petugas sungguhan.
 
 import { NextRequest, NextResponse } from "next/server";
+import { bersihkanWaktuKiriman } from "@/lib/waktuJawaban";
 import { akunDariSesi, dbPortal } from "@/lib/portal/server";
 import { aktorDariHeader } from "@/lib/sigapAkses";
 import { galatServer } from "@/lib/sigapGalat";
@@ -51,7 +52,22 @@ export async function POST(req: NextRequest) {
     if (body?.aksi === "jawab") {
       const jaw = bersihkanJawaban(body.jawaban);
       if (!jaw) return galat("Jawaban tidak terbaca. Muat ulang halaman lalu coba lagi.", 422);
-      return NextResponse.json(await jawab(db, akun.id, jaw));
+      const hasil = await jawab(db, akun.id, jaw);
+      // (14 Nov 2026) waktu per soal dari HP: ditempel ke percobaan yang baru tersimpan; gagal = jawaban tetap sah tanpa waktu
+      try {
+        const sekarangMs = Date.now();
+        const w = bersihkanWaktuKiriman(body.waktu, new Set(Object.keys(jaw)), sekarangMs - 24 * 3_600_000, sekarangMs);
+        if (w) {
+          const { data: baru } = await db.from("sigap_qc_percobaan").select("id, selesai_at").eq("akun_id", akun.id).order("id", { ascending: false }).limit(1).maybeSingle();
+          const r = baru as { id: number; selesai_at: string | null } | null;
+          if (r && r.selesai_at && sekarangMs - Date.parse(r.selesai_at) < 120_000) {
+            await db.from("sigap_qc_percobaan").update({ mulai_at: w.mulai_at, jawaban_waktu: w.per_soal }).eq("id", r.id);
+          }
+        }
+      } catch {
+        /* waktu per soal tidak wajib */
+      }
+      return NextResponse.json(hasil);
     }
     if (body?.aksi === "rekap_baca") {
       await tandaiRekapDibaca(db, akun.id, String(body.tanggal ?? ""), body.kegiatan_id);

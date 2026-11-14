@@ -678,10 +678,56 @@ function KartuSoal({ tes, bisaKelola, setelahSimpan }: { tes: TesRingkas; bisaKe
         {lihat && tersimpan && !pratinjau && (
           <div className="mt-3 rounded-xl border border-[#E3E8EE] p-2.5">
             <DaftarSoal soal={tersimpan} />
+            <TopikSoal jenis={tes.jenis} soal={tersimpan} sesudah={muatTersimpan} />
           </div>
         )}
       </div>
     </Kartu>
+  );
+}
+
+/**
+ * (14 Nov 2026) Topik tiap soal untuk monitoring pemahaman ("topik terlemah"). Boleh diisi atau diubah kapan saja, juga sesudah peserta mulai,
+ * karena tidak memengaruhi nilai. Soal tanpa topik tetap dinilai; bila semua kosong, kartu topik tidak tampil di monitoring.
+ */
+function TopikSoal({ jenis, soal, sesudah }: { jenis: JenisTes; soal: SoalLengkap[]; sesudah: () => Promise<void> | void }) {
+  const [isi, setIsi] = useState<Record<number, string>>(() => Object.fromEntries(soal.map((s) => [s.nomor, s.topik ?? ""])));
+  const [sibuk, setSibuk] = useState(false);
+  const [pesan, setPesan] = useState<{ jenis: "ok" | "galat"; teks: string } | null>(null);
+  const berubah = soal.some((s) => (isi[s.nomor] ?? "") !== (s.topik ?? ""));
+  const daftarTopik = Array.from(new Set(Object.values(isi).map((t) => t.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, "id"));
+  async function simpan() {
+    setSibuk(true);
+    setPesan(null);
+    try {
+      const r = await fetchJson<{ jumlah: number }>(URL_ADMIN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "simpan_topik", jenis, topik: isi }) });
+      setPesan({ jenis: "ok", teks: `Topik tersimpan untuk ${r.jumlah} soal.` });
+      await sesudah();
+    } catch (e) {
+      if (!(e instanceof SesiBerakhir)) setPesan({ jenis: "galat", teks: pesanGalat(e) });
+    } finally {
+      setSibuk(false);
+    }
+  }
+  return (
+    <details className="mt-2 rounded-lg border border-[#E3E8EE] p-2">
+      <summary className="min-h-[40px] cursor-pointer text-[12.5px] font-bold text-[#0F2A52]">Topik soal untuk monitoring ({soal.filter((s) => s.topik).length}/{soal.length} terisi)</summary>
+      <p className="m-0 mb-2 text-[12px] text-[#55657D]">Isi topik atau blok materi tiap soal (misalnya &quot;Blok IV&quot; atau &quot;Konsep rumah tangga&quot;). Monitoring menampilkan topik terlemah dari sini. Tidak memengaruhi nilai.</p>
+      <datalist id={`topik-${jenis}`}>{daftarTopik.map((t) => <option key={t} value={t} />)}</datalist>
+      <div className="max-h-[320px] space-y-1.5 overflow-y-auto pr-1">
+        {soal.map((s) => (
+          <label key={s.nomor} className="flex items-center gap-2 text-[12.5px]">
+            <span className="w-8 flex-none text-right font-bold tabular-nums">{s.nomor}.</span>
+            <span className="min-w-0 flex-1 truncate text-[#55657D]" title={s.teks}>{s.teks}</span>
+            <input className={`${INPUT} !min-h-[36px] w-[44%] max-w-[220px] flex-none`} list={`topik-${jenis}`} maxLength={60} value={isi[s.nomor] ?? ""} onChange={(e) => setIsi((x) => ({ ...x, [s.nomor]: e.target.value }))} aria-label={`Topik soal ${s.nomor}`} />
+          </label>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" className={BTN} disabled={sibuk || !berubah} onClick={() => void simpan()}>{sibuk ? "Menyimpan…" : "Simpan topik"}</button>
+        {pesan && <Pesan jenis={pesan.jenis === "ok" ? "info" : "galat"}>{pesan.teks}</Pesan>}
+      </div>
+    </details>
   );
 }
 

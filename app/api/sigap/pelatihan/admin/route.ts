@@ -30,11 +30,12 @@ import {
   type SoalLengkap,
   type StatusTes,
   type TesBaris,
+  bersihkanTopikSoal,
 } from "@/lib/sigapTes";
 import { muatAturan, muatSkorPertama } from "@/lib/sigapAturanDb";
 import { nilaiResmiTes } from "@/lib/sigapAturanTes";
 import { muatKesiapan } from "@/lib/sigapKesiapanDb"; // (8 Nov 2026) kartu Kesiapan: ?bagian=kesiapan (hanya baca)
-import { FILTER_BUKAN_ADMINISTRASI, KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSoal, muatTes, muatTesDaftar, pastikanTesBawaan } from "@/lib/sigapTesDb";
+import { FILTER_BUKAN_ADMINISTRASI, KOLOM_SESI_PUBLIK, akunDariRequest, dbAdmin, finalisasiBilaKedaluwarsa, idKegiatanPelatihan, jumlahSoal, muatSemuaSoal, muatSoal, muatTes, muatTesDaftar, pastikanTesBawaan } from "@/lib/sigapTesDb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -224,6 +225,19 @@ export async function POST(req: NextRequest) {
     if (!jenisTesValid(jenis) || !DAFTAR_JENIS_TES.includes(jenis)) return galat("Jenis tes tidak dikenal.");
     const tes = await muatTes(db, kegiatanId, jenis as JenisTes);
     if (!tes) return galat("Tes tidak ditemukan.", 404);
+
+    // (14 Nov 2026) topik soal untuk monitoring pemahaman; boleh diubah kapan saja (tidak memengaruhi nilai)
+    if (aksi === "simpan_topik") {
+      const semua = await muatSemuaSoal(db, tes.id);
+      const daftar = bersihkanTopikSoal(body?.topik, semua.map((s) => s.nomor));
+      if (!daftar) return galat("Isian topik tidak terbaca.");
+      for (const t of daftar) {
+        const { error } = await db.from("sigap_tes_soal").update({ topik: t.topik }).eq("tes_id", tes.id).eq("nomor", t.nomor);
+        if (error) return galat(error.message, 500);
+      }
+      await catatAudit(db, akun.id, "pelatihan_simpan_topik", { tes_id: tes.id, jenis, jumlah: daftar.length });
+      return NextResponse.json({ ok: true, jumlah: daftar.filter((t) => t.topik).length });
+    }
 
     if (aksi === "simpan_soal") {
       const { count } = await db.from("sigap_tes_sesi").select("id", { count: "exact", head: true }).eq("tes_id", tes.id);

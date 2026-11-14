@@ -18,6 +18,7 @@ import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
 import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { NextRequest, NextResponse } from "next/server";
 import { TOLERANSI_DETIK, batasPengerjaan, bersihkanJawaban, jawabanSoalLain, jenisTesValid, lewatBatas } from "@/lib/sigapTes";
+import { perbaruiWaktu } from "@/lib/waktuJawaban";
 import { terapkanAgendaPeserta } from "@/lib/sigapAgendaDb"; // (9 Nov 2026) tes dimulai instruktur (agenda hari H)
 import { muatAturan } from "@/lib/sigapAturanDb";
 import { hitungTahapan, kunciUntuk, ringkasIzin, tesDenganIzin, type KodeTahap } from "@/lib/sigapTahapan";
@@ -134,9 +135,12 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       if (body?.jawaban !== undefined) {
         // (6 Nov 2026) jawaban untuk soal yang dinonaktifkan panitia tetap dipertahankan (tidak ikut nilai) agar bisa dipulihkan bila soal diaktifkan kembali
         const bersih = { ...jawabanSoalLain(sesi.jawaban, soal), ...bersihkanJawaban(body.jawaban, soal) };
+        // (14 Nov 2026) waktu per soal: soal yang baru dijawab atau berubah pilihannya dicatat pada jam simpan ini (lib/waktuJawaban.ts)
+        const { data: wLama } = await db.from("sigap_tes_sesi").select("jawaban_waktu").eq("id", sesi.id).maybeSingle();
+        const waktu = perbaruiWaktu((wLama as { jawaban_waktu?: unknown } | null)?.jawaban_waktu, sesi.jawaban as Record<string, string>, bersih, sekarang.toISOString());
         const { data, error } = await db
           .from("sigap_tes_sesi")
-          .update({ jawaban: bersih, diubah_at: sekarang.toISOString() })
+          .update({ jawaban: bersih, jawaban_waktu: waktu, diubah_at: sekarang.toISOString() })
           .eq("id", sesi.id)
           .is("selesai_at", null)
           .select(KOLOM_SESI_PUBLIK)
