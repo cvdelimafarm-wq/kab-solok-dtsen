@@ -80,6 +80,14 @@ export async function GET(req: NextRequest) {
     };
 
     const [soal, sesi] = await Promise.all([muatSemuaSoal(db, tes.id), bacaSesi(tes.id)]);
+    // penanda "bahas di kelas" (SQL 20261114za); tahan galat bila kolom belum ada
+    const bahasPer = new Map<number, { at: string; oleh: string | null }>();
+    try {
+      const { data: bh, error: eb } = await db.from("sigap_tes_soal").select("nomor, bahas_at, bahas_oleh").eq("tes_id", tes.id).not("bahas_at", "is", null);
+      if (!eb) for (const r of (bh ?? []) as { nomor: number; bahas_at: string; bahas_oleh: string | null }[]) bahasPer.set(Number(r.nomor), { at: r.bahas_at, oleh: r.bahas_oleh });
+    } catch {
+      /* tanpa penanda */
+    }
     // percobaan pertama yang sudah diarsipkan (peserta yang mengulang)
     const arsip: ArsipPertamaMasuk[] = [];
     const ulang = sesi.filter((s) => s.percobaan > 1).map((s) => s.akun_id);
@@ -103,7 +111,7 @@ export async function GET(req: NextRequest) {
 
     const pemahaman = hitungPemahamanTes({
       jenis,
-      soal: soal.filter((q) => q.aktif !== false).map((q) => ({ nomor: q.nomor, teks: q.teks, opsi: q.opsi, kunci: q.kunci, topik: q.topik ?? null, bobot: q.bobot })),
+      soal: soal.filter((q) => q.aktif !== false).map((q) => ({ nomor: q.nomor, teks: q.teks, opsi: q.opsi, kunci: q.kunci, topik: q.topik ?? null, bobot: q.bobot, bahas: bahasPer.get(q.nomor) ?? null })),
       sesi,
       arsipPertama: arsip,
       peserta,
@@ -119,8 +127,40 @@ export async function GET(req: NextRequest) {
       sekarang: new Date().toISOString(),
       cakupan: ringkasCakupan(cakupan),
       peran_pemantau: pengguna.jenis,
+      boleh_tandai: pengguna.jenis === "panitia" || pengguna.jenis === "instruktur",
       pemahaman,
     });
+  } catch (e) {
+    return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
+  }
+}
+
+// POST {aksi:"bahas", jenis, nomor, tandai:boolean} -> tandai / lepas "bahas di kelas" (panitia dan instruktur). Hanya penanda; tidak mengubah nilai.
+export async function POST(req: NextRequest) {
+  const db = dbAdmin();
+  if (!db) return galat("SUPABASE_SERVICE_ROLE_KEY belum diset.", 500);
+  try {
+    const akun = await akunDariRequest(req, db);
+    if (!akun) return galat("Sesi berakhir. Silakan masuk kembali.", 401);
+    const kegiatanId = await idKegiatanPelatihan(db, req, akun.id);
+    if (!kegiatanId) return galat("Kegiatan pelatihan belum dibuat.", 404);
+    const { izin } = await izinAkun(db, akun.id);
+    const pengguna = await tentukanPengguna(db, kegiatanId, akun.id, izin);
+    if (pengguna.jenis !== "panitia" && pengguna.jenis !== "instruktur") return galat("Hanya panitia dan instruktur yang dapat menandai soal.", 403);
+    const body = (await req.json().catch(() => null)) as { aksi?: string; jenis?: string; nomor?: unknown; tandai?: unknown } | null;
+    if (!body || body.aksi !== "bahas" || !JENIS.has(String(body.jenis))) return galat("Permintaan tidak valid.");
+    const nomor = Number(body.nomor);
+    if (!Number.isInteger(nomor) || nomor < 1) return galat("Nomor soal tidak valid.");
+    const { data: tes } = await db.from("sigap_tes").select("id").eq("kegiatan_id", kegiatanId).eq("jenis", String(body.jenis)).maybeSingle();
+    if (!tes) return galat("Tes tidak ditemukan.", 404);
+    const tandai = body.tandai !== false;
+    const { error } = await db
+      .from("sigap_tes_soal")
+      .update(tandai ? { bahas_at: new Date().toISOString(), bahas_oleh: String(akun.nama ?? "").slice(0, 120) || null } : { bahas_at: null, bahas_oleh: null })
+      .eq("tes_id", (tes as { id: number }).id)
+      .eq("nomor", nomor);
+    if (error) return galat("Penanda belum dapat disimpan. Pastikan SQL 20261114za sudah dijalankan.", 500);
+    return NextResponse.json({ ok: true, tandai });
   } catch (e) {
     return galat(e instanceof Error ? e.message : "Terjadi kesalahan.", 500);
   }

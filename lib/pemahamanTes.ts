@@ -15,7 +15,7 @@ import { bacaWaktu, lamaPerSoal, type WaktuJawaban } from "@/lib/waktuJawaban";
 export const MENIT_MACET = 3;
 
 export type OpsiTes = { kode: string; teks: string };
-export type SoalTesMasuk = { nomor: number; teks: string; opsi: OpsiTes[]; kunci: string; topik?: string | null; bobot?: number };
+export type SoalTesMasuk = { nomor: number; teks: string; opsi: OpsiTes[]; kunci: string; topik?: string | null; bobot?: number; bahas?: { at: string; oleh: string | null } | null };
 export type SesiTesMasuk = {
   akun_id: number;
   mulai_at: string | null;
@@ -77,6 +77,8 @@ export type SoalTesHasil = {
   perlu_diperiksa: boolean;
   lama_median_detik: number | null;
   salah_akun: number[];
+  /** ditandai "bahas di kelas" oleh panitia / instruktur (hanya penanda) */
+  bahas: { at: string; oleh: string | null } | null;
 };
 
 export type TopikHasil = { topik: string; soal: number; menjawab: number; pct_benar: number | null };
@@ -215,6 +217,7 @@ export function hitungPemahamanTes(m: {
       perlu_diperiksa: !!keliru && keliru.jumlah > benar,
       lama_median_detik: median(lama),
       salah_akun: salahAkun,
+      bahas: q.bahas ?? null,
     };
   });
 

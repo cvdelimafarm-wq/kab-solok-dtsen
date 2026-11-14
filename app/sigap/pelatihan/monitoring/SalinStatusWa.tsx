@@ -3,19 +3,29 @@
 // app/sigap/pelatihan/monitoring/SalinStatusWa.tsx
 //
 // (14 Nov 2026) Templat monitoring pemahaman, K7: salin status pengisian untuk WA. Hanya status pengisian tiap tahapan (tanpa nilai, soal,
-// jawaban, atau nama orang). Gambar tabel (tahapan, terisi, sudah, belum) digambar di kanvas; teks pengantar tetap dari lib/statusPengisianWa.ts.
+// atau jawaban); sejak 15.46 gambar memuat nama peserta (tabel nama × tahapan, putusan Ketua Tim). Gambar tabel (tahapan, terisi, sudah, belum) digambar di kanvas; teks pengantar tetap dari lib/statusPengisianWa.ts.
 // Tombol: salin gambar dan teks, salin teks, bagikan ke WhatsApp, simpan gambar.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pesan } from "../../admin/ui";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
-import { LABEL_TAHAPAN_WA, hitungStatusWa, tahapanTersediaWa, teksPengantarWa, type BarisStatusWa, type KodeTahapanWa } from "@/lib/statusPengisianWa";
+import { LABEL_PENDEK_WA, LABEL_TAHAPAN_WA, hitungStatusWa, tabelNamaWa, tahapanTersediaWa, teksPengantarWa, type BarisStatusWa, type KodeTahapanWa } from "@/lib/statusPengisianWa";
 
-function gambarTabel(c: HTMLCanvasElement, judul: string, sub: string, total: number, tahapan: ReturnType<typeof hitungStatusWa>["tahapan"]) {
+// (14 Nov 2026, 15.46) Putusan Ketua Tim: gambar memuat nama peserta. Susunan: judul, tabel nama × tahapan dengan ✓ (sudah) / ✗ (belum),
+// dan baris REKAP paling bawah (sudah/total tiap tahapan, putusan 15.48). Nilai, soal, dan jawaban tetap tidak ikut.
+function potongTeks(g: CanvasRenderingContext2D, t: string, maks: number): string {
+  if (g.measureText(t).width <= maks) return t;
+  let s = t;
+  while (s.length > 1 && g.measureText(`${s}…`).width > maks) s = s.slice(0, -1);
+  return `${s}…`;
+}
+
+function gambarTabel(c: HTMLCanvasElement, judul: string, sub: string, total: number, tahapan: ReturnType<typeof hitungStatusWa>["tahapan"], nama: ReturnType<typeof tabelNamaWa>, label: string[]) {
   const W = 720;
-  const barisH = 48;
-  const atas = 104;
-  const H = atas + barisH * (tahapan.length + 1) + 28;
+  const barisH = 34;
+  const font = "'Plus Jakarta Sans', Arial, sans-serif";
+  const atas = 84;
+  const H = atas + barisH * (nama.length + 2) + 30;
   const r = 2;
   c.width = W * r;
   c.height = H * r;
@@ -25,39 +35,69 @@ function gambarTabel(c: HTMLCanvasElement, judul: string, sub: string, total: nu
   g.fillStyle = "#FFFFFF";
   g.fillRect(0, 0, W, H);
   g.fillStyle = "#0F2A52";
-  g.font = "800 22px 'Plus Jakarta Sans', Arial, sans-serif";
-  g.fillText(judul, 24, 40);
+  g.font = `800 21px ${font}`;
+  g.fillText(potongTeks(g, judul, W - 48), 24, 38);
   g.fillStyle = "#55657D";
-  g.font = "500 15px 'Plus Jakarta Sans', Arial, sans-serif";
-  g.fillText(sub, 24, 66);
-  g.fillText(`${total} orang`, 24, 88);
-  const kolom = [24, 330, 450, 580];
-  const kepala = ["Tahapan", "Terisi", "Sudah", "Belum"];
+  g.font = `500 14px ${font}`;
+  g.fillText(`${sub} · ${total} orang`, 24, 62);
+  // tabel nama × tahapan
+  const xNama = 24;
+  const lebarNama = label.length > 4 ? 270 : 320;
+  const lebarKol = (W - 24 - xNama - lebarNama) / Math.max(1, label.length);
   g.fillStyle = "#F3F6FB";
   g.fillRect(16, atas, W - 32, barisH);
   g.fillStyle = "#1B2B4B";
-  g.font = "800 16px 'Plus Jakarta Sans', Arial, sans-serif";
-  kepala.forEach((h, i) => g.fillText(h, kolom[i], atas + 30));
-  tahapan.forEach((t, i) => {
+  g.font = `800 14px ${font}`;
+  g.fillText("Nama", xNama, atas + 22);
+  label.forEach((l, i) => {
+    const x = xNama + lebarNama + lebarKol * i + lebarKol / 2;
+    g.textAlign = "center";
+    g.fillText(l, x, atas + 22);
+    g.textAlign = "left";
+  });
+  nama.forEach((o, i) => {
     const y = atas + barisH * (i + 1);
+    if (i % 2 === 1) {
+      g.fillStyle = "#FAFBFD";
+      g.fillRect(16, y, W - 32, barisH);
+    }
     g.strokeStyle = "#E3E8EE";
     g.beginPath();
     g.moveTo(16, y);
     g.lineTo(W - 16, y);
     g.stroke();
-    g.font = "600 16px 'Plus Jakarta Sans', Arial, sans-serif";
     g.fillStyle = "#1B2B4B";
-    g.fillText(t.label, kolom[0], y + 30);
-    g.fillText(t.terisi, kolom[1], y + 30);
-    g.fillStyle = "#13794B";
-    g.fillText(String(t.sudah), kolom[2], y + 30);
-    g.fillStyle = t.belum > 0 ? "#B42329" : "#8794A8";
-    g.font = "800 16px 'Plus Jakarta Sans', Arial, sans-serif";
-    g.fillText(String(t.belum), kolom[3], y + 30);
+    g.font = `600 14px ${font}`;
+    g.fillText(potongTeks(g, `${i + 1}. ${o.nama}`, lebarNama - 10), xNama, y + 22);
+    g.font = `800 16px ${font}`;
+    o.sudah.forEach((v, j) => {
+      g.fillStyle = v ? "#13794B" : "#B42329";
+      g.textAlign = "center";
+      g.fillText(v ? "✓" : "✗", xNama + lebarNama + lebarKol * j + lebarKol / 2, y + 23);
+      g.textAlign = "left";
+    });
+  });
+  // baris rekap paling bawah: sudah/total tiap tahapan
+  const yRekap = atas + barisH * (nama.length + 1);
+  g.fillStyle = "#E8EEF8";
+  g.fillRect(16, yRekap, W - 32, barisH);
+  g.strokeStyle = "#0F2A52";
+  g.beginPath();
+  g.moveTo(16, yRekap);
+  g.lineTo(W - 16, yRekap);
+  g.stroke();
+  g.fillStyle = "#0F2A52";
+  g.font = `800 14px ${font}`;
+  g.fillText(`Rekap sudah (dari ${total})`, xNama, yRekap + 22);
+  tahapan.forEach((t, j) => {
+    g.fillStyle = t.belum > 0 ? "#B42329" : "#13794B";
+    g.textAlign = "center";
+    g.fillText(`${t.sudah}/${total}`, xNama + lebarNama + lebarKol * j + lebarKol / 2, yRekap + 22);
+    g.textAlign = "left";
   });
   g.fillStyle = "#8794A8";
-  g.font = "500 12px 'Plus Jakarta Sans', Arial, sans-serif";
-  g.fillText("SIGAP · BPS Kabupaten Solok", 24, H - 10);
+  g.font = `500 12px ${font}`;
+  g.fillText("✓ sudah · ✗ belum · SIGAP · BPS Kabupaten Solok", 24, H - 10);
 }
 
 export default function SalinStatusWa({ baris, kegiatan, kegiatanId }: { baris: BarisStatusWa[]; kegiatan: string; kegiatanId: number | null }) {
@@ -82,7 +122,9 @@ function Lembar({ baris, kegiatan, kegiatanId, onTutup }: { baris: BarisStatusWa
   const [pesan, setPesan] = useState<{ jenis: "info" | "galat"; teks: string } | null>(null);
   const kanvas = useRef<HTMLCanvasElement | null>(null);
   const [gambarUrl, setGambarUrl] = useState<string | null>(null);
-  const status = useMemo(() => hitungStatusWa(baris, kelas, tersedia.filter((t) => pilih.includes(t))), [baris, kelas, pilih, tersedia]);
+  const dipilih = useMemo(() => tersedia.filter((t) => pilih.includes(t)), [pilih, tersedia]);
+  const status = useMemo(() => hitungStatusWa(baris, kelas, dipilih), [baris, kelas, dipilih]);
+  const tabelNama = useMemo(() => tabelNamaWa(baris, kelas, dipilih), [baris, kelas, dipilih]);
   const tautan = typeof window !== "undefined" ? `${window.location.origin}/sigap/pelatihan${kegiatanId ? `?kegiatan=${kegiatanId}` : ""}` : "";
   const teks = teksPengantarWa({ kegiatan, kelas, waktu, tautan });
   const sub = `${kelas === null ? "Semua kelas" : `Kelas ${kelas}`} · ${new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: false }).format(waktu)} WIB`;
@@ -90,9 +132,9 @@ function Lembar({ baris, kegiatan, kegiatanId, onTutup }: { baris: BarisStatusWa
   useEffect(() => {
     const c = kanvas.current ?? document.createElement("canvas");
     kanvas.current = c;
-    gambarTabel(c, `Status pengisian · ${kegiatan}`.slice(0, 60), sub, status.total, status.tahapan);
+    gambarTabel(c, `Status pengisian · ${kegiatan}`, sub, status.total, status.tahapan, tabelNama, dipilih.map((k) => LABEL_PENDEK_WA[k]));
     setGambarUrl(c.toDataURL("image/png"));
-  }, [kegiatan, sub, status]);
+  }, [kegiatan, sub, status, tabelNama, dipilih]);
 
   const blobGambar = () => new Promise<Blob | null>((res) => (kanvas.current ? kanvas.current.toBlob((b) => res(b), "image/png") : res(null)));
   const ok = (t: string) => setPesan({ jenis: "info", teks: t });
@@ -148,7 +190,7 @@ function Lembar({ baris, kegiatan, kegiatanId, onTutup }: { baris: BarisStatusWa
             ✕
           </button>
         </div>
-        <p className="m-0 mb-2 text-[12px] text-[#55657D]">Hanya status pengisian tiap tahapan. Nilai, soal, jawaban, dan nama tidak ikut.</p>
+        <p className="m-0 mb-2 text-[12px] text-[#55657D]">Gambar berisi nama peserta dan status tiap tahapan (✓ sudah, ✗ belum). Nilai, soal, dan jawaban tidak ikut.</p>
         {kelasAda.length > 1 && (
           <div className="mb-2 flex flex-wrap gap-1.5" role="group" aria-label="Pilih kelas">
             <button type="button" aria-pressed={kelas === null} onClick={() => setKelas(null)} className={chip(kelas === null)}>

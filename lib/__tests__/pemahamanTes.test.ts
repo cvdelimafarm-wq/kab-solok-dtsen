@@ -132,3 +132,14 @@ describe("masukan 14 Nov: kolom ramping, HP tanpa tombol saring", () => {
     expect(readFileSync("app/sigap/admin/KepalaKolom.tsx", "utf8")).toMatch(/minW = "min-w-\[9rem\]"/);
   });
 });
+
+describe("tandai bahas di kelas (K4)", () => {
+  it("penanda soal ikut di hasil hitung; hanya panitia/instruktur yang boleh menandai", () => {
+    const k = hitungPemahamanTes({ jenis: "pretest", soal: [{ ...soal[0], bahas: { at: iso(1), oleh: "Instruktur" } }, soal[1]], sesi: [], peserta, nilaiLulus: 70, nowMs: NOW });
+    expect(k.soal[0].bahas).toMatchObject({ oleh: "Instruktur" });
+    expect(k.soal[1].bahas).toBeNull();
+    const rute = readFileSync("app/api/sigap/pelatihan/pemahaman/route.ts", "utf8");
+    expect(rute).toMatch(/pengguna\.jenis !== "panitia" && pengguna\.jenis !== "instruktur"/);
+    expect(readFileSync("app/sigap/pelatihan/monitoring/PemahamanTes.tsx", "utf8")).toMatch(/Tandai bahas di kelas/);
+  });
+});

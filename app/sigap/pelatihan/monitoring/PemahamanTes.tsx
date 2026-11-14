@@ -16,7 +16,7 @@ import type { HasilPemahamanTes, OrangTes, SoalTesHasil } from "@/lib/pemahamanT
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 import { htmlLaporan, lembarExcel, ringkasanOtomatis, type KonteksLaporan } from "@/lib/laporanPemahaman";
 
-type Jawab = { kegiatan_id: number; kegiatan_nama?: string; jenis: string; tes: { judul: string; buka_at: string | null; tutup_at: string | null; aktif: boolean } | null; sekarang: string; cakupan: string; pemahaman: HasilPemahamanTes | null };
+type Jawab = { kegiatan_id: number; kegiatan_nama?: string; boleh_tandai?: boolean; jenis: string; tes: { judul: string; buka_at: string | null; tutup_at: string | null; aktif: boolean } | null; sekarang: string; cakupan: string; pemahaman: HasilPemahamanTes | null };
 type Mode = "hari_h" | "evaluasi" | "laporan";
 type Jenis = "pretest" | "posttest";
 
@@ -138,12 +138,33 @@ function Lembar({ judul, onTutup, children }: { judul: string; onTutup: () => vo
   );
 }
 
-function RincianSoal({ s, orang, onTutup }: { s: SoalTesHasil; orang: OrangTes[]; onTutup: () => void }) {
+function RincianSoal({ s, orang, onTutup, onTandai }: { s: SoalTesHasil; orang: OrangTes[]; onTutup: () => void; onTandai?: (tandai: boolean) => Promise<void> }) {
+  const [sibuk, setSibuk] = useState(false);
   const peta = new Map(orang.map((o) => [o.akun_id, o]));
   const maks = Math.max(1, ...s.pilihan.map((p) => p.jumlah));
   return (
     <Lembar judul={`Soal ${s.nomor}${s.topik ? ` · ${s.topik}` : ""}`} onTutup={onTutup}>
       <p className="m-0 text-[13.5px] leading-relaxed text-[#1B2B4B]">{s.teks}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {s.bahas && <span className="rounded-full bg-[#E7F5EE] px-2.5 py-1 text-[12px] font-bold text-[#13794B]">✓ Ditandai bahas di kelas{s.bahas.oleh ? ` · ${s.bahas.oleh}` : ""}</span>}
+        {onTandai && (
+          <button
+            type="button"
+            disabled={sibuk}
+            onClick={async () => {
+              setSibuk(true);
+              try {
+                await onTandai(!s.bahas);
+              } finally {
+                setSibuk(false);
+              }
+            }}
+            className={`min-h-[36px] rounded-full px-3.5 text-[12.5px] font-bold disabled:opacity-50 ${s.bahas ? "border border-[#0F2A52] text-[#0F2A52]" : "bg-[#0F2A52] text-white"}`}
+          >
+            {sibuk ? "Menyimpan…" : s.bahas ? "Lepas tanda bahas" : "Tandai bahas di kelas"}
+          </button>
+        )}
+      </div>
       {s.perlu_diperiksa && <Pesan jenis="peringatan">Pilihan {s.keliru_terbanyak?.kode} dipilih lebih banyak daripada kunci. Periksa teks soal atau kuncinya.</Pesan>}
       <ul className="mt-2 space-y-1.5">
         {s.pilihan.map((p) => (
@@ -359,8 +380,8 @@ export default function PemahamanTes() {
                       label: "Bahas",
                       nilai: () => "",
                       sel: (s) => (
-                        <button type="button" onClick={() => setSoalBuka(s)} className="min-h-[32px] rounded-full bg-[#0F2A52] px-3 text-[12px] font-bold text-white">
-                          Bahas
+                        <button type="button" onClick={() => setSoalBuka(s)} className={`min-h-[32px] whitespace-nowrap rounded-full px-3 text-[12px] font-bold ${s.bahas ? "bg-[#E7F5EE] text-[#13794B]" : "bg-[#0F2A52] text-white"}`}>
+                          {s.bahas ? "✓ Dibahas" : "Bahas"}
                         </button>
                       ),
                     },
@@ -384,7 +405,25 @@ export default function PemahamanTes() {
           </details>
         </>
       )}
-      {soalBuka && p && <RincianSoal s={soalBuka} orang={p.orang} onTutup={() => setSoalBuka(null)} />}
+      {soalBuka && p && (
+        <RincianSoal
+          s={p.soal.find((x) => x.nomor === soalBuka.nomor) ?? soalBuka}
+          orang={p.orang}
+          onTutup={() => setSoalBuka(null)}
+          onTandai={
+            d?.boleh_tandai
+              ? async (tandai) => {
+                  try {
+                    await fetchJson(urlPelatihan("/api/sigap/pelatihan/pemahaman"), { method: "POST", body: JSON.stringify({ aksi: "bahas", jenis, nomor: soalBuka.nomor, tandai }) });
+                    await muat();
+                  } catch (e) {
+                    setGalat(pesanGalat(e));
+                  }
+                }
+              : undefined
+          }
+        />
+      )}
       {orangBuka && p && <RincianPeserta o={orangBuka} soal={p.soal} onTutup={() => setOrangBuka(null)} />}
     </Kartu>
   );
