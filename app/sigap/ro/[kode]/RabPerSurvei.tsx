@@ -40,6 +40,7 @@ import { jendelaCair, labelSumber, periksaCair, periksaHarga, type JendelaCair }
 import { Chip, Galat, judulKartu, kartu, kolom, label, Memuat, tombol, tombolKecil } from "../../keu-ui";
 import { tulisKeuKlien, useBacaKeu, useKirim, type HasilAksi } from "../useKeu";
 import SelectCari from "@/app/components/SelectCari";
+import HariPenugasan from "./HariPenugasan"; // (14 Nov 2026, Fase 3) modal pembaruan hari dibayar -> penugasan
 
 type BarisAcuan = {
   ident_id: number; tahun: number; ro_kode: string; nama: string; ident_ver: number; form_sah: unknown | null; upd: Record<string, { mulai: string; selesai: string }> | null;
@@ -909,6 +910,7 @@ function IsiSurvei({ b, bahan, lembar, libur, props, itemBaru, muatItemBaru, nam
                   </table>
                 </div>
                 <p className="text-[12px] text-[#5B6B84]">Maksimal = hari kalender pendataan (penginapan: dikurangi satu malam). Anggaran memakai tarif bila ada di kebijakan.</p>
+                <HariPenugasan identId={b.ident_id} hariTeks={hariTeks} editable={props.editable} />
               </div>
             );
           })()}

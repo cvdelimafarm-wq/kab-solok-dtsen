@@ -84,3 +84,22 @@ export function galatJaringan(e: unknown): boolean {
   const m = e instanceof Error ? `${e.name} ${e.message}` : String(e);
   return /TypeError|Failed to fetch|NetworkError|Load failed|jaringan|sinyal|offline/i.test(m) && !/HTTP \d{3}/.test(m);
 }
+
+/** (14 Nov 2026, luring 3d) Selisih jam server - jam HP terakhir yang diketahui (diukur dari jawaban server mana pun yang membawa jam server). */
+export const KUNCI_JAM_SERVER = `${AWALAN_LURING}jam`;
+export function catatJamServer(p: Penyimpan, serverMs: number, hpMs = Date.now()): void {
+  if (!Number.isFinite(serverMs)) return;
+  try {
+    p.setItem(KUNCI_JAM_SERVER, JSON.stringify({ selisih: serverMs - hpMs, at: hpMs }));
+  } catch {
+    /* abaikan */
+  }
+}
+export function selisihJamServer(p: Penyimpan): { selisih: number; at: number } | null {
+  try {
+    const x = JSON.parse(p.getItem(KUNCI_JAM_SERVER) ?? "null") as { selisih: number; at: number } | null;
+    return x && Number.isFinite(x.selisih) ? x : null;
+  } catch {
+    return null;
+  }
+}

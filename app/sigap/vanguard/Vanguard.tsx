@@ -29,13 +29,16 @@ import type { Kasus, KasusPublik, KasusRahasia, Koreksi, Kontrol, Level, Nilai, 
 import { Lambang, LogoPenuh } from "./Logo";
 import PanduanPelatihan, { KartuBankSoal, LabelWajib } from "./PanduanPelatihan"; // (2 Nov 2026) konteks pelatihan peserta; (3 Nov 2026) Menu wajib + Latihan bank soal
 import { useKonteksPelatihan } from "./useKonteksPelatihan";
+import { galatJaringan, tandaPemilik } from "@/lib/luringSimpan"; // (14 Nov 2026) luring 3c: latihan tanpa sinyal
+import { bacaAntreVg, bacaRahasiaVg, bacaStatusVg, ditolakVg, perluRahasiaBaru, simpanRahasiaVg, simpanStatusVg, tambahAntreVg, tulisAntreVg } from "@/lib/vanguardLuring";
 import { kartuTampil, soalLatihanBerikutnya, type KonteksPelatihan } from "@/lib/konteksVanguard";
 
 type PengKirim = Pengaturan & { status: StatusJadwal };
 type Layar = "pembuka" | "beranda" | "kasus" | "akhir";
 type Info = { memuat: boolean; mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null; uji: boolean };
 type StatusRahasia = "idle" | "memuat" | "siap" | "ditolak" | "gagal";
-type Catat = { status: "tidak" | "mengirim" | "ok" | "gagal"; nomor?: number; pesan?: string };
+type Catat = { status: "tidak" | "mengirim" | "ok" | "gagal" | "tunda"; nomor?: number; pesan?: string };
+type StatusVg = { mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null; riwayat: { kasus: string; percobaan: number; benar: boolean; bintang: number }[]; lemah?: Kelemahan[]; uji?: boolean; kemampuan?: PetaKemampuan; pengaturan?: Record<string, unknown> & { status?: string } };
 type Hasil = {
   jenis: "benar" | "salah" | "kunci" | "bebas";
   /** Mode uji: hanya vonis dari server; tanpa rincian kotak, koreksi, atau pembahasan. */
@@ -119,9 +122,22 @@ export default function Vanguard() {
     setInfo((i) => (i.memuat && i.mode === "tercatat" ? i : { memuat: true, mode: "tercatat", boleh: false, alasan: null, uji: false })); // kegiatan baru diketahui dari konteks: tunggu status pencatatan
     (async () => {
       try {
-        const r = await apiPortal<{ mode: "bebas" | "tercatat"; boleh: boolean; alasan: string | null; riwayat: { kasus: string; percobaan: number; benar: boolean; bintang: number }[]; lemah?: Kelemahan[]; uji?: boolean; kemampuan?: PetaKemampuan; pengaturan?: Record<string, unknown> & { status?: string } }>(`/api/sigap/vanguard?kegiatan=${kegiatan}`);
+        // (14 Nov 2026, luring 3c) tanpa sinyal: status terakhir dari HP; mode uji tetap butuh sinyal (server yang menilai)
+        let r: StatusVg;
+        let dariHp = false;
+        const pemilik = tandaPemilik(bacaSesi());
+        try {
+          r = await apiPortal<StatusVg>(`/api/sigap/vanguard?kegiatan=${kegiatan}`);
+          simpanStatusVg(localStorage, pemilik, kegiatan, r);
+        } catch (e0) {
+          const lama = galatJaringan(e0) ? bacaStatusVg<StatusVg>(localStorage, pemilik, kegiatan) : null;
+          if (!lama) throw e0;
+          r = lama.isi;
+          dariHp = true;
+        }
         if (batal) return;
-        setInfo({ memuat: false, mode: r.mode, boleh: r.boleh, alasan: r.alasan, uji: r.uji === true });
+        if (dariHp && r.uji) setInfo({ memuat: false, mode: r.mode, boleh: false, alasan: "Tanpa sinyal: mode uji perlu sinyal karena dinilai server. Latihan bebas tetap bisa dilakukan (tidak dicatat).", uji: false });
+        else setInfo({ memuat: false, mode: r.mode, boleh: r.boleh, alasan: dariHp ? "Tanpa sinyal: percobaan disimpan di HP dan dicatat otomatis saat tersambung." : r.alasan, uji: r.uji === true });
         setKemampuan(r.kemampuan ?? {});
         setLemah(Array.isArray(r.lemah) ? r.lemah : []);
         if (r.pengaturan) setPeng({ ...bacaPengaturan(r.pengaturan), status: r.pengaturan.status === "belum_buka" || r.pengaturan.status === "tutup" ? r.pengaturan.status : "buka" });
@@ -140,6 +156,60 @@ export default function Vanguard() {
     if (kegiatan !== null) return;
     try { window.localStorage.setItem(KUNCI_LOKAL, JSON.stringify({ bintang, tries })); } catch { /* abaikan */ }
   }, [bintang, tries, kegiatan]);
+
+  // ---------- (14 Nov 2026, luring 3c) antrean percobaan tanpa sinyal + simpan rahasia latihan untuk dipakai tanpa sinyal ----------
+  const [antreVg, setAntreVg] = useState(0);
+  useEffect(() => {
+    let jalan = false;
+    const siram = async () => {
+      if (jalan || !navigator.onLine) return;
+      jalan = true;
+      const pemilik = tandaPemilik(bacaSesi());
+      try {
+        let daftar = bacaAntreVg(localStorage, pemilik);
+        for (const it of daftar) {
+          if (it.ditolak) continue;
+          try {
+            await apiPortal("/api/sigap/vanguard", { method: "POST", body: JSON.stringify(it.body) });
+            daftar = daftar.filter((x) => x.id !== it.id);
+          } catch (e) {
+            if (galatJaringan(e)) break;
+            const pesan = e instanceof Error ? e.message : String(e);
+            daftar = daftar.map((x) => (x.id === it.id ? (ditolakVg(pesan) || x.coba >= 4 ? { ...x, ditolak: pesan } : { ...x, coba: x.coba + 1 }) : x));
+          }
+          tulisAntreVg(localStorage, pemilik, daftar);
+        }
+        setAntreVg(daftar.filter((x) => !x.ditolak).length);
+      } finally {
+        jalan = false;
+      }
+    };
+    setAntreVg(bacaAntreVg(localStorage, tandaPemilik(bacaSesi())).filter((x) => !x.ditolak).length);
+    void siram();
+    const t = window.setInterval(() => void siram(), 60_000);
+    window.addEventListener("online", siram);
+    return () => {
+      window.clearInterval(t);
+      window.removeEventListener("online", siram);
+    };
+  }, [catat.status]);
+  const sudahSiapkan = useRef(false);
+  useEffect(() => {
+    if (sudahSiapkan.current || info.memuat || uji || typeof navigator === "undefined" || !navigator.onLine) return;
+    sudahSiapkan.current = true;
+    const pemilik = tandaPemilik(bacaSesi());
+    void (async () => {
+      for (const kas of KASUS_PUBLIK) {
+        if (kas.bebas || !perluRahasiaBaru(bacaRahasiaVg(localStorage, pemilik, kas.kode))) continue;
+        try {
+          const r = await apiPortal<{ rahasia: KasusRahasia }>(`/api/sigap/vanguard/kasus?kode=${kas.kode}`);
+          simpanRahasiaVg(localStorage, pemilik, kas.kode, r.rahasia);
+        } catch {
+          break; // sinyal putus / ditolak (sedang diujikan): coba lagi lain kali
+        }
+      }
+    })();
+  }, [info.memuat, uji]);
 
   // ---------- Back: kalkulator di atas kasus, kasus di atas daftar; Back dari daftar = keluar halaman (kembali ke SIGAP) ----------
   // Sengaja TIDAK ada lapisan untuk daftar kasus: lapisan yang didaftarkan ulang sesudah Back (tanpa sentuhan pengguna) membuat Chrome melewati entri riwayat
@@ -168,13 +238,21 @@ export default function Vanguard() {
   const ambilRahasia = async (kode: string): Promise<KasusRahasia | null> => {
     if (rahasia[kode]) return rahasia[kode];
     setStatusRahasia((s) => ({ ...s, [kode]: "memuat" }));
+    const pemilik = tandaPemilik(bacaSesi());
     try {
       const r = await apiPortal<{ rahasia: KasusRahasia }>(`/api/sigap/vanguard/kasus?kode=${kode}`);
       setRahasia((x) => ({ ...x, [kode]: r.rahasia }));
       setStatusRahasia((s) => ({ ...s, [kode]: "siap" }));
+      simpanRahasiaVg(localStorage, pemilik, kode, r.rahasia); // (14 Nov 2026, luring 3c) untuk latihan tanpa sinyal
       return r.rahasia;
     } catch (e) {
       if (e instanceof Error && e.message === "SESI_BERAKHIR") return null;
+      const lama = galatJaringan(e) ? bacaRahasiaVg<KasusRahasia>(localStorage, pemilik, kode) : null;
+      if (lama) {
+        setRahasia((x) => ({ ...x, [kode]: lama.isi }));
+        setStatusRahasia((s) => ({ ...s, [kode]: "siap" }));
+        return lama.isi;
+      }
       setStatusRahasia((s) => ({ ...s, [kode]: e instanceof Error && /diujikan/.test(e.message) ? "ditolak" : "gagal" }));
       return null;
     }
@@ -195,10 +273,11 @@ export default function Vanguard() {
     if (!dicatat || kegiatan === null) return null;
     setCatat({ status: "mengirim" });
     const kalkKirim = Math.min(500, kalkRef.current);
+    const isiKirim = { kegiatan, kasus: kas.kode, isian, petunjuk, lihatJawaban, kalkulator: kalkKirim, durasiDtk: Math.min(86400, Math.max(0, Math.round((Date.now() - mulaiRef.current) / 1000))) };
     try {
       const r = await apiPortal<{ nomor: number; benar: boolean; bintang: number; jmlSalah?: number }>("/api/sigap/vanguard", {
         method: "POST",
-        body: JSON.stringify({ kegiatan, kasus: kas.kode, isian, petunjuk, lihatJawaban, kalkulator: kalkKirim, durasiDtk: Math.min(86400, Math.max(0, Math.round((Date.now() - mulaiRef.current) / 1000))) }),
+        body: JSON.stringify(isiKirim),
       });
       kalkRef.current = Math.max(0, kalkRef.current - kalkKirim);
       setCatat({ status: "ok", nomor: r.nomor });
@@ -207,6 +286,13 @@ export default function Vanguard() {
       return r;
     } catch (err) {
       if (err instanceof Error && err.message === "SESI_BERAKHIR") return null;
+      // (14 Nov 2026, luring 3c) latihan tanpa sinyal: percobaan masuk antrean HP, dicatat otomatis saat tersambung (mode uji tetap butuh sinyal)
+      if (!uji && galatJaringan(err)) {
+        tambahAntreVg(localStorage, tandaPemilik(bacaSesi()), isiKirim);
+        kalkRef.current = Math.max(0, kalkRef.current - kalkKirim);
+        setCatat({ status: "tunda" });
+        return null;
+      }
       setCatat({ status: "gagal", pesan: err instanceof Error ? err.message : "Gagal mencatat." });
       return null;
     }
@@ -377,6 +463,7 @@ export default function Vanguard() {
       </div>
 
       <div className="scroll" ref={skrol}><div className="stack">
+        {layar === "beranda" && antreVg > 0 && <div className="catat tidak" role="status" style={{ margin: "8px 12px" }}>{antreVg} percobaan tanpa sinyal tersimpan di HP; dicatat otomatis saat tersambung.</div>}
         {layar === "beranda" && <Beranda konteks={konteks} siap={siap} semua={semua} onSemua={setSemua} balik={alamatVanguard({ kegiatan, dari: tujuan })} kegiatanK={dicatat ? kegiatan : null} bintang={bintang} selesai={selesai} total={bernilaiAktif.length} levelAktif={levelAktif} dicatat={dicatat} uji={uji} info={infoTampil} peng={dicatat ? peng : null} lulus={lulus} fin={fin} saran={saran} lemah={lemah} onBuka={bukaKasus} onAkhir={() => setLayar("akhir")} />}
 
         {layar === "kasus" && k && (
@@ -664,6 +751,7 @@ function PanelHasil({ k, rah, hasil, catat, dicatat, adaLanjut, onUlang, onKunci
 function CatatInfo({ catat, dicatat }: { catat: Catat; dicatat: boolean }) {
   if (!dicatat) return null;
   if (catat.status === "mengirim") return <div className="catat tidak" role="status" style={{ margin: "8px 12px" }}>Mencatat percobaan…</div>;
+  if (catat.status === "tunda") return <div className="catat tidak" role="status" style={{ margin: "8px 12px" }}>Tanpa sinyal: percobaan tersimpan di HP dan dicatat otomatis saat tersambung.</div>;
   if (catat.status === "ok") return <div className="catat ya" role="status" style={{ margin: "8px 12px" }}>Tercatat: percobaan ke-{catat.nomor} pada kasus ini.</div>;
   if (catat.status === "gagal" && catat.pesan && DITOLAK_SERVER.test(catat.pesan)) return <div className="catat gagal" role="alert" style={{ margin: "8px 12px" }}>Percobaan ini tidak dicatat: {catat.pesan}</div>;
   if (catat.status === "gagal") return <div className="catat gagal" role="alert" style={{ margin: "8px 12px" }}>Percobaan ini belum tercatat ({catat.pesan}). Tekan Periksa lagi bila sinyal sudah baik.</div>;

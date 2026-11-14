@@ -32,6 +32,8 @@ export type SesiLuring = {
   jejak: { n: number; k: string; ms: number }[];
   terkirim_at: string | null;
   galat_kirim: string | null;
+  /** pesan server yang menahan kiriman sementara (mis. terkunci tahapan: ajukan buka kunci) — tetap dicoba ulang */
+  tertahan?: string | null;
 };
 
 export function buatSesiLuring(paket: PaketTes, isi: IsiPaketSoal, selisihMs: number, pemilik: string, hpMs: number, ulang: boolean): SesiLuring {
@@ -127,7 +129,7 @@ export const ditolakServer = (pesan: string): boolean => /sudah selesai|ditutup|
  * (luring 3b-4) Ringkasan keadaan tes terakhir dari server (bersinyal): dipakai saat tanpa sinyal untuk tahu apakah peserta boleh
  * MENGULANG (wajib 100 dan belum 100). Tidak kotor -> dibuang saat keluar akun.
  */
-export type RingkasTes = { v: 1; pemilik: string; status: string; percobaan: number; wajib_100: boolean; tuntas: boolean; bisa_ulang: boolean; disimpan_at: string };
+export type RingkasTes = { v: 1; pemilik: string; status: string; percobaan: number; wajib_100: boolean; tuntas: boolean; bisa_ulang: boolean; disimpan_at: string; terkunci?: string | null };
 export const kunciRingkasTes = (jenis: string): string => `${AWALAN_LURING}ringkas:${jenis}`;
 
 export function simpanRingkasTes(p: Penyimpan, jenis: string, r: Omit<RingkasTes, "v">): void {
@@ -158,6 +160,7 @@ export function bolehMulaiLuring(ringkas: RingkasTes | null, sesi: SesiLuring | 
   if (sesi && !sesi.kotor && (!ringkas || Date.parse(ringkas.disimpan_at) < Date.parse(sesi.terkirim_at ?? ""))) {
     return { boleh: false, ulang: false, alasan: "Nilai percobaan terakhir belum diketahui di HP ini. Tunggu ada sinyal." };
   }
+  if (ringkas?.terkunci) return { boleh: false, ulang: false, alasan: `${ringkas.terkunci} Ajukan buka kunci di halaman tes saat ada sinyal; panitia/instruktur akan diberi tahu.` };
   if (!ringkas || ringkas.status === "belum_buka" || ringkas.status === "buka") return { boleh: true, ulang: false };
   if (ringkas.status === "selesai" && ringkas.wajib_100 && !ringkas.tuntas && ringkas.bisa_ulang) return { boleh: true, ulang: true };
   if (ringkas.status === "mengerjakan") return { boleh: false, ulang: false, alasan: "Tes ini sudah dimulai bersinyal; lanjutkan dari halaman tes (jawaban tersimpan di HP)." };

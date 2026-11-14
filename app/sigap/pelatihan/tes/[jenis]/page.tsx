@@ -20,6 +20,7 @@ import KartuTerkunci, { type KunciTes } from "../../KartuTerkunci"; // (2 Nov 20
 import { judulPelatihan } from "@/lib/sigapPelatihanNama";
 import TesTanpaSinyal, { adaSesiLuringAktif } from "./TesTanpaSinyal"; // (14 Nov 2026) luring 3b-2: tes dikerjakan tanpa sinyal dengan sandi A
 import { simpanRingkasTes } from "@/lib/sesiLuring";
+import { catatJamServer } from "@/lib/luringSimpan";
 import { baca as bacaLuring, gabungJawaban, galatJaringan, jamServerSekarang, kunciTesTerakhir, tandaPemilik, tulis as tulisLuring } from "@/lib/luringSimpan"; // (14 Nov 2026) luring L12
 
 type Keadaan = KeadaanTes & { terkunci?: KunciTes | null };
@@ -91,7 +92,8 @@ function IsiTes({ jenis }: { jenis: JenisTes }) {
       setTanpaSinyal(false);
       setGalat(null);
       // (14 Nov 2026, luring 3b-4) ringkasan untuk aturan mengulang saat nanti tanpa sinyal
-      simpanRingkasTes(localStorage, jenis, { pemilik: tandaPemilik(bacaSesi()), status: d.status, percobaan: d.percobaan, wajib_100: !!d.wajib_100, tuntas: !!d.tuntas, bisa_ulang: !!d.bisa_ulang, disimpan_at: d.sekarang });
+      catatJamServer(localStorage, Date.parse(d.sekarang));
+      simpanRingkasTes(localStorage, jenis, { pemilik: tandaPemilik(bacaSesi()), status: d.status, percobaan: d.percobaan, wajib_100: !!d.wajib_100, tuntas: !!d.tuntas, bisa_ulang: !!d.bisa_ulang, disimpan_at: d.sekarang, terkunci: d.terkunci?.pesan ?? null });
     },
     [setujukan, jenis, simpanHp]
   );

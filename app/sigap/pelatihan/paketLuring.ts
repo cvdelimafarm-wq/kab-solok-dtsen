@@ -52,6 +52,8 @@ export async function kirimSesiLuringTertunda<T = unknown>(jenis: string): Promi
       simpanSesiLuring(localStorage, { ...s, galat_kirim: pesan });
       return { ditolak: pesan };
     }
+    // ditahan sementara (mis. terkunci tahapan): simpan pesannya untuk ditampilkan, tetap dicoba lagi
+    if (!/failed to fetch|networkerror|load failed|sambungan/i.test(pesan)) simpanSesiLuring(localStorage, { ...s, tertahan: pesan });
     return null;
   }
 }

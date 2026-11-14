@@ -16,6 +16,7 @@ import KartuVanguardHariIni from "../../KartuVanguardHariIni";
 import KartuRoleplayHariIni from "../../KartuRoleplayHariIni"; // (8 Nov 2026) Roleplaying by Vanguard (langkah 8)
 import KartuAgendaSesi from "../KartuAgendaSesi"; // (9 Nov 2026) Agenda sesi: instruktur memulai/menyelesaikan Pretest dan Posttest kelasnya
 import AbsenPeserta from "../AbsenPeserta";
+import AbsenTanpaSinyal from "../AbsenTanpaSinyal"; // (14 Nov 2026) luring 3d
 import KartuIzinBuka from "../KartuIzinBuka";
 import { Kerangka } from "../komponen";
 import { PulsaPeserta } from "../pulsa";
@@ -286,6 +287,7 @@ export default function HalamanHariIni() {
           {terkunciUndangan && <Pesan jenis="info">Bagian pelatihan lain terbuka setelah Anda menerima undangan ini.</Pesan>}
           {!terkunciUndangan && <KartuJadwalPendataan jadwal={d.jadwal_pendataan} pelatihan={d.jadwal_pelatihan ?? (d.undangan.tanggal_iso ? { mulai: d.undangan.tanggal_iso, selesai: null } : null)} peran={d.peserta?.peran ?? null} />}
           {!vg.mendesak && !terkunciUndangan && <KartuVanguardHariIni kegiatanId={d.kegiatan_id} />}
+          {!terkunciUndangan && <AbsenTanpaSinyal />}
           {!terkunciUndangan && <AbsenPeserta />}
           {!terkunciUndangan && <KartuKuis />}
           {!terkunciUndangan && <KartuRoleplayHariIni kegiatanId={d.kegiatan_id} />}

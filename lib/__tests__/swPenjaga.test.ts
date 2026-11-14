@@ -97,4 +97,18 @@ describe("penjaga luring (docs/luring-aturan.md)", () => {
     const tes = readFileSync(join(akar, "app", "sigap", "pelatihan", "tes", "[jenis]", "page.tsx"), "utf8");
     expect(tes).toMatch(/<TesTanpaSinyal/);
   });
+  it("L14: Vanguard latihan, absen kode, lembar QC korwil, dan agenda instruktur tetap bekerja tanpa sinyal", () => {
+    const vg = readFileSync(join(akar, "app", "sigap", "vanguard", "Vanguard.tsx"), "utf8");
+    expect(vg).toMatch(/tambahAntreVg\(/);
+    expect(vg).toMatch(/if \(!uji && galatJaringan\(err\)\)/); // mode uji tidak pernah diantrekan
+    const absen = readFileSync(join(akar, "app", "api", "sigap", "pelatihan", "absen", "route.ts"), "utf8");
+    expect(absen).toMatch(/aksi === "kode_luring"/);
+    const absenDb = readFileSync(join(akar, "lib", "sigapAbsenDb.ts"), "utf8");
+    expect(absenDb).toMatch(/export async function kirimKodeLuring[\s\S]*tungguKode/); // batas salah ketik berlaku
+    const korwil = readFileSync(join(akar, "app", "sigap", "korwil", "KorwilLembarQc.tsx"), "utf8");
+    expect(korwil).toMatch(/kirimAtauAntre\(/);
+    const agenda = readFileSync(join(akar, "app", "sigap", "pelatihan", "KartuAgendaSesi.tsx"), "utf8");
+    expect(agenda).toMatch(/AWALAN_LURING\}agenda:/);
+    expect(existsSync(join(akar, "app", "sigap", "kelola", "luring", "page.tsx"))).toBe(true);
+  });
 });

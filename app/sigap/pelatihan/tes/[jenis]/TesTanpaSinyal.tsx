@@ -214,6 +214,10 @@ export default function TesTanpaSinyal<K>({ jenis, label, onDiterima, onMulai, m
             <>
               <b className="text-[#B42329]">{sesi.galat_kirim}</b> Jawaban tetap disimpan di HP ini. Hubungi panitia pelatihan.
             </>
+          ) : sesi.kotor && sesi.tertahan ? (
+            <>
+              <b className="text-[#8A6200]">{sesi.tertahan}</b> Jawaban tetap tersimpan di HP dan dikirim otomatis begitu diizinkan.
+            </>
           ) : sesi.kotor ? (
             <>
               {Object.keys(sesi.jawaban).length} dari {sesi.soal.length} soal terjawab. Jawaban dikirim otomatis begitu HP mendapat sinyal (paling lambat {BATAS_TERTAHAN_JAM} jam sesudah waktu habis, yaitu sebelum{" "}

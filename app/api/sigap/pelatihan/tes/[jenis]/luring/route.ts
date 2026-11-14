@@ -14,6 +14,9 @@ import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
 import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { bersihkanJawaban, jawabanSoalLain, jenisTesValid } from "@/lib/sigapTes";
 import { terapkanAgendaPeserta } from "@/lib/sigapAgendaDb";
+import { muatAturan } from "@/lib/sigapAturanDb";
+import { hitungTahapan, kunciUntuk, tesDenganIzin } from "@/lib/sigapTahapan";
+import { izinBerlakuPerTahap, muatIzin, muatTahapanBatch } from "@/lib/sigapTahapanDb";
 import { akunDariRequest, dbAdmin, finalisasiSesi, idKegiatanPelatihan, muatSesi, muatSoal, muatTes, mulaiUlang, pesertaPelatihan, susunKeadaan } from "@/lib/sigapTesDb";
 import { versiSoal } from "@/lib/sigapTesLuring";
 import { bacaKirimLuring, periksaKirimLuring } from "@/lib/sigapTesLuringPeriksa";
@@ -45,12 +48,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (!k) return galat("Isi kiriman tidak sah.");
     if (k.tes_id !== tes.id) return galat("Paket soal ini milik tes lain. Muat ulang halaman tes.", 409);
     const ulang = body?.ulang === true;
+    if (!tes.aktif) return galat("Tes belum tersedia.", 409);
 
     const sekarang = new Date();
-    const efektif = await terapkanAgendaPeserta(db, tes, peserta.kelas);
+    // (14 Nov 2026) sama dengan halaman tes: izin buka kunci memberi jendela pribadi, dan blokir tahapan berlaku (jalur tanpa sinyal bukan jalan pintas)
+    const sekarangMs = sekarang.getTime();
+    const [aturan, izin] = await Promise.all([muatAturan(db, kegiatanId), muatIzin(db, kegiatanId, [akun.id], sekarangMs)]);
+    const barisIzin = izin.peta.get(akun.id) ?? [];
+    const tesIzin = tesDenganIzin(tes, izinBerlakuPerTahap(barisIzin, sekarangMs)[jenis], sekarangMs);
+    const efektif = await terapkanAgendaPeserta(db, tesIzin, peserta.kelas);
     const dimulaiInstruktur = !!efektif.agenda;
     // tes yang dimulai instruktur: jendela bisa sudah ditutup saat jawaban tiba, jadi batas atas memakai jadwal tes asli bila lebih longgar
-    const jadwal = dimulaiInstruktur && Date.parse(tes.tutup_at) > Date.parse(efektif.tutup_at) ? { ...efektif, tutup_at: tes.tutup_at } : efektif;
+    // izin buka kunci: batas bawah tetap jadwal asli bila lebih awal (HP bisa mulai sebelum izin dicatat dan menunggu sinyal)
+    const lebihAwal = (a: string, b: string) => (Date.parse(a) <= Date.parse(b) ? a : b);
+    const lebihAkhir = (a: string, b: string) => (Date.parse(a) >= Date.parse(b) ? a : b);
+    const jadwal = { ...efektif, buka_at: lebihAwal(tes.buka_at, efektif.buka_at), tutup_at: dimulaiInstruktur ? lebihAkhir(tes.tutup_at, efektif.tutup_at) : efektif.tutup_at };
     const h = periksaKirimLuring(k, jadwal, dimulaiInstruktur, sekarang.getTime());
     if (!h.ok) return galat(h.pesan, 409);
 
@@ -70,6 +82,12 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     };
 
     let sesi = await muatSesi(db, tes.id, akun.id);
+    if (!sesi && aturan.blokir_tahap) {
+      const batch = await muatTahapanBatch(db, kegiatanId, [akun.id], sekarangMs, aturan);
+      const masukan = batch.masukan.get(akun.id);
+      const kunci = masukan ? kunciUntuk(hitungTahapan(masukan, true, barisIzin, sekarangMs), jenis) : null;
+      if (kunci) return galat(`${kunci.pesan} Ajukan buka kunci di halaman tes saat ada sinyal; jawaban tetap tersimpan di HP.`, 409);
+    }
     // kiriman ganda: sesi sudah memuat cap kiriman yang sama
     if (sesi) {
       const { data: c } = await db.from("sigap_tes_sesi").select("luring_cap").eq("id", sesi.id).maybeSingle();

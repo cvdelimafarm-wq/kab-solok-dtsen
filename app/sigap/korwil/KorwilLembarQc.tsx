@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPortal } from "@/app/portal/sesi";
+import { kirimAtauAntre, usePengirimAntrean } from "@/app/portal/antreanKirim"; // (14 Nov 2026, luring 3e) lembar QC tanpa sinyal masuk antrean kirim
+import { galatJaringan } from "@/lib/luringSimpan";
 import { bacaCache, muatData, siapkanData, useData } from "@/app/portal/dataBersama";
 import { namaSingkatTampil } from "@/lib/namaTampil";
 import {
@@ -70,6 +72,7 @@ const WARNA_KATEGORI: Record<string, string> = { Baik: "bg-[#E3F6EC] text-[#1379
 
 /** kelompok: pilihan di halaman Supervisi; null = kelompok bawaan akun (server yang menentukan, sama dengan Monitoring). */
 export default function KorwilLembarQc({ kelompok }: { kelompok: number | null }) {
+  usePengirimAntrean(); // (14 Nov 2026, luring 3e) kirim ulang lembar yang tertahan saat tersambung
   // (27 Okt 2026) Data lewat simpanan bersama (dataBersama.ts): langsung tampil dari simpanan / hasil prefetch, diperbarui di belakang, dan TIDAK menunggu Monitoring.
   const hd = useData<Data>(`/api/portal/qc/kuesioner${kelompok ? `?kelompok=${kelompok}` : ""}`);
   const d = hd.data;
@@ -197,16 +200,22 @@ export default function KorwilLembarQc({ kelompok }: { kelompok: number | null }
     setSibuk(true);
     setGalat(null);
     setInfo(null);
+    const isiLembar = { kelompok: d.kelompok, objek, tanggal, subjek_akun_id: subjek, kk_id: objek === "kk" ? kkId : null, jawaban: hasil.jawaban, catatan, tindak_lanjut: tindak, tenggat: tenggat || null };
     try {
       await apiPortal(`/api/portal/qc/kuesioner`, {
         method: "POST",
-        body: JSON.stringify({ kelompok: d.kelompok, objek, tanggal, subjek_akun_id: subjek, kk_id: objek === "kk" ? kkId : null, jawaban: hasil.jawaban, catatan, tindak_lanjut: tindak, tenggat: tenggat || null }),
+        body: JSON.stringify(isiLembar),
       });
       setInfo(ada ? "Lembar diperbarui." : "Lembar tersimpan.");
       // simpanan daftar lembar sudah ditandai basi oleh penulisan (ATURAN_TULIS); ambil ulang sekarang agar daftar & status "sudah diisi" langsung benar
       await Promise.all([hd.muat(), objek === "kk" && subjek ? muatKk(subjek) : Promise.resolve()]);
     } catch (e) {
-      setGalat(pesanGalat(e));
+      // (14 Nov 2026, luring 3e) tanpa sinyal: lembar disimpan di antrean HP dan dikirim otomatis saat tersambung (lembar yang sama = yang terakhir berlaku)
+      if (galatJaringan(e)) {
+        const h = kirimAtauAntre(`/api/portal/qc/kuesioner`, isiLembar, `qc:${d.kelompok}:${objek}:${tanggal}:${subjek}:${objek === "kk" ? kkId : "-"}`);
+        if (h.ok) setInfo("Tanpa sinyal: lembar tersimpan di HP dan dikirim otomatis saat tersambung.");
+        else setGalat(h.pesan);
+      } else setGalat(pesanGalat(e));
     } finally {
       setSibuk(false);
     }

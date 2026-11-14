@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson, urlPelatihan } from "../admin/api";
 import type { MetodeAbsen } from "@/lib/sigapAbsen";
+import { catatJamServer } from "@/lib/luringSimpan"; // (14 Nov 2026) luring 3d: selisih jam untuk absen tanpa sinyal
 
 export type SesiTerbuka = { id: number; no: number; label: string; metode: MetodeAbsen[]; tutup_at: string; sisa_detik: number; radius_m: number; sudah_hadir: boolean; di_luar_radar: boolean };
 export type SesiHari = { id: number; no: number; label: string; jam: string | null; keadaan: "dibuka" | "habis" | "ditutup"; tutup_at: string; sudah_hadir: boolean };
@@ -42,6 +43,7 @@ function muatDari(url: string, paksa = false): Promise<void> {
   const p = fetchJson<DataAbsenSaya>(url)
     .then((r) => {
       keadaan.set(url, { data: r, tiba: Date.now(), ada: true });
+      if (typeof r?.sekarang === "number") catatJamServer(localStorage, r.sekarang);
     })
     .catch(() => {
       // bukan peserta atau fitur belum aktif: diam (data lama, bila ada, tidak dibuang oleh galat sesaat)

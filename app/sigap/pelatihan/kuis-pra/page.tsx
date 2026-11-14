@@ -10,6 +10,13 @@ import { bacaSesi, fetchJson, keluar, keMasuk, pesanGalat, SesiBerakhir, urlPela
 import { BTN_G, BTN_O, Chip, HeaderAdmin, Kartu, Memuat, Pesan } from "../../admin/ui";
 import TombolKembali from "@/app/components/TombolKembali";
 import type { StatusKuisPra } from "@/lib/sigapKuisPra";
+import { AWALAN_LURING, baca as bacaLuring, galatJaringan, tandaPemilik, tulis as tulisLuring } from "@/lib/luringSimpan"; // (14 Nov 2026) luring 3g
+
+// (14 Nov 2026, luring 3g) Kuis pra tanpa sinyal: percobaan yang sudah DIMULAI bersinyal (soalnya sudah di HP) bisa diselesaikan tanpa sinyal.
+// Tiap pilihan langsung disimpan di HP; Kirim tanpa sinyal = antrean (kotor, tidak dibuang saat keluar akun) dan dinilai server saat tersambung.
+// Memulai percobaan baru tetap butuh sinyal (soal disusun server per petugas dari riwayat anomali).
+const KUNCI_HP = `${AWALAN_LURING}kuispra`;
+type SimpanHp = { data: Data; kirim: boolean; percobaan_id: number | null };
 
 const URL_API = "/api/sigap/pelatihan/kuis-pra";
 type Opsi = { kode: string; teks: string };
@@ -31,13 +38,34 @@ export default function KuisPra() {
   const [hasil, setHasil] = useState<Hasil | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const [jawaban, setJawaban] = useState<Record<string, string>>({});
+  const [dariHp, setDariHp] = useState(false);
+  const [antre, setAntre] = useState(false);
+  const pemilik = () => tandaPemilik(bacaSesi());
+  const simpanHp = (d: Data, jw: Record<string, string>, kirim: boolean) =>
+    tulisLuring<SimpanHp, Record<string, string>>(localStorage, KUNCI_HP, { pemilik: pemilik(), jamServer: null, keadaan: { data: d, kirim, percobaan_id: d.berjalan?.id ?? null }, jawaban: jw, kotor: !!d.berjalan });
 
   const muat = useCallback(async () => {
+    const lokal = bacaLuring<SimpanHp, Record<string, string>>(localStorage, KUNCI_HP, tandaPemilik(bacaSesi()));
     try {
-      setData(await fetchJson<Data>(urlPelatihan(URL_API)));
+      const d = await fetchJson<Data>(urlPelatihan(URL_API));
+      setData(d);
       setGalat(null);
+      setDariHp(false);
+      // jawaban di HP untuk percobaan yang sama menang (belum diterima server)
+      const sama = !!lokal && !!d.berjalan && lokal.keadaan.percobaan_id === d.berjalan.id;
+      const jw = sama ? lokal!.jawaban : {};
+      if (sama) setJawaban(jw);
+      tulisLuring<SimpanHp, Record<string, string>>(localStorage, KUNCI_HP, { pemilik: tandaPemilik(bacaSesi()), jamServer: null, keadaan: { data: d, kirim: sama && lokal!.keadaan.kirim, percobaan_id: d.berjalan?.id ?? null }, jawaban: jw, kotor: !!d.berjalan });
+      setAntre(sama && lokal!.keadaan.kirim);
     } catch (e) {
-      if (!(e instanceof SesiBerakhir)) setGalat(pesanGalat(e));
+      if (e instanceof SesiBerakhir) return;
+      if (galatJaringan(e) && lokal) {
+        setData(lokal.keadaan.data);
+        setJawaban(lokal.jawaban);
+        setAntre(lokal.keadaan.kirim);
+        setDariHp(true);
+        setGalat(null);
+      } else setGalat(pesanGalat(e));
     }
   }, []);
   useEffect(() => {
@@ -63,13 +91,44 @@ export default function KuisPra() {
     setJawaban({});
     if (await post({ aksi: "mulai" })) await muat();
   }
-  async function kirim(b: Berjalan) {
-    const r = (await post({ aksi: "jawab", percobaan_id: b.id, jawaban })) as unknown as Hasil | null;
-    if (r) {
+  async function kirim(b: Berjalan, jw: Record<string, string> = jawaban) {
+    setSibuk(true);
+    setGalat(null);
+    try {
+      const r = await fetchJson<Hasil>(urlPelatihan(URL_API), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ aksi: "jawab", percobaan_id: b.id, jawaban: jw }) });
       setHasil(r);
+      setAntre(false);
       await muat();
+    } catch (e) {
+      if (e instanceof SesiBerakhir) return;
+      if (galatJaringan(e) && data) {
+        simpanHp(data, jw, true); // (luring 3g) dinilai server saat tersambung
+        setAntre(true);
+      } else {
+        setGalat(pesanGalat(e));
+        setAntre(false);
+        if (data) simpanHp(data, jw, false);
+        void muat();
+      }
+    } finally {
+      setSibuk(false);
     }
   }
+  // (luring 3g) kirim antrean saat tersambung lagi
+  useEffect(() => {
+    if (!antre) return;
+    const f = () => {
+      if (navigator.onLine && data?.berjalan) void kirim(data.berjalan);
+    };
+    f();
+    window.addEventListener("online", f);
+    const t = window.setInterval(f, 20_000);
+    return () => {
+      window.removeEventListener("online", f);
+      window.clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [antre, data?.berjalan?.id]);
 
   const st = data?.status;
   const p = data?.pengaturan;
@@ -83,6 +142,8 @@ export default function KuisPra() {
       </HeaderAdmin>
       <main className="mx-auto max-w-3xl space-y-3 px-3 pb-16 pt-4 sm:px-4">
         {galat && <Pesan jenis="galat">{galat}</Pesan>}
+        {dariHp && <Pesan jenis="info">Tanpa sinyal: data terakhir dari HP. Percobaan yang sudah dimulai bisa diselesaikan; memulai percobaan baru butuh sinyal.</Pesan>}
+        {antre && <Pesan jenis="peringatan">Jawaban tersimpan di HP dan dikirim otomatis saat ada sinyal. Nilai dan pembahasan tampil sesudah terkirim.</Pesan>}
         {!data && !galat && <Memuat />}
         {data && !data.tersedia && <Pesan jenis="info">Kuis pra belum tersedia untuk Anda.</Pesan>}
         {data?.tersedia && p && st && (
@@ -93,7 +154,7 @@ export default function KuisPra() {
                 {p.tutup_at && <li>Ditutup: {waktuWib(p.tutup_at)} WIB</li>}
                 <li>Nilai terbaik Anda: <b>{st.terbaik ?? "belum ada"}</b> · sisa percobaan: <b>{st.sisa}</b></li>
               </ul>
-              {st.status === "bisa_mulai" && (
+              {st.status === "bisa_mulai" && !dariHp && (
                 <div className="mt-3">
                   <button type="button" className={BTN_G} disabled={sibuk} onClick={mulai}>
                     {sibuk ? "Menyiapkan soal…" : st.keBerikut > 1 ? `Mulai percobaan ke-${st.keBerikut}` : "Mulai kuis"}
@@ -115,7 +176,20 @@ export default function KuisPra() {
                       <div className="mt-1.5 space-y-1">
                         {s.opsi.map((o) => (
                           <label key={o.kode} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-[13.5px] ${jawaban[s.id] === o.kode ? "border-[#1F6FD1] bg-[#E3EEFB]" : "border-[#E3E8EE] bg-white"}`}>
-                            <input type="radio" name={s.id} className="mt-0.5" checked={jawaban[s.id] === o.kode} onChange={() => setJawaban((j) => ({ ...j, [s.id]: o.kode }))} />
+                            <input
+                              type="radio"
+                              name={s.id}
+                              className="mt-0.5"
+                              disabled={antre}
+                              checked={jawaban[s.id] === o.kode}
+                              onChange={() =>
+                                setJawaban((j) => {
+                                  const baru = { ...j, [s.id]: o.kode };
+                                  if (data) simpanHp(data, baru, false); // (luring 3g) tiap pilihan langsung ke HP
+                                  return baru;
+                                })
+                              }
+                            />
                             <span>
                               <b>{o.kode}.</b> {o.teks}
                             </span>
@@ -127,8 +201,8 @@ export default function KuisPra() {
                 </ol>
                 <div className="mt-4 flex items-center justify-between gap-2">
                   <span className="text-[12.5px] text-[#6B7A90]">{terjawab < berjalan.soal.length ? "Soal yang belum dijawab dihitung salah." : "Semua soal terjawab."}</span>
-                  <button type="button" className={BTN_G} disabled={sibuk} onClick={() => void kirim(berjalan)}>
-                    {sibuk ? "Mengirim…" : "Kirim jawaban"}
+                  <button type="button" className={BTN_G} disabled={sibuk || antre} onClick={() => void kirim(berjalan)}>
+                    {antre ? "Menunggu sinyal…" : sibuk ? "Mengirim…" : "Kirim jawaban"}
                   </button>
                 </div>
               </Kartu>

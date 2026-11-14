@@ -20,12 +20,13 @@ import { boleh, catatAudit, izinAkun } from "@/lib/sigapAkses";
 import { TUBUH_GERBANG } from "@/lib/gerbangUndangan";
 import { periksaGerbang } from "@/lib/sigapPelatihanBaruDb";
 import { akunDariRequest, dbAdmin, idKegiatanPelatihan, pesertaPelatihan } from "@/lib/sigapTesDb";
+import { bacaKodeLuring } from "@/lib/sigapAbsenLuring"; // (14 Nov 2026) luring 3d
 import { tentukanPengguna } from "@/lib/sigapPelatihanBaruDb";
 import { posisiValid } from "@/lib/sigapPresensi";
 import { bacaSusulan, kedatanganBerlaku, keadaanSesi, menitWib, periksaAlasan, periksaJamSusulan, periksaMetodeTunggal, periksaRadius, sarankanSesi, sisaDetik, tanggalWib } from "@/lib/sigapAbsen";
 import {
   ambilSesi, batalDatangManual, catatDatangManual, catatSusulan, centangMassal, centangPeserta, gantiMetode, hariKegiatan, kirimKode, kodeBaru, konfirmasiLokasi, muatAtur, muatDatang, muatHadir, muatRekapKoreksi,
-  muatSesiHari, mulaiSesi, pesertaKelas, simpanAtur, simpanPosisiPengelola, tutupSesi, ubahRadius, PESAN_SQL,
+  kirimKodeLuring, muatSesiHari, mulaiSesi, pesertaKelas, simpanAtur, simpanPosisiPengelola, tutupSesi, ubahRadius, PESAN_SQL,
 } from "@/lib/sigapAbsenDb";
 
 export const runtime = "nodejs";
@@ -150,6 +151,17 @@ export async function POST(req: NextRequest) {
     const aksi = body.aksi;
 
     // ---------- peserta ----------
+    // (14 Nov 2026, luring 3d) kode yang diketik TANPA SINYAL: sesi dicari dari kode + jam ketik (lib/sigapAbsenLuring.ts)
+    if (aksi === "kode_luring") {
+      const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
+      if (!peserta) return galat("Anda bukan peserta pelatihan ini.", 403);
+      if ((await periksaGerbang(db, kegiatanId, akun.id)) !== "boleh") return NextResponse.json(TUBUH_GERBANG, { status: 403 });
+      const k = bacaKodeLuring(body);
+      if (!k) return galat("Isi absen tanpa sinyal tidak sah.");
+      const h = await kirimKodeLuring(db, kegiatanId, akun.id, peserta.kelas ?? null, k, sekarang);
+      if (!h.ok) return galat(h.pesan, h.status, { tunggu_detik: h.tunggu_detik });
+      return NextResponse.json({ ok: true, sudah: !!h.sudah });
+    }
     if (aksi === "kode" || aksi === "lokasi") {
       const peserta = await pesertaPelatihan(db, akun.id, kegiatanId);
       if (!peserta) return galat("Anda bukan peserta pelatihan ini.", 403);

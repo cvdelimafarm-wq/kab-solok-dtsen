@@ -7,9 +7,10 @@
 // bagi akun lain (peserta, panitia, admin) kartu tidak digambar. Muat ulang otomatis tiap 5 detik. Peserta melihat "Menunggu instruktur memulai".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SesiBerakhir, fetchJson, pesanGalat } from "../admin/api";
+import { SesiBerakhir, bacaSesi, fetchJson, pesanGalat } from "../admin/api";
 import { BTN, BTN_G, BTN_O, BTN_R, Chip, Kartu, Pesan } from "../admin/ui";
 import { jamWib } from "./komponen";
+import { AWALAN_LURING, galatJaringan, tandaPemilik } from "@/lib/luringSimpan"; // (14 Nov 2026) luring 3f
 import { LABEL_STATUS_AGENDA, aksiTersedia, peringatanMulai, type AksiAgenda, type StatusAgenda } from "@/lib/sigapAgenda";
 
 type Sesi = {
@@ -41,18 +42,42 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
   /** Tombol yang sedang meminta konfirmasi: `${tes_id}:${aksi}` */
   const [yakin, setYakin] = useState<string | null>(null);
   const terbang = useRef(false);
+  // (14 Nov 2026, luring 3f) instruktur tanpa sinyal: agenda terakhir (termasuk sandi A) dari HP, supaya sandi tetap bisa dibacakan
+  const [dariHp, setDariHp] = useState(false);
+  const kunciHp = `${AWALAN_LURING}agenda:${kegiatanId}`;
 
   const muat = useCallback(async () => {
     if (terbang.current) return;
     terbang.current = true;
+    const pemilik = tandaPemilik(bacaSesi());
     try {
-      setK(await fetchJson<Keadaan>(url));
+      const d = await fetchJson<Keadaan>(url);
+      setK(d);
+      setDariHp(false);
+      try {
+        localStorage.setItem(kunciHp, JSON.stringify({ v: 1, pemilik, d }));
+      } catch {
+        /* penuh */
+      }
     } catch (e) {
-      if (!(e instanceof SesiBerakhir)) setK((lama) => lama ?? { ada: false });
+      if (e instanceof SesiBerakhir) return;
+      let lama: Keadaan | null = null;
+      if (galatJaringan(e)) {
+        try {
+          const x = JSON.parse(localStorage.getItem(kunciHp) ?? "null") as { v: 1; pemilik: string; d: Keadaan } | null;
+          if (x && x.v === 1 && x.pemilik === pemilik) lama = x.d;
+        } catch {
+          lama = null;
+        }
+      }
+      if (lama) {
+        setK(lama);
+        setDariHp(true);
+      } else setK((l) => l ?? { ada: false });
     } finally {
       terbang.current = false;
     }
-  }, [url]);
+  }, [url, kunciHp]);
 
   useEffect(() => {
     void muat();
@@ -83,6 +108,11 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
     <Kartu judul="Agenda sesi kelas Anda" ket="Tes dimulai oleh Anda">
       <div id="langkah-agenda" className="space-y-3">
         {galat && <Pesan jenis="galat" onTutup={() => setGalat(null)}>{galat}</Pesan>}
+        {dariHp && (
+          <p role="status" className="m-0 rounded-xl border border-[#F0D48A] bg-[#FFF6DD] px-3 py-2 text-[12.5px] leading-snug text-[#5C3D00]">
+            Tanpa sinyal: agenda terakhir dari HP. Tombol Mulai/Selesai butuh sinyal. Bila kelas mengerjakan tanpa sinyal, bacakan sandi di bawah; peserta yang soalnya sudah terunduh bisa langsung mengerjakan.
+          </p>
+        )}
         {k.sesi.map((s) => {
           const aksi = aksiTersedia(s.status)[0];
           const kunci = `${s.tes_id}:${aksi}`;
@@ -112,7 +142,8 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
                 <div className="mt-1.5 text-[12.5px] text-[#3A4A63]">
                   <span className={s.siap_luring.siap === s.siap_luring.total ? "font-bold text-[#13794B]" : "font-semibold"}>
                     Siap tanpa sinyal: {s.siap_luring.siap} dari {s.siap_luring.total} peserta
-                  </span>
+                  </span>{" "}
+                  <a href="/sigap/kelola/luring" className="text-[12px] text-[#1F5FD1] underline">Periksa HP ini</a>
                   {s.siap_luring.belum.length > 0 && (
                     <details className="mt-0.5">
                       <summary className="cursor-pointer text-[12px] text-[#1F5FD1]">Belum siap ({s.siap_luring.belum.length}) — minta buka SIGAP Pelatihan saat ada sinyal</summary>
@@ -122,7 +153,7 @@ export default function KartuAgendaSesi({ kegiatanId }: { kegiatanId: number }) 
                 </div>
               )}
               {/* (14 Nov 2026, luring 3b) sandi A: dibacakan setelah Mulai bila ada peserta tanpa sinyal; membuka soal yang sudah terunduh di HP-nya */}
-              {s.sandi_luring && s.status === "berjalan" && (
+              {s.sandi_luring && (s.status === "berjalan" || (dariHp && s.status !== "selesai")) && (
                 <div className="mt-2 rounded-[12px] border border-[#CFE0F5] bg-[#F3F8FF] px-3 py-2">
                   <p className="text-[11.5px] font-bold uppercase tracking-wide text-[#3A5A8C]">Sandi untuk peserta tanpa sinyal</p>
                   <p className="mt-0.5 font-mono text-[20px] font-extrabold tracking-wider text-[#0F2A52]">{s.sandi_luring}</p>

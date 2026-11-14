@@ -11,6 +11,8 @@ import {
   type BarisRekap, type MetodeAbsen, type Posisi, type SesiRencana,
 } from "@/lib/sigapAbsen";
 
+import { putuskanKodeLuring, type KodeLuring } from "./sigapAbsenLuring"; // (14 Nov 2026) luring 3d
+
 export const PESAN_SQL = "Absen peserta belum aktif di basis data. Jalankan SQL 20261102zk_kegiatan_absen.";
 
 // ---------- pengaturan ----------
@@ -452,4 +454,45 @@ export async function muatRekapKoreksi(db: Db, kegiatanId: number, kelas: number
     /* kosong */
   }
   return hasil.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, 3000);
+}
+
+// ---------- (14 Nov 2026, luring 3d) absen kode tanpa sinyal ----------
+
+/**
+ * Kode yang diketik tanpa sinyal (lib/sigapAbsenLuring.ts). Sesi dicari dari kode + jam ketik; batas salah ketik berlaku untuk sesi-sesi kelas
+ * peserta hari itu (salah ketik dihitung pada semua sesi kode kelasnya, supaya jalur ini tidak bisa dipakai menebak kode).
+ */
+export async function kirimKodeLuring(db: Db, kegiatanId: number, akunId: number, kelasPeserta: number | null, k: KodeLuring, nowMs: number): Promise<HasilAbsen> {
+  const t = k.hp_ms + k.selisih_ms;
+  const hari = await muatSesiHari(db, kegiatanId, tanggalWib(t));
+  if (!hari.tersedia) return { ok: false, pesan: PESAN_SQL, status: 500 };
+  const kelasku = hari.sesi.filter((s) => (s.kelas === null || kelasPeserta === null || Number(s.kelas) === Number(kelasPeserta)) && s.metode.includes("kode"));
+  try {
+    const ids = kelasku.map((s) => s.id);
+    const { data: sl } = ids.length ? await db.from("sigap_kegiatan_absen_salah").select("absen_sesi_id, jumlah, terakhir_at").eq("akun_id", akunId).in("absen_sesi_id", ids) : { data: [] };
+    const baris = (sl ?? []) as { absen_sesi_id: number; jumlah: number; terakhir_at: string }[];
+    const tunggu = Math.max(0, ...baris.map((b) => tungguKode(b.jumlah, Date.parse(b.terakhir_at), nowMs)));
+    if (tunggu > 0) return { ok: false, pesan: `Terlalu banyak salah ketik. Coba lagi ${tunggu} detik lagi.`, status: 429, tunggu_detik: tunggu };
+    const p = putuskanKodeLuring(kelasku, k, kelasPeserta, nowMs);
+    if (!p.ok) {
+      if (p.salah_kode) {
+        for (const s of kelasku) {
+          const lama = baris.find((b) => b.absen_sesi_id === s.id);
+          const dasar = lama && lama.jumlah >= SALAH_KODE_MAKS ? 0 : lama?.jumlah ?? 0;
+          await db.from("sigap_kegiatan_absen_salah").upsert({ absen_sesi_id: s.id, akun_id: akunId, jumlah: dasar + 1, terakhir_at: new Date(nowMs).toISOString() }, { onConflict: "absen_sesi_id,akun_id" });
+        }
+      }
+      return p;
+    }
+    const { data: sudah } = await db.from("sigap_kegiatan_absen_hadir").select("diterima").eq("absen_sesi_id", p.sesi_id).eq("akun_id", akunId).maybeSingle();
+    if ((sudah as { diterima: boolean } | null)?.diterima) return { ok: true, sudah: true };
+    const cap = { hp_ms: k.hp_ms, selisih_ms: k.selisih_ms, kirim_hp_ms: k.kirim_hp_ms, catatan: p.catatan, diterima_at: new Date(nowMs).toISOString() };
+    const isi = { absen_sesi_id: p.sesi_id, akun_id: akunId, metode: "kode", diterima: true, manual: false, at: new Date(p.t).toISOString() };
+    let { error } = await db.from("sigap_kegiatan_absen_hadir").upsert({ ...isi, luring_cap: cap }, { onConflict: "absen_sesi_id,akun_id" });
+    if (error && /luring_cap/i.test(error.message)) ({ error } = await db.from("sigap_kegiatan_absen_hadir").upsert(isi, { onConflict: "absen_sesi_id,akun_id" }));
+    if (error) return { ok: false, pesan: "Kehadiran belum dapat disimpan.", status: 500 };
+    return { ok: true };
+  } catch {
+    return { ok: false, pesan: PESAN_SQL, status: 500 };
+  }
 }
