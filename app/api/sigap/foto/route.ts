@@ -182,6 +182,7 @@ export async function POST(req: NextRequest) {
     if (d !== null && (hamMin === null || d < hamMin)) hamMin = d;
   }
   const umurPosisi = angka(form.get("posisi_umur_ms"));
+  const sumberLokasi = ((s) => (s === "gps" || s === "jaringan" ? s : null))(form.get("sumber_lokasi"));
   const kecepatan = pembanding.sebelumnya
     ? kecepatanKmJam(pembanding.sebelumnya, { lat: posisi.lat, lng: posisi.lng, ms: w.diambilMs })
     : null;
@@ -235,6 +236,8 @@ export async function POST(req: NextRequest) {
       waktu_hp: angka(form.get("waktu_hp")) !== null ? new Date(angka(form.get("waktu_hp")) as number).toISOString() : null,
       selisih_detik: w.selisihHpDetik, waktu_terverifikasi: w.terverifikasi,
       lat: posisi.lat, lng: posisi.lng, akurasi_m: posisi.akurasi,
+      // (14 Nov 2026) sumber lokasi dari HP (SQL 20261114z); nilai lain dibuang
+      ...(sumberLokasi ? { sumber_lokasi: sumberLokasi } : {}),
       posisi_at: umurPosisi !== null ? new Date(w.diambilMs - umurPosisi).toISOString() : null,
       jarak_wilayah_m: jarakWilayah === 99999 ? null : jarakWilayah, lokasi_teks: lokasi,
       file_path: jalur, ukuran_byte: stempel.buf.length, sha256: sha256Hex(stempel.buf), sha256_asli: shaAsli, sidik_gambar: sidik,

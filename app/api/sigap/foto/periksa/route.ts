@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
   if (m instanceof NextResponse) return m;
   const { db, akunId } = m;
   const admin = await adalahAdminFoto(db, akunId);
-  const KOLOM = "id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, diterima_at, waktu_hp, lokasi_teks, lat, lng, jarak_wilayah_m, akurasi_m, kepercayaan, alasan, status_periksa";
+  const KOLOM = "id, kode, kegiatan_id, akun_pengambil, tanggal, diambil_at, diterima_at, waktu_hp, lokasi_teks, lat, lng, jarak_wilayah_m, akurasi_m, sumber_lokasi, kepercayaan, alasan, status_periksa";
   let tim: number[] | null = null;
   if (!admin) {
     tim = await timDiawasi(db, akunId);

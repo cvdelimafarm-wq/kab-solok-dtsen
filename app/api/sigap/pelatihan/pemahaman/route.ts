@@ -47,6 +47,8 @@ export async function GET(req: NextRequest) {
     }));
     const ids = peserta.map((p) => p.akun_id);
 
+    const { data: keg } = await db.from("sigap_kegiatan").select("nama").eq("id", kegiatanId).maybeSingle();
+    const kegiatanNama = (keg as { nama?: string } | null)?.nama ?? `Pelatihan ${kegiatanId}`;
     const { data: tesRows } = await db.from("sigap_tes").select("id, jenis, judul, buka_at, tutup_at, aktif, nilai_lulus").eq("kegiatan_id", kegiatanId).in("jenis", ["pretest", "posttest"]);
     const tesPer = new Map(((tesRows ?? []) as { id: number; jenis: string; judul: string; buka_at: string | null; tutup_at: string | null; aktif: boolean; nilai_lulus: number | null }[]).map((t) => [t.jenis, t]));
     const tes = tesPer.get(jenis);
@@ -111,6 +113,7 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.json({
       kegiatan_id: kegiatanId,
+      kegiatan_nama: kegiatanNama,
       jenis,
       tes: { judul: tes.judul, buka_at: tes.buka_at, tutup_at: tes.tutup_at, aktif: tes.aktif },
       sekarang: new Date().toISOString(),

@@ -19,3 +19,16 @@ describe("kamera SIGAP: lokasi cadangan", () => {
     expect(src).toMatch(/clearWatch\(cadanganRef\.current\)/);
   });
 });
+
+describe("sumber lokasi foto (putusan 14 Nov)", () => {
+  it("HP mengirim sumber_lokasi gps/jaringan; server hanya menyimpan nilai sah; layar periksa menampilkannya", () => {
+    const antre = readFileSync("app/sigap/foto/antreanFoto.ts", "utf8");
+    const rute = readFileSync("app/api/sigap/foto/route.ts", "utf8");
+    const periksa = readFileSync("app/sigap/foto/PeriksaFoto.tsx", "utf8");
+    expect(src).toMatch(/terima\(p, "gps"\)/);
+    expect(src).toMatch(/terima\(p, "jaringan"\)/);
+    expect(antre).toMatch(/f\.append\("sumber_lokasi"/);
+    expect(rute).toMatch(/s === "gps" \|\| s === "jaringan"/);
+    expect(periksa).toMatch(/jaringan Wi-Fi\/seluler/);
+  });
+});

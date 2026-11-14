@@ -40,7 +40,7 @@ import { useTombolKembali } from "./useTombolKembali";
 import { ambilTokenPaket, siapkanPaket } from "./paketOffline";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
 
-type Pos = { lat: number; lng: number; akurasi: number; mono: number };
+type Pos = { lat: number; lng: number; akurasi: number; mono: number; sumber?: "gps" | "jaringan" };
 type Hasil = DataHasil;
 type Hadap = "environment" | "user";
 
@@ -73,6 +73,7 @@ function itemDari(j: Jepretan, kegiatanId: number, slot: number | null, tag: Tag
     lng: j.pos.lng,
     akurasi: j.pos.akurasi,
     posisi_umur_ms: j.umurPosisi,
+    sumber_lokasi: j.pos.sumber ?? null,
     slot,
     tag: tag.map((t) => ({ akun_id: t.akun_id, slot_usulan: t.slot_usulan })),
   };
@@ -441,9 +442,9 @@ export default function KameraSigap({
       //  - bacaan simpanan peramban yang lebih tua dari 2 menit dibuang (bukan lokasi saat ini);
       //  - bila keduanya galat, keduanya dicoba lagi tiap 15 detik (tanpa menutup kamera).
       // Akurasi tetap disaring aturan yang sama (<= 300 m langsung; 300-5000 m menunggu lalu ditandai diperiksa; > 5000 m ditolak).
-      const terima = (p: GeolocationPosition) => {
+      const terima = (p: GeolocationPosition, sumber: "gps" | "jaringan") => {
         if (Number.isFinite(p.timestamp) && Date.now() - p.timestamp > 120_000) return;
-        const baru = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy, mono: performance.now() };
+        const baru: Pos = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy, mono: performance.now(), sumber };
         setGalatGps(null);
         setPosisi((lama) => {
           if (!lama) return baru;
@@ -456,7 +457,7 @@ export default function KameraSigap({
       const pasang = () => {
         if (gpsRef.current === null)
           gpsRef.current = navigator.geolocation.watchPosition(
-            terima,
+            (p) => terima(p, "gps"),
             (e) => {
               if (e.code === 1) {
                 setGalatGps("Izin lokasi ditolak. Izinkan lokasi agar foto bisa diambil.");
@@ -469,7 +470,7 @@ export default function KameraSigap({
           );
         if (cadanganRef.current === null)
           cadanganRef.current = navigator.geolocation.watchPosition(
-            terima,
+            (p) => terima(p, "jaringan"),
             () => {
               galatJaringanAkhir = Date.now();
             },

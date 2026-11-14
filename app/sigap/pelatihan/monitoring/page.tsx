@@ -21,6 +21,7 @@ import { LABEL_KELULUSAN, type StatusKelulusan } from "@/lib/sigapAturanTes";
 import { hitungPerStatus, keteranganPantau, saringBaris, statusUntuk, variabelTersedia, type BankBaris, type KodeVariabel, type VgBaris } from "@/lib/monitoringVariabel";
 import SelectCari from "@/app/components/SelectCari";
 import PemahamanTes from "./PemahamanTes";
+import SalinStatusWa from "./SalinStatusWa";
 
 type Tes = { status: "belum" | "mengerjakan" | "selesai"; skor: number | null };
 type Kunci = { tahap: "pretest" | "posttest"; oleh_label: string; pesan: string };
@@ -36,6 +37,9 @@ type Baris = {
   bank?: BankBaris | null;
 };
 type Data = {
+  kegiatan_id?: number;
+  /** (14 Nov 2026) untuk teks pengantar salin status WA */
+  kegiatan_nama?: string | null;
   jenis: "peserta" | "instruktur" | "panitia";
   ringkas: string;
   hierarki_tersedia: boolean;
@@ -216,7 +220,7 @@ export default function HalamanMonitoring() {
           {!d.hierarki_tersedia && d.jenis !== "peserta" && (
             <Pesan jenis="peringatan">Hierarki atasan–bawahan belum disusun, jadi daftar tampil rata. Susun atau salin dari data PSP di Kelola Pelatihan.</Pesan>
           )}
-          <Kartu judul="Ringkasan" ket={`${r.total} orang`}>
+          <Kartu judul="Ringkasan" ket={`${r.total} orang`} kanan={d.jenis !== "peserta" || d.baris.length > 1 ? <SalinStatusWa baris={d.baris} kegiatan={d.kegiatan_nama ?? "Pelatihan"} kegiatanId={d.kegiatan_id ?? null} /> : undefined}>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Angka label="Menerima undangan" nilai={r.undangan_terima} dari={r.total} />
               <Angka label="Pretest selesai" nilai={r.pretest_selesai} dari={r.total} />

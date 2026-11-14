@@ -21,6 +21,8 @@ export type ItemAntrean = {
   lng: number;
   akurasi: number;
   posisi_umur_ms: number | null;
+  /** (14 Nov 2026) sumber lokasi: GPS atau jaringan (Wi-Fi/seluler); item lama tanpa nilai */
+  sumber_lokasi?: "gps" | "jaringan" | null;
   slot: number | null;
   tag: { akun_id: number; slot_usulan: number | null }[];
   galat_terakhir?: string | null;
@@ -74,6 +76,7 @@ export function formDariItem(x: ItemAntrean): FormData {
   f.append("lng", String(x.lng));
   f.append("akurasi", String(x.akurasi));
   if (x.posisi_umur_ms !== null) f.append("posisi_umur_ms", String(Math.round(x.posisi_umur_ms)));
+  if (x.sumber_lokasi) f.append("sumber_lokasi", x.sumber_lokasi);
   if (x.slot !== null) f.append("slot", String(x.slot));
   if (x.tag.length) f.append("tag", JSON.stringify(x.tag));
   return f;

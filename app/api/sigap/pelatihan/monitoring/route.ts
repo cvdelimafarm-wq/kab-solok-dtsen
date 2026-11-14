@@ -139,8 +139,16 @@ export async function GET(req: NextRequest) {
     const hitung = (f: (r: (typeof baris)[number]) => boolean) => baris.filter(f).length;
     // (3 Nov 2026) yang menolak undangan sudah dikeluarkan dari pelatihan (tidak ada di baris); panitia / instruktur melihat daftarnya untuk mencari pengganti
     const penolak = pengguna.jenis === "peserta" ? [] : await muatDaftarPenolak(db, kegiatanId);
+    // (14 Nov 2026) nama kegiatan untuk teks pengantar salin status WA (K7)
+    let kegNama: unknown = null;
+    try {
+      kegNama = (await db.from("sigap_kegiatan").select("nama").eq("id", kegiatanId).maybeSingle()).data;
+    } catch {
+      kegNama = null; // tahan galat: tanpa nama, teks WA memakai "Pelatihan"
+    }
     return NextResponse.json({
       kegiatan_id: kegiatanId,
+      kegiatan_nama: (kegNama as { nama?: string } | null)?.nama ?? null,
       jenis: pengguna.jenis,
       ringkas: ringkasCakupan(cakupan),
       hierarki_tersedia: tersedia,

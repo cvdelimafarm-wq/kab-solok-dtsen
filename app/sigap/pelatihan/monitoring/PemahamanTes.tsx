@@ -11,12 +11,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchJson, pesanGalat, urlPelatihan } from "../../admin/api";
 import { Kartu, Memuat, Pesan } from "../../admin/ui";
 import KepalaKolom from "@/app/sigap/admin/KepalaKolom";
-import { nilaiBeda, terapkanTabel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
+import { nilaiBeda, putarUrut, terapkanTabel, type Saring, type Urut } from "@/lib/sigapTabelKolom";
 import type { HasilPemahamanTes, OrangTes, SoalTesHasil } from "@/lib/pemahamanTes";
 import { useTutupDenganBack } from "@/app/portal/useTutupDenganBack";
+import { htmlLaporan, lembarExcel, ringkasanOtomatis, type KonteksLaporan } from "@/lib/laporanPemahaman";
 
-type Jawab = { kegiatan_id: number; jenis: string; tes: { judul: string; buka_at: string | null; tutup_at: string | null; aktif: boolean } | null; sekarang: string; cakupan: string; pemahaman: HasilPemahamanTes | null };
-type Mode = "hari_h" | "evaluasi";
+type Jawab = { kegiatan_id: number; kegiatan_nama?: string; jenis: string; tes: { judul: string; buka_at: string | null; tutup_at: string | null; aktif: boolean } | null; sekarang: string; cakupan: string; pemahaman: HasilPemahamanTes | null };
+type Mode = "hari_h" | "evaluasi" | "laporan";
 type Jenis = "pretest" | "posttest";
 
 const WARNA = { ok: "#13794B", wait: "#B7791F", bad: "#B42329", mut: "#8794A8" } as const;
@@ -24,11 +25,25 @@ const fmt = (n: number | null | undefined) => (n === null || n === undefined ? "
 const LABEL_STATUS: Record<OrangTes["status"], string> = { belum: "Belum mulai", mengerjakan: "Mengerjakan", selesai: "Selesai", terlewat: "Waktu habis" };
 
 // ---------------------------------------------------------------- tabel standar (kepala kolom: cari, urut, saring)
+// (14 Nov 2026) Masukan Ketua Tim: kolom terlalu lebar; di HP tanpa tombol saring di kolom. HP (< 640 px): kepala hanya label yang bisa
+// diketuk untuk mengurutkan (▲/▼), sel rapat. Laptop: KepalaKolom dengan lebar minimal sesuai isi (angka sempit, teks sedang).
+function useHp(): boolean {
+  const [hp, setHp] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia("(max-width: 639px)");
+    const ubah = () => setHp(m.matches);
+    ubah();
+    m.addEventListener("change", ubah);
+    return () => m.removeEventListener("change", ubah);
+  }, []);
+  return hp;
+}
 type Kolom<T> = { id: string; label: string; nilai: (b: T) => string | number; sel?: (b: T) => React.ReactNode; angka?: boolean; kanan?: boolean };
 
 function Tabel<T>({ baris, kolom, kunci, kosong, onBaris, label }: { baris: T[]; kolom: Kolom<T>[]; kunci: (b: T) => string | number; kosong: string; onBaris?: (b: T) => void; label: string }) {
   const [saring, setSaring] = useState<Saring<string>>({});
   const [urut, setUrut] = useState<Urut<string>>(null);
+  const hp = useHp();
   const nilai = useCallback((b: T, k: string) => kolom.find((c) => c.id === k)?.nilai(b) ?? "", [kolom]);
   const tampil = useMemo(() => terapkanTabel(baris, saring, urut, nilai), [baris, saring, urut, nilai]);
   if (baris.length === 0) return <p className="m-0 text-[13px] text-[#6B7A90]">{kosong}</p>;
@@ -38,8 +53,15 @@ function Tabel<T>({ baris, kolom, kunci, kosong, onBaris, label }: { baris: T[];
         <thead className="sticky top-0 z-[1] bg-[#F3F6FB]">
           <tr>
             {kolom.map((c) => (
-              <th key={c.id} className={`border-b border-[#DDE6F3] px-2 py-1.5 text-left font-bold text-[#1B2B4B] ${c.kanan ? "text-right" : ""}`}>
-                <KepalaKolom id={c.id} label={c.label} saring={saring} setSaring={setSaring} urut={urut} setUrut={setUrut} opsi={() => nilaiBeda(baris, c.id, nilai, !!c.angka)} />
+              <th key={c.id} className={`border-b border-[#DDE6F3] ${hp ? "px-1.5" : "px-2"} py-1.5 text-left font-bold text-[#1B2B4B] ${c.kanan ? "text-right" : ""}`}>
+                {hp ? (
+                  <button type="button" onClick={() => setUrut(putarUrut(urut, c.id))} className="whitespace-nowrap text-[12px] font-bold" aria-label={`Urutkan kolom ${c.label}`}>
+                    {c.label}
+                    {urut?.kolom === c.id ? (urut.arah === "naik" ? " ▲" : " ▼") : ""}
+                  </button>
+                ) : (
+                  <KepalaKolom id={c.id} label={c.label} saring={saring} setSaring={setSaring} urut={urut} setUrut={setUrut} opsi={() => nilaiBeda(baris, c.id, nilai, !!c.angka)} minW={c.angka || c.kanan ? "min-w-[5rem]" : c.id === "nama" || c.id === "soal" || c.id === "keadaan" || c.id === "saran" ? "min-w-[7.5rem]" : "min-w-[6rem]"} />
+                )}
               </th>
             ))}
           </tr>
@@ -48,7 +70,7 @@ function Tabel<T>({ baris, kolom, kunci, kosong, onBaris, label }: { baris: T[];
           {tampil.map((b) => (
             <tr key={kunci(b)} onClick={onBaris ? () => onBaris(b) : undefined} onKeyDown={onBaris ? (e) => (e.key === "Enter" || e.key === " ") && onBaris(b) : undefined} tabIndex={onBaris ? 0 : undefined} className={`border-b border-[#EEF2F7] ${onBaris ? "cursor-pointer hover:bg-[#F7FAFF] focus:bg-[#EEF4FF] focus:outline-none" : ""}`}>
               {kolom.map((c) => (
-                <td key={c.id} className={`px-2 py-1.5 align-top ${c.kanan ? "text-right tabular-nums" : ""}`}>
+                <td key={c.id} className={`${hp ? "px-1.5" : "px-2"} py-1.5 align-top ${c.kanan ? "whitespace-nowrap text-right tabular-nums" : ""}`}>
                   {c.sel ? c.sel(b) : String(c.nilai(b))}
                 </td>
               ))}
@@ -61,7 +83,7 @@ function Tabel<T>({ baris, kolom, kunci, kosong, onBaris, label }: { baris: T[];
   );
 }
 
-const Potong = ({ teks, lebar = "max-w-[15rem]" }: { teks: string; lebar?: string }) => (
+const Potong = ({ teks, lebar = "max-w-[7.5rem] sm:max-w-[15rem]" }: { teks: string; lebar?: string }) => (
   <span className={`block truncate ${lebar}`} title={teks}>
     {teks}
   </span>
@@ -182,7 +204,7 @@ function RincianPeserta({ o, soal, onTutup }: { o: OrangTes; soal: SoalTesHasil[
         kosong={o.status === "selesai" ? "Semua soal benar pada percobaan pertama." : "Belum ada jawaban percobaan pertama."}
         kolom={[
           { id: "no", label: "No", nilai: (s) => s.nomor, angka: true, kanan: true },
-          { id: "soal", label: "Soal", nilai: (s) => s.teks, sel: (s) => <Potong teks={s.teks} lebar="max-w-[13rem]" /> },
+          { id: "soal", label: "Soal", nilai: (s) => s.teks, sel: (s) => <Potong teks={s.teks} lebar="max-w-[7.5rem] sm:max-w-[13rem]" /> },
           { id: "jawab", label: "Jawaban", nilai: (s) => o.jawaban[String(s.nomor)] ?? "-" },
           { id: "kunci", label: "Kunci", nilai: (s) => s.kunci },
           { id: "lama", label: "Lama (dtk)", nilai: (s) => o.lama_soal[String(s.nomor)] ?? "", angka: true, kanan: true },
@@ -249,6 +271,7 @@ export default function PemahamanTes() {
           [
             ["hari_h", "Hari H"],
             ["evaluasi", "Evaluasi"],
+            ["laporan", "Laporan"],
           ] as [Mode, string][]
         ).map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={mode === k} onClick={() => setMode(k)} className={`min-h-[38px] rounded-[10px] px-4 text-[13px] font-extrabold ${mode === k ? "bg-white text-[#0F2A52] shadow-sm" : "text-[#3C4C68]"}`}>
@@ -291,7 +314,9 @@ export default function PemahamanTes() {
       {p && p.ringkas.peserta > 0 && (
         <>
           {chipSaring}
-          {mode === "hari_h" ? (
+          {mode === "laporan" && d ? (
+            <Laporan p={p} k={{ kegiatan: d.kegiatan_nama ?? "Pelatihan", tes: d.tes?.judul ?? (jenis === "pretest" ? "Pretest" : "Posttest"), cakupan: d.cakupan, dibuat: new Date(d.sekarang) }} />
+          ) : mode === "hari_h" ? (
             <div className="space-y-3">
               <div className="grid auto-rows-fr grid-cols-2 gap-2 sm:grid-cols-4">
                 <Angka label="Selesai" nilai={`${p.ringkas.selesai}/${p.ringkas.peserta}`} nada="ok" aktif={saringStatus === "selesai"} onKlik={() => ketuk("selesai")} />
@@ -308,7 +333,7 @@ export default function PemahamanTes() {
                   kosong="Tidak ada peserta pada saringan ini."
                   onBaris={setOrangBuka}
                   kolom={[
-                    { id: "nama", label: "Nama", nilai: (o) => o.nama, sel: (o) => <Potong teks={o.nama} lebar="max-w-[10rem]" /> },
+                    { id: "nama", label: "Nama", nilai: (o) => o.nama, sel: (o) => <Potong teks={o.nama} lebar="max-w-[7.5rem] sm:max-w-[10rem]" /> },
                     { id: "status", label: "Status", nilai: (o) => (o.macet ? "Macet" : LABEL_STATUS[o.status]) },
                     { id: "maju", label: "Kemajuan", nilai: (o) => o.kemajuan_pct, angka: true, sel: (o) => <Bilah pct={o.status === "selesai" ? 100 : o.kemajuan_pct} nada={o.macet ? "wait" : o.status === "selesai" ? "ok" : "mut"} /> },
                     { id: "soal", label: "Soal", nilai: (o) => o.soal_sekarang ?? "", angka: true, kanan: true },
@@ -326,7 +351,7 @@ export default function PemahamanTes() {
                   kosong={p.ringkas.selesai ? "Belum ada soal yang salah." : "Belum ada yang selesai."}
                   kolom={[
                     { id: "no", label: "No", nilai: (s) => s.nomor, angka: true, kanan: true },
-                    { id: "soal", label: "Soal", nilai: (s) => s.teks, sel: (s) => <Potong teks={s.teks} lebar="max-w-[11rem]" /> },
+                    { id: "soal", label: "Soal", nilai: (s) => s.teks, sel: (s) => <Potong teks={s.teks} lebar="max-w-[7.5rem] sm:max-w-[11rem]" /> },
                     { id: "salah", label: "Salah", nilai: (s) => s.salah, angka: true, kanan: true },
                     { id: "keliru", label: "Pilihan keliru", nilai: (s) => (s.keliru_terbanyak ? `${s.keliru_terbanyak.kode} (${s.keliru_terbanyak.jumlah})` : "-") },
                     {
@@ -376,7 +401,7 @@ function TabelIngat({ p, onBuka }: { p: HasilPemahamanTes; onBuka: (id: number) 
         kosong="Tidak ada yang perlu diingatkan."
         onBaris={(x) => onBuka(x.akun_id)}
         kolom={[
-          { id: "nama", label: "Nama", nilai: (x) => x.nama, sel: (x) => <Potong teks={x.nama} lebar="max-w-[10rem]" /> },
+          { id: "nama", label: "Nama", nilai: (x) => x.nama, sel: (x) => <Potong teks={x.nama} lebar="max-w-[7.5rem] sm:max-w-[10rem]" /> },
           { id: "keadaan", label: "Keadaan", nilai: (x) => x.keadaan },
           { id: "saran", label: "Saran", nilai: (x) => x.saran },
         ]}
@@ -464,7 +489,7 @@ function Evaluasi({
             kunci={(t) => t.nama}
             kosong="Belum ada tim."
             kolom={[
-              { id: "tim", label: "Tim", nilai: (t) => t.nama, sel: (t) => <Potong teks={t.nama} lebar="max-w-[9rem]" /> },
+              { id: "tim", label: "Tim", nilai: (t) => t.nama, sel: (t) => <Potong teks={t.nama} lebar="max-w-[7.5rem] sm:max-w-[9rem]" /> },
               { id: "peserta", label: "Orang", nilai: (t) => t.peserta, angka: true, kanan: true },
               { id: "selesai", label: "Selesai", nilai: (t) => t.selesai, angka: true, kanan: true },
               { id: "lulus", label: "Lulus", nilai: (t) => t.lulus, angka: true, kanan: true },
@@ -485,7 +510,7 @@ function Evaluasi({
             kosong="Belum ada yang mengerjakan pretest dan posttest."
             onBaris={onOrang}
             kolom={[
-              { id: "nama", label: "Nama", nilai: (o) => o.nama, sel: (o) => <Potong teks={o.nama} lebar="max-w-[10rem]" /> },
+              { id: "nama", label: "Nama", nilai: (o) => o.nama, sel: (o) => <Potong teks={o.nama} lebar="max-w-[7.5rem] sm:max-w-[10rem]" /> },
               { id: "pre", label: "Pretest", nilai: (o) => o.pembanding ?? "", angka: true, kanan: true, sel: (o) => fmt(o.pembanding) },
               { id: "post", label: "Posttest", nilai: (o) => o.nilai ?? "", angka: true, kanan: true, sel: (o) => fmt(o.nilai) },
               { id: "naik", label: "Naik", nilai: (o) => o.naik ?? "", angka: true, kanan: true, sel: (o) => <b style={{ color: (o.naik ?? 0) > 0 ? WARNA.ok : (o.naik ?? 0) < 0 ? WARNA.bad : WARNA.mut }}>{(o.naik ?? 0) > 0 ? "+" : ""}{fmt(o.naik)}</b> },
@@ -510,7 +535,7 @@ function Evaluasi({
             onBaris={onSoal}
             kolom={[
               { id: "no", label: "No", nilai: (s) => s.nomor, angka: true, kanan: true },
-              { id: "soal", label: "Soal", nilai: (s) => s.teks, sel: (s) => <Potong teks={s.teks} lebar="max-w-[11rem]" /> },
+              { id: "soal", label: "Soal", nilai: (s) => s.teks, sel: (s) => <Potong teks={s.teks} lebar="max-w-[7.5rem] sm:max-w-[11rem]" /> },
               { id: "benar", label: "% benar", nilai: (s) => s.pct_benar ?? "", angka: true, kanan: true },
               { id: "kunci", label: "Kunci", nilai: (s) => s.kunci },
               { id: "keliru", label: "Keliru terbanyak", nilai: (s) => (s.keliru_terbanyak ? `${s.keliru_terbanyak.kode} (${s.keliru_terbanyak.jumlah})` : "-") },
@@ -527,7 +552,7 @@ function Evaluasi({
               kunci={(t) => t.topik}
               kosong="-"
               kolom={[
-                { id: "topik", label: "Topik", nilai: (t) => t.topik, sel: (t) => <Potong teks={t.topik} lebar="max-w-[12rem]" /> },
+                { id: "topik", label: "Topik", nilai: (t) => t.topik, sel: (t) => <Potong teks={t.topik} lebar="max-w-[7.5rem] sm:max-w-[12rem]" /> },
                 { id: "soal", label: "Soal", nilai: (t) => t.soal, angka: true, kanan: true },
                 { id: "benar", label: "% benar", nilai: (t) => t.pct_benar ?? "", angka: true, kanan: true, sel: (t) => <b style={{ color: (t.pct_benar ?? 100) < 70 ? WARNA.bad : (t.pct_benar ?? 100) < 85 ? WARNA.wait : WARNA.ok }}>{t.pct_benar ?? "–"}</b> },
               ]}
@@ -582,6 +607,63 @@ function Evaluasi({
       )}
 
       <TabelIngat p={p} onBuka={(id) => { const o = p.orang.find((x) => x.akun_id === id); if (o) onOrang(o); }} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Laporan (K6): satu sumber hitung yang sama; unduh Excel dan cetak / PDF
+function Laporan({ p, k }: { p: HasilPemahamanTes; k: KonteksLaporan }) {
+  const [galat, setGalat] = useState<string | null>(null);
+  const html = useMemo(() => htmlLaporan(p, k), [p, k]);
+  const namaBerkas = `Laporan_pemahaman_${k.tes}_${k.kegiatan}`.replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 90);
+  async function unduhExcel() {
+    setGalat(null);
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+      for (const l of lembarExcel(p, k)) {
+        const ws = XLSX.utils.aoa_to_sheet(l.baris);
+        ws["!cols"] = l.lebar.map((wch) => ({ wch }));
+        XLSX.utils.book_append_sheet(wb, ws, l.nama);
+      }
+      XLSX.writeFile(wb, `${namaBerkas}.xlsx`);
+    } catch {
+      setGalat("Berkas Excel belum dapat dibuat. Coba lagi.");
+    }
+  }
+  function cetak() {
+    const w = window.open("", "_blank");
+    if (!w) return setGalat("Jendela cetak diblokir peramban. Izinkan pop-up untuk SIGAP lalu coba lagi.");
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 400);
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => void unduhExcel()} className="min-h-[42px] rounded-xl border-2 border-[#0F2A52] bg-white px-4 text-[13px] font-extrabold text-[#0F2A52]">
+          ⬇ Unduh Excel
+        </button>
+        <button type="button" onClick={cetak} className="min-h-[42px] rounded-xl bg-[#0F2A52] px-4 text-[13px] font-extrabold text-white">
+          Cetak / PDF
+        </button>
+        <span className="self-center text-[11.5px] text-[#6B7A90]">PDF: pilih &quot;Simpan sebagai PDF&quot; di jendela cetak.</span>
+      </div>
+      {galat && <Pesan jenis="galat">{galat}</Pesan>}
+      <div className="min-w-0 rounded-[12px] border border-[#DDE6F3] p-2.5">
+        <b className="text-[13.5px] text-[#0F2A52]">Ringkasan otomatis</b>
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[12.5px] text-[#1B2B4B]">
+          {ringkasanOtomatis(p).map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ul>
+      </div>
+      <div className="min-w-0 overflow-hidden rounded-[12px] border border-[#DDE6F3]">
+        <p className="m-0 border-b border-[#DDE6F3] bg-[#F3F6FB] px-2.5 py-1.5 text-[12px] font-bold text-[#0F2A52]">Pratinjau lembar cetak</p>
+        <iframe title="Pratinjau laporan pemahaman" srcDoc={html} className="block h-[640px] w-full bg-white" sandbox="" />
+      </div>
     </div>
   );
 }

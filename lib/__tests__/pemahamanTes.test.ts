@@ -122,3 +122,13 @@ describe("penjaga HP 360: grid tidak melebar karena tabel", () => {
     expect(komp).not.toMatch(/className="rounded-\[12px\] border border-\[#DDE6F3\] p-2\.5"/);
   });
 });
+
+describe("masukan 14 Nov: kolom ramping, HP tanpa tombol saring", () => {
+  it("di HP kepala kolom hanya label pengurut; di laptop KepalaKolom dengan lebar minimal sesuai isi", () => {
+    const komp = readFileSync("app/sigap/pelatihan/monitoring/PemahamanTes.tsx", "utf8");
+    expect(komp).toMatch(/matchMedia\("\(max-width: 639px\)"\)/);
+    expect(komp).toMatch(/\{hp \? \(\s*<button type="button" onClick=\{\(\) => setUrut\(putarUrut/);
+    expect(komp).toMatch(/minW=\{c\.angka \|\| c\.kanan \? "min-w-\[5rem\]"/);
+    expect(readFileSync("app/sigap/admin/KepalaKolom.tsx", "utf8")).toMatch(/minW = "min-w-\[9rem\]"/);
+  });
+});

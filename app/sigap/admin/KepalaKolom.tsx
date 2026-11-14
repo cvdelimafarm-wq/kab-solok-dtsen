@@ -17,9 +17,11 @@ type Props<K extends string> = {
   setUrut: (u: Urut<K>) => void;
   /** nilai berbeda untuk daftar filter; dipanggil hanya saat panel filter dibuka */
   opsi: () => string[];
+  /** (14 Nov 2026) lebar minimal kepala kolom (kelas Tailwind); bawaan 9rem. Kolom angka boleh lebih sempit. */
+  minW?: string;
 };
 
-export default function KepalaKolom<K extends string>({ id, label, saring, setSaring, urut, setUrut, opsi }: Props<K>) {
+export default function KepalaKolom<K extends string>({ id, label, saring, setSaring, urut, setUrut, opsi, minW = "min-w-[9rem]" }: Props<K>) {
   const [buka, setBuka] = useState<null | { jenis: "q" | "f"; x: number; y: number }>(null);
   const f = saring[id] ?? { q: "", pilih: [] };
   const set = (x: { q: string; pilih: string[] }) => setSaring({ ...saring, [id]: x });
@@ -36,7 +38,7 @@ export default function KepalaKolom<K extends string>({ id, label, saring, setSa
   };
   const daftar = buka?.jenis === "f" ? opsi().slice(0, 80) : [];
   return (
-    <span className="flex w-full min-w-[9rem] items-center justify-between gap-3">
+    <span className={`flex w-full ${minW} items-center justify-between gap-2`}>
       <span>
         {label}
         {aktifU ? (urut?.arah === "naik" ? " ▲" : " ▼") : ""}
