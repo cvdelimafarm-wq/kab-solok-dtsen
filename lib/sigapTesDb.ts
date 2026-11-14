@@ -385,6 +385,8 @@ export type HasilUlang = { ok: true } | { ok: false; pesan: string; status: numb
 export async function mulaiUlang(db: Db, tes: TesBaris, sesi: SesiBaris, soal: SoalLengkap[], sekarang: Date): Promise<HasilUlang> {
   if (!bisaUlang(tes, sesi, soal.length, sekarang)) return { ok: false, pesan: alasanTakBisaUlang(tes, sesi), status: 409 };
   // 1) arsipkan percobaan yang baru selesai (unik per sesi+percobaan: klik ganda tidak menggandakan)
+  // (14 Nov 2026) waktu per soal ikut diarsipkan (SQL 20261114y); dibaca terpisah karena KOLOM_SESI tidak memuatnya
+  const { data: wArsip } = await db.from("sigap_tes_sesi").select("jawaban_waktu").eq("id", sesi.id).maybeSingle();
   const { error: eArsip } = await db.from("sigap_tes_sesi_arsip").upsert(
     {
       sesi_id: sesi.id,
@@ -395,6 +397,7 @@ export async function mulaiUlang(db: Db, tes: TesBaris, sesi: SesiBaris, soal: S
       batas_at: sesi.batas_at,
       selesai_at: sesi.selesai_at,
       jawaban: sesi.jawaban ?? {},
+      jawaban_waktu: (wArsip as { jawaban_waktu?: unknown } | null)?.jawaban_waktu ?? {},
       skor: sesi.skor,
       benar: sesi.benar,
       total: sesi.total,

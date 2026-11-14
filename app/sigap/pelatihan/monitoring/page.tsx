@@ -20,6 +20,7 @@ import { LABEL_PERAN_PELATIHAN, type PeranPelatihan } from "@/lib/hierarkiPelati
 import { LABEL_KELULUSAN, type StatusKelulusan } from "@/lib/sigapAturanTes";
 import { hitungPerStatus, keteranganPantau, saringBaris, statusUntuk, variabelTersedia, type BankBaris, type KodeVariabel, type VgBaris } from "@/lib/monitoringVariabel";
 import SelectCari from "@/app/components/SelectCari";
+import PemahamanTes from "./PemahamanTes";
 
 type Tes = { status: "belum" | "mengerjakan" | "selesai"; skor: number | null };
 type Kunci = { tahap: "pretest" | "posttest"; oleh_label: string; pesan: string };
@@ -254,6 +255,8 @@ export default function HalamanMonitoring() {
             )}
           </Kartu>
           {ok && <Pesan jenis="info">{ok}</Pesan>}
+          {/* (14 Nov 2026) Templat monitoring pemahaman: mode Hari H dan Evaluasi pretest/posttest. Peserta tanpa bawahan hanya melihat dirinya, jadi tidak ditampilkan. */}
+          {(d.jenis !== "peserta" || d.baris.length > 1) && <PemahamanTes />}
           <Kartu judul="Progres per orang" ket={`${variabelAktif === "semua" ? tampil.length : tampilVar.length} dari ${d.baris.length}`}>
             {d.baris.length === 0 ? (
               <p className="text-[13px] text-[#6B7A90]">Belum ada peserta dalam cakupan Anda.</p>
