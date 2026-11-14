@@ -146,7 +146,7 @@ export default function KameraSigap({
   const aliranRef = useRef<MediaStream | null>(null);
   const gpsRef = useRef<number | null>(null);
   const cadanganRef = useRef<number | null>(null); // (14 Nov 2026) watch lokasi jaringan cadangan
-  const cadanganTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cadanganTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokenRef = useRef<{ token: string; mono: number; wall: number } | null>(null);
   const [posisi, setPosisi] = useState<Pos | null>(null);
   const [galatKamera, setGalatKamera] = useState<string | null>(null);
@@ -433,44 +433,63 @@ export default function KameraSigap({
   useEffect(() => {
     if (!navigator.geolocation) setGalatGps("Peramban ini tidak mendukung lokasi.");
     else {
-      // (14 Nov 2026) Laporan lapangan (Yola): di dalam ruangan GPS akurasi tinggi tidak pernah dapat sinyal, kamera berhenti di "Lokasi belum terbaca".
-      // Cadangan: lokasi jaringan (Wi-Fi/seluler, enableHighAccuracy:false) dijalankan bila GPS belum terbaca dalam 8 detik atau galat.
-      // Bacaan GPS yang masih baru (<= 30 detik) didahulukan; bacaan jaringan dipakai bila belum ada GPS atau lebih akurat.
+      // (14 Nov 2026) Laporan lapangan (Yola): di dalam ruangan GPS akurasi tinggi tidak dapat sinyal, kamera berhenti di "Lokasi belum terbaca".
+      // (14 Nov 2026, perbaikan kedua) Kembali ke tempat yang sama, kamera tetap tidak bisa: cadangan hanya menyala bila GPS belum pernah terbaca,
+      // padahal GPS sempat terbaca lalu hilang (atau terbaca sangat kasar). Sekarang:
+      //  - GPS akurasi tinggi dan lokasi jaringan (Wi-Fi/seluler) berjalan BERSAMAAN sejak kamera dibuka;
+      //  - dipakai bacaan PALING AKURAT yang masih baru (<= 30 detik); bacaan yang lebih tua digantikan bacaan baru apa pun;
+      //  - bacaan simpanan peramban yang lebih tua dari 2 menit dibuang (bukan lokasi saat ini);
+      //  - bila keduanya galat, keduanya dicoba lagi tiap 15 detik (tanpa menutup kamera).
       // Akurasi tetap disaring aturan yang sama (<= 300 m langsung; 300-5000 m menunggu lalu ditandai diperiksa; > 5000 m ditolak).
-      let gpsTerakhir = 0;
-      const terima = (p: GeolocationPosition, dariGps: boolean) => {
+      const terima = (p: GeolocationPosition) => {
+        if (Number.isFinite(p.timestamp) && Date.now() - p.timestamp > 120_000) return;
         const baru = { lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy, mono: performance.now() };
-        if (dariGps) gpsTerakhir = baru.mono;
         setGalatGps(null);
         setPosisi((lama) => {
-          if (!lama || dariGps) return baru;
-          const gpsMasihBaru = gpsTerakhir > 0 && baru.mono - gpsTerakhir <= 30_000;
-          return gpsMasihBaru && lama.akurasi <= baru.akurasi ? lama : baru;
+          if (!lama) return baru;
+          const lamaBasi = baru.mono - lama.mono > 30_000;
+          return lamaBasi || baru.akurasi <= lama.akurasi ? baru : lama;
         });
       };
-      const mulaiCadangan = () => {
-        if (cadanganRef.current !== null) return;
-        cadanganRef.current = navigator.geolocation.watchPosition(
-          (p) => terima(p, false),
-          () => {},
-          { enableHighAccuracy: false, maximumAge: 60_000, timeout: 30_000 }
-        );
+      let galatGpsAkhir = 0;
+      let galatJaringanAkhir = 0;
+      const pasang = () => {
+        if (gpsRef.current === null)
+          gpsRef.current = navigator.geolocation.watchPosition(
+            terima,
+            (e) => {
+              if (e.code === 1) {
+                setGalatGps("Izin lokasi ditolak. Izinkan lokasi agar foto bisa diambil.");
+                return;
+              }
+              galatGpsAkhir = Date.now();
+              setGalatGps("Lokasi belum terbaca. Mencoba lokasi jaringan…");
+            },
+            { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 }
+          );
+        if (cadanganRef.current === null)
+          cadanganRef.current = navigator.geolocation.watchPosition(
+            terima,
+            () => {
+              galatJaringanAkhir = Date.now();
+            },
+            { enableHighAccuracy: false, maximumAge: 30_000, timeout: 30_000 }
+          );
       };
-      gpsRef.current = navigator.geolocation.watchPosition(
-        (p) => terima(p, true),
-        (e) => {
-          if (e.code === 1) {
-            setGalatGps("Izin lokasi ditolak. Izinkan lokasi agar foto bisa diambil.");
-            return;
-          }
-          setGalatGps("Lokasi belum terbaca. Mencoba lokasi jaringan…");
-          mulaiCadangan();
-        },
-        { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 }
-      );
-      cadanganTimerRef.current = setTimeout(() => {
-        if (gpsTerakhir === 0) mulaiCadangan();
-      }, 8_000);
+      pasang();
+      // keduanya galat dan belum ada bacaan baru: pasang ulang (sebagian HP berhenti melapor sesudah galat)
+      cadanganTimerRef.current = setInterval(() => {
+        const sekarang = Date.now();
+        if (galatGpsAkhir && galatJaringanAkhir && sekarang - galatGpsAkhir < 20_000 && sekarang - galatJaringanAkhir < 35_000) {
+          if (gpsRef.current !== null) navigator.geolocation.clearWatch(gpsRef.current);
+          if (cadanganRef.current !== null) navigator.geolocation.clearWatch(cadanganRef.current);
+          gpsRef.current = null;
+          cadanganRef.current = null;
+          galatGpsAkhir = 0;
+          galatJaringanAkhir = 0;
+          pasang();
+        }
+      }, 15_000);
     }
     void muatToken();
     void hitungAntre();
@@ -488,7 +507,7 @@ export default function KameraSigap({
       if (gpsRef.current !== null) navigator.geolocation.clearWatch(gpsRef.current);
       if (cadanganRef.current !== null) navigator.geolocation.clearWatch(cadanganRef.current);
       cadanganRef.current = null;
-      if (cadanganTimerRef.current) clearTimeout(cadanganTimerRef.current);
+      if (cadanganTimerRef.current) clearInterval(cadanganTimerRef.current);
     };
   }, [muatToken, hitungAntre, muatTerisi, kirimAntrean]);
 
