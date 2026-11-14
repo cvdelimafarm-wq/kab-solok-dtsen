@@ -74,11 +74,13 @@ const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego/libur", label: "Kalender libur", ikon: "libur" },
   { href: "/sigap/delego/pengingat", label: "Pengingat dan eskalasi", ikon: "lonceng" },
   { href: "/sigap/delego/rapor", label: "Rapor terpadu", ikon: "penilaian" },
+  { href: "/sigap/delego/keputusan", label: "Ruang keputusan", ikon: "monitor" },
 ];
 const BUTIR_RINGKAS: Butir = { href: "/sigap/delego/ringkasan", label: "Ringkasan bulanan", ikon: "ringkas" };
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };
 const BUTIR_PERINTAH: Butir = { href: "/sigap/delego/perintah", label: "Perintah langsung", ikon: "perintah" };
 const BUTIR_SAYA: Butir[] = [
+  { href: "/sigap/delego/meja", label: "Meja kerja", ikon: "tinjau", pendek: "Meja" },
   { href: "/sigap/delego/jadwal", label: "Pekerjaan saya", ikon: "jadwal", pendek: "Pekerjaan" },
   { href: "/sigap/delego/saya", label: "Delegasi saya", ikon: "tugas", pendek: "Delegasi" },
   { href: "/sigap/delego/lapor", label: "Lapor harian", ikon: "lapor", pendek: "Lapor" },

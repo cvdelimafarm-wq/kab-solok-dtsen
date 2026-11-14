@@ -23,7 +23,7 @@ function RaporSaya({ akun }: { akun: number }) {
       <ul className="m-0 grid list-none grid-cols-2 gap-2 p-0 text-[13.5px] sm:grid-cols-3">
         <li><b>{fmt(angka(b.poin_diakui), 1)}</b> poin diakui dari {fmt(angka(b.poin), 1)} dilaporkan</li>
         <li>Capaian <b>{cp === null ? "-" : `${cp}%`}</b> dari kapasitas {fmt(angka(b.hari_kerja), 0)} hari kerja</li>
-        <li>Rata <b>{rh ?? "-"}</b> poin per hari{rh !== null && b.laporan > 0 && !penuhiMinimal(b) ? " (di bawah 60)" : ""}</li>
+        <li>Rata <b>{rh === null ? "-" : fmt(rh, 1)}</b> poin per hari{rh !== null && b.laporan > 0 && !penuhiMinimal(b) ? " (di bawah 60)" : ""}</li>
         <li>Faktor mutu <b>{b.faktor === null ? "-" : fmt(angka(b.faktor), 2)}</b></li>
         <li>Lewat tenggat <b>{b.lewat_tenggat}</b> · inisiatif disetujui <b>{b.inisiatif}</b></li>
         <li>360: <b>{b.nilai_360 === null ? (b.penilai_360 ? `belum tampil (${b.penilai_360} penilai, perlu 3)` : "-") : fmt(angka(b.nilai_360), 2)}</b></li>

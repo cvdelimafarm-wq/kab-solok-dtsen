@@ -113,7 +113,7 @@ export default function Rapor() {
                         <td className="px-1 py-1.5 text-right">{fmt(angka(b.poin), 1)}</td>
                         <td className="px-1 py-1.5 text-right">{fmt(angka(b.poin_diakui), 1)}{angka(b.poin_menunggu) > 0 ? <span className="text-[#3B4A57]"> (+{fmt(angka(b.poin_menunggu), 0)})</span> : null}</td>
                         <td className="px-1 py-1.5 text-right font-semibold">{cp === null ? "-" : `${cp}%`}</td>
-                        <td className={`px-1 py-1.5 text-right ${b.laporan > 0 && !penuhiMinimal(b) ? "text-[#8A4605]" : ""}`}>{rataHarian(b) ?? "-"}</td>
+                        <td className={`px-1 py-1.5 text-right ${b.laporan > 0 && !penuhiMinimal(b) ? "text-[#8A4605]" : ""}`}>{rataHarian(b) === null ? "-" : fmt(rataHarian(b)!, 1)}</td>
                         <td className="px-1 py-1.5 text-right">{b.hari_60}</td>
                         <td className="px-1 py-1.5 text-right">{b.faktor === null ? "-" : fmt(angka(b.faktor), 2)}</td>
                         <td className={`px-1 py-1.5 text-right ${b.lewat_tenggat > 0 ? "text-[#8A4605]" : ""}`}>{b.lewat_tenggat}</td>
