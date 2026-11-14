@@ -6,8 +6,31 @@
 
 import { skorPenerima, tglPendek, TANGGA_PEMBINAAN } from "@/lib/delego/hitung";
 import { useKonteksDelego } from "../konteks";
-import { useSaya } from "../data";
-import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat } from "../ui";
+import { useBacaFungsi, useSaya } from "../data";
+import { angka } from "@/lib/delego/hitung";
+import { capaian, penuhiMinimal, rataHarian, type BahanRapor } from "@/lib/delego/rapor";
+import { Batang, Galat, Halaman, Info, Kartu, Kosong, Lencana, Memuat, fmt } from "../ui";
+
+/** (14 Nov 2026, Fase 5) Rapor bulan ini untuk diri sendiri (keu_dlg_rapor; pegawai hanya melihat barisnya sendiri). */
+function RaporSaya({ akun }: { akun: number }) {
+  const r = useBacaFungsi<BahanRapor>("keu_dlg_rapor", {});
+  const b = r.data?.baris.find((x) => x.akun === akun);
+  if (!b) return null;
+  const cp = capaian(b);
+  const rh = rataHarian(b);
+  return (
+    <Kartu judul="Rapor bulan ini">
+      <ul className="m-0 grid list-none grid-cols-2 gap-2 p-0 text-[13.5px] sm:grid-cols-3">
+        <li><b>{fmt(angka(b.poin_diakui), 1)}</b> poin diakui dari {fmt(angka(b.poin), 1)} dilaporkan</li>
+        <li>Capaian <b>{cp === null ? "-" : `${cp}%`}</b> dari kapasitas {fmt(angka(b.hari_kerja), 0)} hari kerja</li>
+        <li>Rata <b>{rh ?? "-"}</b> poin per hari{rh !== null && b.laporan > 0 && !penuhiMinimal(b) ? " (di bawah 60)" : ""}</li>
+        <li>Faktor mutu <b>{b.faktor === null ? "-" : fmt(angka(b.faktor), 2)}</b></li>
+        <li>Lewat tenggat <b>{b.lewat_tenggat}</b> · inisiatif disetujui <b>{b.inisiatif}</b></li>
+        <li>360: <b>{b.nilai_360 === null ? (b.penilai_360 ? `belum tampil (${b.penilai_360} penilai, perlu 3)` : "-") : fmt(angka(b.nilai_360), 2)}</b></li>
+      </ul>
+    </Kartu>
+  );
+}
 
 export default function Penilaian() {
   const { hari } = useKonteksDelego();
@@ -21,6 +44,7 @@ export default function Penilaian() {
       {s.galat && !d && <Galat>{s.galat}</Galat>}
       {d && skor && (
         <div className="mx-auto grid grid-cols-1 max-w-3xl gap-4">
+          <RaporSaya akun={d.akun.id} />
           <Kartu
             judul="Skor kinerja saya"
             kanan={

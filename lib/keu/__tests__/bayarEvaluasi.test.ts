@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { csvBayar, galatSalin, kalimatRapor, persen, ringkasBayar, type BahanEvaluasi, type DaftarBayar } from "@/lib/keu/bayarEvaluasi";
+import { rpRingkas, csvBayar, galatSalin, kalimatRapor, persen, ringkasBayar, type BahanEvaluasi, type DaftarBayar } from "@/lib/keu/bayarEvaluasi";
 
 const baris = (x: Partial<DaftarBayar["kegiatan"][0]["baris"][0]>) => ({
   penugasan_id: 1, akun_id: 1, nama: "A", jenis: "mitra", peran: "ppl", maks_hari: 4, n_hari: 4, n_lampau: 3, n_sah: 2, n_dibayar: 2, n_rencana: 4,
@@ -42,5 +42,14 @@ describe("rapor dan salin", () => {
     expect(galatSalin("Se", "Seruti TW IV")).toMatch(/3 huruf/);
     expect(galatSalin("seruti tw iv", "Seruti TW IV")).toMatch(/berbeda/);
     expect(galatSalin("Seruti Triwulan I 2027", "Seruti TW IV")).toBeNull();
+  });
+});
+
+describe("rpRingkas", () => {
+  it("meringkas juta dan miliar", () => {
+    expect(rpRingkas(7480000)).toBe("Rp7,48 jt");
+    expect(rpRingkas("13260000")).toBe("Rp13,26 jt");
+    expect(rpRingkas(1250000000)).toBe("Rp1,25 M");
+    expect(rpRingkas(0)).toBe("Rp0");
   });
 });

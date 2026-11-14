@@ -19,7 +19,7 @@ import { alurIdentifikasi, posisiAlur } from "@/lib/alurKelola";
 import { Catatan, Galat, Kosong, Kpi, Memuat, kolom, label, tombolKecil, tombolUtama } from "@/app/sigap/keu-ui";
 import { aksiKeu, useKirim } from "@/app/sigap/ro/useKeu";
 import { useBacaFungsi } from "@/app/sigap/delego/data";
-import { galatSalin, kalimatRapor, persen, ringkasBayar, type BahanEvaluasi } from "@/lib/keu/bayarEvaluasi";
+import { galatSalin, kalimatRapor, persen, ringkasBayar, rpRingkas, type BahanEvaluasi } from "@/lib/keu/bayarEvaluasi";
 import LencanaNotif from "../../../notifikasi/LencanaNotif";
 import { useIdent } from "../../useIdent";
 import { Bagian } from "../../Kontrol";
@@ -154,8 +154,8 @@ function Isi() {
               <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr))]">
                 <Kpi label="SPK terbit" nilai={`${b.spk.terbit}/${b.spk.mitra}`} sub="mitra pada lanjutan" warna={b.spk.mitra > 0 && b.spk.terbit < b.spk.mitra ? "kn" : "hj"} />
                 <Kpi label="Hari kerja sah" nilai={`${rb.hariSah}/${rb.hariRencana}`} sub={rb.hariRencana > 0 ? `${persen(rb.hariSah, rb.hariRencana)}% dari terjadwal` : "belum ada hari kerja"} warna={rb.belumSah > 0 ? "kn" : undefined} />
-                <Kpi label="Daftar bayar" nilai={rp(rb.total)} sub={`rencana ${rp(rb.totalRencana)}`} />
-                <Kpi label="Pembayaran dicatat (RO)" nilai={rp(b.bayar.dicatat_ro)} sub="tab Pembayaran ruang RO" />
+                <Kpi label="Daftar bayar" nilai={<span title={rp(rb.total)}>{rpRingkas(rb.total)}</span>} sub={`rencana ${rp(rb.totalRencana)}`} />
+                <Kpi label="Pembayaran dicatat (RO)" nilai={<span title={rp(b.bayar.dicatat_ro)}>{rpRingkas(b.bayar.dicatat_ro)}</span>} sub="tab Pembayaran ruang RO" />
                 <Kpi label="Butir Delego" nilai={b.delego && b.delego.butir > 0 ? `${b.delego.selesai}/${b.delego.butir}` : "-"} sub={b.delego && b.delego.butir > 0 ? `${b.delego.lewat_tenggat} pernah lewat tenggat` : "belum ada butir survei ini"} />
               </div>
               <ul className="m-0 list-disc space-y-0.5 pl-5 text-[13px] text-[#44546F]">

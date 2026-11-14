@@ -73,6 +73,7 @@ const BUTIR_TIM: Butir[] = [
   { href: "/sigap/delego/rutin", label: "Pekerjaan berulang", ikon: "ulang" },
   { href: "/sigap/delego/libur", label: "Kalender libur", ikon: "libur" },
   { href: "/sigap/delego/pengingat", label: "Pengingat dan eskalasi", ikon: "lonceng" },
+  { href: "/sigap/delego/rapor", label: "Rapor terpadu", ikon: "penilaian" },
 ];
 const BUTIR_RINGKAS: Butir = { href: "/sigap/delego/ringkasan", label: "Ringkasan bulanan", ikon: "ringkas" };
 const BUTIR_BUAT: Butir = { href: "/sigap/delego/buat", label: "Buat delegasi", ikon: "tambah" };

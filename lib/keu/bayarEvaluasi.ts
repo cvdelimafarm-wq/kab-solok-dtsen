@@ -37,6 +37,13 @@ const n = (x: number | string | null | undefined): number => {
   const v = typeof x === "number" ? x : Number(x ?? 0);
   return Number.isFinite(v) ? v : 0;
 };
+/** Rupiah ringkas untuk kartu angka (mis. "Rp7,48 jt"); angka penuh tetap di tabel. */
+export function rpRingkas(x: number | string): string {
+  const v = n(x);
+  if (Math.abs(v) >= 1e9) return `Rp${(v / 1e9).toLocaleString("id-ID", { maximumFractionDigits: 2 })} M`;
+  if (Math.abs(v) >= 1e6) return `Rp${(v / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 2 })} jt`;
+  return `Rp${v.toLocaleString("id-ID")}`;
+}
 export const persen = (a: number, b: number): number | null => (b > 0 ? Math.round((a / b) * 100) : null);
 
 export type RingkasBayar = { orang: number; hariSah: number; hariRencana: number; total: number; totalRencana: number; terverifikasi: number; tanpaTarif: number; belumSah: number };

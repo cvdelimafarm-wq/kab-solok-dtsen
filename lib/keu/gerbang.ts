@@ -31,6 +31,8 @@ export const FUNGSI_BACA: readonly string[] = [
   "keu_dlg_eskalasi_bahan", "keu_dlg_inisiatif_rekap", "keu_dlg_pengingat_bahan",
   // (14 Nov 2026, Fase 6) daftar bayar, pembayaran tercermin, evaluasi survei (hanya membaca).
   "keu_daftar_bayar", "keu_pembayaran_cocok_bahan", "keu_ident_evaluasi_bahan",
+  // (14 Nov 2026, Fase 5) rapor terpadu (hanya membaca).
+  "keu_dlg_rapor",
   // (7 Nov 2026) Siklus revisi: tanggapan RO milik akun ini (hanya membaca; modal memanggilnya berkala).
   "keu_tanggapan_saya",
   // (13 Nov 2026, C) Poin beban kerja: apakah pegawai perlu diminta usul poin sesudah melapor (hanya membaca).
